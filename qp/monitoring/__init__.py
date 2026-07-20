@@ -13,9 +13,13 @@ from qp.monitoring.alerts import (
     Alert,
     AlertManager,
     AlertSeverity,
+    DingTalkAlert,
+    EmailAlert,
+    FileAlert,
     LogAlert,
     TelegramAlert,
     TerminalAlert,
+    WeComAlert,
 )
 from qp.monitoring.drift import (
     DriftMonitor,
@@ -57,9 +61,13 @@ __all__ = [
     "Alert",
     "AlertManager",
     "AlertSeverity",
+    "DingTalkAlert",
+    "EmailAlert",
+    "FileAlert",
     "LogAlert",
     "TelegramAlert",
     "TerminalAlert",
+    "WeComAlert",
     # Kill switch
     "KillSwitch",
     "KillSwitchPipeline",

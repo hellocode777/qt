@@ -184,6 +184,7 @@ class PaperTradingTracker:
 
         if broker is None:
             from qp.simulation.broker import SimulatedBroker  # noqa: PLC0415
+
             broker = SimulatedBroker(initial_cash=run.capital)
 
         # Replay existing positions if we have history

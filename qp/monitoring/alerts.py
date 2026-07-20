@@ -298,6 +298,306 @@ class TelegramAlert(_BaseAlertChannel):
 
 
 # ------------------------------------------------------------------
+# DingTalk (钉钉) Alert Channel
+# ------------------------------------------------------------------
+
+
+class DingTalkAlert(_BaseAlertChannel):
+    """Sends alerts via DingTalk robot webhook.
+
+    Requires DINGTALK_WEBHOOK_URL environment variable.
+    Secrets come from environment variables only (rule.md §10.1).
+
+    Usage:
+        channel = DingTalkAlert()
+        channel.send(alert)
+    """
+
+    _MAX_LENGTH = 19000  # DingTalk markdown message limit
+
+    def __init__(self, webhook_url: str | None = None) -> None:
+        import os
+
+        self._url = webhook_url or os.getenv("DINGTALK_WEBHOOK_URL", "")
+
+    def send(self, alert: Alert) -> bool:
+        """Send alert as DingTalk markdown message."""
+        if not self._url:
+            return False
+
+        emoji = {
+            AlertSeverity.INFO: "ℹ️",
+            AlertSeverity.WARNING: "⚠️",
+            AlertSeverity.CRITICAL: "🚨",
+        }.get(alert.severity, "📢")
+
+        text = (
+            f"## {emoji} {alert.severity.value.upper()}: {alert.title}\n\n"
+            f"{alert.message}\n\n"
+            f"_{alert.source} | {alert.timestamp[:19]}_"
+        )
+
+        try:
+            import json as _json
+            import urllib.request
+
+            payload = _json.dumps(
+                {
+                    "msgtype": "markdown",
+                    "markdown": {
+                        "title": f"[{alert.severity.value.upper()}] {alert.title}",
+                        "text": text[: self._MAX_LENGTH],
+                    },
+                }
+            ).encode("utf-8")
+
+            url = self._url
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def test(self) -> bool:
+        """Send test message to DingTalk."""
+        if not self._url:
+            return False
+        alert = Alert(
+            severity=AlertSeverity.INFO,
+            title="Test Alert",
+            message="DingTalk alert channel is working. ✅",
+            source="alerts.test",
+        )
+        return self.send(alert)
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self._url)
+
+
+# ------------------------------------------------------------------
+# WeCom (企业微信) Alert Channel
+# ------------------------------------------------------------------
+
+
+class WeComAlert(_BaseAlertChannel):
+    """Sends alerts via WeCom (企业微信) robot webhook.
+
+    Requires WECOM_WEBHOOK_URL environment variable.
+
+    Usage:
+        channel = WeComAlert()
+        channel.send(alert)
+    """
+
+    _MAX_LENGTH = 4000  # WeCom markdown message limit
+
+    def __init__(self, webhook_url: str | None = None) -> None:
+        import os
+
+        self._url = webhook_url or os.getenv("WECOM_WEBHOOK_URL", "")
+
+    def send(self, alert: Alert) -> bool:
+        """Send alert as WeCom markdown message."""
+        if not self._url:
+            return False
+
+        emoji = {
+            AlertSeverity.INFO: "ℹ️",
+            AlertSeverity.WARNING: "⚠️",
+            AlertSeverity.CRITICAL: "🚨",
+        }.get(alert.severity, "📢")
+
+        text = (
+            f"## {emoji} {alert.severity.value.upper()}: {alert.title}\n"
+            f"{alert.message}\n"
+            f"> {alert.source} | {alert.timestamp[:19]}"
+        )
+
+        try:
+            import json as _json
+            import urllib.request
+
+            payload = _json.dumps(
+                {
+                    "msgtype": "markdown",
+                    "markdown": {"content": text[: self._MAX_LENGTH]},
+                }
+            ).encode("utf-8")
+
+            req = urllib.request.Request(
+                self._url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def test(self) -> bool:
+        """Send test message to WeCom."""
+        if not self._url:
+            return False
+        alert = Alert(
+            severity=AlertSeverity.INFO,
+            title="Test Alert",
+            message="WeCom alert channel is working. ✅",
+            source="alerts.test",
+        )
+        return self.send(alert)
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self._url)
+
+
+# ------------------------------------------------------------------
+# Email Alert Channel
+# ------------------------------------------------------------------
+
+
+class EmailAlert(_BaseAlertChannel):
+    """Sends alerts via SMTP email.
+
+    Requires environment variables:
+      SMTP_HOST, SMTP_PORT, SMTP_SENDER, SMTP_PASSWORD, SMTP_RECEIVER
+
+    Usage:
+        channel = EmailAlert()
+        channel.send(alert)
+    """
+
+    def __init__(
+        self,
+        smtp_host: str | None = None,
+        smtp_port: int | None = None,
+        sender: str | None = None,
+        password: str | None = None,
+        receiver: str | None = None,
+        subject_prefix: str = "[QP Alert]",
+    ) -> None:
+        import os
+
+        self._host = smtp_host or os.getenv("SMTP_HOST", "")
+        self._port = smtp_port or int(os.getenv("SMTP_PORT", "465"))
+        self._sender = sender or os.getenv("SMTP_SENDER", "")
+        self._password = password or os.getenv("SMTP_PASSWORD", "")
+        self._receiver = receiver or os.getenv("SMTP_RECEIVER", self._sender)
+        self._subject_prefix = subject_prefix
+
+    def send(self, alert: Alert) -> bool:
+        """Send alert as email (plain text + HTML)."""
+        if not all([self._host, self._sender, self._password]):
+            return False
+
+        try:
+            import smtplib
+            import ssl
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+
+            msg = MIMEMultipart("alternative")
+            msg["From"] = self._sender
+            msg["To"] = self._receiver
+            msg["Subject"] = (
+                f"{self._subject_prefix} [{alert.severity.value.upper()}] {alert.title}"
+            )
+            msg.attach(MIMEText(alert.format_detailed(), "plain", "utf-8"))
+            msg.attach(
+                MIMEText(
+                    f"<html><body><pre style='font-family:monospace'>"
+                    f"{alert.format_detailed()}</pre></body></html>",
+                    "html",
+                    "utf-8",
+                )
+            )
+
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP_SSL(self._host, self._port, context=ctx) as server:
+                server.login(self._sender, self._password)
+                server.sendmail(self._sender, self._receiver, msg.as_string())
+            return True
+        except Exception:
+            return False
+
+    def test(self) -> bool:
+        """Send test email."""
+        if not all([self._host, self._sender, self._password]):
+            return False
+        alert = Alert(
+            severity=AlertSeverity.INFO,
+            title="Test Alert",
+            message="Email alert channel is working. ✅",
+            source="alerts.test",
+        )
+        return self.send(alert)
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self._host and self._sender and self._password)
+
+
+# ------------------------------------------------------------------
+# File Alert Channel (Markdown)
+# ------------------------------------------------------------------
+
+
+class FileAlert(_BaseAlertChannel):
+    """Writes alerts to a Markdown file for persistent record-keeping.
+
+    Usage:
+        channel = FileAlert(output_dir="reports")
+        channel.send(alert)
+    """
+
+    def __init__(self, output_dir: str = "reports") -> None:
+        from pathlib import Path
+
+        self._dir = Path(output_dir)
+        self._dir.mkdir(parents=True, exist_ok=True)
+
+    def send(self, alert: Alert) -> bool:
+        """Append alert to a daily Markdown file."""
+        try:
+            date_str = alert.timestamp[:10]
+            path = self._dir / f"alerts_{date_str}.md"
+
+            entry = (
+                f"## [{alert.severity.value.upper()}] {alert.title}\n"
+                f"- **Time**: {alert.timestamp[:19]}\n"
+                f"- **Source**: {alert.source}\n"
+                f"- **Message**: {alert.message}\n"
+            )
+            if alert.metadata:
+                entry += "- **Metadata**:\n"
+                for k, v in alert.metadata.items():
+                    entry += f"  - {k}: {v}\n"
+            entry += "\n---\n\n"
+
+            mode = "a" if path.exists() else "w"
+            with open(path, mode, encoding="utf-8") as f:
+                f.write(entry)
+            return True
+        except OSError:
+            return False
+
+    def test(self) -> bool:
+        """Send test file alert."""
+        alert = Alert(
+            severity=AlertSeverity.INFO,
+            title="Test Alert",
+            message="File alert channel is working. ✅",
+            source="alerts.test",
+        )
+        return self.send(alert)
+
+
+# ------------------------------------------------------------------
 # Alert Manager
 # ------------------------------------------------------------------
 
