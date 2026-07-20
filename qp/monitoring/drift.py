@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 class DriftSeverity(StrEnum):
     """Drift severity levels."""
+
     NONE = "none"  # PSI < 0.10
     MILD = "mild"  # 0.10 ≤ PSI < 0.25
     SIGNIFICANT = "significant"  # PSI ≥ 0.25 (threshold)
@@ -245,11 +246,7 @@ class DriftMonitor:
 
         ref_mean = float(np.mean(reference[np.isfinite(reference)]))
         cur_mean = float(np.mean(current[np.isfinite(current)]))
-        mean_shift = (
-            abs(cur_mean - ref_mean) / abs(ref_mean) * 100
-            if abs(ref_mean) > 1e-8
-            else 0.0
-        )
+        mean_shift = abs(cur_mean - ref_mean) / abs(ref_mean) * 100 if abs(ref_mean) > 1e-8 else 0.0
 
         if psi >= self._psi_threshold:
             severity = DriftSeverity.SIGNIFICANT
@@ -311,14 +308,10 @@ class DriftMonitor:
         sig_features = [r.feature_name for r in results if r.severity == DriftSeverity.SIGNIFICANT]
         summary_parts = [f"{len(results)} features checked"]
         if sig_features:
-            summary_parts.append(
-                f"SIGNIFICANT DRIFT in: {', '.join(sig_features[:5])}"
-            )
+            summary_parts.append(f"SIGNIFICANT DRIFT in: {', '.join(sig_features[:5])}")
         else:
             mild_count = sum(1 for r in results if r.severity == DriftSeverity.MILD)
-            summary_parts.append(
-                f"OK ({mild_count} mild, {len(results) - mild_count} clean)"
-            )
+            summary_parts.append(f"OK ({mild_count} mild, {len(results) - mild_count} clean)")
 
         return DriftReport(
             timestamp=datetime.now(UTC).isoformat(),
@@ -343,12 +336,8 @@ class DriftMonitor:
         Returns:
             Dict with ks_stat, ks_pvalue, wasserstein, drifted (bool).
         """
-        ks_stat, ks_pval = self.compute_ks(
-            reference_predictions, current_predictions
-        )
-        ws_dist = self.compute_wasserstein(
-            reference_predictions, current_predictions
-        )
+        ks_stat, ks_pval = self.compute_ks(reference_predictions, current_predictions)
+        ws_dist = self.compute_wasserstein(reference_predictions, current_predictions)
         psi = self.compute_psi(reference_predictions, current_predictions)
 
         return {

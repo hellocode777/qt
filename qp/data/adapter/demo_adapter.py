@@ -76,16 +76,18 @@ class DemoAdapter(BaseDataSource):
                 low = min(open_price, price) * (1 - abs(rng.normal(0, 0.005)))
                 volume = rng.integers(1_000_000, 50_000_000)
 
-                rows.append({
-                    "日期": d.strftime("%Y-%m-%d"),
-                    "股票代码": symbol,
-                    "开盘": round(open_price, 2),
-                    "收盘": round(price, 2),
-                    "最高": round(high, 2),
-                    "最低": round(low, 2),
-                    "成交量": volume,
-                    "symbol": symbol,
-                })
+                rows.append(
+                    {
+                        "日期": d.strftime("%Y-%m-%d"),
+                        "股票代码": symbol,
+                        "开盘": round(open_price, 2),
+                        "收盘": round(price, 2),
+                        "最高": round(high, 2),
+                        "最低": round(low, 2),
+                        "成交量": volume,
+                        "symbol": symbol,
+                    }
+                )
 
         return pd.DataFrame(rows)
 

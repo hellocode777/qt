@@ -47,10 +47,7 @@ class SharpeCheck(BaseRule):
             score=round(score, 2),
             threshold=self._min_sharpe,
             actual_value=round(sharpe, 2),
-            detail=(
-                f"Sharpe = {sharpe:.2f} "
-                f"{'≥' if passed else '<'} threshold {self._min_sharpe}"
-            ),
+            detail=(f"Sharpe = {sharpe:.2f} {'≥' if passed else '<'} threshold {self._min_sharpe}"),
         )
 
 
@@ -90,8 +87,7 @@ class MaxDrawdownCheck(BaseRule):
             threshold=self._max_drawdown,
             actual_value=round(dd, 2),
             detail=(
-                f"Max Drawdown = {dd:.2f}% "
-                f"{'≤' if passed else '>'} threshold {self._max_drawdown}%"
+                f"Max Drawdown = {dd:.2f}% {'≤' if passed else '>'} threshold {self._max_drawdown}%"
             ),
         )
 
@@ -145,7 +141,6 @@ class TurnoverCheck(BaseRule):
             threshold=self._max_turnover,
             actual_value=round(turnover, 2),
             detail=(
-                f"Turnover = {turnover:.1f}% "
-                f"(range: {self._min_turnover}%–{self._max_turnover}%)"
+                f"Turnover = {turnover:.1f}% (range: {self._min_turnover}%–{self._max_turnover}%)"
             ),
         )

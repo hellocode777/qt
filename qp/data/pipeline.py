@@ -43,17 +43,28 @@ class DataPipeline(BasePipeline):
             use_demo = context.parameters.get("demo", False)
             if use_demo:
                 from qp.data.adapter.demo_adapter import DemoAdapter
+
                 adapter = DemoAdapter()
             else:
                 from qp.data.adapter.tencent_adapter import TencentAdapter
+
                 adapter = TencentAdapter()
-            raw = adapter.fetch_raw(start_date, end_date, symbols=symbols) if symbols else adapter.fetch_raw(start_date, end_date)
+            raw = (
+                adapter.fetch_raw(start_date, end_date, symbols=symbols)
+                if symbols
+                else adapter.fetch_raw(start_date, end_date)
+            )
 
             # Fallback: Tencent → Demo on network failure
-            if (not use_demo and len(raw) == 0):
+            if not use_demo and len(raw) == 0:
                 from qp.data.adapter.demo_adapter import DemoAdapter
+
                 adapter = DemoAdapter()
-                raw = adapter.fetch_raw(start_date, end_date, symbols=symbols) if symbols else adapter.fetch_raw(start_date, end_date)
+                raw = (
+                    adapter.fetch_raw(start_date, end_date, symbols=symbols)
+                    if symbols
+                    else adapter.fetch_raw(start_date, end_date)
+                )
                 result.metadata["source"] = "demo (fallback)"
             else:
                 result.metadata["source"] = "demo" if use_demo else "tencent"

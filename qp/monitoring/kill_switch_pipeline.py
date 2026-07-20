@@ -36,6 +36,7 @@ from qp.shared.types import PipelineStatus
 
 class MonitorAction(StrEnum):
     """Actions recommended by the Kill Switch Pipeline."""
+
     OK = "ok"  # All clear
     WATCH = "watch"  # Minor concern — increase monitoring
     PAUSE_BUY = "pause_buy"  # Stop new positions
@@ -222,6 +223,7 @@ class KillSwitchPipeline(BasePipeline):
             PortfolioDrawdownTrigger,
             PSITrigger,
         )
+
         ks.add_trigger(DrawdownTrigger())
         ks.add_trigger(PortfolioDrawdownTrigger())
         ks.add_trigger(PSITrigger())

@@ -24,7 +24,9 @@ def _cmd_doctor() -> int:
 
     print("=== QP Doctor ===")
     print()
-    print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    print(
+        f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
     print(f"Platform: {platform.platform()}")
 
     env = EnvironmentMeta()
@@ -34,6 +36,7 @@ def _cmd_doctor() -> int:
 
     try:
         from qp.platform.config import load_config
+
         config = load_config()
         print(f"Config: OK (env={config.runtime.env})")
     except Exception as e:
@@ -41,6 +44,7 @@ def _cmd_doctor() -> int:
 
     try:
         from qp.platform.storage.factory import StorageFactory
+
         factory = StorageFactory("duckdb", duckdb_path=":memory:")
         storage = factory.get_storage()
         storage.connect()
@@ -86,7 +90,9 @@ def _cmd_ingest() -> int:
     result = pipeline.run(context)
 
     print(f"Status: {result.status.value}")
-    print(f"Rows: {result.metrics.get('raw_rows', 'N/A')} raw → {result.metrics.get('cleaned_rows', 'N/A')} cleaned")
+    print(
+        f"Rows: {result.metrics.get('raw_rows', 'N/A')} raw → {result.metrics.get('cleaned_rows', 'N/A')} cleaned"
+    )
     if result.errors:
         for e in result.errors:
             print(f"Error: {e}")
@@ -175,7 +181,7 @@ def _cmd_validate() -> int:
         price_df=price_df,
         strategy_id="simple_rank_v1.0",
         backtest_metrics={
-            "sharpe_ratio": 0.88,       # From Phase 1 real-data run
+            "sharpe_ratio": 0.88,  # From Phase 1 real-data run
             "max_drawdown_pct": 14.02,
             "total_return": 40.62,
         },
@@ -206,7 +212,9 @@ def _cmd_validate() -> int:
 
     if result.failed_rules:
         print()
-        print(f"Failed: {len(result.failed_rules)}/{len(result.rules)} rules — {', '.join(result.failed_rules)}")
+        print(
+            f"Failed: {len(result.failed_rules)}/{len(result.rules)} rules — {', '.join(result.failed_rules)}"
+        )
         print(f"Recommendation: {result.recommendation}")
     else:
         print()
@@ -303,7 +311,9 @@ def _cmd_portfolio_report() -> int:
     print("── 风控限额 / Risk Limits ──")
     risk_manager = PortfolioRiskManager()
     filtered, risk_report = risk_manager.apply_risk_limits_with_prices(combined, prices)
-    print(f"  持仓数量 / Positions:     {risk_report.candidates_in} → {risk_report.candidates_out} (过滤后)")
+    print(
+        f"  持仓数量 / Positions:     {risk_report.candidates_in} → {risk_report.candidates_out} (过滤后)"
+    )
     print(f"  单仓上限 / Max Position:  {risk_manager.max_single_position:.0%}")
     print(f"  单行业上限 / Max Sector:   {risk_manager.max_single_sector:.0%}")
     if risk_report.violations:
@@ -337,8 +347,12 @@ def _cmd_portfolio_report() -> int:
         total_cost += c.total_cost
     print(f"  印花税 / Stamp Tax:          {cost_model.stamp_tax_rate:.3%} (仅卖出)")
     print(f"  佣金 / Commission:           {cost_model.commission_rate:.3%} (买卖双向)")
-    print(f"  预估单边成本 / One-Way:       ¥{total_cost:>10,.0f}  ({total_cost/total_capital*100:.3f}%)")
-    print(f"  预估双边成本 / Round-Trip:     ¥{total_cost*2:>10,.0f}  ({total_cost*2/total_capital*100:.3f}%)")
+    print(
+        f"  预估单边成本 / One-Way:       ¥{total_cost:>10,.0f}  ({total_cost / total_capital * 100:.3f}%)"
+    )
+    print(
+        f"  预估双边成本 / Round-Trip:     ¥{total_cost * 2:>10,.0f}  ({total_cost * 2 / total_capital * 100:.3f}%)"
+    )
     print()
 
     # ── 资金分配 ──
@@ -376,7 +390,7 @@ def _cmd_portfolio_report() -> int:
     # ── KPI 仪表盘 ──
     print("── 组合 KPI 仪表盘 / Portfolio KPI Dashboard ──")
     print(f"  {'指标':<20s} {'目标':>10s} {'状态':>10s}  {'说明'}")
-    print(f"  {'─'*58}")
+    print(f"  {'─' * 58}")
     print(f"  {'夏普比率 / Sharpe':<18s} {'≥ 1.2':>8s}  {'待回测':>8s}   年度风险调整收益")
     print(f"  {'最大回撤 / MaxDD':<18s} {'≤ 20%':>8s}  {'待回测':>8s}   历史最大亏损")
     print(f"  {'超额占比 / Alpha%':<18s} {'≥ 60%':>8s}  {'待回测':>8s}   Alpha 收益占比")
@@ -448,6 +462,7 @@ def _cmd_portfolio_risk() -> int:
 # ------------------------------------------------------------------
 # Phase 4 CLI commands
 # ------------------------------------------------------------------
+
 
 def _cmd_experiment_list() -> int:
     """List all tracked experiments."""
@@ -675,12 +690,14 @@ def _cmd_backtest_run() -> int:
                 px = price_map.get(sym, 10.0)
                 qty = int(per_stock_capital / px // 100 * 100)
                 if qty > 0:
-                    broker.submit_order({
-                        "symbol": sym,
-                        "side": "BUY",
-                        "quantity": qty,
-                        "order_type": "market",
-                    })
+                    broker.submit_order(
+                        {
+                            "symbol": sym,
+                            "side": "BUY",
+                            "quantity": qty,
+                            "order_type": "market",
+                        }
+                    )
 
         broker.execute_pending()
 
@@ -711,11 +728,17 @@ def _cmd_backtest_run() -> int:
         rets = np.array(daily_returns)
         result.total_return_pct = float(((1 + rets).prod() - 1) * 100)
         result.annual_return_pct = float(rets.mean() * 252 * 100)
-        result.sharpe_ratio = float(np.sqrt(252) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+        result.sharpe_ratio = (
+            float(np.sqrt(252) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+        )
         result.annual_volatility_pct = float(rets.std() * np.sqrt(252) * 100)
         cum = (1 + rets).cumprod()
         running_max = np.maximum.accumulate(cum)
-        result.max_drawdown_pct = float(np.abs((cum - running_max).min() / running_max.min()) * 100) if len(cum) > 0 else 0.0
+        result.max_drawdown_pct = (
+            float(np.abs((cum - running_max).min() / running_max.min()) * 100)
+            if len(cum) > 0
+            else 0.0
+        )
 
     # Print
     print()
@@ -926,10 +949,16 @@ def _cmd_monitor_alert_test() -> int:
     manager.info("测试信息 / Test Info", "监控系统正常运行。All systems operational.", "alert_test")
 
     print("  发送 WARNING 级别...")
-    manager.warning("测试警告 / Test Warning", "这是一条警告测试。This is a test warning.", "alert_test")
+    manager.warning(
+        "测试警告 / Test Warning", "这是一条警告测试。This is a test warning.", "alert_test"
+    )
 
     print("  发送 CRITICAL 级别...")
-    manager.critical("测试严重告警 / Test Critical", "这是一条严重告警测试。This is a test critical alert.", "alert_test")
+    manager.critical(
+        "测试严重告警 / Test Critical",
+        "这是一条严重告警测试。This is a test critical alert.",
+        "alert_test",
+    )
 
     print()
     print("  告警测试完成 / Alert test complete.")
@@ -1009,6 +1038,119 @@ def _cmd_knowledge_search() -> int:
     return 0
 
 
+def _cmd_decide() -> int:
+    """Generate trading recommendations for manual review."""
+    from datetime import date
+
+    import polars as pl
+
+    from qp.decision.engine import DecisionEngine
+    from qp.monitoring.regime import MarketRegimeEngine
+    from qp.portfolio.cost_model import CostModel
+    from qp.portfolio.risk_manager import PortfolioRiskManager
+    from qp.strategy.registry import StrategyRegistry
+    from qp.strategy.simple_rank import SimpleRankStrategy
+
+    # Parse arguments
+    strategy_id = "simple_rank_v1.0"
+    total_capital = 1_000_000.0
+
+    args = sys.argv[2:]
+    for arg in args:
+        if arg.startswith("--capital="):
+            total_capital = float(arg.split("=")[1])
+        elif not arg.startswith("--"):
+            strategy_id = arg
+
+    print("═══ QP 交易建议 / Trading Recommendations ═══")
+    print()
+
+    # Load data
+    today = date.today()
+    try:
+        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
+    except FileNotFoundError:
+        print("❌ 未找到数据文件。请先运行 qp run daily")
+        print("   No data found. Run 'qp run daily' first.")
+        return 1
+
+    # Market regime
+    regime_str = ""
+    try:
+        engine = MarketRegimeEngine()
+        regime_result = engine.classify(prices)
+        regime_str = regime_result.summary
+        print(f"  市场状态 / Regime: {regime_result.regime.value}")
+        print(
+            f"  趋势/波动: ADX={regime_result.trend_strength:.1f} | Vol={regime_result.annualized_vol:.1%}"
+        )
+    except Exception:
+        pass
+    print()
+
+    # Generate signals
+    try:
+        registry = StrategyRegistry()
+        registry.register(SimpleRankStrategy(top_n=10))
+        strategy = registry.get(strategy_id)
+        signals = strategy.generate_signals(today)
+    except Exception:
+        print(f"❌ 策略 '{strategy_id}' 未注册或信号生成失败")
+        print(f"   Strategy '{strategy_id}' not registered or signal generation failed.")
+        return 1
+
+    if signals.is_empty():
+        print("❌ 无信号 / No signals generated for today.")
+        return 1
+
+    n_symbols = len(signals)
+    print(f"  候选标的 / Candidates: {n_symbols} 只")
+    print(f"  资金规模 / Capital: ¥{total_capital:,.0f}")
+    print()
+
+    # Risk check
+    risk_manager = PortfolioRiskManager()
+    filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(signals, prices)
+    print(
+        f"  风控过滤 / Risk Filter: {risk_report.candidates_out}/{risk_report.candidates_in} 通过"
+    )
+    if risk_report.violations:
+        for v in risk_report.violations:
+            print(f"    ⚠ {v}")
+    print()
+
+    # Cost preview
+    cost_model = CostModel()
+    total_est_cost = 0.0
+    for sym in filtered_signals["symbol"].to_list()[:10]:
+        px_row = prices.filter(pl.col("symbol") == sym)
+        px = float(px_row["close"][0]) if not px_row.is_empty() else 10.0
+        trade_val = px * (total_capital / 10 / px // 100 * 100)
+        if trade_val > 0:
+            cost = cost_model.estimate_trade(sym, trade_val, "BUY")
+            total_est_cost += cost.total_cost
+    print(
+        f"  预估总成本 / Est. Cost: ¥{total_est_cost:,.0f} ({total_est_cost / total_capital * 100:.2f}%)"
+    )
+    print()
+
+    # Generate recommendations via DecisionEngine
+    decision_engine = DecisionEngine()
+    report = decision_engine.generate(
+        signals=filtered_signals,
+        prices=prices,
+        risk_report=risk_report,
+        total_capital=total_capital,
+        strategy_id=strategy_id,
+        market_regime=regime_str,
+    )
+
+    # Print bilingual output
+    print(decision_engine.format_bilingual(report))
+
+    return 0
+
+
 def _print_help() -> int:
     """Print help message."""
     print("qp — Quant Platform CLI")
@@ -1034,6 +1176,7 @@ def _print_help() -> int:
     print("  monitor alert-test       Test all alert channels")
     print("  knowledge stats          Knowledge archive statistics")
     print("  knowledge search <q>     Search knowledge archive")
+    print("  decide [strategy] [--capital=N]  Generate trade recommendations")
     print()
     print("Phase 1 (available):")
     print("  qp ingest --demo              Ingest with synthetic demo data")
@@ -1058,6 +1201,10 @@ def _print_help() -> int:
     print("  qp monitor alert-test         Test all alert channels")
     print("  qp knowledge stats            Knowledge archive statistics")
     print("  qp knowledge search <query>   Search knowledge archive")
+    print()
+    print("Phase 6 (available):")
+    print("  qp decide [strategy]           Generate trade recommendations")
+    print("  qp decide --capital=500000     Custom capital amount")
     return 0
 
 
@@ -1127,7 +1274,9 @@ def main() -> int:
 
     if command == "backtest":
         if len(sys.argv) < 3:
-            print("qp backtest: missing subcommand. Try: qp backtest run [strategy]", file=sys.stderr)
+            print(
+                "qp backtest: missing subcommand. Try: qp backtest run [strategy]", file=sys.stderr
+            )
             return 1
         sub = sys.argv[2]
         if sub == "run":
@@ -1146,7 +1295,10 @@ def main() -> int:
             return _cmd_monitor_regime()
         if sub == "alert-test":
             return _cmd_monitor_alert_test()
-        print(f"qp monitor: unknown subcommand '{sub}'. Try: check, regime, alert-test", file=sys.stderr)
+        print(
+            f"qp monitor: unknown subcommand '{sub}'. Try: check, regime, alert-test",
+            file=sys.stderr,
+        )
         return 1
 
     if command == "knowledge":
@@ -1160,6 +1312,9 @@ def main() -> int:
             return _cmd_knowledge_search()
         print(f"qp knowledge: unknown subcommand '{sub}'. Try: stats, search", file=sys.stderr)
         return 1
+
+    if command == "decide":
+        return _cmd_decide()
 
     print(f"qp: unknown command '{command}'. Try 'qp --help'", file=sys.stderr)
     return 1

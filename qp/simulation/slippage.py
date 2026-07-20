@@ -45,7 +45,7 @@ class FixedSlippage(BaseSlippageModel):
 
     def __init__(self, bps: float = 10.0) -> None:
         """Args:
-            bps: Slippage in basis points (1 bp = 0.01%). Default 10 bps = 0.1%.
+        bps: Slippage in basis points (1 bp = 0.01%). Default 10 bps = 0.1%.
         """
         self._rate = bps / 10000.0
 
@@ -73,8 +73,8 @@ class VolatilitySlippage(BaseSlippageModel):
         reference_vol: float = 0.30,
     ) -> None:
         """Args:
-            base_bps: Base slippage in bps.
-            reference_vol: Reference annual vol (default 30%) for normalization.
+        base_bps: Base slippage in bps.
+        reference_vol: Reference annual vol (default 30%) for normalization.
         """
         self._base_rate = base_bps / 10000.0
         self._reference_vol = reference_vol
@@ -100,8 +100,8 @@ class SqrtImpactModel(BaseSlippageModel):
 
     def __init__(self, base_bps: float = 5.0, max_participation: float = 0.10) -> None:
         """Args:
-            base_bps: Impact at 1% participation rate in bps.
-            max_participation: Maximum participation rate (default 10%).
+        base_bps: Impact at 1% participation rate in bps.
+        max_participation: Maximum participation rate (default 10%).
         """
         self._base_rate = base_bps / 10000.0
         self._max_participation = max_participation
@@ -130,6 +130,7 @@ class SqrtImpactModel(BaseSlippageModel):
 # ------------------------------------------------------------------
 # Factory
 # ------------------------------------------------------------------
+
 
 def create_slippage_model(model_type: str = "fixed", **kwargs) -> BaseSlippageModel:
     """Create a slippage model by name.

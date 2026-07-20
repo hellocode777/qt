@@ -32,7 +32,9 @@ class DatasetLoader:
             Polars DataFrame containing the dataset.
         """
         pattern = f"{name}_*.parquet"
-        candidates = sorted(self._base_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+        candidates = sorted(
+            self._base_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True
+        )
 
         if version:
             candidates = [p for p in candidates if version in p.name]

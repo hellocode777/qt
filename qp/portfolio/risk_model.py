@@ -254,7 +254,8 @@ class RiskModel(BaseRiskModel):
 
         # Market risk
         market_risk, market_pct = self._compute_market_risk(
-            port_returns, benchmark_returns  # type: ignore[arg-type]
+            port_returns,  # type: ignore[arg-type]
+            benchmark_returns,
         )
 
         # Style risk
@@ -263,9 +264,7 @@ class RiskModel(BaseRiskModel):
         )
 
         # Sector risk (from concentration)
-        sector_risk, sector_pct, sector_exposures = self._compute_sector_risk(
-            ret_pivot, w, symbols
-        )
+        sector_risk, sector_pct, sector_exposures = self._compute_sector_risk(ret_pivot, w, symbols)
 
         # Idiosyncratic risk = residual
         explained_var = market_risk**2 + style_risk**2 + sector_risk**2
@@ -311,17 +310,11 @@ class RiskModel(BaseRiskModel):
         w = np.array(list(weights.values()))
         hhi = float(np.sum(w**2))
         effective_n = float(1.0 / hhi) if hhi > 0 else float(len(w))
-        diversification_score = float(
-            1.0 - 1.0 / effective_n if effective_n > 1 else 0.0
-        )
+        diversification_score = float(1.0 - 1.0 / effective_n if effective_n > 1 else 0.0)
 
         # Top risk contributors — weighted by position size
-        sorted_positions = sorted(
-            weights.items(), key=lambda x: abs(x[1]), reverse=True
-        )
-        top_contributors = [
-            (sym, wt) for sym, wt in sorted_positions[:5]
-        ]
+        sorted_positions = sorted(weights.items(), key=lambda x: abs(x[1]), reverse=True)
+        top_contributors = [(sym, wt) for sym, wt in sorted_positions[:5]]
 
         # Concentration: top 5 weight / total
         top5_wt = sum(abs(wt) for _, wt in top_contributors)
@@ -428,9 +421,12 @@ class RiskModel(BaseRiskModel):
 
         style_risk = float(np.sqrt(max(style_var_total, 0.0)))
 
-        total_var = float(np.var(
-            (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(axis=1)  # type: ignore[assignment]
-        ) * self._trading_days)
+        total_var = float(
+            np.var(
+                (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(axis=1)  # type: ignore[assignment]
+            )
+            * self._trading_days
+        )
         pct = style_var_total / total_var if total_var > 0 else 0.0
 
         return style_risk, min(pct, 1.0), exposures
@@ -458,9 +454,12 @@ class RiskModel(BaseRiskModel):
 
         sector_risk = float(np.sqrt(max(sector_var, 0.0)))
 
-        total_var = float(np.var(
-            (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(axis=1)  # type: ignore[assignment]
-        ) * self._trading_days)
+        total_var = float(
+            np.var(
+                (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(axis=1)  # type: ignore[assignment]
+            )
+            * self._trading_days
+        )
         pct = sector_var / total_var if total_var > 0 else 0.0
 
         return sector_risk, min(pct, 1.0), sector_wt

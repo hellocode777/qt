@@ -1,6 +1,11 @@
-"""BaseBroker — unified broker API for paper and live trading.
+"""BaseBroker — unified broker interface for simulation (backtest + paper trading).
 
 See rule.md §7.7 for the complete specification.
+
+DESIGN NOTE: QP is a decision-support system, NOT an automated trading system.
+The system generates buy/sell RECOMMENDATIONS. The user executes trades manually.
+This interface exists ONLY for backtesting and paper-trading simulation — there is
+no live broker adapter and there never will be.
 """
 
 from abc import ABC, abstractmethod

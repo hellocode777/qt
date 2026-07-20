@@ -116,7 +116,11 @@ class TencentAdapter(BaseDataSource):
         return code
 
     def _fetch_one_stock(
-        self, tc: str, code: str, start_dt: datetime, end_dt: datetime,
+        self,
+        tc: str,
+        code: str,
+        start_dt: datetime,
+        end_dt: datetime,
     ) -> list[dict]:
         """Fetch one stock's full history, handling pagination via date segments.
 
@@ -155,16 +159,18 @@ class TencentAdapter(BaseDataSource):
 
             for row in klines:
                 try:
-                    all_rows.append({
-                        "日期": str(row[0])[:10],
-                        "股票代码": code,
-                        "开盘": float(row[1]),
-                        "收盘": float(row[2]),
-                        "最高": float(row[3]),
-                        "最低": float(row[4]),
-                        "成交量": float(row[5]),
-                        "symbol": code,
-                    })
+                    all_rows.append(
+                        {
+                            "日期": str(row[0])[:10],
+                            "股票代码": code,
+                            "开盘": float(row[1]),
+                            "收盘": float(row[2]),
+                            "最高": float(row[3]),
+                            "最低": float(row[4]),
+                            "成交量": float(row[5]),
+                            "symbol": code,
+                        }
+                    )
                 except (ValueError, IndexError):
                     continue
 

@@ -102,8 +102,12 @@ class ExperimentTracker(BaseExperimentTracker):
 
         # Build lineage
         lineage = LineageGraph(
-            dataset_name=lineage_graph.get("dataset", "").split("@")[0] if "@" in lineage_graph.get("dataset", "") else lineage_graph.get("dataset", ""),
-            dataset_version=lineage_graph.get("dataset", "").split("@")[1] if "@" in lineage_graph.get("dataset", "") else "",
+            dataset_name=lineage_graph.get("dataset", "").split("@")[0]
+            if "@" in lineage_graph.get("dataset", "")
+            else lineage_graph.get("dataset", ""),
+            dataset_version=lineage_graph.get("dataset", "").split("@")[1]
+            if "@" in lineage_graph.get("dataset", "")
+            else "",
             features=config.get("features", []),
             model_id=lineage_graph.get("model_id", lineage_graph.get("model", "")),
             model_algo=lineage_graph.get("model_algo", ""),
@@ -164,10 +168,7 @@ class ExperimentTracker(BaseExperimentTracker):
         """Get the most recent experiment, optionally for a strategy."""
         records = self.list_experiments()
         if strategy_id:
-            records = [
-                r for r in records
-                if r.lineage.strategy_id == strategy_id
-            ]
+            records = [r for r in records if r.lineage.strategy_id == strategy_id]
         return records[0] if records else None
 
     def update_status(
@@ -261,8 +262,12 @@ class ExperimentTracker(BaseExperimentTracker):
 
             lin_data = data.get("lineage", {})
             lineage = LineageGraph(
-                dataset_name=lin_data.get("dataset", "").split("@")[0] if "@" in lin_data.get("dataset", "") else "",
-                dataset_version=lin_data.get("dataset", "").split("@")[1] if "@" in lin_data.get("dataset", "") else "",
+                dataset_name=lin_data.get("dataset", "").split("@")[0]
+                if "@" in lin_data.get("dataset", "")
+                else "",
+                dataset_version=lin_data.get("dataset", "").split("@")[1]
+                if "@" in lin_data.get("dataset", "")
+                else "",
                 features=cfg_data.get("features", []),
                 model_id=lin_data.get("model_id", ""),
                 model_algo=lin_data.get("model_algo", ""),

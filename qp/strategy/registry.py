@@ -70,9 +70,7 @@ class StrategyRegistry:
             StrategyLifecycle.PRODUCTION,
         }
         return [
-            s
-            for sid, s in self._strategies.items()
-            if self._lifecycles.get(sid) in active_states
+            s for sid, s in self._strategies.items() if self._lifecycles.get(sid) in active_states
         ]
 
     def get_backtest_ready(self) -> list[BaseStrategy]:
@@ -85,9 +83,7 @@ class StrategyRegistry:
             StrategyLifecycle.BACKTEST_PASSED,
         }
         return [
-            s
-            for sid, s in self._strategies.items()
-            if self._lifecycles.get(sid) in ready_states
+            s for sid, s in self._strategies.items() if self._lifecycles.get(sid) in ready_states
         ]
 
     def set_lifecycle(self, strategy_id: str, state: StrategyLifecycle) -> None:

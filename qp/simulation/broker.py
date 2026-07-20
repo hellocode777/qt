@@ -1,11 +1,17 @@
-"""SimulatedBroker — paper-trading broker with realistic execution.
+"""SimulatedBroker — backtesting broker with realistic execution simulation.
 
-Implements BaseBroker for backtesting with:
+Implements BaseBroker for BACKTESTING ONLY with:
   - Market order execution at next bar's price
   - Transaction cost tracking (stamp tax, commission, slippage, impact)
   - ADV-based liquidity limits (single order ≤ 10% ADV)
   - Cash and position tracking
   - Full trade log
+
+DESIGN NOTE: QP is a decision-support system, not an automated trading system.
+The SimulatedBroker exists purely for backtesting — to estimate what would happen
+if the user followed the system's recommendations. In production, the system
+outputs buy/sell RECOMMENDATIONS (see decision/ layer), and the user executes
+trades manually through their own brokerage account.
 
 See plan_v1.md §8.4 (M4.4).
 """
@@ -157,7 +163,9 @@ class SimulatedBroker(BaseBroker):
             est_cost = price * order["quantity"] * 1.003  # ~0.3% buffer for costs
             if est_cost > self._cash:
                 order["status"] = "REJECTED"
-                order["reject_reason"] = f"Insufficient cash: need {est_cost:.0f}, have {self._cash:.0f}"
+                order["reject_reason"] = (
+                    f"Insufficient cash: need {est_cost:.0f}, have {self._cash:.0f}"
+                )
                 self._pending_orders.append(order)
                 return order_id
 
@@ -191,14 +199,16 @@ class SimulatedBroker(BaseBroker):
         rows = []
         for sym, pos in self._positions.items():
             price = self._current_prices.get(sym, pos.avg_cost)
-            rows.append({
-                "symbol": sym,
-                "shares": pos.shares,
-                "avg_cost": pos.avg_cost,
-                "current_price": price,
-                "market_value": pos.shares * price,
-                "unrealized_pnl": pos.shares * (price - pos.avg_cost),
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "shares": pos.shares,
+                    "avg_cost": pos.avg_cost,
+                    "current_price": price,
+                    "market_value": pos.shares * price,
+                    "unrealized_pnl": pos.shares * (price - pos.avg_cost),
+                }
+            )
         return pd.DataFrame(rows)
 
     def get_cash(self) -> float:
@@ -335,7 +345,8 @@ class SimulatedBroker(BaseBroker):
 
         # Clear processed orders
         self._pending_orders = [
-            o for o in self._pending_orders
+            o
+            for o in self._pending_orders
             if o.get("status") not in ("FILLED", "REJECTED", "CANCELLED")
         ]
 
@@ -343,31 +354,31 @@ class SimulatedBroker(BaseBroker):
 
     def get_equity(self) -> float:
         """Total portfolio equity (cash + positions market value)."""
-        positions_mv = sum(
-            p.market_value for p in self._positions.values()
-        )
+        positions_mv = sum(p.market_value for p in self._positions.values())
         return self._cash + positions_mv
 
     def get_trade_log(self) -> pl.DataFrame:
         """Full trade log as a Polars DataFrame."""
         if not self._trade_log:
             return pl.DataFrame()
-        return pl.DataFrame([
-            {
-                "timestamp": t.timestamp,
-                "symbol": t.symbol,
-                "side": t.side,
-                "shares": t.shares,
-                "price": t.price,
-                "commission": t.commission,
-                "stamp_tax": t.stamp_tax,
-                "slippage": t.slippage,
-                "market_impact": t.market_impact,
-                "total_cost": t.total_cost,
-                "net_amount": t.net_amount,
-            }
-            for t in self._trade_log
-        ])
+        return pl.DataFrame(
+            [
+                {
+                    "timestamp": t.timestamp,
+                    "symbol": t.symbol,
+                    "side": t.side,
+                    "shares": t.shares,
+                    "price": t.price,
+                    "commission": t.commission,
+                    "stamp_tax": t.stamp_tax,
+                    "slippage": t.slippage,
+                    "market_impact": t.market_impact,
+                    "total_cost": t.total_cost,
+                    "net_amount": t.net_amount,
+                }
+                for t in self._trade_log
+            ]
+        )
 
     def get_order_log(self) -> list[dict]:
         """Return all order records (including rejected/cancelled)."""

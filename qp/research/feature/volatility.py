@@ -50,16 +50,13 @@ class Volatility20dFeature(BaseFeature):
         df = df.sort(["symbol", "trade_date"])
 
         # Log returns
-        df = df.with_columns(
-            (pl.col("close").log().diff().over("symbol")).alias("log_return")
-        )
+        df = df.with_columns((pl.col("close").log().diff().over("symbol")).alias("log_return"))
 
         # 20-day rolling std of log returns, annualized, inverted
         df = df.with_columns(
-            (
-                -pl.col("log_return").rolling_std(20).over("symbol")
-                * (252**0.5)
-            ).alias("feature_value")
+            (-pl.col("log_return").rolling_std(20).over("symbol") * (252**0.5)).alias(
+                "feature_value"
+            )
         )
 
         # Drop rows without enough history

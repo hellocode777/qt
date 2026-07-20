@@ -42,9 +42,7 @@ class FreezableBaseModel(BaseModel):
         except AttributeError:
             frozen = False
         if frozen:
-            raise FrozenConfigError(
-                f"Cannot modify '{name}' — configuration is frozen."
-            )
+            raise FrozenConfigError(f"Cannot modify '{name}' — configuration is frozen.")
         super().__setattr__(name, value)
 
     def __delattr__(self, name: str) -> None:
@@ -53,9 +51,7 @@ class FreezableBaseModel(BaseModel):
         except AttributeError:
             frozen = False
         if frozen:
-            raise FrozenConfigError(
-                f"Cannot delete '{name}' — configuration is frozen."
-            )
+            raise FrozenConfigError(f"Cannot delete '{name}' — configuration is frozen.")
         super().__delattr__(name)
 
 

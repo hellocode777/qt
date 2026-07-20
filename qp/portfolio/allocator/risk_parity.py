@@ -79,7 +79,11 @@ class RiskParityAllocator(BaseCapitalAllocator):
             wt = 1.0 / n
             investable = total_capital * (1.0 - self._cash_buffer)
             rows = [
-                {"symbol": s, "target_weight": wt * (1.0 - self._cash_buffer), "target_amount": investable * wt}
+                {
+                    "symbol": s,
+                    "target_weight": wt * (1.0 - self._cash_buffer),
+                    "target_amount": investable * wt,
+                }
                 for s in symbols
             ]
             return pl.DataFrame(rows)
@@ -93,12 +97,14 @@ class RiskParityAllocator(BaseCapitalAllocator):
         for s in symbols:
             raw_wt = inv_vols.get(s, 0.0) / total_inv_vol if total_inv_vol > 0 else 0.0
             target_wt = raw_wt * (1.0 - self._cash_buffer)
-            rows.append({
-                "symbol": s,
-                "target_weight": round(target_wt, 6),
-                "target_amount": round(target_wt * total_capital, 2),
-                "annual_vol": round(vols.get(s, 0.0), 4),
-            })
+            rows.append(
+                {
+                    "symbol": s,
+                    "target_weight": round(target_wt, 6),
+                    "target_amount": round(target_wt * total_capital, 2),
+                    "annual_vol": round(vols.get(s, 0.0), 4),
+                }
+            )
 
         return pl.DataFrame(rows)
 
@@ -113,9 +119,7 @@ class RiskParityAllocator(BaseCapitalAllocator):
             return {}
 
         px = px.sort(["symbol", "trade_date"])
-        px = px.with_columns(
-            (pl.col("close").log().diff().over("symbol")).alias("log_return")
-        )
+        px = px.with_columns((pl.col("close").log().diff().over("symbol")).alias("log_return"))
         px = px.drop_nulls(subset=["log_return"])
 
         # Last N days per symbol

@@ -47,7 +47,9 @@ class DailyPriceContract:
                 errors.append(f"Missing column: {col}")
 
         # Check data types
-        if "trade_date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["trade_date"]):
+        if "trade_date" in df.columns and not pd.api.types.is_datetime64_any_dtype(
+            df["trade_date"]
+        ):
             errors.append("trade_date must be datetime64")
 
         # Check for nulls in key columns

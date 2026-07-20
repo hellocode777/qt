@@ -1,6 +1,5 @@
 """Tests for Shared modules — constants, types, exceptions."""
 
-
 from qp.shared.constants import (
     DEFAULT_CURRENCY,
     DEFAULT_TIMEZONE,
@@ -34,6 +33,7 @@ class TestConstants:
 
     def test_default_timezone_is_utc(self) -> None:
         from datetime import UTC
+
         assert DEFAULT_TIMEZONE == UTC
 
     def test_min_training_window_days(self) -> None:

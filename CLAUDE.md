@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-QP (Quant Platform) is a quantitative investment research and trading platform with a strict 12-layer architecture. The project is currently in **Sprint 0 (Bootstrap)** — the directory skeleton and design documentation are in place, but all source files are empty placeholders awaiting implementation.
+QP (Quant Platform) is a quantitative investment research and trading platform with a strict 10-layer architecture. The project is currently in **Sprint 0 (Bootstrap)** — the directory skeleton and design documentation are in place, but all source files are empty placeholders awaiting implementation.
 
 ## Build & Quality Commands
 

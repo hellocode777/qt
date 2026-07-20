@@ -102,6 +102,17 @@ qp validate → simple_rank_v1.0:
 | M5.5 | ✅ | Knowledge Layer：KnowledgeArchive + KnowledgeEntry（YAML frontmatter + Markdown）+ 5类模板（实验总结/失败分析/事后复盘/决策审计/研究债务）+ 全文搜索 |
 | M5.6 | ✅ | 集成：`qp monitor check/regime/alert-test` + `qp knowledge stats/search` CLI 命令 |
 
+### ✅ Phase 6 — Decision Layer + 架构自查 + 测试补充（已完成）
+
+**目标**：实现决策辅助层、七类可信性审计、补充业务层测试。
+
+| Milestone | 状态 | 说明 |
+|---|---|---|
+| M6.1 | ✅ | Decision Layer：TradeRecommendation + DecisionReport + DecisionEngine + `qp decide` CLI 命令（中英双语输出） |
+| M6.2 | ✅ | 架构完整性自查：`docs/credibility_check.md` 七类可信性全部审计（5 通过 / 2 基本满足） |
+| M6.3 | ✅ | 业务层单元测试：test_decision + test_portfolio + test_strategy + test_monitoring（34 → 109 个测试） |
+| M6.4 | ✅ | 最终检查：ruff=0, pyright=0, pytest=109/109 passed, 文档同步 |
+
 ---
 
 ## 二、可用命令
@@ -131,6 +142,7 @@ uv run qp monitor regime                   # 市场状态检测
 uv run qp monitor alert-test               # 告警通道测试
 uv run qp knowledge stats                  # 知识库统计
 uv run qp knowledge search <query>         # 知识库搜索
+uv run qp decide [strategy] [--capital=N]  # 生成交易建议（中英双语）
 ```
 
 ### 2.2 代码检查
@@ -214,11 +226,13 @@ qp/
 │   ├── regime.py      #   MarketRegimeEngine
 │   ├── strategy_monitor.py # StrategyMonitor
 │   └── alerts.py      #   AlertManager + Terminal/Log/Telegram
-├── decision/          # Layer 8: ⏳ 空
+├── decision/          # Layer 8: ✅ Phase 6
+│   ├── models.py      #   TradeRecommendation + DecisionReport
+│   └── engine.py      #   DecisionEngine + bilingual formatter
 └── knowledge/         # Layer 10: ✅ Phase 5
     └── archive.py     #   KnowledgeArchive + 5类模板
 tests/
-├── unit/              # 单元测试 (34 个) ✅
+├── unit/              # 单元测试 (109 个) ✅
 ├── integration/       # 集成测试 ⏳
 └── e2e/               # 端到端测试 ⏳
 ```
@@ -274,13 +288,55 @@ AlertManager → TerminalAlert / LogAlert / TelegramAlert
 KnowledgeArchive (实验总结 / 失败分析 / 决策审计 / 事后复盘)
 ```
 
-## 六、下一步：Phase 6 缓冲与复盘
+## 六、Phase 6 数据流
 
-按 `docs/plan_v1.md` 继续推进：
+```
+Strategy.generate_signals()
+          ↓
+PortfolioRiskManager.apply_risk_limits_with_prices()
+          ↓
+DecisionEngine.generate()  ← CostModel + RiskReport + MarketRegime
+          ↓
+DecisionReport
+  ├── TradeRecommendation (symbol, action, weight, shares, price, cost, reason, warnings, confidence)
+  ├── risk_summary + cost_summary + market_regime
+  └── disclaimer
+          ↓
+DecisionEngine.format_bilingual() → 终端双语输出
+DecisionEngine.to_markdown()     → 审计日志
+```
 
-1. 数据源问题修复 — AkShare API 变化、数据缺失
-2. 券商 API 联调 — 真实券商连接、认证、下单
-3. Bug 排查与修复 — 26 周积累的已知问题
-4. 性能优化 — 大数据量查询、回测性能
-5. 架构完整性自查 — 七类可信性逐项检查
-6. 阈值校准 — 根据实际运行数据校准判定标准
+## 七、项目总结
+
+### 最终质量门禁
+
+```bash
+uv sync      # ✅ 62 packages
+ruff check   # ✅ 0 errors
+pyright      # ✅ 0 errors
+pytest       # ✅ 109/109 passed
+```
+
+### 10 层架构完成度
+
+| Layer | 名称 | 状态 |
+|---|---|---|
+| 1 | platform/ | ✅ 完整（config, logging, runtime, scheduler, storage, pipeline, cli, metadata） |
+| 2 | data/ | ✅ 完整（adapter×3, cleaning, contract, loader, calendar, corporate_action） |
+| 3 | research/ | ⚠️ 基本完整（feature×2, split, trainer, experiment; 缺中性化/label/evaluation） |
+| 4 | validation/ | ✅ 完整（rule engine + 9 checks） |
+| 5 | strategy/ | ⚠️ 基本完整（1 strategy, aggregator, registry; 需更多策略） |
+| 6 | portfolio/ | ✅ 完整（risk, cost, allocator×3, optimizer, risk_model） |
+| 7 | simulation/ | ✅ 完整（broker, slippage×3, backtest, result） |
+| 8 | decision/ | ✅ 完成（models, engine, bilingual output） |
+| 9 | monitoring/ | ✅ 完整（drift, decay, regime, strategy_monitor, kill_switch, alerts, pipeline） |
+| 10 | knowledge/ | ✅ 完整（archive, 5 templates, full-text search） |
+
+**10/10 层有代码，0 层为空。**
+
+### 后续方向
+
+1. 截面中性化（行业 + 市值）— 提升因子质量
+2. Purged CV 接入 LightGBM 训练 — 自动化研究流程
+3. 更多因子和策略 — 丰富信号来源
+4. 集成测试 + E2E 测试 — 提升测试金字塔

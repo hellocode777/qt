@@ -24,6 +24,7 @@ from enum import StrEnum
 
 class DecayStage(StrEnum):
     """Model decay lifecycle stages."""
+
     HEALTHY = "healthy"  # IC stable, no degradation
     WARNING = "warning"  # OOS IC declining but still above decay threshold
     DECAYING = "decaying"  # OOS IC < 30% of training IC

@@ -124,7 +124,9 @@ class DrawdownTrigger(_BaseTrigger):
             "message": (
                 f"Drawdown {current_dd:.1%} > "
                 f"historical_max × {self._ratio} = {self._threshold:.1%}"
-            ) if fired else "",
+            )
+            if fired
+            else "",
         }
 
 
@@ -155,13 +157,9 @@ class PortfolioDrawdownTrigger(_BaseTrigger):
 
         messages = []
         if monthly_fired:
-            messages.append(
-                f"Monthly return {monthly_ret:.1%} ≤ -{self._monthly_limit:.0%}"
-            )
+            messages.append(f"Monthly return {monthly_ret:.1%} ≤ -{self._monthly_limit:.0%}")
         if rolling_fired:
-            messages.append(
-                f"Rolling 60d DD {rolling_60d_dd:.1%} ≥ {self._rolling_60d_limit:.0%}"
-            )
+            messages.append(f"Rolling 60d DD {rolling_60d_dd:.1%} ≥ {self._rolling_60d_limit:.0%}")
 
         return {
             "fired": fired,
@@ -193,9 +191,7 @@ class PSITrigger(_BaseTrigger):
             "fired": fired,
             "psi": psi,
             "threshold": self._threshold,
-            "message": (
-                f"PSI {psi:.3f} ≥ threshold {self._threshold}"
-            ) if fired else "",
+            "message": (f"PSI {psi:.3f} ≥ threshold {self._threshold}") if fired else "",
         }
 
     @staticmethod

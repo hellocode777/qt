@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 class Regime(StrEnum):
     """Market regime classifications."""
+
     TREND_UP = "TREND_UP"  # Strong uptrend
     TREND_DOWN = "TREND_DOWN"  # Strong downtrend
     RANGING = "RANGING"  # Sideways / mean-reverting
@@ -161,8 +162,12 @@ class MarketRegimeEngine:
 
         details = {
             "adx": float(adx),
-            "short_ma": float(closes[-self._short_ma:].mean()) if len(closes) >= self._short_ma else 0.0,
-            "long_ma": float(closes[-self._long_ma:].mean()) if len(closes) >= self._long_ma else 0.0,
+            "short_ma": float(closes[-self._short_ma :].mean())
+            if len(closes) >= self._short_ma
+            else 0.0,
+            "long_ma": float(closes[-self._long_ma :].mean())
+            if len(closes) >= self._long_ma
+            else 0.0,
             "annualized_vol": ann_vol,
             "vol_percentile": vol_percentile,
             "close": float(closes[-1]),
@@ -279,8 +284,8 @@ class MarketRegimeEngine:
         if n < self._long_ma:
             return 0
 
-        short_ma = float(closes[-self._short_ma:].mean())
-        long_ma = float(closes[-self._long_ma:].mean())
+        short_ma = float(closes[-self._short_ma :].mean())
+        long_ma = float(closes[-self._long_ma :].mean())
 
         if short_ma > long_ma * 1.02:
             return 1  # Uptrend

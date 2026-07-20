@@ -20,6 +20,7 @@ from qp.shared.protocols.base_corporate_action import CorporateActionEngine as C
 
 class ActionType(StrEnum):
     """Corporate action types."""
+
     CASH_DIVIDEND = "cash_dividend"  # 现金分红
     STOCK_DIVIDEND = "stock_dividend"  # 送股
     SPLIT = "split"  # 拆股
@@ -230,8 +231,14 @@ class CorporateActionLoader:
         """
         return pd.DataFrame(
             columns=[
-                "symbol", "ex_date", "action_type", "dividend_per_share",
-                "split_ratio", "rights_ratio", "rights_price", "bonus_ratio",
+                "symbol",
+                "ex_date",
+                "action_type",
+                "dividend_per_share",
+                "split_ratio",
+                "rights_ratio",
+                "rights_price",
+                "bonus_ratio",
             ]
         )
 
@@ -251,10 +258,12 @@ class CorporateActionLoader:
         """
         rows = []
         for sym, (shares, avg_cost) in positions.items():
-            rows.append({
-                "symbol": sym,
-                "shares": shares,
-                "avg_cost": avg_cost,
-                "cash": cash,
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "shares": shares,
+                    "avg_cost": avg_cost,
+                    "cash": cash,
+                }
+            )
         return pd.DataFrame(rows)

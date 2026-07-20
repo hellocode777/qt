@@ -38,9 +38,7 @@ class SimpleVectorBacktest:
 
         # Daily returns per symbol
         px = px.sort(["symbol", "trade_date"])
-        px = px.with_columns(
-            pl.col("close").pct_change().over("symbol").alias("daily_return")
-        )
+        px = px.with_columns(pl.col("close").pct_change().over("symbol").alias("daily_return"))
         px = px.drop_nulls(subset=["daily_return"])
 
         # Equal weight portfolio return (average across selected stocks)

@@ -23,6 +23,7 @@ from enum import StrEnum
 
 class AlertSeverity(StrEnum):
     """Alert severity levels."""
+
     INFO = "info"  # Routine notification
     WARNING = "warning"  # Needs attention
     CRITICAL = "critical"  # Immediate action required
@@ -253,11 +254,13 @@ class TelegramAlert(_BaseAlertChannel):
             import urllib.request
 
             url = f"https://api.telegram.org/bot{self._token}/sendMessage"
-            payload = _json.dumps({
-                "chat_id": self._chat_id,
-                "text": text,
-                "parse_mode": "Markdown",
-            }).encode("utf-8")
+            payload = _json.dumps(
+                {
+                    "chat_id": self._chat_id,
+                    "text": text,
+                    "parse_mode": "Markdown",
+                }
+            ).encode("utf-8")
 
             req = urllib.request.Request(
                 url,
@@ -341,21 +344,29 @@ class AlertManager:
         """
         results: dict[str, bool] = {}
         for channel, min_sev in self._channels:
-            if min_sev is None or self._severity_rank(alert.severity) >= self._severity_rank(min_sev):
+            if min_sev is None or self._severity_rank(alert.severity) >= self._severity_rank(
+                min_sev
+            ):
                 ch_name = type(channel).__name__
                 results[ch_name] = channel.send(alert)
         return results
 
     # Convenience methods
-    def info(self, title: str, message: str, source: str = "monitoring", **metadata: str) -> dict[str, bool]:
+    def info(
+        self, title: str, message: str, source: str = "monitoring", **metadata: str
+    ) -> dict[str, bool]:
         """Send INFO alert."""
         return self.send(Alert(AlertSeverity.INFO, title, message, source, metadata=metadata))
 
-    def warning(self, title: str, message: str, source: str = "monitoring", **metadata: str) -> dict[str, bool]:
+    def warning(
+        self, title: str, message: str, source: str = "monitoring", **metadata: str
+    ) -> dict[str, bool]:
         """Send WARNING alert."""
         return self.send(Alert(AlertSeverity.WARNING, title, message, source, metadata=metadata))
 
-    def critical(self, title: str, message: str, source: str = "monitoring", **metadata: str) -> dict[str, bool]:
+    def critical(
+        self, title: str, message: str, source: str = "monitoring", **metadata: str
+    ) -> dict[str, bool]:
         """Send CRITICAL alert."""
         return self.send(Alert(AlertSeverity.CRITICAL, title, message, source, metadata=metadata))
 
@@ -369,7 +380,9 @@ class AlertManager:
 
     @staticmethod
     def _severity_rank(severity: AlertSeverity) -> int:
-        return {AlertSeverity.INFO: 0, AlertSeverity.WARNING: 1, AlertSeverity.CRITICAL: 2}[severity]
+        return {AlertSeverity.INFO: 0, AlertSeverity.WARNING: 1, AlertSeverity.CRITICAL: 2}[
+            severity
+        ]
 
     @property
     def channel_count(self) -> int:

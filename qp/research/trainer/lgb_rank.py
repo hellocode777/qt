@@ -127,7 +127,10 @@ class LightGBMRankModel(BaseModel):
         ]
 
         train_data = lgb.Dataset(
-            X, label=y, group=groups, weight=sample_weight,
+            X,
+            label=y,
+            group=groups,
+            weight=sample_weight,
         )
 
         valid_sets = [train_data]
@@ -149,9 +152,7 @@ class LightGBMRankModel(BaseModel):
         )
 
         self._best_iteration = (
-            self._model.best_iteration
-            if self._model.best_iteration > 0
-            else n_estimators
+            self._model.best_iteration if self._model.best_iteration > 0 else n_estimators
         )
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
@@ -202,10 +203,16 @@ class LightGBMRankModel(BaseModel):
         if self._model is None:
             return pd.DataFrame(columns=["feature", "gain"])
         importance = self._model.feature_importance(importance_type="gain")
-        return pd.DataFrame({
-            "feature": self._feature_names,
-            "gain": importance,
-        }).sort_values("gain", ascending=False).reset_index(drop=True)
+        return (
+            pd.DataFrame(
+                {
+                    "feature": self._feature_names,
+                    "gain": importance,
+                }
+            )
+            .sort_values("gain", ascending=False)
+            .reset_index(drop=True)
+        )
 
     @property
     def best_iteration(self) -> int:

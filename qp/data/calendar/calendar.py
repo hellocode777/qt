@@ -13,9 +13,7 @@ class TradingCalendar:
     def __init__(self) -> None:
         self._cache: dict[int, list[date]] = {}
 
-    def get_trading_days(
-        self, start_date: date, end_date: date
-    ) -> list[date]:
+    def get_trading_days(self, start_date: date, end_date: date) -> list[date]:
         """Get trading days between two dates.
 
         In a full implementation, this would use a proper trading calendar.
@@ -27,9 +25,7 @@ class TradingCalendar:
             df = ak.tool_trade_date_hist_sina()
             if df is not None and not df.empty:
                 trade_dates = pd.to_datetime(df["trade_date"]).dt.date.tolist()
-                return [
-                    d for d in trade_dates if start_date <= d <= end_date
-                ]
+                return [d for d in trade_dates if start_date <= d <= end_date]
         except Exception:
             pass
 

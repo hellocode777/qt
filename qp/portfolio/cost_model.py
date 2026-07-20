@@ -247,16 +247,12 @@ class MarketImpactModel:
 
         # Estimate daily volume in CNY (close * volume)
         if "volume" in df.columns:
-            df = df.with_columns(
-                (pl.col("close") * pl.col("volume")).alias("daily_value")
-            )
+            df = df.with_columns((pl.col("close") * pl.col("volume")).alias("daily_value"))
         else:
             return {}
 
         # Last N days average
         df = df.group_by("symbol").tail(lookback)
-        adv = df.group_by("symbol").agg(
-            pl.col("daily_value").mean().alias("adv")
-        )
+        adv = df.group_by("symbol").agg(pl.col("daily_value").mean().alias("adv"))
 
         return dict(zip(adv["symbol"].to_list(), adv["adv"].to_list(), strict=True))

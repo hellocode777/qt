@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 class HealthLevel(StrEnum):
     """Strategy health classification."""
+
     HEALTHY = "healthy"  # 80-100: all metrics normal
     WATCH = "watch"  # 60-79: minor deviations
     WARNING = "warning"  # 40-59: needs attention
@@ -36,6 +37,7 @@ class HealthLevel(StrEnum):
 @dataclass
 class SignalRecord:
     """Record of one day's signal generation."""
+
     date: str
     n_signals: int = 0
     n_buys: int = 0
@@ -135,19 +137,19 @@ class StrategyMonitor:
 
         # Trim to window
         if len(self._signal_history) > self._window_days:
-            self._signal_history = self._signal_history[-self._window_days:]
+            self._signal_history = self._signal_history[-self._window_days :]
 
     def record_turnover(self, turnover_pct: float) -> None:
         """Record a daily/weekly turnover percentage."""
         self._turnover_history.append(turnover_pct)
         if len(self._turnover_history) > self._window_days:
-            self._turnover_history = self._turnover_history[-self._window_days:]
+            self._turnover_history = self._turnover_history[-self._window_days :]
 
     def record_drawdown(self, date: str, drawdown_pct: float) -> None:
         """Record current drawdown level."""
         self._drawdown_history.append((date, drawdown_pct))
         if len(self._drawdown_history) > self._window_days * 2:
-            self._drawdown_history = self._drawdown_history[-self._window_days * 2:]
+            self._drawdown_history = self._drawdown_history[-self._window_days * 2 :]
 
     # ------------------------------------------------------------------
     # Health check
@@ -180,14 +182,10 @@ class StrategyMonitor:
 
             # Check if signal count is in expected range
             if mean_sig < self._expected_min:
-                alerts.append(
-                    f"Low signals: avg {mean_sig:.1f}/day < min {self._expected_min}"
-                )
+                alerts.append(f"Low signals: avg {mean_sig:.1f}/day < min {self._expected_min}")
                 scores["consistency"] = max(0, 25 * mean_sig / self._expected_min)
             elif mean_sig > self._expected_max:
-                alerts.append(
-                    f"High signals: avg {mean_sig:.1f}/day > max {self._expected_max}"
-                )
+                alerts.append(f"High signals: avg {mean_sig:.1f}/day > max {self._expected_max}")
                 scores["consistency"] = 15.0  # Too many signals
             else:
                 # Coefficient of variation — lower is more stable
@@ -204,9 +202,7 @@ class StrategyMonitor:
         if self._turnover_history:
             avg_turnover = float(np.mean(self._turnover_history))
             if avg_turnover > self._max_turnover:
-                alerts.append(
-                    f"High turnover: {avg_turnover:.1%}/week > {self._max_turnover:.0%}"
-                )
+                alerts.append(f"High turnover: {avg_turnover:.1%}/week > {self._max_turnover:.0%}")
                 scores["turnover"] = max(0, 25 * self._max_turnover / avg_turnover)
             elif avg_turnover > self._max_turnover * 0.7:
                 scores["turnover"] = 20.0
@@ -219,9 +215,7 @@ class StrategyMonitor:
         if self._drawdown_history:
             current_dd = abs(self._drawdown_history[-1][1])
             if current_dd > self._max_drawdown:
-                alerts.append(
-                    f"Drawdown breach: {current_dd:.1%} > max {self._max_drawdown:.0%}"
-                )
+                alerts.append(f"Drawdown breach: {current_dd:.1%} > max {self._max_drawdown:.0%}")
                 scores["drawdown"] = max(0, 25 * self._max_drawdown / current_dd)
             elif current_dd > self._max_drawdown * 0.7:
                 scores["drawdown"] = 20.0
@@ -276,8 +270,7 @@ class StrategyMonitor:
                 f"Score={total_score:.0f}/100 | "
                 f"Signals={avg_signals:.1f}/day | "
                 f"Turnover={avg_turnover:.1%} | "
-                f"DD={current_dd:.1%}"
-                + (f" | ⚠ {len(alerts)} alerts" if alerts else "")
+                f"DD={current_dd:.1%}" + (f" | ⚠ {len(alerts)} alerts" if alerts else "")
             ),
         )
 
@@ -309,13 +302,15 @@ class StrategyMonitor:
 
         rows = []
         for r in self._signal_history:
-            rows.append({
-                "date": r.date,
-                "n_signals": r.n_signals,
-                "n_buys": r.n_buys,
-                "n_sells": r.n_sells,
-                "n_holds": r.n_holds,
-            })
+            rows.append(
+                {
+                    "date": r.date,
+                    "n_signals": r.n_signals,
+                    "n_buys": r.n_buys,
+                    "n_sells": r.n_sells,
+                    "n_holds": r.n_holds,
+                }
+            )
         return pd.DataFrame(rows)
 
     @property

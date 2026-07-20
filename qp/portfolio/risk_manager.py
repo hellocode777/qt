@@ -92,7 +92,9 @@ class PortfolioRiskManager(BasePortfolioRiskManager):
             return raw_signals
 
         # Convert to polars
-        signals = pl.from_pandas(raw_signals) if isinstance(raw_signals, pd.DataFrame) else raw_signals
+        signals = (
+            pl.from_pandas(raw_signals) if isinstance(raw_signals, pd.DataFrame) else raw_signals
+        )
 
         symbols = signals["symbol"].to_list()
         n_signals = len(symbols)
@@ -188,16 +190,13 @@ class PortfolioRiskManager(BasePortfolioRiskManager):
         for sector, w in sector_weights.items():
             if w > self._max_single_sector:
                 violations.append(
-                    f"Sector cap: {sector} at {w:.1%} > "
-                    f"{self._max_single_sector:.0%}"
+                    f"Sector cap: {sector} at {w:.1%} > {self._max_single_sector:.0%}"
                 )
 
         # Step 3: Correlation filter
         correlated_pairs: list[tuple[str, str, float]] = []
         if len(remaining) >= 2:
-            correlated_pairs = self._correlation.find_high_correlation_pairs(
-                prices, remaining
-            )
+            correlated_pairs = self._correlation.find_high_correlation_pairs(prices, remaining)
             if correlated_pairs:
                 # Build rank dict from signal order
                 signal_ranks = {s: i + 1 for i, s in enumerate(symbols)}

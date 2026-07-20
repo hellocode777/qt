@@ -64,9 +64,7 @@ class DatasetRegistry:
             raise KeyError(f"Dataset not found: {key}")
 
         # Find latest version
-        matching = [
-            (k, v) for k, v in self._entries.items() if v["name"] == name
-        ]
+        matching = [(k, v) for k, v in self._entries.items() if v["name"] == name]
         if not matching:
             raise KeyError(f"Dataset not found: {name}")
         matching.sort(key=lambda x: x[1]["version"], reverse=True)

@@ -26,9 +26,7 @@ class FeaturePipeline(BasePipeline):
         return "feature_compute"
 
     def run(self, context: PipelineContext) -> PipelineResult:
-        feature_names = context.parameters.get(
-            "features", list(_FEATURE_CLASSES.keys())
-        )
+        feature_names = context.parameters.get("features", list(_FEATURE_CLASSES.keys()))
 
         result = PipelineResult(
             status=PipelineStatus.SUCCESS,

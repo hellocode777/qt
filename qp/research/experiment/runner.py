@@ -136,9 +136,9 @@ class ExperimentRunner:
         # Compute forward returns (5-day)
         px = price_df.sort(["symbol", "trade_date"])
         px = px.with_columns(
-            (
-                pl.col("close").shift(-5).over("symbol") / pl.col("close") - 1
-            ).alias("forward_return_5d")
+            (pl.col("close").shift(-5).over("symbol") / pl.col("close") - 1).alias(
+                "forward_return_5d"
+            )
         )
         px = px.drop_nulls(subset=["forward_return_5d"])
 
@@ -172,7 +172,11 @@ class ExperimentRunner:
         metrics.ic_mean = float(np.mean(ics))
         metrics.ic_ir = float(np.abs(np.mean(ics)) / np.std(ics)) if np.std(ics) > 0 else 0.0
         n = len(ics)
-        metrics.ic_t_stat = float(np.abs(np.mean(ics)) / (np.std(ics) / np.sqrt(n))) if np.std(ics) > 0 and n > 1 else 0.0
+        metrics.ic_t_stat = (
+            float(np.abs(np.mean(ics)) / (np.std(ics) / np.sqrt(n)))
+            if np.std(ics) > 0 and n > 1
+            else 0.0
+        )
 
         # Simple backtest: long top-10 by feature value, equal weight
         merged = merged.sort("feature_value", descending=True)
@@ -189,7 +193,9 @@ class ExperimentRunner:
 
         if daily_rets:
             rets = np.array(daily_rets)
-            metrics.sharpe_ratio = float(np.sqrt(52) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+            metrics.sharpe_ratio = (
+                float(np.sqrt(52) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+            )
             metrics.total_return_pct = float(((1 + rets).prod() - 1) * 100)
             metrics.annual_return_pct = float(rets.mean() * 52 * 100)
             metrics.annual_volatility_pct = float(rets.std() * np.sqrt(52) * 100)

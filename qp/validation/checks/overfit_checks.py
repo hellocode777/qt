@@ -158,9 +158,8 @@ class FeatureImportanceCheck(BaseRule):
         if top3_fail:
             failures.append(f"top-3 gain ({top3_pct:.1%}) > {self._max_top3_pct:.0%}")
 
-        detail = (
-            f"Top-1 feature: {top1_pct:.1%}, Top-3: {top3_pct:.1%}. "
-            + (", ".join(failures) if failures else "Concentration acceptable.")
+        detail = f"Top-1 feature: {top1_pct:.1%}, Top-3: {top3_pct:.1%}. " + (
+            ", ".join(failures) if failures else "Concentration acceptable."
         )
 
         return RuleResult(

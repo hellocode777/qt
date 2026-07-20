@@ -49,9 +49,7 @@ class LifecycleManager:
             RuntimeStateError: If the transition is invalid.
         """
         if not self.can_transition_to(target):
-            raise RuntimeStateError(
-                f"Invalid state transition: {self._state.name} → {target.name}"
-            )
+            raise RuntimeStateError(f"Invalid state transition: {self._state.name} → {target.name}")
         self._state = target
 
     def is_terminal(self) -> bool:

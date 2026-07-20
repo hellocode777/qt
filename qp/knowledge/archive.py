@@ -31,6 +31,7 @@ from pathlib import Path
 
 class KnowledgeCategory(StrEnum):
     """Categories for knowledge entries."""
+
     RESEARCH_DEBT = "research_debt"
     DECISION_AUDIT = "decision_audit"
     EXPERIMENT_SUMMARY = "experiment_summary"
@@ -63,9 +64,7 @@ class KnowledgeEntry:
     title: str
     content: str = ""
     tags: list[str] = field(default_factory=list)
-    created_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     related: list[str] = field(default_factory=list)
     metadata: dict[str, str] = field(default_factory=dict)
 

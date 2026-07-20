@@ -55,9 +55,7 @@ class DailyPipeline(BasePipeline):
                 result.errors.extend(data_result.errors)
                 result.status = PipelineStatus.FAILED
                 return result
-            result.metrics.update(
-                {f"data_{k}": v for k, v in data_result.metrics.items()}
-            )
+            result.metrics.update({f"data_{k}": v for k, v in data_result.metrics.items()})
 
             # Step 2: Feature computation (momentum + volatility)
             feature_pipeline = FeaturePipeline()
@@ -138,16 +136,12 @@ class DailyPipeline(BasePipeline):
                     )
                     total_impact += cost.total_cost
 
-                result.metrics["estimated_cost_pct"] = round(
-                    total_impact / total_capital * 100, 4
-                )
+                result.metrics["estimated_cost_pct"] = round(total_impact / total_capital * 100, 4)
 
             # Step 6: Capital allocation
             allocator = AllocationFactory.create(alloc_method, cash_buffer=0.05)
             if not filtered_signals.is_empty():
-                alloc_df = allocator.allocate_capital(
-                    filtered_signals.to_pandas(), total_capital
-                )
+                alloc_df = allocator.allocate_capital(filtered_signals.to_pandas(), total_capital)
                 alloc_df_pl = pl.from_pandas(alloc_df)
                 result.metrics["allocated_positions"] = len(alloc_df_pl)
             else:
@@ -171,9 +165,7 @@ class DailyPipeline(BasePipeline):
                         amount = wt * total_capital
                         quantity = int(amount // 100 * 100)  # Round to lots
                         if quantity > 0:
-                            orders.append(
-                                Order(symbol=sym, side="BUY", quantity=quantity)
-                            )
+                            orders.append(Order(symbol=sym, side="BUY", quantity=quantity))
                 result.metrics["order_count"] = len(orders)
                 for o in orders:
                     result.metadata[f"order_{o.symbol}"] = f"{o.side} {o.quantity} ({o.side})"

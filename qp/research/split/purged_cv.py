@@ -61,8 +61,8 @@ class PurgedKFold:
     """
 
     n_splits: int = DEFAULT_PURGED_CV_FOLDS
-    purge_days: int = 20    # Days to purge before each test block
-    embargo_days: int = 5   # Days to embargo after each test block
+    purge_days: int = 20  # Days to purge before each test block
+    embargo_days: int = 5  # Days to embargo after each test block
     min_train_days: int = MIN_TRAINING_WINDOW_DAYS  # 500
 
     def split(
@@ -108,15 +108,17 @@ class PurgedKFold:
             train_indices = np.arange(0, train_end_idx)
             test_indices = np.arange(test_start_idx, test_end_idx)
 
-            folds.append(PurgedFold(
-                fold_idx=fold_idx,
-                train_indices=train_indices,
-                test_indices=test_indices,
-                train_start=dates[0],
-                train_end=dates[train_end_idx - 1],
-                test_start=dates[test_start_idx],
-                test_end=dates[test_end_idx - 1],
-            ))
+            folds.append(
+                PurgedFold(
+                    fold_idx=fold_idx,
+                    train_indices=train_indices,
+                    test_indices=test_indices,
+                    train_start=dates[0],
+                    train_end=dates[train_end_idx - 1],
+                    test_start=dates[test_start_idx],
+                    test_end=dates[test_end_idx - 1],
+                )
+            )
 
         if not folds:
             raise ValueError(
@@ -176,7 +178,9 @@ def _days_between(d1: Any, d2: Any) -> int:  # type: ignore[misc]
 
     try:
         # numpy datetime64
-        return abs(int((np.datetime64(d2) - np.datetime64(d1)).astype("timedelta64[D]").astype(int)))
+        return abs(
+            int((np.datetime64(d2) - np.datetime64(d1)).astype("timedelta64[D]").astype(int))
+        )
     except Exception:
         pass
 

@@ -53,8 +53,6 @@ class SinglePortfolio:
             estimated_price = 10.0
             quantity = int(target_amount / estimated_price // 100 * 100)  # Round to lots
             if quantity > 0:
-                orders.append(
-                    Order(symbol=symbol, side=action, quantity=quantity)
-                )
+                orders.append(Order(symbol=symbol, side=action, quantity=quantity))
 
         return orders

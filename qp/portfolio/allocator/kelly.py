@@ -105,12 +105,14 @@ class KellyAllocator(BaseCapitalAllocator):
             capped_f = min(fractional_f, self._max_single)
             target_wt = capped_f * (1.0 - self._cash_buffer)
 
-            rows.append({
-                "symbol": s,
-                "target_weight": round(target_wt, 6),
-                "target_amount": round(target_wt * total_capital, 2),
-                "kelly_fraction": round(f_star, 4),
-            })
+            rows.append(
+                {
+                    "symbol": s,
+                    "target_weight": round(target_wt, 6),
+                    "target_amount": round(target_wt * total_capital, 2),
+                    "kelly_fraction": round(f_star, 4),
+                }
+            )
 
         return pl.DataFrame(rows)
 
@@ -139,9 +141,7 @@ class KellyAllocator(BaseCapitalAllocator):
 
         px = px.sort(["symbol", "trade_date"])
         px = px.with_columns(
-            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias(
-                "daily_return"
-            )
+            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("daily_return")
         )
         px = px.drop_nulls(subset=["daily_return"])
 

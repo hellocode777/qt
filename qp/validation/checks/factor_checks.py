@@ -266,7 +266,9 @@ class StratificationCheck(BaseRule):
 
 
 def _compute_rank_ic(
-    feature_df: pl.DataFrame, price_df: pl.DataFrame, forward_period: int = 1,
+    feature_df: pl.DataFrame,
+    price_df: pl.DataFrame,
+    forward_period: int = 1,
 ) -> np.ndarray | None:
     """Compute daily cross-sectional Rank IC (Spearman) series.
 
@@ -282,15 +284,8 @@ def _compute_rank_ic(
         NumPy array of daily IC values, or None if computation fails.
     """
     # Compute forward return per symbol
-    px = (
-        price_df
-        .sort(["symbol", "trade_date"])
-        .with_columns(
-            pl.col("close")
-            .shift(-forward_period)
-            .over("symbol")
-            .alias("forward_close")
-        )
+    px = price_df.sort(["symbol", "trade_date"]).with_columns(
+        pl.col("close").shift(-forward_period).over("symbol").alias("forward_close")
     )
     px = px.with_columns(
         ((pl.col("forward_close") - pl.col("close")) / pl.col("close")).alias("fwd_ret")
@@ -345,12 +340,8 @@ def _compute_quantile_spreads(
         NumPy array of daily spread values, or None if computation fails.
     """
     # Forward return
-    px = (
-        price_df
-        .sort(["symbol", "trade_date"])
-        .with_columns(
-            pl.col("close").shift(-1).over("symbol").alias("forward_close")
-        )
+    px = price_df.sort(["symbol", "trade_date"]).with_columns(
+        pl.col("close").shift(-1).over("symbol").alias("forward_close")
     )
     px = px.with_columns(
         ((pl.col("forward_close") - pl.col("close")) / pl.col("close")).alias("fwd_ret")
@@ -375,11 +366,12 @@ def _compute_quantile_spreads(
 
         # Assign quantile group by feature value rank
         day_data = day_data.with_columns(
-            ((pl.col("feature_value").rank() / day_data.height * n_quantiles)
-             .ceil()
-             .clip(1, n_quantiles)
-             .cast(pl.Int64))
-            .alias("quantile")
+            (
+                (pl.col("feature_value").rank() / day_data.height * n_quantiles)
+                .ceil()
+                .clip(1, n_quantiles)
+                .cast(pl.Int64)
+            ).alias("quantile")
         )
 
         # Mean forward return per quantile

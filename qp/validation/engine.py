@@ -22,9 +22,9 @@ class ValidationContext:
     DataFrame, backtest metrics, strategy metadata, and any extra kwargs.
     """
 
-    feature_df: Any = None       # Polars DataFrame: [trade_date, symbol, feature_value]
-    price_df: Any = None         # Polars DataFrame: [trade_date, symbol, close]
-    signal_df: Any = None        # Polars DataFrame: [symbol, rank, action]
+    feature_df: Any = None  # Polars DataFrame: [trade_date, symbol, feature_value]
+    price_df: Any = None  # Polars DataFrame: [trade_date, symbol, close]
+    signal_df: Any = None  # Polars DataFrame: [symbol, rank, action]
     backtest_metrics: dict[str, float] = field(default_factory=dict)
     strategy_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
