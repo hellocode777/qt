@@ -89,6 +89,19 @@ qp validate → simple_rank_v1.0:
 | M4.4 | ✅ | Corporate Action Engine：现金分红/送股/拆股/配股/转增 + CorporateActionLoader |
 | M4.5 | ✅ | 集成：`qp experiment list/show` + `qp model list/show` + `qp backtest run` 命令 |
 
+### ✅ Phase 5 — 监控、熔断、知识沉淀（已完成）
+
+**目标**：生产级监控体系和知识沉淀机制。
+
+| Milestone | 状态 | 说明 |
+|---|---|---|
+| M5.1 | ✅ | Risk Model：RiskModel (BaseRiskModel) + 多因子归因（Market/Style/Sector/Idiosyncratic）+ RiskDecomposition + AttributionReport |
+| M5.2 | ✅ | Monitoring Layer：DriftMonitor (PSI/KS/Wasserstein) + ModelDecayDetector (滚动IC衰减) + MarketRegimeEngine (趋势/震荡/高低波动) + StrategyMonitor (信号/换手率/回撤健康度) |
+| M5.3 | ✅ | Alert Channels：AlertManager + TerminalAlert (彩色) + LogAlert (结构化) + TelegramAlert (Bot推送) + AlertSeverity 三级 |
+| M5.4 | ✅ | Kill Switch Pipeline：KillSwitchPipeline (BasePipeline) + MonitorReport + 每日自动检查 + Model Decay与Kill Switch联动 + MonitorAction 五级 |
+| M5.5 | ✅ | Knowledge Layer：KnowledgeArchive + KnowledgeEntry（YAML frontmatter + Markdown）+ 5类模板（实验总结/失败分析/事后复盘/决策审计/研究债务）+ 全文搜索 |
+| M5.6 | ✅ | 集成：`qp monitor check/regime/alert-test` + `qp knowledge stats/search` CLI 命令 |
+
 ---
 
 ## 二、可用命令
@@ -113,6 +126,11 @@ uv run qp experiment show <id>             # 实验详情 + 血缘
 uv run qp model list                       # 模型列表
 uv run qp model show <id>                  # 模型详情 + 指标
 uv run qp backtest run [strategy]          # Broker 回测（含成本）
+uv run qp monitor check                    # 每日安全检查（KS + 漂移 + 衰减）
+uv run qp monitor regime                   # 市场状态检测
+uv run qp monitor alert-test               # 告警通道测试
+uv run qp knowledge stats                  # 知识库统计
+uv run qp knowledge search <query>         # 知识库搜索
 ```
 
 ### 2.2 代码检查
@@ -188,10 +206,17 @@ qp/
 │   ├── broker.py      #   SimulatedBroker (BaseBroker)
 │   ├── slippage.py    #   SlippageModel (fixed/volatility/sqrt)
 │   └── result.py      #   SimulationResult
-├── monitoring/        # Layer 9: ✅ Phase 2
-│   └── kill_switch.py #   KillSwitch + 3 triggers
+├── monitoring/        # Layer 9: ✅ Phase 5
+│   ├── kill_switch.py #   KillSwitch + 3 triggers (Phase 2)
+│   ├── kill_switch_pipeline.py # KillSwitchPipeline (Phase 5)
+│   ├── drift.py       #   DriftMonitor (PSI/KS/Wasserstein)
+│   ├── model_decay.py #   ModelDecayDetector
+│   ├── regime.py      #   MarketRegimeEngine
+│   ├── strategy_monitor.py # StrategyMonitor
+│   └── alerts.py      #   AlertManager + Terminal/Log/Telegram
 ├── decision/          # Layer 8: ⏳ 空
-└── knowledge/         # Layer 10: ⏳ 空
+└── knowledge/         # Layer 10: ✅ Phase 5
+    └── archive.py     #   KnowledgeArchive + 5类模板
 tests/
 ├── unit/              # 单元测试 (34 个) ✅
 ├── integration/       # 集成测试 ⏳
@@ -231,12 +256,31 @@ MeanVarianceOptimizer.optimize()
 
 ---
 
-## 五、下一步：Phase 4 Registry & Lineage + Simulation 正式版
+## 五、Phase 5 数据流
+
+```
+MarketRegimeEngine (趋势/震荡/高低波动)
+          ↓
+DriftMonitor (PSI / KS / Wasserstein)
+          ↓
+ModelDecayDetector (滚动 IC 衰减检测)
+          ↓
+StrategyMonitor (信号频率 / 换手率 / 回撤)
+          ↓
+KillSwitchPipeline (每日自动检查)
+          ↓
+AlertManager → TerminalAlert / LogAlert / TelegramAlert
+          ↓
+KnowledgeArchive (实验总结 / 失败分析 / 决策审计 / 事后复盘)
+```
+
+## 六、下一步：Phase 6 缓冲与复盘
 
 按 `docs/plan_v1.md` 继续推进：
 
-1. Experiment Tracker 正式版 — 实验配置、指标、血缘存储
-2. 四大 Registry 正式版 — Dataset / Feature / Model / Strategy
-3. 自动化月度重训 — Walk-Forward 滚动窗口
-4. Simulation 正式版 — SimulatedBroker + 逐笔冲击成本 + ADV 限制
-5. Corporate Action Engine — 分红/送股/拆股/配股处理
+1. 数据源问题修复 — AkShare API 变化、数据缺失
+2. 券商 API 联调 — 真实券商连接、认证、下单
+3. Bug 排查与修复 — 26 周积累的已知问题
+4. 性能优化 — 大数据量查询、回测性能
+5. 架构完整性自查 — 七类可信性逐项检查
+6. 阈值校准 — 根据实际运行数据校准判定标准

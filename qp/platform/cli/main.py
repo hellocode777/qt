@@ -740,6 +740,275 @@ def _cmd_backtest_run() -> int:
     return 0
 
 
+def _cmd_monitor_check() -> int:
+    """Run daily monitoring check (Kill Switch + Drift + Decay + Health)."""
+    from datetime import datetime
+
+    print("=== QP 监控检查 / Monitor Check ===")
+    print(f"  时间 / Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print()
+
+    # Market Regime
+    print("── 市场状态 / Market Regime ──")
+    try:
+        from qp.monitoring.regime import MarketRegimeEngine
+
+        engine = MarketRegimeEngine()
+        # Try to load price data for regime detection
+        from pathlib import Path
+
+        import polars as pl
+
+        data_dir = Path("data/dataset")
+        parquet_files = sorted(data_dir.glob("daily_price_*.parquet"))
+        if parquet_files:
+            prices = pl.read_parquet(str(parquet_files[-1]))
+            result = engine.classify(prices)
+            print(f"  状态 / Regime:     {result.regime.value}")
+            print(f"  置信度 / Confidence: {result.confidence:.0%}")
+            print(f"  趋势强度 / ADX:    {result.trend_strength:.1f}")
+            direction_map = {1: "上升 Uptrend", -1: "下降 Downtrend", 0: "中性 Neutral"}
+            print(f"  趋势方向 / Dir:    {direction_map.get(result.trend_direction, 'N/A')}")
+            print(f"  年化波动 / Vol:    {result.annualized_vol:.1%}")
+            print(f"  波动分位 / Vol%:   {result.volatility_percentile:.0f}%")
+            print(f"  {result.summary}")
+        else:
+            print("  ⚠ 无数据 / No price data — 跳过 regime 检测")
+    except Exception as e:
+        print(f"  ⚠ Regime detection failed: {e}")
+
+    # Kill Switch
+    print()
+    print("── 熔断检查 / Kill Switch ──")
+    try:
+        from qp.monitoring.kill_switch import (
+            DrawdownTrigger,
+            KillSwitch,
+            PortfolioDrawdownTrigger,
+            PSITrigger,
+        )
+
+        ks = KillSwitch()
+        ks.add_trigger(DrawdownTrigger(historical_max_dd=0.14, ratio=1.5))
+        ks.add_trigger(PortfolioDrawdownTrigger(monthly_limit=0.15, rolling_60d_limit=0.20))
+        ks.add_trigger(PSITrigger(threshold=0.25))
+
+        result = ks.check(
+            current_drawdown=0.0,
+            monthly_return=0.0,
+            rolling_60d_drawdown=0.0,
+            psi=0.0,
+        )
+        status_icon = "✅" if not result.triggered else "🚨"
+        status_text = "正常 OK" if not result.triggered else "触发 TRIGGERED"
+        print(f"  {status_icon} 熔断状态 / Status: {status_text}")
+        if result.triggered:
+            for t in result.triggers:
+                print(f"    ⚠ {t}")
+        print(f"  建议操作 / Rec:   {result.recommendation}")
+    except Exception as e:
+        print(f"  ⚠ Kill switch check failed: {e}")
+
+    # Strategy Health
+    print()
+    print("── 策略健康 / Strategy Health ──")
+    try:
+        from qp.monitoring.strategy_monitor import StrategyMonitor
+
+        monitor = StrategyMonitor(strategy_id="simple_rank_v1.0")
+        health = monitor.health_check()
+        icon = {
+            "healthy": "✅",
+            "watch": "👀",
+            "warning": "⚠️",
+            "critical": "🚨",
+        }.get(health.health_level.value, "❓")
+        print(f"  {icon} 健康等级 / Level:  {health.health_level.value.upper()}")
+        print(f"  健康分数 / Score:     {health.health_score:.0f}/100")
+        print(f"  日均信号 / Avg Signals: {health.avg_daily_signals:.1f}")
+        print(f"  信号稳定性 / Consistency: {health.signal_consistency:.0%}")
+        if health.alerts:
+            for a in health.alerts:
+                print(f"    ⚠ {a}")
+    except Exception as e:
+        print(f"  ⚠ Health check failed: {e}")
+
+    # Model Decay
+    print()
+    print("── 模型衰减 / Model Decay ──")
+    try:
+        from qp.monitoring.model_decay import ModelDecayDetector
+
+        detector = ModelDecayDetector(training_ic_mean=0.035)
+        status = detector.check(rolling_ic=0.030)
+        icon = {
+            "healthy": "✅",
+            "warning": "⚠️",
+            "decaying": "🔴",
+            "stale": "💀",
+        }.get(status.stage.value, "❓")
+        print(f"  {icon} 衰减状态 / Stage: {status.stage.value.upper()}")
+        print(f"  训练IC / Training IC:   {status.training_ic_mean:.4f}")
+        print(f"  滚动IC / Rolling IC:    {status.rolling_ic:.4f}")
+        print(f"  IC比率 / IC Ratio:      {status.ic_ratio:.0%}")
+        if status.needs_attention:
+            print(f"  ⚠ {status.recommended_action}")
+    except Exception as e:
+        print(f"  ⚠ Model decay check failed: {e}")
+
+    print()
+    return 0
+
+
+def _cmd_monitor_regime() -> int:
+    """Detect current market regime."""
+    from pathlib import Path
+
+    import polars as pl
+
+    from qp.monitoring.regime import MarketRegimeEngine
+
+    print("=== QP 市场状态检测 / Market Regime Detection ===")
+    print()
+
+    data_dir = Path("data/dataset")
+    parquet_files = sorted(data_dir.glob("daily_price_*.parquet"))
+    if not parquet_files:
+        print("❌ 未找到数据文件 / No data found. 请先运行 qp run daily")
+        return 1
+
+    prices = pl.read_parquet(str(parquet_files[-1]))
+    engine = MarketRegimeEngine()
+    result = engine.classify(prices)
+
+    direction_map = {1: "上升 (Uptrend)", -1: "下降 (Downtrend)", 0: "中性 (Neutral)"}
+
+    print(f"  市场状态 / Regime:      {result.regime.value}")
+    print(f"  置信度 / Confidence:    {result.confidence:.0%}")
+    print(f"  趋势强度 / ADX:         {result.trend_strength:.1f}")
+    print(f"  趋势方向 / Direction:   {direction_map.get(result.trend_direction)}")
+    print(f"  年化波动率 / Ann. Vol:  {result.annualized_vol:.1%}")
+    print(f"  波动率分位数 / Vol%:    {result.volatility_percentile:.0f}%")
+    print()
+
+    if result.is_trending:
+        print("  💡 建议：趋势市场 → 动量策略 / Use momentum strategies")
+    elif result.regime.value == "RANGING":
+        print("  💡 建议：震荡市场 → 均值回归策略 / Use mean-reversion strategies")
+    elif result.regime.value == "HIGH_VOL":
+        print("  💡 建议：高波动 → 降低仓位 / Reduce position sizes")
+
+    return 0
+
+
+def _cmd_monitor_alert_test() -> int:
+    """Send test alerts to all configured channels."""
+    from qp.monitoring.alerts import (
+        AlertManager,
+        AlertSeverity,
+        LogAlert,
+        TelegramAlert,
+        TerminalAlert,
+    )
+
+    print("=== QP 告警测试 / Alert Test ===")
+    print()
+
+    manager = AlertManager()
+    manager.add_channel(TerminalAlert(use_colors=True))
+    manager.add_channel(LogAlert())
+    manager.add_channel(TelegramAlert(), min_severity=AlertSeverity.WARNING)
+
+    print(f"  已注册通道 / Channels: {manager.channel_count}")
+    print()
+
+    print("  发送 INFO 级别...")
+    manager.info("测试信息 / Test Info", "监控系统正常运行。All systems operational.", "alert_test")
+
+    print("  发送 WARNING 级别...")
+    manager.warning("测试警告 / Test Warning", "这是一条警告测试。This is a test warning.", "alert_test")
+
+    print("  发送 CRITICAL 级别...")
+    manager.critical("测试严重告警 / Test Critical", "这是一条严重告警测试。This is a test critical alert.", "alert_test")
+
+    print()
+    print("  告警测试完成 / Alert test complete.")
+    return 0
+
+
+def _cmd_knowledge_stats() -> int:
+    """Show knowledge archive statistics."""
+    from qp.knowledge.archive import KnowledgeArchive
+
+    print("=== QP 知识库统计 / Knowledge Archive Stats ===")
+    print()
+
+    archive = KnowledgeArchive()
+    stats = archive.stats()
+
+    category_names = {
+        "research_debt": "研究债务 / Research Debt",
+        "decision_audit": "决策审计 / Decision Audit",
+        "experiment_summary": "实验总结 / Experiment Summary",
+        "failure_analysis": "失败分析 / Failure Analysis",
+        "post_mortem": "事后复盘 / Post Mortem",
+    }
+
+    for cat, name in category_names.items():
+        count = stats.get(cat, 0)
+        bar = "█" * min(count, 30)
+        print(f"  {name:40s} {count:3d} {bar}")
+
+    print(f"  {'─' * 55}")
+    print(f"  {'总计 / Total':40s} {stats.get('total', 0):3d}")
+    print()
+    print("  存储位置 / Storage: data/knowledge/")
+    return 0
+
+
+def _cmd_knowledge_search() -> int:
+    """Search knowledge archive."""
+    from qp.knowledge.archive import KnowledgeArchive
+
+    if len(sys.argv) < 3:
+        print("qp knowledge search <query>", file=sys.stderr)
+        return 1
+
+    query = " ".join(sys.argv[2:])
+    print(f"=== QP 知识库搜索 / Knowledge Search: '{query}' ===")
+    print()
+
+    archive = KnowledgeArchive()
+    results = archive.search(query, limit=20)
+
+    if not results:
+        print(f"  未找到匹配 '{query}' 的条目。")
+        print(f"  No entries match '{query}'.")
+        return 0
+
+    print(f"  找到 / Found: {len(results)} 条")
+    print()
+
+    for i, entry in enumerate(results, 1):
+        cat_names = {
+            "research_debt": "研究债务",
+            "decision_audit": "决策审计",
+            "experiment_summary": "实验总结",
+            "failure_analysis": "失败分析",
+            "post_mortem": "事后复盘",
+        }
+        cat_zh = cat_names.get(entry.category.value, entry.category.value)
+        print(f"  {i}. [{cat_zh}] {entry.title}")
+        print(f"     ID: {entry.entry_id}")
+        print(f"     标签 / Tags: {', '.join(entry.tags) if entry.tags else '(无)'}")
+        # Show first 120 chars of content
+        preview = entry.content.strip()[:120].replace("\n", " ")
+        print(f"     预览 / Preview: {preview}...")
+        print()
+
+    return 0
+
+
 def _print_help() -> int:
     """Print help message."""
     print("qp — Quant Platform CLI")
@@ -760,6 +1029,11 @@ def _print_help() -> int:
     print("  model list               List registered models")
     print("  model show <id>          Show model details")
     print("  backtest run [strategy]  Run broker-based backtest")
+    print("  monitor check            Run daily safety checks (KS + drift + decay)")
+    print("  monitor regime           Detect current market regime")
+    print("  monitor alert-test       Test all alert channels")
+    print("  knowledge stats          Knowledge archive statistics")
+    print("  knowledge search <q>     Search knowledge archive")
     print()
     print("Phase 1 (available):")
     print("  qp ingest --demo              Ingest with synthetic demo data")
@@ -777,6 +1051,13 @@ def _print_help() -> int:
     print("  qp experiment list/show       Experiment tracking")
     print("  qp model list/show            Model registry")
     print("  qp backtest run [strategy]    Full backtest with costs")
+    print()
+    print("Phase 5 (available):")
+    print("  qp monitor check              Daily safety checks (KS + drift + decay)")
+    print("  qp monitor regime             Detect current market regime")
+    print("  qp monitor alert-test         Test all alert channels")
+    print("  qp knowledge stats            Knowledge archive statistics")
+    print("  qp knowledge search <query>   Search knowledge archive")
     return 0
 
 
@@ -852,6 +1133,32 @@ def main() -> int:
         if sub == "run":
             return _cmd_backtest_run()
         print(f"qp backtest: unknown subcommand '{sub}'. Try: run", file=sys.stderr)
+        return 1
+
+    if command == "monitor":
+        if len(sys.argv) < 3:
+            print("qp monitor: missing subcommand. Try: check, regime, alert-test", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "check":
+            return _cmd_monitor_check()
+        if sub == "regime":
+            return _cmd_monitor_regime()
+        if sub == "alert-test":
+            return _cmd_monitor_alert_test()
+        print(f"qp monitor: unknown subcommand '{sub}'. Try: check, regime, alert-test", file=sys.stderr)
+        return 1
+
+    if command == "knowledge":
+        if len(sys.argv) < 3:
+            print("qp knowledge: missing subcommand. Try: stats, search <query>", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "stats":
+            return _cmd_knowledge_stats()
+        if sub == "search":
+            return _cmd_knowledge_search()
+        print(f"qp knowledge: unknown subcommand '{sub}'. Try: stats, search", file=sys.stderr)
         return 1
 
     print(f"qp: unknown command '{command}'. Try 'qp --help'", file=sys.stderr)

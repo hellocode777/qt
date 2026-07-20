@@ -14,10 +14,16 @@ from qp.portfolio.cost_model import CostBreakdown, CostModel, MarketImpactModel
 from qp.portfolio.industry import IndustryMapper
 from qp.portfolio.optimizer import MeanVarianceOptimizer, OptimizationResult
 from qp.portfolio.risk_manager import PortfolioRiskManager, RiskReport
+from qp.portfolio.risk_model import (
+    AttributionReport,
+    RiskDecomposition,
+    RiskModel,
+)
 from qp.portfolio.single_portfolio import Order, SinglePortfolio
 
 __all__ = [
     "AllocationFactory",
+    "AttributionReport",
     "CorrelationAnalyzer",
     "CostBreakdown",
     "CostModel",
@@ -29,6 +35,8 @@ __all__ = [
     "OptimizationResult",
     "Order",
     "PortfolioRiskManager",
+    "RiskDecomposition",
+    "RiskModel",
     "RiskParityAllocator",
     "RiskReport",
     "SinglePortfolio",
