@@ -24,9 +24,18 @@
 | M0.9 | ✅ | 元数据：运行时信息、环境信息 |
 | M0.11 | ✅ | 测试：34 个单元测试，全部通过 |
 
-### ⏳ Phase 1 — Walking Skeleton（待开始）
+### ✅ Phase 1 — Walking Skeleton（已完成）
 
-数据接入 → 因子 → 策略 → 组合 → 回测 → 报告，端到端最小闭环。
+数据接入 → 因子 → 策略 → 组合 → 回测 → 报告，端到端最小闭环已跑通。
+
+| Milestone | 状态 | 说明 |
+|---|---|---|
+| M1.1 | ✅ | Data Layer：Tencent 适配器（主力）+ AKShare 适配器 + Demo 适配器、数据清洗引擎、Data Contract、DatasetRegistry、DatasetLoader、交易日历 |
+| M1.3 | ✅ | Research Layer：Momentum20dFeature (BaseFeature)、FeatureRegistry、FeaturePipeline |
+| M1.4 | ✅ | Strategy Layer：SimpleRankStrategy (Top 10)、Decision dataclass |
+| M1.5 | ✅ | Portfolio Layer：SinglePortfolio (Equal Weight)、Order dataclass |
+| M1.6 | ✅ | Simulation Layer：SimpleVectorBacktest (向量化回测)、绩效指标 |
+| M1.7 | ✅ | Walking Skeleton 集成：`qp ingest`（腾讯API真实数据）+ `qp run daily` 端到端跑通（Sharpe 0.88，总收益 40.62%，最大回撤 -14.02%） |
 
 ---
 
@@ -49,6 +58,15 @@ uv run qp --help
 
 # 查看已注册的 Pipeline
 uv run qp pipeline list
+
+# 数据摄入（使用模拟数据）
+uv run qp ingest --demo
+
+# 数据摄入（指定日期范围）
+uv run qp ingest 2024-01-01 2024-12-31
+
+# 端到端每日流程（数据 → 特征 → 策略 → 组合 → 回测）
+uv run qp run daily --demo
 ```
 
 ### 2.2 代码检查
@@ -112,12 +130,22 @@ qp/
 │   ├── types/         #   枚举类型 (10 个)
 │   ├── constants/     #   常量
 │   └── exceptions/    #   异常类 (20 个)
-├── data/              # Layer 2: ⏳ 空
-├── research/          # Layer 3: ⏳ 空
+├── data/              # Layer 2: ✅ Walking Skeleton
+│   ├── adapter/       #   Tencent(主力) + AKShare + Demo 适配器
+│   ├── cleaning/      #   数据清洗引擎
+│   ├── contract/      #   DailyPriceContract
+│   ├── dataset/       #   DatasetRegistry
+│   ├── loader/        #   DatasetLoader
+│   └── calendar/      #   TradingCalendar
+├── research/          # Layer 3: ✅ Walking Skeleton
+│   └── feature/       #   Momentum20dFeature + FeatureRegistry
 ├── validation/        # Layer 4: ⏳ 空
-├── strategy/          # Layer 5: ⏳ 空
-├── portfolio/         # Layer 6: ⏳ 空
-├── simulation/        # Layer 7: ⏳ 空
+├── strategy/          # Layer 5: ✅ Walking Skeleton
+│   └── simple_rank.py #   SimpleRankStrategy (Top 10)
+├── portfolio/         # Layer 6: ✅ Walking Skeleton
+│   └── single_portfolio.py  # SinglePortfolio (Equal Weight)
+├── simulation/        # Layer 7: ✅ Walking Skeleton
+│   └── backtest.py    #   SimpleVectorBacktest
 ├── decision/          # Layer 8: ⏳ 空
 ├── monitoring/        # Layer 9: ⏳ 空
 └── knowledge/         # Layer 10: ⏳ 空
@@ -129,13 +157,27 @@ tests/
 
 ---
 
-## 四、下一步：Phase 1 Walking Skeleton
+## 四、Phase 1 真实数据跑分
+
+| 指标 | 真实数据（腾讯 API） | 模拟数据（Demo） |
+|---|---|---|
+| 数据量 | 11,066 行 | 9,690 行 |
+| 股票数 | 18 只 | 15 只 |
+| 夏普比率 | **0.88** | 1.65 |
+| 年化收益 | 16.67% | - |
+| 总收益 | 40.62% | 55.75% |
+| 最大回撤 | -14.02% | -14.94% |
+
+> 模拟数据 GBM 随机游走高估了策略表现，真实数据更可靠。
+
+---
+
+## 五、下一步：Phase 2 Validation Gate + Kill Switch
 
 按 `docs/plan_v1.md` 的计划表继续推进：
 
-1. Data Layer — AkShare 数据接入，生成 `daily_price.parquet`
-2. Research Layer — 20 日动量因子计算
-3. Strategy Layer — SimpleRankStrategy (Top 10)
-4. Portfolio Layer — SinglePortfolio (Equal Weight)
-5. Simulation Layer — 简化向量回测 + Markdown 报告
-6. `qp run daily` 一条命令跑通全流程
+1. Validation Layer — 因子检验（Rank IC、IC_IR、t-stat）、Rule Engine 框架
+2. Research Layer — Purged CV（Purge + Embargo）
+3. LightGBM 建模流水线（LambdaRank、截面标准化、过拟合检查）
+4. Backtest Validation（Sharpe ≥1.0、最大回撤 ≤25%）
+5. Kill Switch 最小版（回撤熔断、PSI 漂移检测）

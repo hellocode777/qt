@@ -3,9 +3,10 @@
 See rule.md §7.2 for the complete specification.
 """
 
-from abc import ABC, abstractmethod
+from __future__ import annotations
 
-import pandas as pd
+from abc import ABC, abstractmethod
+from typing import Any
 
 
 class BaseFeature(ABC):
@@ -14,6 +15,9 @@ class BaseFeature(ABC):
     Every feature must be registered in the Feature Registry (ADR-019).
     Features must respect the PIT (Point-in-Time) principle — no future
     information leakage is allowed.
+
+    Note: DataFrame types are left as Any to allow both pandas and polars
+    implementations (TDR-010).
     """
 
     @property
@@ -29,7 +33,7 @@ class BaseFeature(ABC):
         ...
 
     @abstractmethod
-    def compute(self, data_map: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def compute(self, data_map: dict[str, Any]) -> Any:
         """Compute the feature values.
 
         Args:

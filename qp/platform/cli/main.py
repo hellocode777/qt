@@ -24,30 +24,23 @@ def _cmd_doctor() -> int:
 
     print("=== QP Doctor ===")
     print()
-
-    # Python
     print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     print(f"Platform: {platform.platform()}")
 
-    # Environment
     env = EnvironmentMeta()
     print(f"CPU cores: {env.cpu_count}")
     print(f"Disk free: {env.disk_free_gb:.1f} GB")
     print(f"Working dir: {env.cwd}")
 
-    # Config
     try:
         from qp.platform.config import load_config
-
         config = load_config()
         print(f"Config: OK (env={config.runtime.env})")
     except Exception as e:
         print(f"Config: FAILED ({e})")
 
-    # Storage
     try:
         from qp.platform.storage.factory import StorageFactory
-
         factory = StorageFactory("duckdb", duckdb_path=":memory:")
         storage = factory.get_storage()
         storage.connect()
@@ -63,9 +56,87 @@ def _cmd_doctor() -> int:
 
 def _cmd_pipeline_list() -> int:
     """List registered pipelines."""
+
     print("Registered Pipelines:")
-    print("  (none — Pipeline registry will be populated in Phase 1)")
+    print("  data_ingest     — Raw data → cleaned daily_price.parquet")
+    print("  feature_compute — Compute momentum_20d feature")
+    print("  daily           — End-to-end: data → feature → strategy → report")
     return 0
+
+
+def _cmd_ingest() -> int:
+    """Run data ingestion pipeline."""
+    from qp.data.pipeline import DataPipeline
+    from qp.platform.pipeline.context import PipelineContext
+
+    pipeline = DataPipeline()
+
+    kwargs: dict = {}
+    args = sys.argv[2:]
+    for arg in args:
+        if arg == "--demo":
+            kwargs["demo"] = True
+        elif not arg.startswith("--"):
+            if "start_date" not in kwargs:
+                kwargs["start_date"] = arg
+            else:
+                kwargs["end_date"] = arg
+
+    context = PipelineContext(pipeline_name=pipeline.name, parameters=kwargs)
+    result = pipeline.run(context)
+
+    print(f"Status: {result.status.value}")
+    print(f"Rows: {result.metrics.get('raw_rows', 'N/A')} raw → {result.metrics.get('cleaned_rows', 'N/A')} cleaned")
+    if result.errors:
+        for e in result.errors:
+            print(f"Error: {e}")
+    if result.metadata.get("version"):
+        print(f"Version: {result.metadata['version']}")
+
+    return 0 if result.status.value == "success" else 1
+
+
+def _cmd_run() -> int:
+    """Run the daily end-to-end pipeline."""
+    from qp.pipeline.daily_pipeline import DailyPipeline
+    from qp.platform.pipeline.context import PipelineContext
+
+    print("=== QP Daily Pipeline ===")
+    print()
+
+    demo = "--demo" in sys.argv
+    context = PipelineContext(
+        pipeline_name="daily",
+        parameters={"demo": demo} if demo else {},
+    )
+    pipeline = DailyPipeline()
+    result = pipeline.run(context)
+
+    print(f"Status: {result.status.value}")
+    print(f"Pipeline: {result.pipeline_name}")
+    print(f"Run ID: {result.run_id}")
+    print(f"Duration: {result.duration_seconds:.1f}s")
+    print()
+
+    if result.metrics:
+        print("Metrics:")
+        for k, v in sorted(result.metrics.items()):
+            print(f"  {k}: {v}")
+
+    if result.metadata:
+        print()
+        print("Orders:")
+        for k, v in sorted(result.metadata.items()):
+            if k.startswith("order_"):
+                print(f"  {k.removeprefix('order_')}: {v}")
+
+    if result.errors:
+        print()
+        print("Errors:")
+        for e in result.errors:
+            print(f"  {e}")
+
+    return 0 if result.status.value == "success" else 1
 
 
 def _print_help() -> int:
@@ -78,26 +149,14 @@ def _print_help() -> int:
     print("  version        Show version information")
     print("  doctor         Run environment diagnostics")
     print("  pipeline list  List registered pipelines")
-    print("  ingest         Data ingestion (Phase 1)")
-    print("  feature        Feature computation (Phase 1)")
-    print("  train          Model training (Phase 1)")
-    print("  validate       Strategy validation (Phase 2)")
-    print("  backtest       Run a backtest (Phase 1)")
-    print("  report         Generate performance report (Phase 1)")
-    print("  run            Run daily pipeline (Phase 1)")
-    print("  scheduler      Scheduler management (Phase 0)")
+    print("  ingest [start] [end] [--demo]  Run data ingestion")
+    print("  run daily [--demo]       Run end-to-end daily pipeline")
+    print()
+    print("Phase 1 (available):")
+    print("  qp ingest --demo              Ingest with synthetic demo data")
+    print("  qp ingest 2024-01-01 2024-12-31  Ingest date range")
+    print("  qp run daily --demo           Full pipeline with demo data")
     return 0
-
-
-COMMANDS = {
-    "version": _cmd_version,
-    "--version": _cmd_version,
-    "-V": _cmd_version,
-    "doctor": _cmd_doctor,
-    "--help": _print_help,
-    "-h": _print_help,
-    "pipeline": _cmd_pipeline_list,  # placeholder
-}
 
 
 def main() -> int:
@@ -108,12 +167,21 @@ def main() -> int:
 
     command = sys.argv[1]
 
+    if command == "version" or command == "--version" or command == "-V":
+        return _cmd_version()
+    if command == "doctor":
+        return _cmd_doctor()
+    if command in ("--help", "-h"):
+        return _print_help()
+
+    if command == "ingest":
+        return _cmd_ingest()
+
+    if command == "run" and len(sys.argv) > 2 and sys.argv[2] == "daily":
+        return _cmd_run()
+
     if command == "pipeline" and len(sys.argv) > 2 and sys.argv[2] == "list":
         return _cmd_pipeline_list()
-
-    handler = COMMANDS.get(command)
-    if handler is not None:
-        return handler()
 
     print(f"qp: unknown command '{command}'. Try 'qp --help'", file=sys.stderr)
     return 1
