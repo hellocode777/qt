@@ -30,12 +30,39 @@
 
 | Milestone | 状态 | 说明 |
 |---|---|---|
-| M1.1 | ✅ | Data Layer：Tencent 适配器（主力）+ AKShare 适配器 + Demo 适配器、数据清洗引擎、Data Contract、DatasetRegistry、DatasetLoader、交易日历 |
+| M1.1 | ✅ | Data Layer：Tencent 适配器（主力）+ AKShare + Demo、清洗引擎、Data Contract、DatasetRegistry、DatasetLoader、交易日历 |
 | M1.3 | ✅ | Research Layer：Momentum20dFeature (BaseFeature)、FeatureRegistry、FeaturePipeline |
 | M1.4 | ✅ | Strategy Layer：SimpleRankStrategy (Top 10)、Decision dataclass |
 | M1.5 | ✅ | Portfolio Layer：SinglePortfolio (Equal Weight)、Order dataclass |
 | M1.6 | ✅ | Simulation Layer：SimpleVectorBacktest (向量化回测)、绩效指标 |
-| M1.7 | ✅ | Walking Skeleton 集成：`qp ingest`（腾讯API真实数据）+ `qp run daily` 端到端跑通（Sharpe 0.88，总收益 40.62%，最大回撤 -14.02%） |
+| M1.7 | ✅ | Walking Skeleton 集成：真实数据端到端跑通（Sharpe 0.88，总收益 40.62%，最大回撤 -14.02%） |
+
+### ✅ Phase 2 — Validation Gate + Kill Switch（已完成）
+
+**目标**：建立策略质量门禁和熔断机制。
+
+| Milestone | 状态 | 说明 |
+|---|---|---|
+| M2.1 | ✅ | Validation Layer：RankIC / IC_IR / t-stat / 分层检验 + Rule Engine（BaseRule + RuleEngine） |
+| M2.2 | ✅ | Purged CV：PurgedKFold（walk-forward + Purge + Embargo），最少 500 天训练窗口 |
+| M2.3 | ✅ | LightGBM：LightGBMRankModel (LambdaRank) + CrossSectionalStandardizer |
+| M2.4 | ✅ | 过拟合检查：样本内/外 IC 比值 + 特征重要性集中度检测 |
+| M2.5 | ✅ | Backtest Validation：Sharpe ≥ 1.0、最大回撤 ≤ 25%、换手率检查 |
+| M2.6 | ✅ | Kill Switch：DrawdownTrigger + PortfolioDrawdownTrigger + PSITrigger |
+| M2.7 | ✅ | 集成：`qp validate` 命令 + 全量质量检查通过 |
+
+**Phase 2 实测**：
+
+```
+qp validate → simple_rank_v1.0:
+  ❌ rank_ic         0.0178 < 0.02
+  ❌ ic_ir           0.053 < 0.3
+  ❌ ic_t_stat       1.30 < 2.0
+  ❌ stratification  1.73 < 2.0
+  ❌ sharpe_ratio    0.88 < 1.0
+  ✅ max_drawdown    14.02% ≤ 25%
+  Overall: FAIL (Score 33/100, 5/6 failed)
+```
 
 ---
 
@@ -44,67 +71,30 @@
 ### 2.1 安装与运行
 
 ```bash
-# 安装依赖（首次或依赖变更时执行）
-uv sync
-
-# 查看版本
-uv run qp version
-
-# 环境诊断
-uv run qp doctor
-
-# 查看帮助
-uv run qp --help
-
-# 查看已注册的 Pipeline
-uv run qp pipeline list
-
-# 数据摄入（使用模拟数据）
-uv run qp ingest --demo
-
-# 数据摄入（指定日期范围）
-uv run qp ingest 2024-01-01 2024-12-31
-
-# 端到端每日流程（数据 → 特征 → 策略 → 组合 → 回测）
-uv run qp run daily --demo
+uv sync                                    # 安装依赖
+uv run qp version                          # 查看版本
+uv run qp doctor                           # 环境诊断
+uv run qp --help                           # 帮助
+uv run qp pipeline list                    # 已注册 Pipeline
+uv run qp ingest --demo                    # 数据摄入（模拟数据）
+uv run qp ingest 2024-01-01 2024-12-31     # 数据摄入（日期范围）
+uv run qp run daily --demo                 # 端到端流程（模拟数据）
+uv run qp run daily                        # 端到端流程（真实数据）
+uv run qp validate                         # 策略验证（全部 Gate 检查）
 ```
 
 ### 2.2 代码检查
 
 ```bash
-# 自动格式化
-uv run ruff format
-
-# 代码检查（零错误）
-uv run ruff check
-
-# 自动修复可修复的问题
-uv run ruff check --fix
-
-# 类型检查（零错误）
-uv run pyright
+uv run ruff format       # 自动格式化
+uv run ruff check        # 代码检查
+uv run ruff check --fix  # 自动修复
+uv run pyright           # 类型检查
+uv run pytest            # 运行全部测试
+uv run pytest --cov=qp   # 带覆盖率
 ```
 
-### 2.3 测试
-
-```bash
-# 运行全部测试
-uv run pytest
-
-# 详细输出
-uv run pytest -v
-
-# 运行单个测试文件
-uv run pytest tests/unit/test_config.py
-
-# 运行单个测试方法
-uv run pytest tests/unit/test_config.py::TestConfigFreeze::test_cannot_modify_frozen_config
-
-# 带覆盖率
-uv run pytest --cov=qp
-```
-
-### 2.4 一键全量检查（每个 Milestone 的 Definition of Done）
+### 2.3 一键全量检查（Definition of Done）
 
 ```bash
 uv sync && uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
@@ -118,36 +108,41 @@ uv sync && uv run ruff format && uv run ruff check && uv run pyright && uv run p
 qp/
 ├── platform/          # Layer 1: 运行时基础设施 ✅
 │   ├── cli/           #   CLI 入口 (qp)
-│   ├── config/        #   配置系统 (4层优先级)
-│   ├── logging/       #   日志系统 (Loguru)
-│   ├── metadata/      #   元数据 (版本/环境)
+│   ├── config/        #   配置系统
+│   ├── logging/       #   日志系统
+│   ├── metadata/      #   元数据
 │   ├── pipeline/      #   Pipeline 引擎
-│   ├── runtime/       #   运行时 (状态机/Composition Root)
-│   ├── scheduler/     #   调度器 (APScheduler)
-│   └── storage/       #   存储工厂 (DuckDB/SQLite/Parquet)
+│   ├── runtime/       #   运行时 + Composition Root
+│   ├── scheduler/     #   调度器
+│   └── storage/       #   存储工厂
 ├── shared/            # 跨层共享 ✅
-│   ├── protocols/     #   抽象接口 (11 个 ABCs)
+│   ├── protocols/     #   抽象接口 (11 个)
 │   ├── types/         #   枚举类型 (10 个)
 │   ├── constants/     #   常量
 │   └── exceptions/    #   异常类 (20 个)
-├── data/              # Layer 2: ✅ Walking Skeleton
-│   ├── adapter/       #   Tencent(主力) + AKShare + Demo 适配器
+├── data/              # Layer 2: ✅
+│   ├── adapter/       #   Tencent(主力) + AKShare + Demo
 │   ├── cleaning/      #   数据清洗引擎
 │   ├── contract/      #   DailyPriceContract
-│   ├── dataset/       #   DatasetRegistry
 │   ├── loader/        #   DatasetLoader
 │   └── calendar/      #   TradingCalendar
-├── research/          # Layer 3: ✅ Walking Skeleton
-│   └── feature/       #   Momentum20dFeature + FeatureRegistry
-├── validation/        # Layer 4: ⏳ 空
-├── strategy/          # Layer 5: ✅ Walking Skeleton
+├── research/          # Layer 3: ✅
+│   ├── feature/       #   Momentum20dFeature + FeatureRegistry
+│   ├── split/         #   PurgedKFold (walk-forward + Purge + Embargo)
+│   └── trainer/       #   LightGBMRankModel + Standardizer
+├── validation/        # Layer 4: ✅ Phase 2
+│   ├── engine.py      #   BaseRule + RuleEngine + ValidationContext
+│   ├── result.py      #   RuleResult + ValidationResult
+│   └── checks/        #   factor_checks + overfit_checks + backtest_checks
+├── strategy/          # Layer 5: ✅
 │   └── simple_rank.py #   SimpleRankStrategy (Top 10)
-├── portfolio/         # Layer 6: ✅ Walking Skeleton
+├── portfolio/         # Layer 6: ✅
 │   └── single_portfolio.py  # SinglePortfolio (Equal Weight)
-├── simulation/        # Layer 7: ✅ Walking Skeleton
+├── simulation/        # Layer 7: ✅
 │   └── backtest.py    #   SimpleVectorBacktest
+├── monitoring/        # Layer 9: ✅ Phase 2
+│   └── kill_switch.py #   KillSwitch + 3 triggers
 ├── decision/          # Layer 8: ⏳ 空
-├── monitoring/        # Layer 9: ⏳ 空
 └── knowledge/         # Layer 10: ⏳ 空
 tests/
 ├── unit/              # 单元测试 (34 个) ✅
@@ -157,27 +152,12 @@ tests/
 
 ---
 
-## 四、Phase 1 真实数据跑分
+## 四、下一步：Phase 3 Portfolio Risk + Capital Allocation
 
-| 指标 | 真实数据（腾讯 API） | 模拟数据（Demo） |
-|---|---|---|
-| 数据量 | 11,066 行 | 9,690 行 |
-| 股票数 | 18 只 | 15 只 |
-| 夏普比率 | **0.88** | 1.65 |
-| 年化收益 | 16.67% | - |
-| 总收益 | 40.62% | 55.75% |
-| 最大回撤 | -14.02% | -14.94% |
+按 `docs/plan_v1.md` 继续推进：
 
-> 模拟数据 GBM 随机游走高估了策略表现，真实数据更可靠。
-
----
-
-## 五、下一步：Phase 2 Validation Gate + Kill Switch
-
-按 `docs/plan_v1.md` 的计划表继续推进：
-
-1. Validation Layer — 因子检验（Rank IC、IC_IR、t-stat）、Rule Engine 框架
-2. Research Layer — Purged CV（Purge + Embargo）
-3. LightGBM 建模流水线（LambdaRank、截面标准化、过拟合检查）
-4. Backtest Validation（Sharpe ≥1.0、最大回撤 ≤25%）
-5. Kill Switch 最小版（回撤熔断、PSI 漂移检测）
+1. Portfolio Risk Model — 风险分解 (Barra 风格因子)
+2. Capital Allocation — Kelly/风险平价/等权
+3. 多策略并行 — Strategy Registry + 信号聚合
+4. 交易成本模型 — 冲击成本/滑点
+5. 仓位优化 — 均值方差/最大夏普

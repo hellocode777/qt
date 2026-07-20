@@ -139,6 +139,82 @@ def _cmd_run() -> int:
     return 0 if result.status.value == "success" else 1
 
 
+def _cmd_validate() -> int:
+    """Run validation gate checks on the current strategy."""
+    import polars as pl
+
+    from qp.validation import (
+        ICIRCheck,
+        MaxDrawdownCheck,
+        RankICCheck,
+        RuleEngine,
+        SharpeCheck,
+        StratificationCheck,
+        TStatCheck,
+        ValidationContext,
+    )
+
+    print("=== QP Validation Gate ===")
+    print()
+
+    # Load data
+    try:
+        feature_df = pl.read_parquet("data/dataset/momentum_20d.parquet")
+        price_df = pl.read_parquet("data/dataset/daily_price_2026-07-20.parquet")
+    except FileNotFoundError as e:
+        print(f"Error: Data not found. Run 'qp run daily' first. ({e})")
+        return 1
+
+    # Ensure date types match
+    feature_df = feature_df.with_columns(pl.col("trade_date").cast(pl.Date))
+    price_df = price_df.with_columns(pl.col("trade_date").cast(pl.Date))
+
+    # Build validation context
+    ctx = ValidationContext(
+        feature_df=feature_df,
+        price_df=price_df,
+        strategy_id="simple_rank_v1.0",
+        backtest_metrics={
+            "sharpe_ratio": 0.88,       # From Phase 1 real-data run
+            "max_drawdown_pct": 14.02,
+            "total_return": 40.62,
+        },
+    )
+
+    # Register all checks
+    engine = RuleEngine()
+    engine.register(RankICCheck(min_ic_mean=0.02))
+    engine.register(ICIRCheck(min_ic_ir=0.3))
+    engine.register(TStatCheck(min_t_stat=2.0))
+    engine.register(StratificationCheck(n_quantiles=5, min_t_stat=2.0))
+    engine.register(SharpeCheck(min_sharpe=1.0))
+    engine.register(MaxDrawdownCheck(max_drawdown_pct=25.0))
+
+    result = engine.validate(ctx)
+
+    # Print results
+    print(f"Strategy: {ctx.strategy_id}")
+    print(f"Overall:  {result.status.value.upper()}")
+    print(f"Score:    {result.score}/100")
+    print(f"Confidence: {result.confidence:.0%}")
+    print()
+
+    print("Checks:")
+    for r in result.rules:
+        icon = "✅" if r.status.value == "pass" else "❌"
+        print(f"  {icon} {r.rule_name:<22s}  {r.detail}")
+
+    if result.failed_rules:
+        print()
+        print(f"Failed: {len(result.failed_rules)}/{len(result.rules)} rules — {', '.join(result.failed_rules)}")
+        print(f"Recommendation: {result.recommendation}")
+    else:
+        print()
+        print("All checks passed — strategy may proceed to Paper Trading.")
+
+    return 0 if result.passed else 1
+
+
 def _print_help() -> int:
     """Print help message."""
     print("qp — Quant Platform CLI")
@@ -151,11 +227,15 @@ def _print_help() -> int:
     print("  pipeline list  List registered pipelines")
     print("  ingest [start] [end] [--demo]  Run data ingestion")
     print("  run daily [--demo]       Run end-to-end daily pipeline")
+    print("  validate                 Run validation gate checks")
     print()
     print("Phase 1 (available):")
     print("  qp ingest --demo              Ingest with synthetic demo data")
     print("  qp ingest 2024-01-01 2024-12-31  Ingest date range")
     print("  qp run daily --demo           Full pipeline with demo data")
+    print()
+    print("Phase 2 (available):")
+    print("  qp validate                   Validate current strategy against all gates")
     return 0
 
 
@@ -182,6 +262,9 @@ def main() -> int:
 
     if command == "pipeline" and len(sys.argv) > 2 and sys.argv[2] == "list":
         return _cmd_pipeline_list()
+
+    if command == "validate":
+        return _cmd_validate()
 
     print(f"qp: unknown command '{command}'. Try 'qp --help'", file=sys.stderr)
     return 1

@@ -1,0 +1,395 @@
+"""Factor validation checks — Rank IC, IC_IR, t-stat, stratification.
+
+All checks follow the BaseRule contract. Thresholds are constructor-injected
+so they can be overridden from config or CLI without code changes.
+
+See rule.md §7.9.1 for the complete specification.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import polars as pl
+
+from qp.shared.types import ValidationStatus
+from qp.validation.engine import BaseRule, RuleResult, ValidationContext
+
+# ------------------------------------------------------------------
+# Rank IC Check
+# ------------------------------------------------------------------
+
+
+class RankICCheck(BaseRule):
+    """Cross-sectional Rank IC (Spearman) between factor value and forward return.
+
+    Computed daily, then aggregated via mean over the full period.
+    Threshold: mean |IC| ≥ min_ic_mean (default 0.02 per rule.md §7.9.1).
+    """
+
+    def __init__(self, min_ic_mean: float = 0.02) -> None:
+        self._min_ic_mean = min_ic_mean
+
+    @property
+    def rule_name(self) -> str:
+        return "rank_ic"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        feature_df = context.feature_df
+        price_df = context.price_df
+
+        if feature_df is None or price_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df or price_df in validation context.",
+            )
+
+        ic_series = _compute_rank_ic(feature_df, price_df)
+        if ic_series is None or len(ic_series) == 0:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Could not compute Rank IC — insufficient data.",
+            )
+
+        mean_ic = float(ic_series.mean())
+        passed = abs(mean_ic) >= self._min_ic_mean
+
+        # Score: map mean_IC to 0-100 linearly, cap at 0.10
+        score = min(100.0, (abs(mean_ic) / 0.10) * 100.0)
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._min_ic_mean,
+            actual_value=round(mean_ic, 4),
+            detail=(
+                f"Mean Rank IC = {mean_ic:.4f} "
+                f"({'≥' if passed else '<'} threshold {self._min_ic_mean})"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# IC_IR Check
+# ------------------------------------------------------------------
+
+
+class ICIRCheck(BaseRule):
+    """Information Coefficient / Information Ratio (IC_IR).
+
+    IC_IR = mean(IC) / std(IC).  Measures signal consistency.
+    Threshold: IC_IR ≥ min_ic_ir (default 0.3 per rule.md §7.9.1).
+    """
+
+    def __init__(self, min_ic_ir: float = 0.3) -> None:
+        self._min_ic_ir = min_ic_ir
+
+    @property
+    def rule_name(self) -> str:
+        return "ic_ir"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        feature_df = context.feature_df
+        price_df = context.price_df
+
+        if feature_df is None or price_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df or price_df in validation context.",
+            )
+
+        ic_series = _compute_rank_ic(feature_df, price_df)
+        if ic_series is None or len(ic_series) < 2:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Insufficient IC data for IC_IR computation.",
+            )
+
+        mean_ic = float(ic_series.mean())
+        std_ic = float(ic_series.std())
+        ic_ir = abs(mean_ic) / std_ic if std_ic > 0 else 0.0
+
+        passed = ic_ir >= self._min_ic_ir
+        score = min(100.0, (ic_ir / 1.0) * 100.0)  # 1.0 IC_IR → score 100
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._min_ic_ir,
+            actual_value=round(ic_ir, 4),
+            detail=(
+                f"IC_IR = {ic_ir:.4f} (IC mean={mean_ic:.4f}, IC std={std_ic:.4f}) "
+                f"{'≥' if passed else '<'} threshold {self._min_ic_ir}"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# IC t-stat Check
+# ------------------------------------------------------------------
+
+
+class TStatCheck(BaseRule):
+    """IC t-statistic — tests whether IC is statistically different from zero.
+
+    t-stat = mean(IC) / (std(IC) / sqrt(n_days))
+    Threshold: |t-stat| ≥ min_t_stat (default 2.0 per rule.md §7.9.1).
+    """
+
+    def __init__(self, min_t_stat: float = 2.0) -> None:
+        self._min_t_stat = min_t_stat
+
+    @property
+    def rule_name(self) -> str:
+        return "ic_t_stat"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        feature_df = context.feature_df
+        price_df = context.price_df
+
+        if feature_df is None or price_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df or price_df in validation context.",
+            )
+
+        ic_series = _compute_rank_ic(feature_df, price_df)
+        if ic_series is None or len(ic_series) < 6:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Insufficient IC data for t-stat (need ≥ 6 observations).",
+            )
+
+        mean_ic = float(ic_series.mean())
+        std_ic = float(ic_series.std())
+        n = len(ic_series)
+        t_stat = abs(mean_ic) / (std_ic / np.sqrt(n)) if std_ic > 0 else 0.0
+
+        passed = t_stat >= self._min_t_stat
+        score = min(100.0, (t_stat / 5.0) * 100.0)  # t-stat 5.0 → score 100
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._min_t_stat,
+            actual_value=round(t_stat, 2),
+            detail=(
+                f"IC t-stat = {t_stat:.2f} (n={n}) "
+                f"{'≥' if passed else '<'} threshold {self._min_t_stat}"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# Stratification (Quantile Spread) Check
+# ------------------------------------------------------------------
+
+
+class StratificationCheck(BaseRule):
+    """Quantile-based stratification check.
+
+    Groups stocks into quantiles by factor value each day, computes
+    equal-weighted forward return per quantile.  Checks that the
+    top-bottom spread is directionally consistent (mean spread ≠ 0)
+    and statistically significant (t-stat ≥ min_t_stat).
+
+    Threshold: top-bottom spread t-stat ≥ min_t_stat (default 2.0).
+    """
+
+    def __init__(self, n_quantiles: int = 5, min_t_stat: float = 2.0) -> None:
+        self._n_quantiles = n_quantiles
+        self._min_t_stat = min_t_stat
+
+    @property
+    def rule_name(self) -> str:
+        return "stratification"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        feature_df = context.feature_df
+        price_df = context.price_df
+
+        if feature_df is None or price_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df or price_df in validation context.",
+            )
+
+        spreads = _compute_quantile_spreads(feature_df, price_df, self._n_quantiles)
+        if spreads is None or len(spreads) < 6:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Insufficient data for stratification check.",
+            )
+
+        mean_spread = float(spreads.mean())
+        std_spread = float(spreads.std())
+        t_stat = abs(mean_spread) / (std_spread / np.sqrt(len(spreads))) if std_spread > 0 else 0.0
+
+        passed = t_stat >= self._min_t_stat
+        score = min(100.0, (t_stat / 5.0) * 100.0)
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._min_t_stat,
+            actual_value=round(t_stat, 2),
+            detail=(
+                f"Top-Bottom spread mean = {mean_spread:.4f}, "
+                f"t-stat = {t_stat:.2f} (n={len(spreads)}) "
+                f"{'≥' if passed else '<'} threshold {self._min_t_stat}"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# Shared computation helpers
+# ------------------------------------------------------------------
+
+
+def _compute_rank_ic(
+    feature_df: pl.DataFrame, price_df: pl.DataFrame, forward_period: int = 1,
+) -> np.ndarray | None:
+    """Compute daily cross-sectional Rank IC (Spearman) series.
+
+    For each day T: Spearman corr(feature_value_T, forward_return_T→T+forward_period)
+    across all stocks with data on that day.
+
+    Args:
+        feature_df: [trade_date, symbol, feature_value]
+        price_df: [trade_date, symbol, close]
+        forward_period: Days ahead for forward return (default 1).
+
+    Returns:
+        NumPy array of daily IC values, or None if computation fails.
+    """
+    # Compute forward return per symbol
+    px = (
+        price_df
+        .sort(["symbol", "trade_date"])
+        .with_columns(
+            pl.col("close")
+            .shift(-forward_period)
+            .over("symbol")
+            .alias("forward_close")
+        )
+    )
+    px = px.with_columns(
+        ((pl.col("forward_close") - pl.col("close")) / pl.col("close")).alias("fwd_ret")
+    )
+    px = px.drop_nulls(subset=["fwd_ret"])
+
+    # Join feature values with forward returns on (trade_date, symbol)
+    merged = feature_df.join(
+        px.select(["trade_date", "symbol", "fwd_ret"]),
+        on=["trade_date", "symbol"],
+        how="inner",
+    )
+
+    if merged.is_empty():
+        return None
+
+    # Per-day Rank IC (Spearman) — skip days with < 5 stocks
+    ic_values: list[float] = []
+    dates = merged["trade_date"].unique().sort().to_list()
+
+    for d in dates:
+        day_data = merged.filter(pl.col("trade_date") == d)
+        if day_data.height < 5:
+            continue
+        # Spearman rank correlation
+        feat_rank = day_data["feature_value"].rank()
+        ret_rank = day_data["fwd_ret"].rank()
+        rho = _spearman_from_ranks(feat_rank, ret_rank)
+        ic_values.append(rho)
+
+    return np.array(ic_values) if ic_values else None
+
+
+def _spearman_from_ranks(rx: pl.Series, ry: pl.Series) -> float:
+    """Compute Spearman correlation from ranked series."""
+    n = len(rx)
+    if n < 3:
+        return 0.0
+    d2 = float((rx - ry).pow(2).sum())  # type: ignore[arg-type]
+    rho = 1.0 - (6.0 * d2) / (n * (n * n - 1))
+    return float(rho)
+
+
+def _compute_quantile_spreads(
+    feature_df: pl.DataFrame,
+    price_df: pl.DataFrame,
+    n_quantiles: int = 5,
+) -> np.ndarray | None:
+    """Compute daily top-bottom quantile forward-return spreads.
+
+    Returns:
+        NumPy array of daily spread values, or None if computation fails.
+    """
+    # Forward return
+    px = (
+        price_df
+        .sort(["symbol", "trade_date"])
+        .with_columns(
+            pl.col("close").shift(-1).over("symbol").alias("forward_close")
+        )
+    )
+    px = px.with_columns(
+        ((pl.col("forward_close") - pl.col("close")) / pl.col("close")).alias("fwd_ret")
+    )
+    px = px.drop_nulls(subset=["fwd_ret"])
+
+    merged = feature_df.join(
+        px.select(["trade_date", "symbol", "fwd_ret"]),
+        on=["trade_date", "symbol"],
+        how="inner",
+    )
+    if merged.is_empty():
+        return None
+
+    spreads: list[float] = []
+    dates = merged["trade_date"].unique().sort().to_list()
+
+    for d in dates:
+        day_data = merged.filter(pl.col("trade_date") == d)
+        if day_data.height < n_quantiles * 2:
+            continue
+
+        # Assign quantile group by feature value rank
+        day_data = day_data.with_columns(
+            ((pl.col("feature_value").rank() / day_data.height * n_quantiles)
+             .ceil()
+             .clip(1, n_quantiles)
+             .cast(pl.Int64))
+            .alias("quantile")
+        )
+
+        # Mean forward return per quantile
+        q_ret = day_data.group_by("quantile").agg(pl.col("fwd_ret").mean().alias("mean_ret"))
+        q_ret = q_ret.sort("quantile")
+
+        if q_ret.height < 2:
+            continue
+        top_ret = q_ret["mean_ret"][-1]
+        bottom_ret = q_ret["mean_ret"][0]
+        spreads.append(top_ret - bottom_ret)
+
+    return np.array(spreads) if spreads else None
