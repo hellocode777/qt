@@ -4,6 +4,10 @@ Exports LightGBMRankModel (default ML model, TDR-012),
 CrossSectionalStandardizer, and ModelRegistry.
 """
 
+from qp.research.trainer.auto_retrain import (
+    MonthlyRetrainPipeline,
+    RetrainResult,
+)
 from qp.research.trainer.lgb_rank import (
     DEFAULT_LGB_PARAMS,
     CrossSectionalStandardizer,
@@ -22,6 +26,8 @@ __all__ = [
     "LightGBMRankModel",
     "ModelMetadata",
     "ModelRegistry",
+    "MonthlyRetrainPipeline",
+    "RetrainResult",
     "copy_to_registry",
     "hash_model",
 ]

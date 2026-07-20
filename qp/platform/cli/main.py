@@ -1151,6 +1151,149 @@ def _cmd_decide() -> int:
     return 0
 
 
+def _cmd_paper_start() -> int:
+    """Start a 30-day paper trading run."""
+    from datetime import date
+
+    from qp.strategy.paper_trading import PaperTradingTracker
+    from qp.strategy.registry import StrategyRegistry
+
+    strategy_id = "simple_rank_v1.0"
+    if len(sys.argv) > 3 and not sys.argv[3].startswith("--"):
+        strategy_id = sys.argv[3]
+
+    print("═══ QP 模拟交易 / Paper Trading ═══")
+    print()
+    print(f"  策略 / Strategy:  {strategy_id}")
+    print(f"  起始日期 / Start: {date.today().isoformat()}")
+
+    # Verify strategy exists
+    try:
+        registry = StrategyRegistry()
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry.register(SimpleRankStrategy(top_n=10))
+        registry.get(strategy_id)
+    except KeyError:
+        print(f"  ❌ 策略 '{strategy_id}' 未注册")
+        return 1
+
+    tracker = PaperTradingTracker()
+    run = tracker.start(strategy_id, capital=1_000_000)
+    print(f"  运行编号 / Run ID: {run.run_id}")
+    print(f"  状态文件 / State:   {run.state_file}")
+    print()
+    print("  ✅ 模拟交易已启动。每天运行 'qp paper status' 查看进度。")
+    print("  ✅ Paper trading started. Run 'qp paper status' for daily updates.")
+    return 0
+
+
+def _cmd_paper_status() -> int:
+    """Show current paper trading status."""
+    from qp.strategy.paper_trading import PaperTradingTracker
+
+    strategy_id = "simple_rank_v1.0"
+    if len(sys.argv) > 3 and not sys.argv[3].startswith("--"):
+        strategy_id = sys.argv[3]
+
+    tracker = PaperTradingTracker()
+    run = tracker.load(strategy_id)
+
+    if run is None:
+        print(f"  ⚠ 未找到 '{strategy_id}' 的模拟交易记录。请先运行 'qp paper start'。")
+        print("  ⚠ No paper trading run found. Run 'qp paper start' first.")
+        return 1
+
+    st = tracker.status(run)
+
+    print("═══ QP 模拟交易状态 / Paper Trading Status ═══")
+    print()
+    print(f"  策略 / Strategy:    {st['strategy_id']}")
+    print(f"  运行编号 / Run ID:  {st['run_id']}")
+    print(f"  起始日期 / Start:   {st['start_date']}")
+    print(f"  已过天数 / Days:    {st['elapsed_days']}/30")
+    print(f"  当前权益 / Equity:  ¥{st['current_equity']:,.0f}")
+    print()
+
+    if st["is_complete"] and "result" in st:
+        r = st["result"]
+        icon = "✅" if r["passed"] else "❌"
+        print("  ── 评估结果 / Evaluation ──")
+        print(f"  {icon} 通过 / Passed:    {r['passed']}")
+        print(f"  总收益 / Return:         {r['total_return']:.1f}%")
+        print(f"  夏普 / Sharpe:           {r['sharpe']:.2f}")
+        print(f"  最大回撤 / Max DD:       {r['max_drawdown']:.1f}%")
+        print(f"  建议 / Recommendation:   {r['recommendation']}")
+    else:
+        remaining = 30 - st["elapsed_days"]
+        print(f"  ⏳ 还剩 {remaining} 天完成评估 / {remaining} days remaining.")
+    print()
+    return 0
+
+
+def _cmd_retrain() -> int:
+    """Run monthly model retrain pipeline."""
+    from datetime import date
+
+    from qp.platform.pipeline.context import PipelineContext
+    from qp.research.trainer.auto_retrain import MonthlyRetrainPipeline
+
+    strategy_id = "simple_rank_v1.0"
+    dry_run = False
+
+    args = sys.argv[2:]
+    for arg in args:
+        if arg == "--dry-run":
+            dry_run = True
+        elif not arg.startswith("--"):
+            strategy_id = arg
+
+    print("═══ QP 模型重训 / Model Retrain ═══")
+    print()
+    print(f"  策略 / Strategy:    {strategy_id}")
+    print(f"  模式 / Mode:        {'演习 dry-run' if dry_run else '正式 live'}")
+    print()
+
+    context = PipelineContext(
+        pipeline_name="monthly_retrain",
+        parameters={
+            "strategy_id": strategy_id,
+            "train_end": date.today().isoformat(),
+            "dry_run": dry_run,
+        },
+    )
+
+    pipeline = MonthlyRetrainPipeline()
+    result = pipeline.run(context)
+
+    if result.status.value == "failed":
+        print("  ❌ 重训失败 / Retrain FAILED")
+        for e in result.errors:
+            print(f"     {e}")
+        return 1
+
+    print(f"  ✅ 重训完成 / Status: {result.status.value}")
+    print()
+
+    if result.metrics:
+        print("  ── 指标 / Metrics ──")
+        for k, v in sorted(result.metrics.items()):
+            print(f"  {k}: {v:.4f}")
+
+    if result.metadata and "retrain_result" in result.metadata:
+        rr = result.metadata["retrain_result"]
+        print()
+        print("  ── 结果 / Result ──")
+        print(f"  验证通过 / Validated: {rr.validation_passed}")
+        print(f"  模型注册 / Registered: {rr.model_registered}")
+        if rr.model_id:
+            print(f"  模型编号 / Model ID: {rr.model_id}")
+        print(f"  {rr.recommendation}")
+
+    print()
+    return 0
+
+
 def _print_help() -> int:
     """Print help message."""
     print("qp — Quant Platform CLI")
@@ -1177,6 +1320,9 @@ def _print_help() -> int:
     print("  knowledge stats          Knowledge archive statistics")
     print("  knowledge search <q>     Search knowledge archive")
     print("  decide [strategy] [--capital=N]  Generate trade recommendations")
+    print("  paper start [strategy]   Start 30-day paper trading run")
+    print("  paper status [strategy]  Show paper trading status")
+    print("  retrain [strategy] [--dry-run]  Run monthly model retrain")
     print()
     print("Phase 1 (available):")
     print("  qp ingest --demo              Ingest with synthetic demo data")
@@ -1205,6 +1351,11 @@ def _print_help() -> int:
     print("Phase 6 (available):")
     print("  qp decide [strategy]           Generate trade recommendations")
     print("  qp decide --capital=500000     Custom capital amount")
+    print()
+    print("Gap closure (Phase 6 continued):")
+    print("  qp paper start [strategy]      Start 30-day paper trading")
+    print("  qp paper status                Show paper trading progress")
+    print("  qp retrain [strategy] --dry-run Run monthly model retrain")
     return 0
 
 
@@ -1315,6 +1466,21 @@ def main() -> int:
 
     if command == "decide":
         return _cmd_decide()
+
+    if command == "paper":
+        if len(sys.argv) < 3:
+            print("qp paper: missing subcommand. Try: start, status", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "start":
+            return _cmd_paper_start()
+        if sub == "status":
+            return _cmd_paper_status()
+        print(f"qp paper: unknown subcommand '{sub}'. Try: start, status", file=sys.stderr)
+        return 1
+
+    if command == "retrain":
+        return _cmd_retrain()
 
     print(f"qp: unknown command '{command}'. Try 'qp --help'", file=sys.stderr)
     return 1

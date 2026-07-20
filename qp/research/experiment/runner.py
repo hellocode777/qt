@@ -1,6 +1,6 @@
 """ExperimentRunner — orchestrates a full experiment: feature → CV → train → evaluate → log.
 
-Encapsulates the end-to-end experiment workflow for reproducible research.
+Encapsulates the end-to-end experiment pipeline for reproducible research.
 """
 
 from __future__ import annotations

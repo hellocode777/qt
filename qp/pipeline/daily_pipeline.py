@@ -1,4 +1,4 @@
-"""DailyPipeline — orchestrated end-to-end daily workflow.
+"""DailyPipeline — orchestrated end-to-end daily pipeline.
 
 Phase 3 upgrade: Multi-Strategy → Risk Manager → Cost Model
     → Capital Allocator → Position Optimizer → Order Generation.
@@ -30,7 +30,7 @@ from qp.strategy.simple_rank import SimpleRankStrategy
 
 
 class DailyPipeline(BasePipeline):
-    """End-to-end daily quant workflow with full portfolio pipeline."""
+    """End-to-end daily quant pipeline with full portfolio pipeline."""
 
     @property
     def name(self) -> str:
