@@ -541,6 +541,81 @@ def _cmd_experiment_show() -> int:
     return 0
 
 
+def _cmd_experiment_run() -> int:
+    """Run a named experiment pipeline (e.g. multifactor)."""
+    if len(sys.argv) < 4:
+        print("qp experiment run <name> [options]", file=sys.stderr)
+        print("  Available: multifactor", file=sys.stderr)
+        print("  Options:", file=sys.stderr)
+        print("    --symbols 000001,000002,...   Stock codes", file=sys.stderr)
+        print("    --start 2024-01-01           Start date", file=sys.stderr)
+        print("    --end 2026-07-20             End date", file=sys.stderr)
+        print("    --top-n 10                   Top N stocks", file=sys.stderr)
+        print("    --rebalance 20               Rebalance frequency (days)", file=sys.stderr)
+        print("    --industry-neutral           Enable industry neutralization", file=sys.stderr)
+        print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
+        return 1
+
+    pipeline_name = sys.argv[3]
+
+    if pipeline_name != "multifactor":
+        print(
+            f"qp experiment run: unknown pipeline '{pipeline_name}'. Try: multifactor",
+            file=sys.stderr,
+        )
+        return 1
+
+    from qp.platform.pipeline.context import PipelineContext
+    from qp.research.experiment.multifactor_pipeline import MultiFactorPipeline
+
+    # Parse options
+    params: dict[str, object] = {}
+    args = sys.argv[4:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--symbols="):
+            params["symbols"] = arg.split("=", 1)[1].split(",")
+        elif arg == "--symbols" and i + 1 < len(args):
+            i += 1
+            params["symbols"] = args[i].split(",")
+        elif arg.startswith("--start="):
+            params["start_date"] = arg.split("=", 1)[1]
+        elif arg.startswith("--end="):
+            params["end_date"] = arg.split("=", 1)[1]
+        elif arg.startswith("--top-n="):
+            params["top_n"] = int(arg.split("=", 1)[1])
+        elif arg.startswith("--rebalance="):
+            params["rebalance_freq"] = int(arg.split("=", 1)[1])
+        elif arg == "--industry-neutral":
+            params["industry_neutral"] = True
+        elif arg == "--orthogonalize":
+            params["orthogonalize"] = True
+        i += 1
+
+    context = PipelineContext(pipeline_name="multifactor_experiment", parameters=params)
+    pipeline = MultiFactorPipeline()
+    result = pipeline.run(context)
+
+    if result.status.value != "success":
+        return 1
+
+    # Print summary
+    logger = __import__("loguru").logger
+    logger.info("")
+    logger.info("── 实验指标 / Metrics ──")
+    for k, v in sorted(result.metrics.items()):
+        if isinstance(v, float):
+            if abs(v) < 0.01:
+                logger.info("  {}: {:.4f}", k, v)
+            elif abs(v) < 1:
+                logger.info("  {}: {:.2f}", k, v)
+            else:
+                logger.info("  {}: {:.1f}", k, v)
+
+    return 0
+
+
 def _cmd_model_list() -> int:
     """List registered models."""
     from qp.research.trainer import ModelRegistry
@@ -1311,6 +1386,7 @@ def _print_help() -> int:
     print("  portfolio risk           Risk analysis + correlation scan")
     print("  experiment list          List all experiments")
     print("  experiment show <id>     Show experiment details")
+    print("  experiment run multifactor [opts]  Run multi-factor experiment")
     print("  model list               List registered models")
     print("  model show <id>          Show model details")
     print("  backtest run [strategy]  Run broker-based backtest")
@@ -1401,14 +1477,16 @@ def main() -> int:
 
     if command == "experiment":
         if len(sys.argv) < 3:
-            print("qp experiment: missing subcommand. Try: list, show <id>", file=sys.stderr)
+            print("qp experiment: missing subcommand. Try: list, show, run", file=sys.stderr)
             return 1
         sub = sys.argv[2]
         if sub == "list":
             return _cmd_experiment_list()
         if sub == "show":
             return _cmd_experiment_show()
-        print(f"qp experiment: unknown subcommand '{sub}'. Try: list, show", file=sys.stderr)
+        if sub == "run":
+            return _cmd_experiment_run()
+        print(f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run", file=sys.stderr)
         return 1
 
     if command == "model":
