@@ -7,8 +7,15 @@ from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.research.feature.momentum import Momentum20dFeature
 from qp.research.feature.registry import FeatureRegistry
+from qp.research.feature.volatility import Volatility20dFeature
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus
+
+# Feature factory — maps name to class
+_FEATURE_CLASSES: dict[str, type] = {
+    "momentum_20d": Momentum20dFeature,
+    "volatility_20d": Volatility20dFeature,
+}
 
 
 class FeaturePipeline(BasePipeline):
@@ -19,7 +26,9 @@ class FeaturePipeline(BasePipeline):
         return "feature_compute"
 
     def run(self, context: PipelineContext) -> PipelineResult:
-        feature_names = context.parameters.get("features", ["momentum_20d"])
+        feature_names = context.parameters.get(
+            "features", list(_FEATURE_CLASSES.keys())
+        )
 
         result = PipelineResult(
             status=PipelineStatus.SUCCESS,
@@ -34,17 +43,22 @@ class FeaturePipeline(BasePipeline):
 
             registry = FeatureRegistry()
 
-            if "momentum_20d" in feature_names:
-                feature = Momentum20dFeature()
+            for fname in feature_names:
+                if fname not in _FEATURE_CLASSES:
+                    result.metrics["feature_rows"] = -1
+                    result.metadata["skip_" + fname] = "unknown — skipped"
+                    continue
+
+                feature = _FEATURE_CLASSES[fname]()
                 registry.register(feature)
 
                 feature_df = feature.compute({"daily_price": ds})
-                result.metrics["feature_rows"] = len(feature_df)
+                result.metrics[f"feature_{fname}_rows"] = len(feature_df)
 
                 # Save feature
                 import polars as pl
 
-                path = "data/dataset/momentum_20d.parquet"
+                path = f"data/dataset/{fname}.parquet"
                 pl.from_pandas(feature_df.to_pandas()).write_parquet(path)
                 result.artifacts.append(path)
 

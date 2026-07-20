@@ -64,6 +64,19 @@ qp validate → simple_rank_v1.0:
   Overall: FAIL (Score 33/100, 5/6 failed)
 ```
 
+### ✅ Phase 3 — Portfolio Risk + Capital Allocation（已完成）
+
+**目标**：多策略并行、组合风控、资金分配、交易成本、仓位优化。
+
+| Milestone | 状态 | 说明 |
+|---|---|---|
+| M3.1 | ✅ | Strategy Registry + Signal Aggregator + Volatility20d 因子 |
+| M3.2 | ✅ | Portfolio Risk Manager：单仓 ≤ 8%、单行业 ≤ 25%、相关性过滤（>0.7）、风险预算 |
+| M3.3 | ✅ | Transaction Cost Model：印花税 0.05% + 佣金 0.025% + 滑点 0.1% + sqrt 冲击成本 |
+| M3.4 | ✅ | Capital Allocation：EqualWeight + RiskParity（逆波动率）+ FractionalKelly（0.25×）+ 现金缓冲 ≥ 5% |
+| M3.5 | ✅ | MeanVarianceOptimizer（最大夏普、SLSQP、Ledoit-Wolf 协方差收缩）+ 分析回退 |
+| M3.6 | ✅ | 集成：DailyPipeline 升级为完整 Portfolio 流程 + `qp portfolio report/risk` 命令 |
+
 ---
 
 ## 二、可用命令
@@ -81,6 +94,8 @@ uv run qp ingest 2024-01-01 2024-12-31     # 数据摄入（日期范围）
 uv run qp run daily --demo                 # 端到端流程（模拟数据）
 uv run qp run daily                        # 端到端流程（真实数据）
 uv run qp validate                         # 策略验证（全部 Gate 检查）
+uv run qp portfolio report                 # 组合 KPI 看板
+uv run qp portfolio risk                   # 风控分析 + 相关性扫描
 ```
 
 ### 2.2 代码检查
@@ -127,17 +142,29 @@ qp/
 │   ├── loader/        #   DatasetLoader
 │   └── calendar/      #   TradingCalendar
 ├── research/          # Layer 3: ✅
-│   ├── feature/       #   Momentum20dFeature + FeatureRegistry
+│   ├── feature/       #   Momentum20d + Volatility20d + FeatureRegistry
 │   ├── split/         #   PurgedKFold (walk-forward + Purge + Embargo)
 │   └── trainer/       #   LightGBMRankModel + Standardizer
 ├── validation/        # Layer 4: ✅ Phase 2
 │   ├── engine.py      #   BaseRule + RuleEngine + ValidationContext
 │   ├── result.py      #   RuleResult + ValidationResult
 │   └── checks/        #   factor_checks + overfit_checks + backtest_checks
-├── strategy/          # Layer 5: ✅
-│   └── simple_rank.py #   SimpleRankStrategy (Top 10)
-├── portfolio/         # Layer 6: ✅
-│   └── single_portfolio.py  # SinglePortfolio (Equal Weight)
+├── strategy/          # Layer 5: ✅ Phase 3
+│   ├── simple_rank.py #   SimpleRankStrategy (Top 10)
+│   ├── registry.py    #   StrategyRegistry (多策略管理)
+│   └── aggregator.py  #   SignalAggregator (rank_blend/equal_weight/vote)
+├── portfolio/         # Layer 6: ✅ Phase 3 重点
+│   ├── single_portfolio.py  # SinglePortfolio (legacy)
+│   ├── risk_manager.py #  PortfolioRiskManager (仓位/行业/相关性限制)
+│   ├── industry.py    #   IndustryMapper (申万行业分类)
+│   ├── correlation.py #   CorrelationAnalyzer (>0.7 冗余检测)
+│   ├── cost_model.py  #   CostModel + MarketImpactModel (sqrt)
+│   ├── optimizer.py   #   MeanVarianceOptimizer (最大夏普, SLSQP, Ledoit-Wolf)
+│   └── allocator/     #   资金分配器
+│       ├── equal_weight.py  # EqualWeightAllocator (1/N)
+│       ├── risk_parity.py   # RiskParityAllocator (逆波动率)
+│       ├── kelly.py         # KellyAllocator (Fractional Kelly)
+│       └── factory.py       # AllocationFactory
 ├── simulation/        # Layer 7: ✅
 │   └── backtest.py    #   SimpleVectorBacktest
 ├── monitoring/        # Layer 9: ✅ Phase 2
@@ -152,12 +179,43 @@ tests/
 
 ---
 
-## 四、下一步：Phase 3 Portfolio Risk + Capital Allocation
+## 四、Phase 3 数据流
+
+```
+FeaturePipeline (momentum_20d + volatility_20d)
+          ↓
+StrategyRegistry.get_backtest_ready() → 2 策略
+          ↓
+SignalAggregator (rank_blend)
+          ↓
+PortfolioRiskManager.apply_risk_limits_with_prices()
+  ├── 单仓上限 8%
+  ├── 单行业上限 25%
+  └── 相关性过滤 (>0.7)
+          ↓
+CostModel.estimate()
+  ├── 印花税 0.05% (卖)
+  ├── 佣金 0.025%
+  └── sqrt 冲击成本
+          ↓
+AllocationFactory.create("risk_parity")
+  └── 现金缓冲 5%
+          ↓
+MeanVarianceOptimizer.optimize()
+  ├── Ledoit-Wolf 协方差收缩
+  └── SLSQP 最大夏普
+          ↓
+订单生成 + SimpleVectorBacktest
+```
+
+---
+
+## 五、下一步：Phase 4 Registry & Lineage + Simulation 正式版
 
 按 `docs/plan_v1.md` 继续推进：
 
-1. Portfolio Risk Model — 风险分解 (Barra 风格因子)
-2. Capital Allocation — Kelly/风险平价/等权
-3. 多策略并行 — Strategy Registry + 信号聚合
-4. 交易成本模型 — 冲击成本/滑点
-5. 仓位优化 — 均值方差/最大夏普
+1. Experiment Tracker 正式版 — 实验配置、指标、血缘存储
+2. 四大 Registry 正式版 — Dataset / Feature / Model / Strategy
+3. 自动化月度重训 — Walk-Forward 滚动窗口
+4. Simulation 正式版 — SimulatedBroker + 逐笔冲击成本 + ADV 限制
+5. Corporate Action Engine — 分红/送股/拆股/配股处理
