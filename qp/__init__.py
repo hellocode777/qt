@@ -1,5 +1,6 @@
 """QP — Quant Platform.
 
-A long-term investment research and decision platform.
-Twelve-layer reference architecture.
+A personal quantitative research & investment decision operating system.
 """
+
+__version__ = "0.0.1"
