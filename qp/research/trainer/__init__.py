@@ -1,6 +1,7 @@
-"""Research Trainer — model training and evaluation.
+"""Research Trainer — model training, evaluation, and registry.
 
-Exports LightGBMRankModel (default ML model, TDR-012) and CrossSectionalStandardizer.
+Exports LightGBMRankModel (default ML model, TDR-012),
+CrossSectionalStandardizer, and ModelRegistry.
 """
 
 from qp.research.trainer.lgb_rank import (
@@ -8,9 +9,19 @@ from qp.research.trainer.lgb_rank import (
     CrossSectionalStandardizer,
     LightGBMRankModel,
 )
+from qp.research.trainer.registry import (
+    ModelMetadata,
+    ModelRegistry,
+    copy_to_registry,
+    hash_model,
+)
 
 __all__ = [
-    "LightGBMRankModel",
     "CrossSectionalStandardizer",
     "DEFAULT_LGB_PARAMS",
+    "LightGBMRankModel",
+    "ModelMetadata",
+    "ModelRegistry",
+    "copy_to_registry",
+    "hash_model",
 ]

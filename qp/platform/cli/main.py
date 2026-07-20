@@ -445,6 +445,301 @@ def _cmd_portfolio_risk() -> int:
     return 0
 
 
+# ------------------------------------------------------------------
+# Phase 4 CLI commands
+# ------------------------------------------------------------------
+
+def _cmd_experiment_list() -> int:
+    """List all tracked experiments."""
+    from qp.research.experiment import ExperimentTracker
+
+    tracker = ExperimentTracker()
+    records = tracker.list_experiments()
+
+    if not records:
+        print("(empty)")
+        print("  暂无实验记录。运行 qp run daily 后将自动记录实验。")
+        return 0
+
+    print(f"{'ID':<32s} {'Status':<14s} {'Sharpe':>8s} {'IC':>8s} {'Ret':>8s}  Lineage")
+    print("-" * 100)
+    for r in records:
+        print(
+            f"{r.config.experiment_id:<32s} "
+            f"{r.status.value:<14s} "
+            f"{r.metrics.sharpe_ratio:>7.2f} "
+            f"{r.metrics.ic_mean:>7.4f} "
+            f"{r.metrics.total_return_pct:>7.1f}% "
+            f" {r.lineage.chain_str()}"
+        )
+    print(f"\n共 {len(records)} 条记录 / {len(records)} experiments total")
+    return 0
+
+
+def _cmd_experiment_show() -> int:
+    """Show experiment details."""
+    if len(sys.argv) < 3:
+        print("用法: qp experiment show <experiment_id>")
+        return 1
+
+    from qp.research.experiment import ExperimentTracker
+
+    exp_id = sys.argv[2]
+    tracker = ExperimentTracker()
+    record = tracker.get(exp_id)
+
+    if record is None:
+        print(f"实验 {exp_id} 未找到 / Experiment not found")
+        return 1
+
+    print(f"=== 实验详情 / Experiment: {exp_id} ===")
+    print()
+    print(f"  状态 / Status:       {record.status.value}")
+    print(f"  创建时间 / Created:   {record.config.created_at.isoformat()}")
+    print(f"  描述 / Description:  {record.config.description or '(none)'}")
+    print()
+    print("  ── 配置 / Config ──")
+    print(f"    特征 / Features:    {record.config.features}")
+    print(f"    数据版本 / Dataset:  {record.config.dataset_version}")
+    print(f"    CV折数 / CV Folds:   {record.config.cv_folds}")
+    if record.config.model_params:
+        print(f"    模型参数 / Model:    {record.config.model_params}")
+    print()
+    print("  ── 指标 / Metrics ──")
+    print(f"    IC均值 / IC Mean:      {record.metrics.ic_mean:.4f}")
+    print(f"    IC_IR:                 {record.metrics.ic_ir:.2f}")
+    print(f"    IC t-stat:             {record.metrics.ic_t_stat:.2f}")
+    print(f"    夏普比率 / Sharpe:      {record.metrics.sharpe_ratio:.2f}")
+    print(f"    最大回撤 / MaxDD:       {record.metrics.max_drawdown_pct:.1f}%")
+    print(f"    总收益 / Total Return:  {record.metrics.total_return_pct:.1f}%")
+    print(f"    样本内IC / In-Sample:   {record.metrics.in_sample_ic:.4f}")
+    print(f"    样本外IC / Out-of-Sample: {record.metrics.out_of_sample_ic:.4f}")
+    print()
+    print("  ── 血缘 / Lineage ──")
+    print(f"    {record.lineage.chain_str()}")
+    if record.errors:
+        print()
+        print("  ── 错误 / Errors ──")
+        for e in record.errors:
+            print(f"    {e}")
+
+    return 0
+
+
+def _cmd_model_list() -> int:
+    """List registered models."""
+    from qp.research.trainer import ModelRegistry
+
+    registry = ModelRegistry()
+    models = registry.list_models()
+
+    if not models:
+        print("(empty)")
+        print("  暂无已注册模型。")
+        return 0
+
+    print(f"{'Model ID':<35s} {'Strategy':<25s} {'Stage':<16s} {'Sharpe':>8s} {'Features'}")
+    print("-" * 120)
+    for m in models:
+        features_str = ", ".join(m.features[:3])
+        if len(m.features) > 3:
+            features_str += f" +{len(m.features) - 3}"
+        print(
+            f"{m.model_id:<35s} "
+            f"{m.strategy_id:<25s} "
+            f"{m.stage.value:<16s} "
+            f"{m.metrics.get('sharpe_ratio', 0):>7.2f} "
+            f" {features_str}"
+        )
+    print(f"\n共 {len(models)} 个模型 / {len(models)} models total")
+    return 0
+
+
+def _cmd_model_show() -> int:
+    """Show model details."""
+    if len(sys.argv) < 3:
+        print("用法: qp model show <model_id>")
+        return 1
+
+    from qp.research.trainer import ModelRegistry
+
+    model_id = sys.argv[2]
+    registry = ModelRegistry()
+    meta = registry.get(model_id)
+
+    if meta is None:
+        print(f"模型 {model_id} 未找到 / Model not found")
+        return 1
+
+    print(f"=== 模型详情 / Model: {model_id} ===")
+    print()
+    print(f"  策略 / Strategy:       {meta.strategy_id}")
+    print(f"  阶段 / Stage:          {meta.stage.value}")
+    print(f"  创建时间 / Created:     {meta.created_at}")
+    print(f"  文件哈希 / Hash:        {meta.file_hash}")
+    print(f"  文件路径 / Path:        {meta.file_path}")
+    print()
+    print("  ── 训练配置 / Training Config ──")
+    print(f"    特征 / Features:      {meta.features}")
+    print(f"    时间窗口 / Window:     {meta.training_window}")
+    print(f"    CV折数 / CV Folds:    {meta.cv_folds}")
+    if meta.hyperparams:
+        print("    超参数 / Hyperparams:")
+        for k, v in meta.hyperparams.items():
+            print(f"      {k}: {v}")
+    print()
+    print("  ── 评估指标 / Metrics ──")
+    if meta.metrics:
+        for k, v in sorted(meta.metrics.items()):
+            print(f"    {k}: {v}")
+    else:
+        print("    (none)")
+
+    return 0
+
+
+def _cmd_backtest_run() -> int:
+    """Run broker-based backtest."""
+    from datetime import date
+
+    import numpy as np
+    import polars as pl
+
+    from qp.simulation.broker import SimulatedBroker
+    from qp.simulation.result import SimulationResult
+    from qp.strategy.registry import StrategyRegistry
+    from qp.strategy.simple_rank import SimpleRankStrategy
+
+    today = date.today()
+    strategy_id = "simple_rank_v1.0"
+    if len(sys.argv) > 2:
+        strategy_id = sys.argv[2]
+
+    print(f"=== QP 回测 / Backtest: {strategy_id} ===")
+    print()
+
+    # Load data
+    try:
+        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
+    except FileNotFoundError:
+        print("❌ 未找到数据文件。请先运行 qp run daily")
+        return 1
+
+    # Generate signals
+    registry = StrategyRegistry()
+    registry.register(SimpleRankStrategy(top_n=10))
+    strategy = registry.get(strategy_id)
+    signals = strategy.generate_signals(today)
+
+    if signals.is_empty():
+        print("❌ 无信号。")
+        return 1
+
+    symbols = signals["symbol"].to_list()[:10]
+    print(f"  候选标的 / Candidates:  {len(symbols)} 只")
+    print(f"  标的列表 / Symbols:      {', '.join(symbols[:5])}...")
+
+    # Initialize broker
+    broker = SimulatedBroker(initial_cash=1_000_000, slippage_model="fixed")
+
+    # Get sorted trading dates
+    dates = sorted(prices["trade_date"].unique().to_list())
+    if not dates:
+        print("❌ 无交易日数据。")
+        return 1
+
+    # Convert prices to dict for broker
+    price_df = prices.sort(["symbol", "trade_date"])
+
+    daily_nav: list[dict] = []
+    daily_returns: list[float] = []
+
+    for i, d in enumerate(dates):
+        day_prices = price_df.filter(pl.col("trade_date") == d)
+        price_map = {}
+        adv_map = {}
+        for row in day_prices.iter_rows(named=True):
+            sym = str(row["symbol"])
+            px = float(row["close"])  # type: ignore[arg-type]
+            vol = float(row.get("volume", 0))  # type: ignore[arg-type]
+            price_map[sym] = px
+            if vol > 0 and px > 0:
+                adv_map[sym] = px * vol
+
+        broker.set_prices(price_map, adv_map, str(d))
+
+        # On first day, submit opening orders
+        if i == 0:
+            per_stock_capital = 1_000_000 / len(symbols)
+            for sym in symbols:
+                px = price_map.get(sym, 10.0)
+                qty = int(per_stock_capital / px // 100 * 100)
+                if qty > 0:
+                    broker.submit_order({
+                        "symbol": sym,
+                        "side": "BUY",
+                        "quantity": qty,
+                        "order_type": "market",
+                    })
+
+        broker.execute_pending()
+
+        equity = broker.get_equity()
+        daily_nav.append({"date": str(d), "equity": equity})
+
+        if i > 0 and daily_nav[-2]["equity"] > 0:
+            ret = equity / daily_nav[-2]["equity"] - 1
+            daily_returns.append(ret)
+
+    # Compute result
+    result = SimulationResult(
+        strategy_id=strategy_id,
+        initial_capital=1_000_000,
+        final_equity=broker.get_equity(),
+        n_days=len(dates),
+        n_trades=broker.trade_count,
+        total_commission=broker.total_commission,
+        total_stamp_tax=broker.total_stamp_tax,
+        total_slippage=broker.total_slippage,
+        total_market_impact=broker.total_market_impact,
+        total_cost=broker.total_trading_cost,
+        start_date=str(dates[0]),
+        end_date=str(dates[-1]),
+    )
+
+    if daily_returns:
+        rets = np.array(daily_returns)
+        result.total_return_pct = float(((1 + rets).prod() - 1) * 100)
+        result.annual_return_pct = float(rets.mean() * 252 * 100)
+        result.sharpe_ratio = float(np.sqrt(252) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+        result.annual_volatility_pct = float(rets.std() * np.sqrt(252) * 100)
+        cum = (1 + rets).cumprod()
+        running_max = np.maximum.accumulate(cum)
+        result.max_drawdown_pct = float(np.abs((cum - running_max).min() / running_max.min()) * 100) if len(cum) > 0 else 0.0
+
+    # Print
+    print()
+    print("  ── 回测结果 / Backtest Results ──")
+    print(f"  起始日期 / Start:       {result.start_date}")
+    print(f"  结束日期 / End:         {result.end_date}")
+    print(f"  交易天数 / Days:         {result.n_days}")
+    print(f"  交易次数 / Trades:       {result.n_trades}")
+    print(f"  总收益 / Total Return:   {result.total_return_pct:.1f}%")
+    print(f"  年化收益 / Ann. Return:  {result.annual_return_pct:.1f}%")
+    print(f"  夏普比率 / Sharpe:       {result.sharpe_ratio:.2f}")
+    print(f"  最大回撤 / Max DD:       {result.max_drawdown_pct:.1f}%")
+    print(f"  年化波动 / Ann. Vol:     {result.annual_volatility_pct:.1f}%")
+    print()
+    print("  ── 交易成本 / Trading Costs ──")
+    print(f"  佣金 / Commission:       ¥{result.total_commission:,.0f}")
+    print(f"  印花税 / Stamp Tax:      ¥{result.total_stamp_tax:,.0f}")
+    print(f"  滑点 / Slippage:        ¥{result.total_slippage:,.0f}")
+    print(f"  冲击成本 / Impact:       ¥{result.total_market_impact:,.0f}")
+    print(f"  总成本 / Total Cost:     ¥{result.total_cost:,.0f}")
+
+    return 0
+
+
 def _print_help() -> int:
     """Print help message."""
     print("qp — Quant Platform CLI")
@@ -460,6 +755,11 @@ def _print_help() -> int:
     print("  validate                 Run validation gate checks")
     print("  portfolio report         Portfolio KPI dashboard")
     print("  portfolio risk           Risk analysis + correlation scan")
+    print("  experiment list          List all experiments")
+    print("  experiment show <id>     Show experiment details")
+    print("  model list               List registered models")
+    print("  model show <id>          Show model details")
+    print("  backtest run [strategy]  Run broker-based backtest")
     print()
     print("Phase 1 (available):")
     print("  qp ingest --demo              Ingest with synthetic demo data")
@@ -472,6 +772,11 @@ def _print_help() -> int:
     print("Phase 3 (available):")
     print("  qp portfolio report           Portfolio KPI dashboard")
     print("  qp portfolio risk             Risk analysis + correlation scan")
+    print()
+    print("Phase 4 (available):")
+    print("  qp experiment list/show       Experiment tracking")
+    print("  qp model list/show            Model registry")
+    print("  qp backtest run [strategy]    Full backtest with costs")
     return 0
 
 
@@ -513,6 +818,40 @@ def main() -> int:
 
     if command == "portfolio":
         print("qp portfolio: missing subcommand. Try: qp portfolio report", file=sys.stderr)
+        return 1
+
+    if command == "experiment":
+        if len(sys.argv) < 3:
+            print("qp experiment: missing subcommand. Try: list, show <id>", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "list":
+            return _cmd_experiment_list()
+        if sub == "show":
+            return _cmd_experiment_show()
+        print(f"qp experiment: unknown subcommand '{sub}'. Try: list, show", file=sys.stderr)
+        return 1
+
+    if command == "model":
+        if len(sys.argv) < 3:
+            print("qp model: missing subcommand. Try: list, show <id>", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "list":
+            return _cmd_model_list()
+        if sub == "show":
+            return _cmd_model_show()
+        print(f"qp model: unknown subcommand '{sub}'. Try: list, show", file=sys.stderr)
+        return 1
+
+    if command == "backtest":
+        if len(sys.argv) < 3:
+            print("qp backtest: missing subcommand. Try: qp backtest run [strategy]", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "run":
+            return _cmd_backtest_run()
+        print(f"qp backtest: unknown subcommand '{sub}'. Try: run", file=sys.stderr)
         return 1
 
     print(f"qp: unknown command '{command}'. Try 'qp --help'", file=sys.stderr)

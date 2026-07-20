@@ -77,6 +77,18 @@ qp validate → simple_rank_v1.0:
 | M3.5 | ✅ | MeanVarianceOptimizer（最大夏普、SLSQP、Ledoit-Wolf 协方差收缩）+ 分析回退 |
 | M3.6 | ✅ | 集成：DailyPipeline 升级为完整 Portfolio 流程 + `qp portfolio report/risk` 命令 |
 
+### ✅ Phase 4 — Registry & Lineage + Simulation 正式版（已完成）
+
+**目标**：实验追踪、模型注册、SimulatedBroker、公司事件处理。
+
+| Milestone | 状态 | 说明 |
+|---|---|---|
+| M4.1 | ✅ | Experiment Tracker：ExperimentTracker + ExperimentRunner + LineageGraph + JSON 存储 |
+| M4.2 | ✅ | Model Registry：ModelRegistry + ModelMetadata + SHA256 哈希 + 文件管理 |
+| M4.3 | ✅ | Simulation 升级：SimulatedBroker (BaseBroker) + SlippageModel + ADV 限制 + SimulationResult |
+| M4.4 | ✅ | Corporate Action Engine：现金分红/送股/拆股/配股/转增 + CorporateActionLoader |
+| M4.5 | ✅ | 集成：`qp experiment list/show` + `qp model list/show` + `qp backtest run` 命令 |
+
 ---
 
 ## 二、可用命令
@@ -96,6 +108,11 @@ uv run qp run daily                        # 端到端流程（真实数据）
 uv run qp validate                         # 策略验证（全部 Gate 检查）
 uv run qp portfolio report                 # 组合 KPI 看板
 uv run qp portfolio risk                   # 风控分析 + 相关性扫描
+uv run qp experiment list                  # 实验列表
+uv run qp experiment show <id>             # 实验详情 + 血缘
+uv run qp model list                       # 模型列表
+uv run qp model show <id>                  # 模型详情 + 指标
+uv run qp backtest run [strategy]          # Broker 回测（含成本）
 ```
 
 ### 2.2 代码检查
@@ -141,10 +158,11 @@ qp/
 │   ├── contract/      #   DailyPriceContract
 │   ├── loader/        #   DatasetLoader
 │   └── calendar/      #   TradingCalendar
-├── research/          # Layer 3: ✅
+├── research/          # Layer 3: ✅ Phase 4
 │   ├── feature/       #   Momentum20d + Volatility20d + FeatureRegistry
 │   ├── split/         #   PurgedKFold (walk-forward + Purge + Embargo)
-│   └── trainer/       #   LightGBMRankModel + Standardizer
+│   ├── trainer/       #   LightGBMRankModel + ModelRegistry
+│   └── experiment/    #   ExperimentTracker + ExperimentRunner
 ├── validation/        # Layer 4: ✅ Phase 2
 │   ├── engine.py      #   BaseRule + RuleEngine + ValidationContext
 │   ├── result.py      #   RuleResult + ValidationResult
@@ -165,8 +183,11 @@ qp/
 │       ├── risk_parity.py   # RiskParityAllocator (逆波动率)
 │       ├── kelly.py         # KellyAllocator (Fractional Kelly)
 │       └── factory.py       # AllocationFactory
-├── simulation/        # Layer 7: ✅
-│   └── backtest.py    #   SimpleVectorBacktest
+├── simulation/        # Layer 7: ✅ Phase 4
+│   ├── backtest.py    #   SimpleVectorBacktest (legacy)
+│   ├── broker.py      #   SimulatedBroker (BaseBroker)
+│   ├── slippage.py    #   SlippageModel (fixed/volatility/sqrt)
+│   └── result.py      #   SimulationResult
 ├── monitoring/        # Layer 9: ✅ Phase 2
 │   └── kill_switch.py #   KillSwitch + 3 triggers
 ├── decision/          # Layer 8: ⏳ 空
