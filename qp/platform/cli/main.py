@@ -554,6 +554,7 @@ def _cmd_experiment_run() -> int:
         print("    --rebalance 20               Rebalance frequency (days)", file=sys.stderr)
         print("    --industry-neutral           Enable industry neutralization", file=sys.stderr)
         print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
+        print("    --dataset daily_price_main   Gold dataset name", file=sys.stderr)
         return 1
 
     pipeline_name = sys.argv[3]
@@ -591,6 +592,8 @@ def _cmd_experiment_run() -> int:
             params["industry_neutral"] = True
         elif arg == "--orthogonalize":
             params["orthogonalize"] = True
+        elif arg.startswith("--dataset="):
+            params["dataset"] = arg.split("=", 1)[1]
         i += 1
 
     context = PipelineContext(pipeline_name="multifactor_experiment", parameters=params)
@@ -686,6 +689,47 @@ def _cmd_model_show() -> int:
         print("    (none)")
 
     return 0
+
+
+def _cmd_data_fetch() -> int:
+    """Fetch full main-board data through complete Data Layer pipeline."""
+    from qp.data.loader.full_pipeline import FullDataPipeline
+    from qp.platform.pipeline.context import PipelineContext
+
+    params: dict[str, object] = {}
+    args = sys.argv[3:] if len(sys.argv) > 3 else []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--batch="):
+            params["batch_size"] = int(arg.split("=", 1)[1])
+        elif arg == "--skip-etl":
+            params["skip_etl"] = True
+        elif arg.startswith("--start="):
+            params["start_date"] = arg.split("=", 1)[1]
+        elif arg.startswith("--end="):
+            params["end_date"] = arg.split("=", 1)[1]
+        i += 1
+
+    print("═══ QP Data Fetch ═══")
+    context = PipelineContext(pipeline_name="full_data_ingest", parameters=params)
+    pipeline = FullDataPipeline()
+    result = pipeline.run(context)
+
+    print(f"\nStatus: {result.status.value}")
+    if result.artifacts:
+        for a in result.artifacts:
+            print(f"Output:  {a}")
+    if result.metrics:
+        n_stocks = result.metrics.get("n_stocks", 0)
+        n_rows = result.metrics.get("n_rows", 0)
+        print(f"Stocks:  {n_stocks:.0f}")
+        print(f"Rows:    {n_rows:.0f}")
+        for tier in ["raw", "bronze", "silver", "gold"]:
+            mb = result.metrics.get(f"{tier}_mb", 0)
+            if mb:
+                print(f"  {tier.capitalize()}: {mb:.0f} MB")
+    return 0 if result.status.value == "success" else 1
 
 
 def _cmd_backtest_run() -> int:
@@ -1401,6 +1445,8 @@ def _print_help() -> int:
     print("  retrain [strategy] [--dry-run]  Run monthly model retrain")
     print()
     print("Phase 1 (available):")
+    print("  qp data fetch [--batch=500] [--skip-etl]")
+    print("                                Fetch full main-board data from quant.db")
     print("  qp ingest --demo              Ingest with synthetic demo data")
     print("  qp ingest 2024-01-01 2024-12-31  Ingest date range")
     print("  qp run daily --demo           Full pipeline with demo data")
@@ -1499,6 +1545,16 @@ def main() -> int:
         if sub == "show":
             return _cmd_model_show()
         print(f"qp model: unknown subcommand '{sub}'. Try: list, show", file=sys.stderr)
+        return 1
+
+    if command == "data":
+        if len(sys.argv) < 3:
+            print("qp data: missing subcommand. Try: fetch", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "fetch":
+            return _cmd_data_fetch()
+        print(f"qp data: unknown subcommand '{sub}'. Try: fetch", file=sys.stderr)
         return 1
 
     if command == "backtest":

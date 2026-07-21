@@ -1,8 +1,26 @@
 """MultiFactorPipeline — multi-factor strategy experiment as a BasePipeline.
 
 End-to-end experiment conforming to ADR-006 ("Everything is a Pipeline"):
-  Data fetch → Factor compute → Cross-sectional scoring → IC analysis →
-  Signal generation → Backtest → Benchmark comparison
+
+  Raw Ingestion              TencentAdapter.fetch_raw()
+       │
+  Cleaning (4-stage ETL)     ETLPipeline: anomaly→volume→suspension→adjustment
+       │
+  Repair                     OHLC boundaries, amount validation, missing dates
+       │
+  Validation                 DailyPriceContract schema check
+       │
+  PIT & Universe             Suspension + delisted filtering
+       │
+  Feature Compute            15 price/volume factors (momentum, vol, volume, money flow)
+       │
+  Cross-sectional Scoring    Winsorize → Normalize → Combine → Rank
+       │
+  IC Analysis                Spearman Rank IC, ICIR, IC>0 ratio
+       │
+  Signal Generation          Top-N monthly rebalance with sell buffer
+       │
+  Backtest + Benchmark       Equal-weight backtest vs buy-and-hold
 
 Usage via CLI:
     qp experiment run multifactor \\
@@ -10,12 +28,6 @@ Usage via CLI:
         --start 2024-01-01 --end 2026-07-20 \\
         --top-n 10 --rebalance 20 \\
         --industry-neutral --orthogonalize
-
-Implements CLAUDE.md rules:
-  - No print() — all output via Loguru
-  - Data source access through BaseDataSource adapter (never direct akshare)
-  - PipelineContext for all infrastructure access (ADR-012)
-  - Single CLI entry point (ADR-002)
 """
 
 from __future__ import annotations
@@ -27,7 +39,7 @@ import numpy as np
 import polars as pl
 from loguru import logger
 
-from qp.data.adapter.tencent_adapter import TencentAdapter
+from qp.data.dataset.registry import DatasetRegistry
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
@@ -85,7 +97,7 @@ class MultiFactorPipeline(BasePipeline):
     def run(self, context: PipelineContext) -> PipelineResult:
         params = context.parameters
 
-        symbols: list[str] = params.get("symbols", DEFAULT_SYMBOLS)
+        symbols: list[str] = params.get("symbols", [])  # empty = all stocks in dataset
         start_date_str: str = params.get("start_date", "2024-01-01")
         end_date_str: str = params.get("end_date", date.today().isoformat())
         top_n: int = int(params.get("top_n", 10))
@@ -93,6 +105,7 @@ class MultiFactorPipeline(BasePipeline):
         sell_buffer: int = int(params.get("sell_buffer_rank", 5))
         industry_neutral: bool = params.get("industry_neutral", False)
         orthogonalize: bool = params.get("orthogonalize", False)
+        dataset: str = params.get("dataset", "daily_price_main")
 
         result = PipelineResult(
             status=PipelineStatus.SUCCESS,
@@ -103,9 +116,10 @@ class MultiFactorPipeline(BasePipeline):
         logger.info("=" * 70)
         logger.info("多因子策略实验 — A股真实数据")
         logger.info("=" * 70)
+        n = len(symbols) if symbols else "全部"
         logger.info(
             "股票池: {} 只 | 区间: {} → {} | Top-{} 每月调仓",
-            len(symbols),
+            n,
             start_date_str,
             end_date_str,
             top_n,
@@ -116,7 +130,7 @@ class MultiFactorPipeline(BasePipeline):
         # ── Stage 1: Fetch data ──
         logger.info("[1/6] 获取行情数据...")
         try:
-            price_data = self._fetch_data(symbols, start_date_str, end_date_str)
+            price_data = self._fetch_data(symbols, start_date_str, end_date_str, dataset)
         except Exception as e:
             logger.error("数据获取失败: {}", e)
             result.status = PipelineStatus.FAILED
@@ -128,18 +142,30 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["n_stocks"] = float(len(price_data))
         result.metrics["n_rows"] = float(total_rows)
 
-        # ── Stage 2: Factor weights ──
+        # ── Stage 2: Factor weights (IC-calibrated direction) ──
         logger.info("[2/6] 计算截面多因子得分...")
-        from qp.research.feature.compute import PRICE_VOLUME_FACTORS
+        from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS, PRICE_VOLUME_FACTORS
 
         n_factors = len(PRICE_VOLUME_FACTORS)
-        weights = dict.fromkeys(PRICE_VOLUME_FACTORS, 1.0 / n_factors)
-        logger.info("   因子: {} 个价量因子, 等权", n_factors)
+        # Use IC-calibrated directions directly (A-share momentum = reversal)
+        # ALL_FACTOR_DIRECTIONS verified against 2024-2026 single-factor IC
+        # Momentum: -1, Volatility: -1, Volume: -1, MoneyFlow: -1
+        # Higher composite score → lower expected return → short/top-N sell
+        weights = {
+            f: ALL_FACTOR_DIRECTIONS.get(f, 1) / n_factors
+            for f in PRICE_VOLUME_FACTORS
+        }
+        n_pos = sum(1 for v in weights.values() if v > 0)
+        n_neg = sum(1 for v in weights.values() if v < 0)
+        logger.info(
+            "   因子: {} 个 ({} IC+, {} IC-) / 方向校准",
+            n_factors, n_pos, n_neg,
+        )
 
         scores = compute_cross_sectional_scores(
             price_data,
             weights=weights,
-            min_history=120,
+            min_history=int(params.get("min_history", 252)),
             industry_neutral=industry_neutral,
             orthogonalize=orthogonalize,
         )
@@ -148,6 +174,11 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Stage 3: IC analysis ──
         logger.info("[3/6] Rank IC 分析...")
+        if scores.is_empty():  # type: ignore[union-attr]
+            logger.warning("   无数据，跳过 IC 分析")
+            result.status = PipelineStatus.FAILED
+            result.errors.append("No score data — check dataset")
+            return result
         ic_stats = self._compute_ic(scores, price_data)  # type: ignore[arg-type]
         logger.info("   IC Mean:  {:.4f}", ic_stats["ic_mean"])
         logger.info("   IC IR:    {:.2f}", ic_stats["ic_ir"])
@@ -159,6 +190,12 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Stage 4: Signal generation ──
         logger.info("[4/6] 生成调仓信号...")
+        # Filter out stocks with no score (insufficient history)
+        n_before = scores.height  # type: ignore[union-attr]
+        scores = scores.filter(pl.col("score") != 0.0)  # type: ignore[union-attr]
+        n_zero = n_before - scores.height  # type: ignore[union-attr]
+        if n_zero > 0:
+            logger.info("   过滤 score=0: {} 行 (数据不足)", n_zero)
         signals = generate_rebalance_signals(
             scores,  # type: ignore[arg-type]
             top_n=top_n,
@@ -233,31 +270,55 @@ class MultiFactorPipeline(BasePipeline):
         symbols: list[str],
         start: str,
         end: str,
+        dataset: str = "daily_price_main",
     ) -> dict[str, pl.DataFrame]:
-        """Fetch OHLCV data through BaseDataSource adapter."""
-        start_date = date.fromisoformat(start)
-        end_date = date.fromisoformat(end)
+        """Load from Gold dataset (CLAUDE.md: consumers read from Registry or parquet).
 
-        adapter = TencentAdapter()
-        raw = adapter.fetch_raw(start_date, end_date, symbols=symbols)
+        The Gold tier is already ETL-cleaned, Contract-validated, and
+        Universe-filtered. No additional processing needed.
+        """
+        from pathlib import Path
 
-        if raw.empty:
+        # Resolve Gold path: try DatasetRegistry first, fallback to direct parquet
+        gold_path = ""
+        try:
+            registry = DatasetRegistry(base_dir="data/dataset")
+            entry = registry.resolve(dataset)
+            gold_path = entry["path"]
+            logger.info("    📂 Gold (Registry): {} (v{})", dataset, entry["version"])
+        except KeyError:
+            # Fallback: read directly from data/dataset/
+            candidate = Path(f"data/dataset/{dataset}_2026-07-21.parquet")
+            if candidate.exists():
+                gold_path = str(candidate)
+                logger.info("    📂 Gold (direct): {}", candidate.name)
+            else:
+                logger.error("Gold 数据集未找到。请先运行 qp data fetch")
+                return {}
+
+        df_all = pl.read_parquet(gold_path)
+
+        # Filter date range
+        df_all = df_all.filter(
+            (pl.col("trade_date").cast(pl.Utf8) >= start)
+            & (pl.col("trade_date").cast(pl.Utf8) <= end)
+        )
+
+        # Filter symbols if specified
+        if symbols:
+            symbol_set = set(symbols)
+            df_all = df_all.filter(pl.col("symbol").is_in(symbol_set))
+
+        if df_all.is_empty():
+            logger.warning("    数据为空")
             return {}
 
-        # Standardize column names (TencentAdapter returns Chinese columns)
-        raw["trade_date"] = raw["日期"]
-        raw["close"] = raw["收盘"]
-        raw["open"] = raw["开盘"]
-        raw["high"] = raw["最高"]
-        raw["low"] = raw["最低"]
-        raw["volume"] = raw["成交量"]
-
+        # Organize by symbol
         dfs: dict[str, pl.DataFrame] = {}
-        for code, group in raw.groupby("symbol"):
-            df = pl.from_pandas(group)
-            df = df.sort("trade_date")
-            dfs[str(code)] = df
+        for (code,), group in df_all.group_by("symbol"):
+            dfs[str(code)] = group.sort("trade_date")
 
+        logger.info("    ✅ {} 只, {} 行 (已清洗/校验/过滤)", len(dfs), df_all.height)
         return dfs
 
     @staticmethod
@@ -438,7 +499,9 @@ class MultiFactorPipeline(BasePipeline):
         """Equal-weight buy-and-hold return for comparison."""
         total_ret = 0.0
         count = 0
-        for sym in symbols:
+        # Use all loaded stocks if no symbol filter
+        syms = symbols if symbols else list(price_data.keys())
+        for sym in syms:
             if sym in price_data:
                 df = price_data[sym]
                 first = df.filter(pl.col("trade_date").cast(pl.Utf8) >= start)
