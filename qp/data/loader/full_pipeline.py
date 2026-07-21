@@ -27,6 +27,7 @@ from qp.data.cleaning.etl_pipeline import ETLPipeline
 from qp.data.cleaning.repair import repair_all
 from qp.data.contract.daily_price import DailyPriceContract
 from qp.data.dataset.registry import DatasetRegistry
+from qp.data.timestamp import annotate_timestamps_pl
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
@@ -93,6 +94,11 @@ class FullDataPipeline(BasePipeline):
                         len(batch_codes), len(raw_pd))
 
         raw_df = pl.concat(all_raw, how="diagonal_relaxed")  # type: ignore[arg-type]
+
+        # ── Dual-timestamp annotation (data_layer.md §1) ──
+        raw_df = annotate_timestamps_pl(raw_df)
+        logger.info("     双时间戳已标注: source_event_time + ingestion_received_time")
+
         raw_df.write_parquet(str(raw_path))
         raw_mb = raw_path.stat().st_size / (1024 * 1024)  # type: ignore[operator]
         logger.info("✅ Raw:  {} 只, {} 行, {:.0f} MB → {}",
@@ -111,7 +117,10 @@ class FullDataPipeline(BasePipeline):
         bronze_df = etl_result.df
         bronze_df = repair_all(bronze_df, validate_amount=False)
 
-        keep = ["symbol", "trade_date", "open", "high", "low", "close", "volume"]
+        keep = [
+            "symbol", "trade_date", "open", "high", "low", "close", "volume",
+            "source_event_time", "ingestion_received_time",
+        ]
         bronze_df = bronze_df.select([c for c in keep if c in bronze_df.columns])
         bronze_df.write_parquet(str(bronze_path))
         bronze_mb = bronze_path.stat().st_size / (1024 * 1024)  # type: ignore[operator]

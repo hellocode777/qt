@@ -1,6 +1,8 @@
 """DataPipeline — end-to-end data ingestion and cleaning.
 
 Raw → Bronze (cleaned) → Silver (validated) → Gold (dataset-ready)
+
+Uses Polars for all data transformations.
 """
 
 from __future__ import annotations
@@ -8,9 +10,12 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import polars as pl
+
 from qp.data.cleaning.engine import CleaningEngine
 from qp.data.contract.daily_price import DailyPriceContract
 from qp.data.dataset.registry import DatasetRegistry
+from qp.data.timestamp import annotate_timestamps_pl
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
@@ -71,25 +76,29 @@ class DataPipeline(BasePipeline):
 
             result.metrics["raw_rows"] = len(raw)
 
-            # Step 2: Clean
+            # Convert to Polars (adapters return Pandas)
+            raw_pl = pl.from_pandas(raw)
+
+            # Annotate dual timestamps (data_layer.md §1)
+            raw_pl = annotate_timestamps_pl(raw_pl)
+
+            # Step 2: Clean (Polars-native vectorized pipeline)
             engine = CleaningEngine()
-            clean = engine.clean(raw)
-            result.metrics["cleaned_rows"] = len(clean)
+            clean = engine.clean(raw_pl)
+            result.metrics["cleaned_rows"] = clean.height
 
             # Step 3: Validate contract
             errors = DailyPriceContract.validate(clean)
             if errors:
                 result.errors.extend(errors)
 
-            # Step 4: Save as parquet
+            # Step 4: Save as parquet (Polars-native)
             output_dir = Path("data/dataset")
             output_dir.mkdir(parents=True, exist_ok=True)
             version = date.today().isoformat()
             output_path = output_dir / f"daily_price_{version}.parquet"
 
-            import polars as pl
-
-            pl.from_pandas(clean).write_parquet(str(output_path))
+            clean.write_parquet(str(output_path))
             result.metrics["output_size_mb"] = output_path.stat().st_size / (1024 * 1024)
 
             # Step 5: Register
@@ -101,7 +110,7 @@ class DataPipeline(BasePipeline):
                 metadata={
                     "start_date": start_date_str,
                     "end_date": end_date_str,
-                    "rows": len(clean),
+                    "rows": clean.height,
                 },
             )
             result.artifacts.append(str(output_path))
