@@ -1,19 +1,25 @@
 """KellyAllocator — Fractional Kelly criterion for position sizing.
 
+Per docs/8_Capital_Allocation_Layer.md §第四: Fractional Kelly:
+  "机构很少 Full Kelly，因为太激进。一般 Quarter Kelly / Half Kelly。
+   加入硬防护: max_fraction=0.25, 严禁 1.0"
+
 Kelly formula: f* = win_rate - (1 - win_rate) / (win_loss_ratio)
 
 Applies a fractional multiplier (0.25x–0.5x) for conservative sizing,
-and caps individual positions at 8% per risk management limits.
+and caps individual positions per risk management limits.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import pandas as pd
 import polars as pl
 
 from qp.shared.protocols.base_capital_allocator import BaseCapitalAllocator
 
-DEFAULT_FRACTION = 0.25  # Use 1/4 Kelly
+DEFAULT_FRACTION = 0.25  # Use 1/4 Kelly — hard safety cap
 DEFAULT_CASH_BUFFER = 0.05
 DEFAULT_LOOKBACK = 60  # Days of history for win/loss estimation
 DEFAULT_MAX_SINGLE_POSITION = 0.08  # Per-position cap
@@ -26,9 +32,12 @@ class KellyAllocator(BaseCapitalAllocator):
     computes the optimal Kelly fraction, then applies a fractional
     multiplier for conservative sizing.
 
+    Hard safety: fraction is clamped to [0, 0.5] — full Kelly (1.0)
+    is explicitly forbidden per docs/8_Capital_Allocation_Layer.md.
+
     Usage:
         alloc = KellyAllocator(fraction=0.25, max_single=0.08)
-        weights = alloc.allocate_capital(signals, total_capital=1_000_000)
+        df = alloc.allocate(candidates, risk_report, total_capital=1_000_000)
     """
 
     def __init__(
@@ -38,35 +47,75 @@ class KellyAllocator(BaseCapitalAllocator):
         lookback: int = DEFAULT_LOOKBACK,
         max_single: float = DEFAULT_MAX_SINGLE_POSITION,
     ) -> None:
-        self._fraction = fraction
+        # Hard safety: never allow fraction > 0.5
+        self._fraction = min(max(fraction, 0.0), 0.5)
         self._cash_buffer = cash_buffer
         self._lookback = lookback
         self._max_single = max_single
 
-    def allocate_capital(
+    # ------------------------------------------------------------------
+    # Standard interface
+    # ------------------------------------------------------------------
+
+    def allocate(
         self,
-        candidate_signals: pd.DataFrame,
+        candidates: pd.DataFrame,
+        risk_report: dict[str, Any] | None,
         total_capital: float,
     ) -> pd.DataFrame:
-        """Compute Kelly-based weights.
+        """Compute fractional Kelly weights.
 
-        Without price history, falls back to equal weight with position caps.
-        Use allocate_with_prices() for full Kelly computation.
+        Without price history, uses max_weight_limit from candidates
+        (or defaults to equal weight capped at max_single).
+
+        Args:
+            candidates: Risk-approved candidates with [symbol, alpha_score,
+                max_weight_limit, risk_cluster, ...].
+            risk_report: Layer 7 risk report (used to pull position caps).
+            total_capital: Total available capital in CNY.
+
+        Returns:
+            DataFrame with [symbol, target_weight, target_capital].
         """
-        if candidate_signals.empty:
-            return pd.DataFrame(columns=["symbol", "target_weight", "target_amount"])
+        if candidates.empty:
+            return pd.DataFrame(columns=["symbol", "target_weight", "target_capital"])
 
-        n = len(candidate_signals)
-        # Without prices, fall back to equal weight capped at max_single
-        raw_wt = 1.0 / n
-        capped_wt = min(raw_wt, self._max_single)
+        n = len(candidates)
         investable = total_capital * (1.0 - self._cash_buffer)
 
-        result = candidate_signals[["symbol"]].copy()
-        result["target_weight"] = capped_wt * (1.0 - self._cash_buffer)
-        result["target_amount"] = investable * capped_wt
+        # Use per-candidate max_weight_limit from Layer 7 if available
+        has_limits = "max_weight_limit" in candidates.columns
 
-        return result.reset_index(drop=True)  # type: ignore[return-value]
+        rows = []
+        for _, row in candidates.iterrows():
+            symbol = str(row["symbol"])
+
+            if has_limits:
+                layer7_limit = float(row.get("max_weight_limit", self._max_single))
+            else:
+                layer7_limit = self._max_single
+
+            # Kelly fraction ∝ alpha_score (proxy when no price history)
+            alpha = float(row.get("alpha_score", 0.5))
+            kelly_f = alpha * self._fraction  # scaled by fraction
+
+            # Cap at the tighter of: max_single, layer7_limit
+            cap = min(self._max_single, layer7_limit)
+            target_wt = min(kelly_f * (1.0 - self._cash_buffer), cap)
+
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "target_weight": round(target_wt, 6),
+                    "target_capital": round(target_wt * total_capital, 2),
+                }
+            )
+
+        return pd.DataFrame(rows).reset_index(drop=True)
+
+    # ------------------------------------------------------------------
+    # Full Kelly computation with price history
+    # ------------------------------------------------------------------
 
     def allocate_with_prices(
         self,
@@ -168,6 +217,18 @@ class KellyAllocator(BaseCapitalAllocator):
             result[sym] = max(0.0, float(f_star))
 
         return result
+
+    # ------------------------------------------------------------------
+    # Legacy interface
+    # ------------------------------------------------------------------
+
+    def allocate_capital(
+        self,
+        candidate_signals: pd.DataFrame,
+        total_capital: float,
+    ) -> pd.DataFrame:
+        """Legacy interface — delegates to allocate()."""
+        return self.allocate(candidate_signals, None, total_capital)
 
     # ------------------------------------------------------------------
     # Properties

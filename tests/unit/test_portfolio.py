@@ -120,7 +120,7 @@ class TestAllocators:
         result = allocator.allocate_capital(signals, 1_000_000)
         assert len(result) == 4
         assert "target_weight" in result.columns
-        assert "target_amount" in result.columns
+        assert "target_capital" in result.columns
 
     def test_factory(self) -> None:
         from qp.portfolio.allocator.factory import AllocationFactory
@@ -142,6 +142,250 @@ class TestAllocators:
 
         with pytest.raises(ValueError, match="Unknown allocation method"):
             AllocationFactory.create("quantum_money")
+
+    # ---- new allocate() interface tests (Week 1 Layer 8) ----
+
+    def test_equal_weight_new_allocate(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.equal_weight import EqualWeightAllocator
+
+        allocator = EqualWeightAllocator(cash_buffer=0.0)
+        candidates = pd.DataFrame({"symbol": ["A", "B", "C"]})
+        result = allocator.allocate(candidates, None, 300_000)
+
+        assert len(result) == 3
+        assert "symbol" in result.columns
+        assert "target_weight" in result.columns
+        assert "target_capital" in result.columns
+        # 1/3 = 33.3%
+        assert abs(result["target_weight"].iloc[0] - 1 / 3) < 0.01
+        assert abs(result["target_weight"].sum() - 1.0) < 0.01
+
+    def test_equal_weight_with_cash_buffer(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.equal_weight import EqualWeightAllocator
+
+        allocator = EqualWeightAllocator(cash_buffer=0.05)
+        candidates = pd.DataFrame({"symbol": ["X", "Y"]})
+        result = allocator.allocate(candidates, None, 1_000_000)
+
+        # 2 stocks, 95% invested
+        assert abs(result["target_weight"].sum() - 0.95) < 0.01
+        # Each = 47.5%
+        assert abs(result["target_weight"].iloc[0] - 0.475) < 0.01
+
+    def test_kelly_new_allocate_uses_limits(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.kelly import KellyAllocator
+
+        allocator = KellyAllocator(fraction=0.25, max_single=0.08, cash_buffer=0.0)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "alpha_score": [0.95, 0.85, 0.75],
+                "max_weight_limit": [0.15, 0.15, 0.15],
+            }
+        )
+        result = allocator.allocate(candidates, None, 1_000_000)
+
+        assert len(result) == 3
+        # Each capped at max_single=0.08
+        for wt in result["target_weight"]:
+            assert wt <= 0.08
+
+    def test_risk_parity_new_allocate_uses_volatility(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.risk_parity import RiskParityAllocator
+
+        allocator = RiskParityAllocator(cash_buffer=0.0)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "risk_volatility": [0.10, 0.40],  # B is 4x more volatile
+                "alpha_score": [0.9, 0.8],
+            }
+        )
+        result = allocator.allocate(candidates, None, 1_000_000)
+
+        assert len(result) == 2
+        # Low-vol A gets higher weight
+        wt_a = result.loc[result["symbol"] == "A", "target_weight"].iloc[0]
+        wt_b = result.loc[result["symbol"] == "B", "target_weight"].iloc[0]
+        assert wt_a > wt_b
+
+    def test_allocate_capital_legacy_delegates(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.equal_weight import EqualWeightAllocator
+
+        allocator = EqualWeightAllocator(cash_buffer=0.0)
+        signals = pd.DataFrame({"symbol": ["A", "B"]})
+        result = allocator.allocate_capital(signals, 1_000_000)
+
+        assert len(result) == 2
+        assert "target_capital" in result.columns
+
+
+class TestTargetPortfolio:
+    """Test TargetPortfolio data model."""
+
+    def test_empty(self) -> None:
+        from qp.portfolio.models.target_portfolio import TargetPortfolio
+
+        tp = TargetPortfolio()
+        assert tp.n_positions == 0
+        assert tp.n_equities == 0
+        assert tp.weight_sum == 0.0
+        assert tp.to_dataframe().empty
+
+    def test_from_allocator_output(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.models.target_portfolio import TargetPortfolio
+
+        df = pd.DataFrame(
+            {
+                "symbol": ["600519", "300750"],
+                "target_weight": [0.12, 0.10],
+                "target_capital": [120_000, 100_000],
+            }
+        )
+        tp = TargetPortfolio.from_allocator_output(
+            date="2026-07-22",
+            positions_df=df,
+            allocator_used="RiskParityAllocator",
+            cash_reserve=0.30,
+            total_capital=1_000_000,
+        )
+
+        assert tp.date == "2026-07-22"
+        assert tp.allocator_used == "RiskParityAllocator"
+        assert tp.n_equities == 2
+        assert tp.n_positions == 3  # 2 stocks + CASH
+        assert tp.cash_weight == 0.30
+        assert tp.total_equity_weight == 0.22
+
+    def test_validate_passes(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.models.target_portfolio import TargetPortfolio
+
+        df = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "target_weight": [0.40, 0.30],
+                "target_capital": [400_000, 300_000],
+            }
+        )
+        tp = TargetPortfolio.from_allocator_output(
+            date="2026-07-22",
+            positions_df=df,
+            allocator_used="EqualWeightAllocator",
+            cash_reserve=0.30,
+            total_capital=1_000_000,
+        )
+        assert tp.is_valid
+
+    def test_validate_weight_sum(self) -> None:
+        from qp.portfolio.models.target_portfolio import TargetPortfolio
+
+        tp = TargetPortfolio(
+            date="2026-07-22",
+            positions=[
+                {"symbol": "A", "target_weight": 0.5, "target_capital": 500_000},
+                {"symbol": "B", "target_weight": 0.5, "target_capital": 500_000},
+            ],
+            allocator_used="Test",
+            cash_reserve=0.0,
+            total_capital=1_000_000,
+        )
+        assert tp.is_valid
+        assert len(tp.validate()) == 0
+
+    def test_symbols_filtering(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.models.target_portfolio import TargetPortfolio
+
+        df = pd.DataFrame(
+            {
+                "symbol": ["600519", "000001"],
+                "target_weight": [0.10, 0.15],
+                "target_capital": [100_000, 150_000],
+            }
+        )
+        tp = TargetPortfolio.from_allocator_output(
+            date="2026-07-22",
+            positions_df=df,
+            allocator_used="Test",
+            cash_reserve=0.05,
+            total_capital=1_000_000,
+        )
+        assert "600519" in tp.equity_symbols
+        assert "CASH" in tp.symbols
+        assert "CASH" not in tp.equity_symbols
+
+
+class TestAllocationResult:
+    """Test AllocationResult data model."""
+
+    def test_empty(self) -> None:
+        from qp.portfolio.models.allocation_result import AllocationResult
+
+        ar = AllocationResult()
+        assert ar.n_candidates_in == 0
+        assert ar.n_positions_out == 0
+        assert not ar.has_warnings
+
+    def test_summary(self) -> None:
+        from qp.portfolio.models.allocation_result import AllocationResult
+
+        ar = AllocationResult(
+            allocator_used="EqualWeightAllocator",
+            n_candidates_in=10,
+            n_positions_out=10,
+            cash_reserve=0.05,
+            total_capital=1_000_000,
+            warnings=["Market regime: defensive"],
+        )
+        assert ar.has_warnings
+        assert "EqualWeightAllocator" in ar.summary()
+        assert "10→10" in ar.summary()
+        assert "⚠" in ar.summary()
+
+    def test_to_dataframe_delegates(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.models.allocation_result import AllocationResult
+        from qp.portfolio.models.target_portfolio import TargetPortfolio
+
+        df = pd.DataFrame(
+            {
+                "symbol": ["A"],
+                "target_weight": [0.95],
+                "target_capital": [950_000],
+            }
+        )
+        tp = TargetPortfolio.from_allocator_output(
+            date="2026-07-22",
+            positions_df=df,
+            allocator_used="Test",
+            cash_reserve=0.05,
+            total_capital=1_000_000,
+        )
+        ar = AllocationResult(
+            allocator_used="Test",
+            target_portfolio=tp,
+            n_candidates_in=1,
+            n_positions_out=1,
+        )
+        out = ar.to_dataframe()
+        assert len(out) == 2  # A + CASH
+        assert "CASH" in out["symbol"].values
 
 
 class TestIndustryMapper:
@@ -1177,3 +1421,635 @@ class TestCVaRBudget:
         assert len(limits) == 3
         for s, lim in limits.items():
             assert lim > 0
+
+
+class TestPositionSizer:
+    """Test PositionSizer — Week 2 Layer 8."""
+
+    def test_size_equal_weight(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.equal_weight import EqualWeightAllocator
+        from qp.portfolio.sizing.position_sizer import PositionSizer
+
+        sizer = PositionSizer(EqualWeightAllocator(cash_buffer=0.0))
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "alpha_score": [0.9, 0.8, 0.7],
+                "risk_cluster": ["C1", "C2", "C1"],
+                "max_weight_limit": [0.15, 0.15, 0.15],
+            }
+        )
+        result = sizer.size(candidates, total_capital=300_000)
+        assert len(result) == 3
+        assert "target_weight" in result.columns
+        assert "target_capital" in result.columns
+        assert "allocator_used" in result.columns
+        assert "risk_cluster" in result.columns
+        assert result["allocator_used"].iloc[0] == "EqualWeightAllocator"
+
+    def test_size_enriches_metadata(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.risk_parity import RiskParityAllocator
+        from qp.portfolio.sizing.position_sizer import PositionSizer
+
+        sizer = PositionSizer(RiskParityAllocator(cash_buffer=0.0))
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["X", "Y"],
+                "risk_volatility": [0.15, 0.35],
+                "max_weight_limit": [0.80, 0.80],
+                "risk_cluster": ["Tech", "Finance"],
+            }
+        )
+        result = sizer.size(candidates, total_capital=500_000)
+        assert len(result) == 2
+        # Low-vol X gets higher weight (1/0.15 > 1/0.35)
+        wt_x = result.loc[result["symbol"] == "X", "target_weight"].iloc[0]
+        wt_y = result.loc[result["symbol"] == "Y", "target_weight"].iloc[0]
+        assert wt_x > wt_y
+        assert "risk_cluster" in result.columns
+
+    def test_size_batch_per_cluster(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.equal_weight import EqualWeightAllocator
+        from qp.portfolio.sizing.position_sizer import PositionSizer
+
+        sizer = PositionSizer(EqualWeightAllocator(cash_buffer=0.0))
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "D"],
+                "risk_cluster": ["C1", "C1", "C2", "C2"],
+                "max_weight_limit": [0.30, 0.30, 0.30, 0.30],
+                "alpha_score": [0.9, 0.8, 0.7, 0.6],
+            }
+        )
+        result = sizer.size_batch(candidates, total_capital=400_000, group_by="risk_cluster")
+        assert len(result) == 4
+        assert "_group" in result.columns
+
+
+class TestWeightNormalizer:
+    """Test WeightNormalizer — Week 2 Layer 8."""
+
+    def test_simple_normalize_no_caps(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.sizing.weight_normalizer import WeightNormalizer
+
+        normalizer = WeightNormalizer()
+        positions = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "D"],
+                "target_weight": [0.3, 0.3, 0.3, 0.3],  # Sum = 1.2
+            }
+        )
+        result = normalizer.normalize(positions, target_total=0.95)
+        assert abs(result.weight_sum - 0.95) < 0.01
+        assert result.converged
+        assert result.iterations == 1
+
+    def test_clip_above_cap(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.sizing.weight_normalizer import WeightNormalizer
+
+        normalizer = WeightNormalizer()
+        positions = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "target_weight": [0.5, 0.3, 0.2],  # A exceeds cap
+                "max_weight_limit": [0.15, 1.0, 1.0],
+            }
+        )
+        result = normalizer.normalize(positions, target_total=0.95)
+        # A must be capped at 0.15
+        wt_a = result.positions.loc[result.positions["symbol"] == "A", "target_weight"].iloc[0]
+        assert wt_a <= 0.15 + 0.001
+        assert abs(result.weight_sum - 0.95) < 0.01
+        assert result.capped_count >= 1
+
+    def test_multiple_caps_redistribute(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.sizing.weight_normalizer import WeightNormalizer
+
+        normalizer = WeightNormalizer()
+        positions = pd.DataFrame(
+            {
+                "symbol": [f"S{i}" for i in range(5)],
+                "target_weight": [0.4, 0.3, 0.2, 0.05, 0.05],
+                "max_weight_limit": [0.10, 0.15, 1.0, 1.0, 1.0],
+            }
+        )
+        result = normalizer.normalize(positions, target_total=0.95)
+        wt_s0 = result.positions.loc[result.positions["symbol"] == "S0", "target_weight"].iloc[0]
+        wt_s1 = result.positions.loc[result.positions["symbol"] == "S1", "target_weight"].iloc[0]
+        assert wt_s0 <= 0.10 + 0.01
+        assert wt_s1 <= 0.15 + 0.01
+        assert abs(result.weight_sum - 0.95) < 0.02
+
+    def test_normalize_with_cash(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.sizing.weight_normalizer import WeightNormalizer
+
+        normalizer = WeightNormalizer()
+        positions = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "target_weight": [0.5, 0.5],
+            }
+        )
+        result = normalizer.normalize_with_cash(positions, cash_reserve=0.10)
+        assert abs(result.weight_sum - 0.90) < 0.01
+
+    def test_empty_returns_immediately(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.sizing.weight_normalizer import WeightNormalizer
+
+        normalizer = WeightNormalizer()
+        result = normalizer.normalize(pd.DataFrame(), target_total=1.0)
+        assert result.converged
+        assert result.iterations == 0
+
+
+class TestVolatilityTargetAllocator:
+    """Test VolatilityTargetAllocator — Week 2 Layer 8."""
+
+    def test_target_vol_allocation(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.volatility_target import VolatilityTargetAllocator
+
+        allocator = VolatilityTargetAllocator(target_vol=0.12, cash_buffer=0.0)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "risk_volatility": [0.40, 0.40],  # Very high vol → scale down
+                "alpha_score": [0.9, 0.8],
+            }
+        )
+        result = allocator.allocate(candidates, None, 1_000_000)
+        assert len(result) == 2
+        assert "vol_scale" in result.columns
+        # With 40% vol and 12% target: scale ≈ 0.3
+        assert result["vol_scale"].iloc[0] <= 0.35
+        # Weight should be scaled down significantly
+        assert result["target_weight"].sum() < 0.5
+
+    def test_low_vol_full_exposure(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.allocator.volatility_target import VolatilityTargetAllocator
+
+        allocator = VolatilityTargetAllocator(target_vol=0.12, cash_buffer=0.0)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "risk_volatility": [0.08, 0.08],  # Very low vol → max exposure
+                "alpha_score": [0.9, 0.8],
+            }
+        )
+        result = allocator.allocate(candidates, None, 1_000_000)
+        # Low vol → scale should be close to max_exposure=1.0
+        assert result["vol_scale"].iloc[0] >= 0.95
+
+    def test_recommended_exposure(self) -> None:
+        from qp.portfolio.allocator.volatility_target import VolatilityTargetAllocator
+
+        allocator = VolatilityTargetAllocator(target_vol=0.12)
+        exposure = allocator.get_recommended_exposure(0.20)
+        # scale = 0.12 / 0.20 = 0.60
+        assert 0.5 < exposure < 0.7
+
+    def test_min_exposure_floor(self) -> None:
+        from qp.portfolio.allocator.volatility_target import VolatilityTargetAllocator
+
+        allocator = VolatilityTargetAllocator(target_vol=0.12, min_exposure=0.30)
+        # Even with 200% vol, exposure stays at 30% floor
+        exposure = allocator.get_recommended_exposure(2.0)
+        assert exposure == 0.30
+
+
+class TestCapitalAllocator:
+    """Test CapitalAllocator orchestrator — Week 2 Layer 8."""
+
+    def test_run_equal_weight(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+
+        config = CapitalAllocatorConfig(method="equal_weight", cash_buffer=0.0)
+        allocator = CapitalAllocator(config)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "D"],
+                "alpha_score": [0.9, 0.8, 0.7, 0.6],
+                "pass_status": [True, True, True, True],
+                "max_weight_limit": [0.30, 0.30, 0.30, 0.30],
+            }
+        )
+        result = allocator.run(candidates, total_capital=1_000_000, date="2026-07-22")
+        assert result.n_candidates_in == 4
+        assert result.n_positions_out == 4
+        assert result.allocator_used == "EqualWeightAllocator"
+        assert result.target_portfolio is not None
+        tp = result.target_portfolio
+        assert tp.n_equities == 4
+        assert abs(tp.weight_sum - 1.0) < 0.02
+
+    def test_run_with_rejected(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+
+        config = CapitalAllocatorConfig(method="equal_weight", cash_buffer=0.0)
+        allocator = CapitalAllocator(config)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["GOOD", "GOOD2", "REJECTED"],
+                "alpha_score": [0.9, 0.8, 0.7],
+                "pass_status": [True, True, False],
+                "max_weight_limit": [0.50, 0.50, 0.50],
+            }
+        )
+        result = allocator.run(candidates, total_capital=300_000, date="2026-07-22")
+        assert result.n_candidates_in == 3
+        assert result.n_positions_out == 2
+        assert result.has_warnings  # 1 rejected
+
+    def test_quick_convenience(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.capital_allocator import CapitalAllocator
+
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "alpha_score": [0.9, 0.8],
+                "max_weight_limit": [0.50, 0.50],
+            }
+        )
+        result = CapitalAllocator.quick(candidates, method="equal_weight", total_capital=500_000)
+        assert result.n_positions_out == 2
+        assert result.target_portfolio is not None
+
+    def test_with_volatility_target(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+
+        config = CapitalAllocatorConfig(
+            method="volatility_target", cash_buffer=0.05, target_vol=0.12
+        )
+        allocator = CapitalAllocator(config)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "alpha_score": [0.9, 0.8],
+                "pass_status": [True, True],
+                "risk_volatility": [0.20, 0.20],
+                "max_weight_limit": [1.0, 1.0],
+            }
+        )
+        result = allocator.run(candidates, total_capital=1_000_000)
+        assert result.allocator_used == "VolatilityTargetAllocator"
+        assert result.target_portfolio is not None
+
+    def test_config_defaults(self) -> None:
+        from qp.portfolio.capital_allocator import CapitalAllocatorConfig
+
+        config = CapitalAllocatorConfig()
+        assert config.method == "equal_weight"
+        assert config.cash_buffer == 0.05
+        assert config.normalizer_iterations == 5
+
+
+class TestReservePolicy:
+    """Test ReservePolicy — Week 3 Layer 8."""
+
+    def test_defaults(self) -> None:
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        p = ReservePolicy()
+        assert p.min_cash == 0.05
+        assert p.max_cash == 0.50
+        assert p.defensive_cash == 0.30
+        assert p.scarcity_threshold == 5
+
+    def test_aggressive_preset(self) -> None:
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        p = ReservePolicy.aggressive()
+        assert p.min_cash < 0.05
+        assert p.defensive_cash < 0.20
+
+    def test_conservative_preset(self) -> None:
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        p = ReservePolicy.conservative()
+        assert p.min_cash >= 0.08
+        assert p.scarcity_threshold >= 7
+
+    def test_clamp_on_init(self) -> None:
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        p = ReservePolicy(min_cash=-0.1, max_cash=2.0, defensive_cash=1.0)
+        assert p.min_cash == 0.0
+        assert p.max_cash <= 1.0
+        assert p.defensive_cash <= p.max_cash
+
+
+class TestCashManager:
+    """Test CashManager — Week 3 Layer 8."""
+
+    def test_normal_mode(self) -> None:
+        from qp.portfolio.cash.cash_manager import CashManager
+
+        cm = CashManager()
+        decision = cm.evaluate(n_candidates=10, current_market_vol=0.15, vol_percentile=0.45)
+        assert decision.cash_mode == "normal"
+        assert decision.final_cash_ratio == 0.05  # policy min
+        assert not decision.is_defensive
+        assert not decision.candidate_adjusted
+
+    def test_scarcity_defense(self) -> None:
+        from qp.portfolio.cash.cash_manager import CashManager
+
+        cm = CashManager()
+        # Only 2 candidates → scarcity trigger
+        decision = cm.evaluate(n_candidates=2, current_market_vol=0.15, vol_percentile=0.45)
+        assert decision.cash_mode == "scarcity"
+        assert decision.final_cash_ratio >= 0.30  # defensive_cash kicked in
+        assert decision.is_defensive
+        assert decision.equity_exposure < 0.7
+
+    def test_volatility_defense(self) -> None:
+        from qp.portfolio.cash.cash_manager import CashManager
+
+        cm = CashManager()
+        # Vol at 95th percentile → vol defense
+        decision = cm.evaluate(n_candidates=10, current_market_vol=0.40, vol_percentile=0.95)
+        assert decision.cash_mode == "defensive"
+        assert decision.final_cash_ratio >= 0.30
+        assert decision.is_defensive
+        assert len(decision.triggers) >= 1
+
+    def test_both_triggers(self) -> None:
+        from qp.portfolio.cash.cash_manager import CashManager
+
+        cm = CashManager()
+        # Both scarcity and high vol
+        decision = cm.evaluate(n_candidates=3, current_market_vol=0.50, vol_percentile=0.97)
+        assert decision.cash_mode == "scarcity"  # scarcity takes precedence
+        assert decision.final_cash_ratio >= 0.30
+        assert len(decision.triggers) >= 2
+
+    def test_apply_to_positions_scales_down(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.cash.cash_manager import CashDecision, CashManager
+
+        cm = CashManager()
+        positions = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "target_weight": [0.50, 0.48],
+                "target_capital": [500_000, 480_000],
+            }
+        )
+        decision = CashDecision(final_cash_ratio=0.30, equity_exposure=0.70)
+        adjusted = cm.apply_to_positions(positions, decision, total_capital=1_000_000)
+
+        # Should scale from ~0.98 to 0.70
+        assert abs(adjusted["target_weight"].sum() - 0.70) < 0.01
+        assert abs(adjusted["target_capital"].sum() - 700_000) < 1_000
+
+    def test_no_scaling_when_close(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.cash.cash_manager import CashDecision, CashManager
+
+        cm = CashManager()
+        positions = pd.DataFrame(
+            {
+                "symbol": ["A"],
+                "target_weight": [0.95],
+                "target_capital": [950_000],
+            }
+        )
+        decision = CashDecision(final_cash_ratio=0.05, equity_exposure=0.95)
+        adjusted = cm.apply_to_positions(positions, decision, total_capital=1_000_000)
+        # Close enough — should be essentially unchanged
+        assert abs(adjusted["target_weight"].sum() - 0.95) < 0.02
+
+
+class TestCapitalAllocatorWithCash:
+    """Test CapitalAllocator integrated with CashManager — Week 3 Layer 8."""
+
+    def test_dynamic_cash_defense(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        config = CapitalAllocatorConfig(
+            method="equal_weight",
+            reserve_policy=ReservePolicy(defensive_cash=0.30, scarcity_threshold=5),
+        )
+        allocator = CapitalAllocator(config)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],  # Only 2 → scarcity trigger
+                "alpha_score": [0.9, 0.8],
+                "pass_status": [True, True],
+                "max_weight_limit": [0.5, 0.5],
+            }
+        )
+        result = allocator.run(
+            candidates,
+            total_capital=1_000_000,
+            date="2026-07-22",
+        )
+        assert result.cash_reserve > 0.05  # Should be higher than min
+        assert result.has_warnings
+        assert "[Cash scarcity]" in " ".join(result.warnings)
+
+    def test_vol_defense_integrated(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        config = CapitalAllocatorConfig(
+            method="equal_weight",
+            reserve_policy=ReservePolicy(),
+        )
+        allocator = CapitalAllocator(config)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "D", "E"],
+                "alpha_score": [0.9, 0.8, 0.7, 0.6, 0.5],
+                "pass_status": [True] * 5,
+                "max_weight_limit": [0.30] * 5,
+            }
+        )
+        result = allocator.run(
+            candidates,
+            total_capital=1_000_000,
+            vol_percentile=0.92,  # High — should trigger vol defense
+            market_vol=0.35,
+        )
+        assert result.cash_reserve >= 0.30  # defensive level
+        tp = result.target_portfolio
+        assert tp is not None
+        assert tp.cash_weight >= 0.30
+
+    def test_cash_mode_in_metadata(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        config = CapitalAllocatorConfig(
+            method="equal_weight",
+            reserve_policy=ReservePolicy(),
+        )
+        allocator = CapitalAllocator(config)
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A"],
+                "alpha_score": [0.9],
+                "pass_status": [True],
+                "max_weight_limit": [1.0],
+            }
+        )
+        result = allocator.run(candidates, total_capital=100_000)
+        assert "cash_mode" in result.metadata
+        assert result.metadata["cash_mode"] == "scarcity"
+
+
+class TestOptimizationConstraints:
+    """Test OptimizationConstraintsBuilder — Week 4 Layer 8."""
+
+    def test_build_from_candidates(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.optimization.constraints import OptimizationConstraintsBuilder
+
+        builder = OptimizationConstraintsBuilder()
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "D"],
+                "pass_status": [True, True, True, False],
+                "max_weight_limit": [0.10, 0.15, 0.20, 0.10],
+                "risk_cluster": ["Tech", "Finance", "Tech", ""],
+                "beta": [0.8, 1.1, 1.3, 0.5],
+                "liquidity_score": [0.9, 0.7, 0.5, 0.3],
+            }
+        )
+        cs = builder.build(candidates)
+
+        # Per-position bounds for passed stocks
+        assert cs.n_position_constraints == 4
+        assert cs.per_position_bounds["A"] == (0.0, 0.10)
+        # 0.20 capped at default_max_single=0.15
+        assert cs.per_position_bounds["C"] == (0.0, 0.15)
+        # Rejected stock → blacklisted, zero bound
+        assert "D" in cs.blacklist
+        assert cs.per_position_bounds["D"] == (0.0, 0.0)
+
+        # Cluster bounds
+        assert "Tech" in cs.cluster_bounds
+        assert "Finance" in cs.cluster_bounds
+        assert cs.n_cluster_constraints == 2
+
+        # Cardinality
+        assert cs.cardinality_min >= 1
+        assert cs.cardinality_max >= 3
+
+    def test_build_with_risk_report(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.optimization.constraints import OptimizationConstraintsBuilder
+
+        builder = OptimizationConstraintsBuilder()
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "pass_status": [True, True],
+                "max_weight_limit": [0.15, 0.15],
+            }
+        )
+        risk_report = {
+            "sector_exposure": {"Tech": 0.45, "Finance": 0.25},
+            "violations": [
+                {"type": "suspended", "symbol": "SUSPENDED_CODE"},
+            ],
+        }
+        cs = builder.build(candidates, risk_report)
+
+        # Sector bounds from risk report
+        assert abs(cs.sector_bounds["Tech"] - 0.30) < 0.01  # capped at default_max
+        assert abs(cs.sector_bounds["Finance"] - 0.25) < 0.01
+        # Suspended stock blacklisted
+        assert "SUSPENDED_CODE" in cs.blacklist
+        assert "SUSPENDED_CODE" in cs.frozen_positions
+
+    def test_to_dict_serializable(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.optimization.constraints import OptimizationConstraintsBuilder
+
+        builder = OptimizationConstraintsBuilder()
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["X", "Y", "ST_BAD"],
+                "pass_status": [True, True, False],
+                "max_weight_limit": [0.12, 0.12, 0.0],
+                "risk_cluster": ["A", "B", ""],
+            }
+        )
+        cs = builder.build(candidates)
+        d = cs.to_dict()
+
+        assert "per_position_bounds" in d
+        assert "sector_bounds" in d
+        assert "cluster_bounds" in d
+        assert "blacklist" in d
+        assert "ST_BAD" in d["blacklist"]
+        assert d["max_leverage"] > 0
+
+    def test_summary_produced(self) -> None:
+        import pandas as pd
+
+        from qp.portfolio.optimization.constraints import OptimizationConstraintsBuilder
+
+        builder = OptimizationConstraintsBuilder()
+        candidates = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "pass_status": [True, True],
+                "max_weight_limit": [0.15, 0.15],
+            }
+        )
+        cs = builder.build(candidates)
+        s = cs.summary()
+        assert "positions=" in s
+        assert "leverage" in s
+
+    def test_default_values(self) -> None:
+        from qp.portfolio.optimization.constraints import ConstraintSet
+
+        cs = ConstraintSet()
+        assert cs.cardinality_min == 1
+        assert cs.cardinality_max == 50
+        assert cs.max_turnover == 1.0
+        assert cs.max_beta == 1.5
+        assert cs.max_leverage == 1.0
+        assert len(cs.blacklist) == 0

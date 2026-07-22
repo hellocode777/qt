@@ -1,10 +1,16 @@
 """RiskParityAllocator — inverse-volatility weighted allocation.
 
+Per docs/8_Capital_Allocation_Layer.md §第二: Risk Parity:
+  "不是每只股票投入一样的钱，而是承担一样的风险。
+   波动大的 6万，波动小的 15万。"
+
 Each position's weight is proportional to 1 / volatility.
 Lower-volatility stocks get higher weights, equalizing risk contribution.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -22,7 +28,7 @@ class RiskParityAllocator(BaseCapitalAllocator):
 
     Usage:
         alloc = RiskParityAllocator(cash_buffer=0.05)
-        weights = alloc.allocate_capital(signals, total_capital=1_000_000, prices=prices_df)
+        df = alloc.allocate(candidates, risk_report, total_capital=1_000_000)
     """
 
     def __init__(
@@ -33,21 +39,79 @@ class RiskParityAllocator(BaseCapitalAllocator):
         self._cash_buffer = cash_buffer
         self._vol_lookback = vol_lookback
 
-    def allocate_capital(
+    # ------------------------------------------------------------------
+    # Standard interface
+    # ------------------------------------------------------------------
+
+    def allocate(
         self,
-        candidate_signals: pd.DataFrame,
+        candidates: pd.DataFrame,
+        risk_report: dict[str, Any] | None,
         total_capital: float,
     ) -> pd.DataFrame:
         """Compute risk parity weights.
 
-        Note: The default allocate_capital interface doesn't receive prices.
-        Use allocate_with_prices() for full risk parity computation.
-        """
-        # Without prices, fall back to equal weight
-        from qp.portfolio.allocator.equal_weight import EqualWeightAllocator
+        Without price data and volatility estimates, uses risk_volatility
+        from the candidates (set by Layer 7). If unavailable, falls back
+        to equal weight.
 
-        fallback = EqualWeightAllocator(cash_buffer=self._cash_buffer)
-        return fallback.allocate_capital(candidate_signals, total_capital)
+        Args:
+            candidates: Risk-approved candidates with [symbol, risk_volatility,
+                max_weight_limit, alpha_score, ...].
+            risk_report: Layer 7 risk report.
+            total_capital: Total available capital in CNY.
+
+        Returns:
+            DataFrame with [symbol, target_weight, target_capital].
+        """
+        if candidates.empty:
+            return pd.DataFrame(columns=["symbol", "target_weight", "target_capital"])
+
+        n = len(candidates)
+        investable = total_capital * (1.0 - self._cash_buffer)
+
+        # Use risk_volatility from Layer 7 if available
+        has_vol = "risk_volatility" in candidates.columns
+        has_limits = "max_weight_limit" in candidates.columns
+
+        if has_vol:
+            vols = candidates["risk_volatility"].copy()
+            # Replace zero or negative vols with a small epsilon
+            vols = vols.clip(lower=0.001)
+            inv_vols = 1.0 / vols
+            total_inv = inv_vols.sum()
+            if total_inv <= 0:
+                has_vol = False  # fallback to equal weight
+
+        rows = []
+        for i, (_, row) in enumerate(candidates.iterrows()):
+            symbol = str(row["symbol"])
+
+            if has_vol and total_inv > 0:
+                raw_wt = float(inv_vols.iloc[i]) / float(total_inv)
+            else:
+                raw_wt = 1.0 / n
+
+            target_wt = raw_wt * (1.0 - self._cash_buffer)
+
+            # Cap at max_weight_limit from Layer 7
+            if has_limits:
+                limit = float(row.get("max_weight_limit", 1.0))
+                target_wt = min(target_wt, limit)
+
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "target_weight": round(target_wt, 6),
+                    "target_capital": round(target_wt * total_capital, 2),
+                }
+            )
+
+        return pd.DataFrame(rows).reset_index(drop=True)
+
+    # ------------------------------------------------------------------
+    # Full risk parity with price data
+    # ------------------------------------------------------------------
 
     def allocate_with_prices(
         self,
@@ -136,6 +200,22 @@ class RiskParityAllocator(BaseCapitalAllocator):
                 result[symbol] = float(vol)
 
         return result
+
+    # ------------------------------------------------------------------
+    # Legacy interface
+    # ------------------------------------------------------------------
+
+    def allocate_capital(
+        self,
+        candidate_signals: pd.DataFrame,
+        total_capital: float,
+    ) -> pd.DataFrame:
+        """Legacy interface — delegates to allocate()."""
+        return self.allocate(candidate_signals, None, total_capital)
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
 
     @property
     def cash_buffer(self) -> float:
