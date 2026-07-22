@@ -628,8 +628,8 @@ def _cmd_experiment_run() -> int:
         )
         return 1
 
+    from qp.pipeline.multifactor_pipeline import MultiFactorPipeline
     from qp.platform.pipeline.context import PipelineContext
-    from qp.research.experiment.multifactor_pipeline import MultiFactorPipeline
 
     # Parse options
     params: dict[str, object] = {}

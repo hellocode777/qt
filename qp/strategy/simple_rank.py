@@ -31,12 +31,13 @@ class Decision:
 class SimpleRankStrategy(BaseStrategy):
     """Select top-N stocks by a single score (e.g. momentum)."""
 
-    def __init__(self, top_n: int = 10) -> None:
+    def __init__(self, top_n: int = 10, strategy_id: str = "simple_rank_v1.0") -> None:
         self._top_n = top_n
+        self._strategy_id = strategy_id
 
     @property
     def strategy_id(self) -> str:
-        return "simple_rank_v1.0"
+        return self._strategy_id
 
     def generate_signals(self, as_of_date: date) -> pl.DataFrame:
         """Generate Top-N stock signals.

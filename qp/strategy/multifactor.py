@@ -35,6 +35,7 @@ Usage:
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -44,6 +45,7 @@ from qp.research.factor_processor import factor_pipeline
 from qp.research.feature.compute import (
     compute_all_factors,
 )
+from qp.shared.protocols.base_strategy import BaseStrategy
 
 # ------------------------------------------------------------------
 # Cross-sectional scoring
@@ -637,7 +639,7 @@ def _make_industry_relative(
 # ------------------------------------------------------------------
 
 
-class MultiFactorStrategy:
+class MultiFactorStrategy(BaseStrategy):
     """Multi-factor stock selection strategy implementing BaseStrategy.
 
     Binds factor computation + cross-sectional scoring into a PIT-compliant
@@ -702,7 +704,7 @@ class MultiFactorStrategy:
     def strategy_id(self) -> str:
         return "multifactor_v1.0"
 
-    def generate_signals(self, as_of_date: str | pl.DataFrame) -> pl.DataFrame:
+    def generate_signals(self, as_of_date: date | str | pl.DataFrame) -> pl.DataFrame:
         """Generate PIT Alpha signals for a given date.
 
         Args:

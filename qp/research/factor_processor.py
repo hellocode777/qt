@@ -26,7 +26,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, overload
 
 import numpy as np
 import polars as pl
@@ -420,7 +420,6 @@ def _one_hot_encode_industries(
         return np.zeros((len(symbols), 0)), []
 
     # Drop the first industry as reference category
-    reference_industry = unique_industries[0]
     dummy_industries = unique_industries[1:]
 
     n = len(symbols)
@@ -736,6 +735,7 @@ def orthogonalize_factors(
 # ------------------------------------------------------------------
 
 
+@overload
 def factor_pipeline(
     all_factors: dict[str, dict[str, dict[str, float]]],
     weights: dict[str, float],
@@ -743,7 +743,43 @@ def factor_pipeline(
     winsorize_method: str = "mad",
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
-    neutralize_method: str = "median",
+    neutralize_method: str | None = "median",
+    orthogonalize: bool = False,
+    vif_threshold: float = 10.0,
+    industry_neutral_strength: float = 1.0,
+    ols_min_stocks_per_industry: int = 3,
+    ols_min_samples: int = 30,
+    return_diagnostics: Literal[False] = False,
+) -> pl.DataFrame: ...
+
+
+@overload
+def factor_pipeline(
+    all_factors: dict[str, dict[str, dict[str, float]]],
+    weights: dict[str, float],
+    normalize_method: str = "rank",
+    winsorize_method: str = "mad",
+    industry_map: dict[str, str] | None = None,
+    market_cap_map: dict[str, float] | None = None,
+    neutralize_method: str | None = "median",
+    orthogonalize: bool = False,
+    vif_threshold: float = 10.0,
+    industry_neutral_strength: float = 1.0,
+    ols_min_stocks_per_industry: int = 3,
+    ols_min_samples: int = 30,
+    *,
+    return_diagnostics: Literal[True],
+) -> tuple[pl.DataFrame, dict[str, Any]]: ...
+
+
+def factor_pipeline(
+    all_factors: dict[str, dict[str, dict[str, float]]],
+    weights: dict[str, float],
+    normalize_method: str = "rank",
+    winsorize_method: str = "mad",
+    industry_map: dict[str, str] | None = None,
+    market_cap_map: dict[str, float] | None = None,
+    neutralize_method: str | None = "median",
     orthogonalize: bool = False,
     vif_threshold: float = 10.0,
     industry_neutral_strength: float = 1.0,
@@ -846,6 +882,7 @@ def factor_pipeline(
             )
         elif neutralize_method == "median" and has_industries:
             # Industry median subtraction + within-industry ranking
+            assert industry_map is not None  # guaranteed by has_industries guard
             scores = industry_group_score(
                 df,
                 weights,

@@ -87,6 +87,14 @@ class SignalAggregator:
         merged = ranked_dfs[0]
         for _i, r in enumerate(ranked_dfs[1:], start=1):
             merged = merged.join(r, on="symbol", how="full")
+            # Polars how="full" duplicates the join key; coalesce and drop
+            if "symbol_right" in merged.columns:
+                merged = (
+                    merged.with_columns(
+                        pl.coalesce(["symbol", "symbol_right"]).alias("symbol")
+                    )
+                    .drop("symbol_right")
+                )
 
         # Average percentile columns (nulls → 0.0)
         pct_cols = [f"pct_{i}" for i in range(len(ranked_dfs))]
@@ -125,6 +133,13 @@ class SignalAggregator:
         merged = normalized[0]
         for _i, n in enumerate(normalized[1:], start=1):
             merged = merged.join(n, on="symbol", how="outer")  # outer = union
+            if "symbol_right" in merged.columns:
+                merged = (
+                    merged.with_columns(
+                        pl.coalesce(["symbol", "symbol_right"]).alias("symbol")
+                    )
+                    .drop("symbol_right")
+                )
 
         z_cols = [f"z_{i}" for i in range(len(normalized))]
         for c in z_cols:
