@@ -372,6 +372,255 @@ def industry_group_score(
 
 
 # ------------------------------------------------------------------
+# OLS cross-sectional neutralization (Size + Industry)
+# ------------------------------------------------------------------
+#
+# Implements the formula from research_layer.md §2:
+#   f_raw,i = α + β₁·Size_i + Σ γₖ·Industry_i,k + ε_i
+#   ε̂_i = residual = pure alpha (after stripping size + industry biases)
+#
+# This is the "gold standard" neutralization.  The existing industry_neutralize()
+# (median subtraction) is a fast approximation that only strips industry effects.
+# OLS neutralization strips BOTH market cap (Size) AND industry simultaneously.
+
+
+def _one_hot_encode_industries(
+    symbols: list[str],
+    industry_map: dict[str, str],
+    min_stocks_per_industry: int = 3,
+) -> tuple[np.ndarray, list[str]]:
+    """One-hot encode industry labels for OLS risk matrix.
+
+    Drops industries with fewer than min_stocks_per_industry stocks
+    (under-represented groups cause unstable regression coefficients).
+
+    Args:
+        symbols: Stock identifiers in row order.
+        industry_map: {symbol: industry_name}.
+        min_stocks_per_industry: Drop industries below this count.
+
+    Returns:
+        (one_hot_matrix, industry_column_names) where matrix is (N, K).
+    """
+    if not industry_map:
+        return np.zeros((len(symbols), 0)), []
+
+    industries = [industry_map.get(str(s), "其他") for s in symbols]
+
+    # Count stocks per industry, drop under-represented
+    from collections import Counter
+
+    counts = Counter(industries)
+    valid_industries = {k for k, v in counts.items() if v >= min_stocks_per_industry}
+
+    # Build one-hot matrix (exclude first category as reference to avoid
+    # perfect multicollinearity with intercept)
+    unique_industries = sorted([ind for ind in valid_industries if ind != "其他"])
+    if not unique_industries:
+        return np.zeros((len(symbols), 0)), []
+
+    # Drop the first industry as reference category
+    reference_industry = unique_industries[0]
+    dummy_industries = unique_industries[1:]
+
+    n = len(symbols)
+    k = len(dummy_industries)
+    one_hot = np.zeros((n, k), dtype=np.float64)
+
+    for i, industry in enumerate(industries):
+        if industry in dummy_industries:
+            col_idx = dummy_industries.index(industry)
+            one_hot[i, col_idx] = 1.0
+
+    return one_hot, dummy_industries
+
+
+def _build_risk_matrix(
+    symbols: list[str],
+    industry_map: dict[str, str] | None = None,
+    market_cap_map: dict[str, float] | None = None,
+    min_stocks_per_industry: int = 3,
+) -> tuple[np.ndarray, list[str]]:
+    """Build risk factor matrix for OLS neutralization.
+
+    Columns: [Size (market_cap), industry_dummy_1, industry_dummy_2, ...]
+    A constant (intercept) column is NOT included — np.linalg.lstsq
+    handles the intercept implicitly when X has full column rank, but we
+    include it explicitly by adding a column of ones.
+
+    Args:
+        symbols: Stock identifiers in row order.
+        industry_map: {symbol: industry_name}. Optional.
+        market_cap_map: {symbol: market_cap_value}. Optional.
+        min_stocks_per_industry: Minimum stocks per industry for inclusion.
+
+    Returns:
+        (risk_matrix, column_names) where matrix is (N, K).
+        Returns empty (N, 0) matrix if no risk factors provided.
+    """
+    parts: list[np.ndarray] = []
+    col_names: list[str] = []
+
+    # Size factor (market cap) — continuous variable
+    if market_cap_map:
+        caps = np.array(
+            [market_cap_map.get(str(s), np.nan) for s in symbols],
+            dtype=np.float64,
+        )
+        # Log transform market cap (distribution is typically log-normal)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            caps_log = np.where(caps > 0, np.log(caps), np.nan)
+        parts.append(caps_log.reshape(-1, 1))
+        col_names.append("log_market_cap")
+
+    # Industry dummies (one-hot encoded, reference category dropped)
+    if industry_map:
+        industry_one_hot, industry_cols = _one_hot_encode_industries(
+            symbols, industry_map, min_stocks_per_industry
+        )
+        if industry_one_hot.shape[1] > 0:
+            parts.append(industry_one_hot)
+            col_names.extend(industry_cols)
+
+    if not parts:
+        return np.zeros((len(symbols), 0)), []
+
+    risk_matrix = np.hstack(parts)  # type: ignore[call-overload]
+    return risk_matrix, col_names
+
+
+def neutralize_cross_section_ols(
+    factor_values: pl.Series,
+    symbols: list[str],
+    industry_map: dict[str, str] | None = None,
+    market_cap_map: dict[str, float] | None = None,
+    min_stocks_per_industry: int = 3,
+    min_samples: int = 30,
+) -> pl.Series:
+    """OLS cross-sectional neutralization for a single date.
+
+    Regresses factor values against risk matrix (Size + Industry dummies),
+    returns residuals ε̂ = y - Xβ as the pure alpha factor.
+
+    Formula: f_raw,i = α + β₁·Size_i + Σ γₖ·Industry_i,k + ε_i
+
+    Args:
+        factor_values: Factor values for all stocks on one date.
+        symbols: Stock identifiers in the same order as factor_values.
+        industry_map: {symbol: industry_name}. Optional.
+        market_cap_map: {symbol: market_cap_value}. Optional.
+        min_stocks_per_industry: Minimum stocks per industry for inclusion.
+        min_samples: Minimum total stocks required for regression.
+
+    Returns:
+        Residual factor Series (same length).  Stocks with NaN in any
+        risk factor retain their original value (no neutralization applied).
+        Returns original values if insufficient data for regression.
+    """
+    n = len(factor_values)
+    if n < min_samples:
+        return factor_values
+
+    # Convert factor to numpy
+    y = factor_values.to_numpy().astype(np.float64)
+
+    # Build risk matrix
+    risk_matrix, risk_cols = _build_risk_matrix(
+        symbols, industry_map, market_cap_map, min_stocks_per_industry
+    )
+
+    if risk_matrix.shape[1] == 0:
+        return factor_values  # No risk factors to neutralize
+
+    # Add intercept column
+    X = np.column_stack([np.ones(n, dtype=np.float64), risk_matrix])
+
+    # Find complete cases (no NaN in y or X)
+    valid_mask = np.isfinite(y)
+    for j in range(X.shape[1]):
+        valid_mask &= np.isfinite(X[:, j])
+
+    valid_idx = np.where(valid_mask)[0]
+    n_valid = len(valid_idx)
+
+    if n_valid < max(min_samples, X.shape[1] + 5):
+        return factor_values  # Not enough valid observations
+
+    X_valid = X[valid_idx]
+    y_valid = y[valid_idx]
+
+    # Check for rank deficiency (e.g., an industry with only 1 stock)
+    if np.linalg.matrix_rank(X_valid) < X_valid.shape[1]:
+        return factor_values
+
+    # OLS regression: β = (X'X)⁻¹X'y
+    try:
+        beta = np.linalg.lstsq(X_valid, y_valid, rcond=None)[0]
+        y_pred_full = X @ beta
+        residuals = y - y_pred_full
+    except np.linalg.LinAlgError:
+        return factor_values
+
+    # Only neutralize stocks with valid risk data;
+    # stocks with NaN risk factors keep original values
+    result = y.copy()
+    result[valid_idx] = residuals[valid_idx]
+
+    return pl.Series(factor_values.name, result)
+
+
+def neutralize_factors_ols(
+    factor_df: pl.DataFrame,
+    industry_map: dict[str, str] | None = None,
+    market_cap_map: dict[str, float] | None = None,
+    id_col: str = "symbol",
+    min_stocks_per_industry: int = 3,
+    min_samples: int = 30,
+) -> pl.DataFrame:
+    """OLS neutralization for all factor columns in a single cross-section.
+
+    Applies neutralize_cross_section_ols() to each factor column.
+
+    Args:
+        factor_df: Cross-sectional DataFrame with [id_col, factor_cols...].
+        industry_map: {symbol: industry_name}.
+        market_cap_map: {symbol: market_cap_value}.
+        id_col: Column name for stock identifier.
+        min_stocks_per_industry: Minimum stocks per industry for OLS.
+        min_samples: Minimum total stocks for regression.
+
+    Returns:
+        DataFrame with OLS-neutralized factor columns (same shape).
+    """
+    if factor_df.is_empty():
+        return factor_df
+
+    if id_col not in factor_df.columns:
+        return factor_df
+
+    symbols = factor_df[id_col].to_list()
+    factor_cols = [c for c in factor_df.columns if c != id_col]
+
+    if not factor_cols:
+        return factor_df
+
+    result = factor_df.clone()
+
+    for col in factor_cols:
+        neutralized = neutralize_cross_section_ols(
+            factor_values=result[col],
+            symbols=symbols,
+            industry_map=industry_map,
+            market_cap_map=market_cap_map,
+            min_stocks_per_industry=min_stocks_per_industry,
+            min_samples=min_samples,
+        )
+        result = result.drop(col).with_columns(neutralized.alias(col))
+
+    return result
+
+
+# ------------------------------------------------------------------
 # Factor orthogonalization
 # ------------------------------------------------------------------
 
@@ -493,9 +742,13 @@ def factor_pipeline(
     normalize_method: str = "rank",
     winsorize_method: str = "mad",
     industry_map: dict[str, str] | None = None,
+    market_cap_map: dict[str, float] | None = None,
+    neutralize_method: str = "median",
     orthogonalize: bool = False,
     vif_threshold: float = 10.0,
     industry_neutral_strength: float = 1.0,
+    ols_min_stocks_per_industry: int = 3,
+    ols_min_samples: int = 30,
     return_diagnostics: bool = False,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Complete factor processing pipeline.
@@ -503,7 +756,9 @@ def factor_pipeline(
     For each date (cross-section):
       1. Build factor DataFrame (stocks × factors)
       2. [optional] Orthogonalize (VIF detection → regression residual)
-      3. [optional] Industry neutralize (within-industry scoring)
+      3. [optional] Neutralize (industry + market cap):
+         - "median": subtract industry median (fast, industry only)
+         - "ols": OLS regression residual (Size + Industry, gold standard)
       4. Winsorize → Normalize → Weighted Combine → Score
 
     Args:
@@ -511,10 +766,18 @@ def factor_pipeline(
         weights: {factor_name: weight}. Negative = penalize (e.g. Volatility).
         normalize_method: "rank" (default) | "zscore" | "minmax".
         winsorize_method: "mad" (default) | "percentile" | None.
-        industry_map: {symbol: industry_name}. Enables industry neutralization.
+        industry_map: {symbol: industry_name}. Required for neutralization.
+        market_cap_map: {symbol: market_cap_value}. Used by OLS neutralization.
+        neutralize_method: "median" (default) | "ols" | None.
+            - "median": subtract industry median (fast approx).
+            - "ols": OLS regression residual (strips Size + Industry).
+            - None: skip neutralization, combine raw factors directly.
         orthogonalize: Enable VIF-based factor orthogonalization.
         vif_threshold: VIF threshold for orthogonalization (default 10.0).
-        industry_neutral_strength: 0.0=global only, 1.0=within-industry only.
+        industry_neutral_strength: 0.0=global only, 1.0=within-industry only
+            (only used when neutralize_method="median").
+        ols_min_stocks_per_industry: Min stocks per industry for OLS.
+        ols_min_samples: Min total stocks for OLS regression.
         return_diagnostics: If True, return (scores_df, diagnostics).
 
     Returns:
@@ -559,8 +822,30 @@ def factor_pipeline(
             if i == 0:
                 diagnostics["orthogonalized_factors"] = _vif_cache.get(frozenset(factor_cols), [])
 
-        # Step 1-3: Industry neutralization or direct combination
-        if industry_map is not None and len(set(industry_map.values())) > 1:
+        # Step 1-3: Neutralization
+        has_industries = industry_map is not None and len(set(industry_map.values())) > 1
+        has_market_cap = market_cap_map is not None and len(market_cap_map) > 0
+
+        if neutralize_method == "ols" and (has_industries or has_market_cap):
+            # OLS regression residual: strip Size + Industry simultaneously
+            factor_df_neutral = neutralize_factors_ols(
+                df,
+                industry_map=industry_map,
+                market_cap_map=market_cap_map,
+                id_col="symbol",
+                min_stocks_per_industry=ols_min_stocks_per_industry,
+                min_samples=ols_min_samples,
+            )
+            factor_cols_neutral = [c for c in factor_df_neutral.columns if c != "symbol"]
+            factor_only = factor_df_neutral.select(factor_cols_neutral)
+            scores = combine_factors(
+                factor_only,
+                weights,
+                normalize_method,
+                winsorize_method,
+            )
+        elif neutralize_method == "median" and has_industries:
+            # Industry median subtraction + within-industry ranking
             scores = industry_group_score(
                 df,
                 weights,
@@ -570,6 +855,7 @@ def factor_pipeline(
                 strength=industry_neutral_strength,
             )
         else:
+            # No neutralization: combine raw factors directly
             factor_only = df.select(factor_cols)
             scores = combine_factors(
                 factor_only,

@@ -37,6 +37,8 @@ class VolumeRatio5D(BaseFeature):
 
         ma5 = pl.col("volume").rolling_mean(5).over("symbol")
         df = df.with_columns((pl.col("volume") / ma5.replace(0.0, None)).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -62,6 +64,8 @@ class VolumeTrend10D(BaseFeature):
         ma5 = pl.col("volume").rolling_mean(5).over("symbol")
         ma20 = pl.col("volume").rolling_mean(20).over("symbol")
         df = df.with_columns((ma5 / ma20.replace(0.0, None)).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -99,6 +103,8 @@ class PriceVolumeCorr(BaseFeature):
         corr = cov / (std_ret * std_vol).replace(0.0, None)
 
         df = df.with_columns(corr.alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -128,6 +134,8 @@ class VolumePriceTrend(BaseFeature):
         vol_slope = pl.col("volume").rolling_mean(5).diff(5).over("symbol")
 
         df = df.with_columns((price_slope.sign() * vol_slope.sign()).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -193,4 +201,9 @@ def compute_volume_factors(df: pl.DataFrame) -> pl.DataFrame:
         "Price_Volume_Corr",
         "Volume_Price_Trend",
     ]
+
+    # shift(1): prevent future information leakage — each factor uses only data ≤ T-1
+    for name in factor_names:
+        df = df.with_columns(pl.col(name).shift(1).alias(name))
+
     return df.select(["trade_date"] + factor_names).drop_nulls()

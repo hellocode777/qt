@@ -220,6 +220,7 @@ class KillSwitchPipeline(BasePipeline):
         ks = KillSwitch()
         from qp.monitoring.kill_switch import (
             DrawdownTrigger,
+            ModelDecayTrigger,
             PortfolioDrawdownTrigger,
             PSITrigger,
         )
@@ -228,12 +229,24 @@ class KillSwitchPipeline(BasePipeline):
         ks.add_trigger(PortfolioDrawdownTrigger())
         ks.add_trigger(PSITrigger())
 
+        # Model Decay trigger — links monitoring to kill switch
+        training_ic = getattr(context, "training_ic_mean", 0.035)
+        ks.add_trigger(
+            ModelDecayTrigger(
+                training_ic_mean=training_ic,
+                decay_ratio=0.30,
+                warning_ratio=0.50,
+            )
+        )
+
         # Build metrics from context
         metrics = {
             "current_drawdown": getattr(context, "current_drawdown", 0.0),
             "monthly_return": getattr(context, "monthly_return", 0.0),
             "rolling_60d_drawdown": getattr(context, "rolling_60d_drawdown", 0.0),
             "psi": getattr(context, "psi_value", 0.0),
+            "rolling_ic": getattr(context, "rolling_ic", 0.0),
+            "training_ic_mean": training_ic,
         }
 
         result = ks.check(**metrics)

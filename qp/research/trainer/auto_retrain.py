@@ -205,9 +205,27 @@ class MonthlyRetrainPipeline(BasePipeline):
             # Feature importance change detection
             if logger:
                 logger.info("Step 7/7: Registration decision...")
-            result.feature_importance_warning = self._check_feature_importance_drift(
-                strategy_id, result.feature_importance
+            drift_report = self._check_feature_importance_drift(
+                strategy_id, result.feature_importance, feature_names
             )
+            result.feature_importance_warning = drift_report.get("has_drift", False)
+
+            # Block promotion if severe feature importance drift detected
+            if drift_report.get("drift_severity") == "severe" and not dry_run:
+                result.validation_passed = False
+                result.validation_errors.append(
+                    f"Feature importance drift (severe): "
+                    f"overlap={drift_report.get('overlap_count', 0)}/5 top features. "
+                    f"Human review required before promotion."
+                )
+            elif drift_report.get("drift_severity") == "moderate" and not dry_run:
+                # Moderate drift: log warning but allow promotion
+                if logger:
+                    logger.warning(
+                        "Feature importance drift (moderate): overlap={}/5. "
+                        "Promotion allowed but review recommended.",
+                        drift_report.get("overlap_count", 0),
+                    )
 
             # Step 7: Register if passed (unless dry run)
             if result.validation_passed and not dry_run:
@@ -640,41 +658,74 @@ class MonthlyRetrainPipeline(BasePipeline):
     def _check_feature_importance_drift(
         strategy_id: str,
         current_importance: dict[str, float],
+        feature_names: list[str] | None = None,
         threshold: float = 0.5,
-    ) -> bool:
-        """Check if feature importance has shifted significantly.
+    ) -> dict[str, object]:
+        """Check feature importance drift using full comparison engine.
 
-        Compares current feature importance against the previous production model.
-        If top 5 features change by >50%, flags for human review.
+        Uses the importance module's compare_importance_versions() for
+        detailed drift analysis (severity grading, surge alerts, rank shifts).
+
+        When severe drift is detected, this now blocks model promotion
+        and requires human review per rule.md §7.9.7.
 
         Returns:
-            True if importance drift is detected.
+            Dict with drift analysis: {has_drift, drift_severity,
+            overlap_count, new_entrants, departed, surge_alerts}
         """
+        result: dict[str, object] = {
+            "has_drift": False,
+            "drift_severity": "none",
+            "overlap_count": 5,
+            "new_entrants": [],
+            "departed": [],
+            "surge_alerts": [],
+        }
+
         if not current_importance:
-            return False
+            return result
 
         try:
             from qp.research.trainer.registry import ModelRegistry
+            from qp.research.importance.feature_importance import (
+                ImportanceRecord,
+                compare_importance_versions,
+            )
 
             registry = ModelRegistry()
             prev = registry.get_production(strategy_id)
             if prev is None or not prev.metrics:
-                return False
+                return result
 
             prev_fi = prev.metrics.get("feature_importance", {})
             if not prev_fi:
-                return False
+                return result
 
-            current_top5 = set(
-                sorted(current_importance, key=current_importance.get, reverse=True)[:5]  # type: ignore[arg-type]
+            prev_record = ImportanceRecord(
+                model_id=prev.model_id,
+                features=prev_fi,
+                method="gain",
             )
-            prev_top5 = set(
-                sorted(prev_fi, key=prev_fi.get, reverse=True)[:5]  # type: ignore[arg-type]
+            curr_record = ImportanceRecord(
+                model_id=strategy_id,
+                features=current_importance,
+                method="gain",
             )
-            overlap = len(current_top5 & prev_top5)
-            return (5 - overlap) / 5 > threshold
+
+            drift = compare_importance_versions(
+                prev_record, curr_record, top_n=5, surge_threshold=0.5
+            )
+
+            result["has_drift"] = drift.has_drift
+            result["drift_severity"] = drift.drift_severity
+            result["overlap_count"] = drift.overlap_count
+            result["new_entrants"] = drift.new_entrants
+            result["departed"] = drift.departed
+            result["surge_alerts"] = drift.surge_alerts
+
+            return result
         except Exception:
-            return False
+            return result
 
     # ------------------------------------------------------------------
     # Helpers

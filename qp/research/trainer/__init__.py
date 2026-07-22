@@ -12,6 +12,8 @@ from qp.research.trainer.lgb_rank import (
     DEFAULT_LGB_PARAMS,
     CrossSectionalStandardizer,
     LightGBMRankModel,
+    build_monotone_constraints,
+    build_monotone_constraints_dict,
 )
 from qp.research.trainer.registry import (
     ModelMetadata,
@@ -28,6 +30,8 @@ __all__ = [
     "ModelRegistry",
     "MonthlyRetrainPipeline",
     "RetrainResult",
+    "build_monotone_constraints",
+    "build_monotone_constraints_dict",
     "copy_to_registry",
     "hash_model",
 ]

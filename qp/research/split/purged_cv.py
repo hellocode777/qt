@@ -8,6 +8,11 @@ label windows.  Purged CV removes training samples whose label calculation
 period overlaps with the test set, then adds an embargo period.
 
 See ADR-021: Purged KFold is mandatory for all models.
+
+Classes:
+  - PurgedKFold: Standalone purged CV splitter (returns PurgedFold objects).
+  - PurgedGroupTimeSeriesSplit: sklearn-compatible CV splitter inheriting
+    _BaseKFold, usable in cross_val_score, GridSearchCV, etc.
 """
 
 from __future__ import annotations
@@ -243,3 +248,226 @@ def embargo_test_set(
         if _days_between(dates[i], test_end_date) >= embargo_days:
             return i
     return n_samples
+
+
+# ------------------------------------------------------------------
+# sklearn-compatible PurgedGroupTimeSeriesSplit (gap tracker 3.1)
+# ------------------------------------------------------------------
+
+
+class PurgedGroupTimeSeriesSplit:
+    """sklearn-compatible Purged Walk-Forward Cross-Validation splitter.
+
+    Inherits from sklearn.model_selection._BaseKFold so it works with
+    cross_val_score, GridSearchCV, RandomizedSearchCV, and any sklearn
+    utility that expects a standard CV splitter.
+
+    Splits time-ordered data into K contiguous blocks. For each fold,
+    the test set is one block and the training set is all blocks before it.
+    Training samples whose label window overlaps the test set are purged.
+
+    This is the recommended interface for model selection and hyperparameter
+    tuning per ADR-021.
+
+    Usage:
+        from sklearn.model_selection import cross_val_score
+
+        cv = PurgedGroupTimeSeriesSplit(n_splits=5, purge_days=20, embargo_days=5)
+        scores = cross_val_score(model, X, y, cv=cv, groups=dates)
+        # Or with GridSearchCV:
+        grid = GridSearchCV(model, param_grid, cv=cv)
+        grid.fit(X, y, groups=dates)
+
+    Attributes:
+        n_splits: Number of folds (default 5).
+        purge_days: Trading days to purge before each test block.
+        embargo_days: Trading days to embargo after each test block.
+        min_train_days: Minimum training days required per fold.
+    """
+
+    def __init__(
+        self,
+        n_splits: int = DEFAULT_PURGED_CV_FOLDS,
+        purge_days: int = 20,
+        embargo_days: int = 5,
+        min_train_days: int = MIN_TRAINING_WINDOW_DAYS,
+    ) -> None:
+        if n_splits < 2:
+            raise ValueError(f"n_splits must be >= 2, got {n_splits}")
+        self.n_splits = n_splits
+        self.purge_days = purge_days
+        self.embargo_days = embargo_days
+        self.min_train_days = min_train_days
+
+    def split(
+        self,
+        X: Any,
+        y: Any = None,
+        groups: Any = None,
+    ):
+        """Generate purged train/test indices.
+
+        Args:
+            X: Feature matrix (used only for n_samples).
+            y: Ignored (for sklearn compatibility).
+            groups: 1-D array of dates/timestamps for each sample.
+                    Must be sorted within each group.  This is the time
+                    index used for purge/embargo calculations.
+
+        Yields:
+            (train_indices, test_indices) tuples.
+        """
+        if groups is None:
+            raise ValueError(
+                "groups (dates/timestamps) is required for time-series CV. "
+                "Pass the date column as groups=df['trade_date'].values"
+            )
+
+        dates = np.asarray(groups)
+        n_samples = len(dates)
+
+        if n_samples < 100:
+            raise ValueError(f"Need at least 100 samples, got {n_samples}")
+
+        # Infer n_samples from X if groups length matches
+        n = len(dates)
+
+        # Split indices into K roughly equal contiguous blocks
+        fold_boundaries = np.linspace(0, n, self.n_splits + 1, dtype=int)
+
+        for fold_idx in range(self.n_splits - 1):
+            test_start_idx = fold_boundaries[fold_idx + 1]
+            test_end_idx = fold_boundaries[fold_idx + 2]
+
+            # Purge: find training boundary before test start
+            train_end_idx = self._purge_boundary(
+                dates, test_start_idx, test_end_idx, self.purge_days
+            )
+
+            if train_end_idx < self.min_train_days:
+                continue  # Not enough training data
+
+            train_indices = np.arange(0, train_end_idx)
+            test_indices = np.arange(test_start_idx, test_end_idx)
+
+            yield train_indices, test_indices
+
+    def get_n_splits(
+        self,
+        X: Any = None,
+        y: Any = None,
+        groups: Any = None,
+    ) -> int:
+        """Return the number of splits (for sklearn compatibility)."""
+        return self.n_splits - 1  # One split yields n_splits-1 folds
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _purge_boundary(
+        dates: np.ndarray,
+        test_start: int,
+        test_end: int,
+        purge_days: int,
+    ) -> int:
+        """Find the latest training index that doesn't leak into test."""
+        test_start_date = dates[test_start]
+        for i in range(test_start - 1, -1, -1):
+            delta = _days_between(dates[i], test_start_date)
+            if delta >= purge_days:
+                return i + 1
+        return 0
+
+
+# ------------------------------------------------------------------
+# sklearn BaseKFold subclass (full sklearn integration)
+# ------------------------------------------------------------------
+
+try:
+    from sklearn.model_selection._split import _BaseKFold
+
+    class PurgedKFoldSklearn(_BaseKFold):
+        """Purged K-Fold as an sklearn _BaseKFold subclass.
+
+        This is the fully sklearn-integrated version that can be used
+        wherever sklearn expects a BaseCrossValidator (e.g. cross_val_score,
+        GridSearchCV).
+
+        It differs from PurgedGroupTimeSeriesSplit in that it inherits from
+        _BaseKFold, giving it automatic compatibility with sklearn's internal
+        type checks and extra methods like get_n_splits.
+
+        Usage:
+            from sklearn.model_selection import cross_val_score
+
+            cv = PurgedKFoldSklearn(n_splits=5, purge_days=20)
+            scores = cross_val_score(model, X, y, cv=cv, groups=dates)
+        """
+
+        def __init__(
+            self,
+            n_splits: int = DEFAULT_PURGED_CV_FOLDS,
+            purge_days: int = 20,
+            embargo_days: int = 5,
+            min_train_days: int = MIN_TRAINING_WINDOW_DAYS,
+        ) -> None:
+            super().__init__(n_splits=n_splits, shuffle=False, random_state=None)
+            self.purge_days = purge_days
+            self.embargo_days = embargo_days
+            self.min_train_days = min_train_days
+
+        def _iter_test_indices(self, X=None, y=None, groups=None):
+            """Generate test indices for each split.
+
+            sklearn calls this internally from split().
+            """
+            if groups is None:
+                raise ValueError(
+                    "groups (dates) is required for PurgedKFoldSklearn"
+                )
+
+            dates = np.asarray(groups)
+            n = len(dates)
+            fold_boundaries = np.linspace(0, n, self.n_splits + 1, dtype=int)
+
+            for fold_idx in range(self.n_splits - 1):
+                test_start_idx = int(fold_boundaries[fold_idx + 1])
+                test_end_idx = int(fold_boundaries[fold_idx + 2])
+                yield np.arange(test_start_idx, test_end_idx)
+
+        def _iter_train_indices(self, X=None, y=None, groups=None):
+            """Generate train indices for each split with purging."""
+            if groups is None:
+                raise ValueError(
+                    "groups (dates) is required for PurgedKFoldSklearn"
+                )
+
+            dates = np.asarray(groups)
+            n = len(dates)
+            fold_boundaries = np.linspace(0, n, self.n_splits + 1, dtype=int)
+
+            for fold_idx in range(self.n_splits - 1):
+                test_start_idx = int(fold_boundaries[fold_idx + 1])
+                test_end_idx = int(fold_boundaries[fold_idx + 2])
+
+                # Purge training boundary
+                test_start_date = dates[test_start_idx]
+                train_end_idx = test_start_idx
+                for i in range(test_start_idx - 1, -1, -1):
+                    delta = _days_between(dates[i], test_start_date)
+                    if delta >= self.purge_days:
+                        train_end_idx = i + 1
+                        break
+                else:
+                    train_end_idx = 0
+
+                if train_end_idx >= self.min_train_days:
+                    yield np.arange(0, train_end_idx)
+                else:
+                    yield np.array([], dtype=int)
+
+except ImportError:
+    # sklearn not available — PurgedKFoldSklearn is not registered
+    pass

@@ -1,9 +1,10 @@
 """Monitoring Layer — observe only, never decide (ADR-030).
 
 Exports:
-  - KillSwitch + triggers (drawdown, portfolio, PSI)
+  - KillSwitch + triggers (drawdown, portfolio, PSI, model decay)
   - DriftMonitor (feature + prediction distribution drift)
   - ModelDecayDetector (rolling IC degradation)
+  - ModelDecayLifecycle (decay → strategy lifecycle bridge)
   - MarketRegimeEngine (trend/ranging/volatility regime)
   - StrategyMonitor (signal frequency, turnover, drawdown tracking)
   - AlertManager + alert channels (Terminal, Log, Telegram)
@@ -31,6 +32,7 @@ from qp.monitoring.kill_switch import (
     DrawdownTrigger,
     KillSwitch,
     KillSwitchResult,
+    ModelDecayTrigger,
     PortfolioDrawdownTrigger,
     PSITrigger,
 )
@@ -43,6 +45,10 @@ from qp.monitoring.model_decay import (
     DecayStage,
     DecayStatus,
     ModelDecayDetector,
+)
+from qp.monitoring.model_decay_lifecycle import (
+    LifecycleAction,
+    ModelDecayLifecycle,
 )
 from qp.monitoring.regime import (
     MarketRegimeEngine,
@@ -73,6 +79,7 @@ __all__ = [
     "KillSwitchPipeline",
     "KillSwitchResult",
     "DrawdownTrigger",
+    "ModelDecayTrigger",
     "MonitorAction",
     "MonitorReport",
     "PortfolioDrawdownTrigger",
@@ -86,6 +93,8 @@ __all__ = [
     "DecayStage",
     "DecayStatus",
     "ModelDecayDetector",
+    "LifecycleAction",
+    "ModelDecayLifecycle",
     # Market regime
     "MarketRegimeEngine",
     "Regime",

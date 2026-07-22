@@ -45,6 +45,8 @@ class Amplitude5D(BaseFeature):
         amplitude = (pl.col("high") - pl.col("low")) / prev_close
 
         df = df.with_columns(amplitude.rolling_mean(5).over("symbol").alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -79,6 +81,8 @@ class VolumeConcentration(BaseFeature):
         std_20 = pl.col("amount").rolling_std(20).over("symbol")
 
         df = df.with_columns((std_20 / mean_20.replace(0.0, None)).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -120,6 +124,8 @@ class ImpliedNetFlow(BaseFeature):
         net_5d = up_flow.rolling_sum(5).over("symbol") - down_flow.rolling_sum(5).over("symbol")
 
         df = df.with_columns((net_5d / total_5d.replace(0.0, None)).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -175,4 +181,9 @@ def compute_money_flow_factors(df: pl.DataFrame) -> pl.DataFrame:
     df = df.with_columns((net_5d / total_5d.replace(0.0, None)).alias("Implied_Net_Flow"))
 
     factor_names = ["Amplitude_5D", "Volume_Concentration", "Implied_Net_Flow"]
+
+    # shift(1): prevent future information leakage — each factor uses only data ≤ T-1
+    for name in factor_names:
+        df = df.with_columns(pl.col(name).shift(1).alias(name))
+
     return df.select(["trade_date"] + factor_names).drop_nulls()

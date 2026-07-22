@@ -236,3 +236,92 @@ class PSITrigger(_BaseTrigger):
             psi += (a - e) * np.log(a / e)
 
         return float(psi)
+
+
+class ModelDecayTrigger(_BaseTrigger):
+    """Fires when model IC has significantly decayed.
+
+    Links ModelDecayDetector to the KillSwitch system per rule.md §7.9.8:
+      - Rolling 20-day OOS IC < 30% of validation IC → Model Decay
+      - Downgrade to Shadow (not full Kill Switch — softer intervention)
+
+    This trigger fires at WARNING level for KillSwitch. The downstream
+    lifecycle handler (ModelDecayLifecycle) manages the downgrade.
+
+    Thresholds:
+      - decay_ratio (0.30): IC ratio below this = decay
+      - absolute_min_ic (0.005): absolute floor for IC
+    """
+
+    def __init__(
+        self,
+        training_ic_mean: float = 0.0,
+        decay_ratio: float = 0.30,
+        warning_ratio: float = 0.50,
+        absolute_min_ic: float = 0.005,
+        rolling_window_days: int = 20,
+    ) -> None:
+        self._train_ic = abs(training_ic_mean) if training_ic_mean != 0 else 0.035
+        self._decay_ratio = decay_ratio
+        self._warning_ratio = warning_ratio
+        self._absolute_min_ic = absolute_min_ic
+        self._rolling_window = rolling_window_days
+
+    @property
+    def name(self) -> str:
+        return "ModelDecayTrigger"
+
+    def evaluate(self, metrics: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate model decay from rolling IC metrics.
+
+        Expects metrics dict to contain:
+          - rolling_ic: Current rolling-window OOS IC
+
+        Returns:
+            Dict with fired, ic_ratio, rolling_ic, training_ic, message.
+        """
+        rolling_ic = abs(float(metrics.get("rolling_ic", 0.0)))
+        training_ic = abs(float(metrics.get("training_ic_mean", self._train_ic)))
+
+        if training_ic <= 0:
+            training_ic = self._train_ic
+
+        ratio = rolling_ic / training_ic if training_ic > 0 else 0.0
+
+        # Determine if fired
+        if rolling_ic < self._absolute_min_ic:
+            fired = True
+            level = "STALE"
+            message = (
+                f"Model STALE: rolling IC {rolling_ic:.4f} < absolute minimum "
+                f"{self._absolute_min_ic}. Retire model, retrain required."
+            )
+        elif ratio < self._decay_ratio:
+            fired = True
+            level = "DECAYING"
+            message = (
+                f"Model DECAYING: rolling IC {rolling_ic:.4f} = {ratio:.0%} of "
+                f"training IC {training_ic:.4f}. Downgraded to Shadow."
+            )
+        elif ratio < self._warning_ratio:
+            fired = False  # Warning only — don't trigger Kill Switch
+            level = "WARNING"
+            message = (
+                f"Model WARNING: rolling IC {rolling_ic:.4f} = {ratio:.0%} of "
+                f"training IC. Monitor closely."
+            )
+        else:
+            fired = False
+            level = "HEALTHY"
+            message = ""
+
+        return {
+            "fired": fired,
+            "level": level,
+            "ic_ratio": ratio,
+            "rolling_ic": rolling_ic,
+            "training_ic": training_ic,
+            "rolling_window_days": self._rolling_window,
+            "message": message,
+        }
+

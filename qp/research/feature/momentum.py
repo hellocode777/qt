@@ -39,6 +39,8 @@ class ShortTermReversal5D(BaseFeature):
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
         df = df.with_columns((pl.col("close").pct_change(5).over("symbol")).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -58,6 +60,8 @@ class Momentum1M(BaseFeature):
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
         df = df.with_columns((pl.col("close").pct_change(20).over("symbol")).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -77,6 +81,8 @@ class Momentum3M(BaseFeature):
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
         df = df.with_columns((pl.col("close").pct_change(60).over("symbol")).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -98,6 +104,8 @@ class Momentum6M(BaseFeature):
         df = df.with_columns(
             (pl.col("close").pct_change(120).over("symbol")).alias("feature_value")
         )
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -125,6 +133,8 @@ class Momentum3MVolAdjusted(BaseFeature):
         vol_60d = pl.col("close").pct_change().rolling_std(60).over("symbol")
 
         df = df.with_columns((ret_60d / vol_60d.replace(0.0, None)).alias("feature_value"))
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -182,6 +192,11 @@ def compute_momentum_factors(df: pl.DataFrame) -> pl.DataFrame:
     df = df.drop("_vol_60d")
 
     factor_names = list(_MOMENTUM_PERIODS.keys()) + ["Momentum_3M_vol_adj"]
+
+    # shift(1): prevent future information leakage — each factor uses only data ≤ T-1
+    for name in factor_names:
+        df = df.with_columns(pl.col(name).shift(1).alias(name))
+
     return df.select(["trade_date"] + factor_names).drop_nulls()
 
 

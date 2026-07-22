@@ -42,12 +42,18 @@ from loguru import logger
 from qp.data.dataset.registry import DatasetRegistry
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
+from qp.research.evaluation.rank_ic import evaluate_factor_ic
+from qp.research.evaluation.layered_test import compute_layered_returns
+from qp.research.factor_processor import factor_pipeline
+from qp.research.feature.compute import (
+    ALL_FACTOR_DIRECTIONS,
+    PRICE_VOLUME_FACTORS,
+    compute_all_factors,
+)
+from qp.research.label.forward_returns import build_labels
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus
-from qp.strategy.multifactor import (
-    compute_cross_sectional_scores,
-    generate_rebalance_signals,
-)
+from qp.strategy.multifactor import generate_rebalance_signals
 
 # Default stock pool: liquid large-cap + representative sectors
 DEFAULT_SYMBOLS = [
@@ -142,15 +148,9 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["n_stocks"] = float(len(price_data))
         result.metrics["n_rows"] = float(total_rows)
 
-        # ── Stage 2: Factor weights (IC-calibrated direction) ──
-        logger.info("[2/6] 计算截面多因子得分...")
-        from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS, PRICE_VOLUME_FACTORS
-
+        # ── Stage 2: Factor computation → raw factor values ──
+        logger.info("[2/6] 计算原始因子值...")
         n_factors = len(PRICE_VOLUME_FACTORS)
-        # Use IC-calibrated directions directly (A-share momentum = reversal)
-        # ALL_FACTOR_DIRECTIONS verified against 2024-2026 single-factor IC
-        # Momentum: -1, Volatility: -1, Volume: -1, MoneyFlow: -1
-        # Higher composite score → lower expected return → short/top-N sell
         weights = {
             f: ALL_FACTOR_DIRECTIONS.get(f, 1) / n_factors
             for f in PRICE_VOLUME_FACTORS
@@ -162,31 +162,73 @@ class MultiFactorPipeline(BasePipeline):
             n_factors, n_pos, n_neg,
         )
 
-        scores = compute_cross_sectional_scores(
-            price_data,
+        # Compute raw factors for all stocks
+        all_raw: dict[str, dict[str, dict[str, float]]] = {}
+        for code, df in price_data.items():
+            factors = compute_all_factors(df.sort("trade_date"))
+            if factors.is_empty():
+                continue
+            for row in factors.iter_rows(named=True):
+                date_str = str(row["trade_date"])
+                if date_str not in all_raw:
+                    all_raw[date_str] = {}
+                all_raw[date_str][code] = {
+                    f: float(row[f]) for f in PRICE_VOLUME_FACTORS if f in row
+                }
+        logger.info("   原始因子: {} 天截面", len(all_raw))
+
+        # ── Stage 2.5: Factor pipeline (winsorize → normalize → neutralize → combine) ──
+        logger.info("[2.5/6] 因子管线处理 (Winsorize→Normalize→Neutralize→Combine)...")
+        neutralize_method = "median" if industry_neutral else None
+        scores = factor_pipeline(
+            all_raw,
             weights=weights,
-            min_history=int(params.get("min_history", 252)),
-            industry_neutral=industry_neutral,
+            normalize_method="rank",
+            winsorize_method="mad",
+            industry_map=_build_industry_map(price_data) if industry_neutral else None,
+            neutralize_method=neutralize_method,
             orthogonalize=orthogonalize,
         )
-        logger.info("   得分矩阵: {} 行 × {} 只股票", scores.height, len(price_data))  # type: ignore[union-attr]
-        result.metrics["score_rows"] = float(scores.height)  # type: ignore[union-attr]
+        logger.info("   得分矩阵: {} 行", scores.height)
+        result.metrics["score_rows"] = float(scores.height)
 
-        # ── Stage 3: IC analysis ──
+        # ── Stage 3: IC analysis (using evaluation module) ──
         logger.info("[3/6] Rank IC 分析...")
-        if scores.is_empty():  # type: ignore[union-attr]
+        if scores.is_empty():
             logger.warning("   无数据，跳过 IC 分析")
             result.status = PipelineStatus.FAILED
             result.errors.append("No score data — check dataset")
             return result
-        ic_stats = self._compute_ic(scores, price_data)  # type: ignore[arg-type]
-        logger.info("   IC Mean:  {:.4f}", ic_stats["ic_mean"])
-        logger.info("   IC IR:    {:.2f}", ic_stats["ic_ir"])
-        logger.info("   IC > 0:   {:.1f}% 天数", ic_stats["ic_positive_pct"])
-        logger.info("   样本量:   {} 天", ic_stats["n_days"])
-        result.metrics["ic_mean"] = ic_stats["ic_mean"]
-        result.metrics["ic_ir"] = ic_stats["ic_ir"]
-        result.metrics["ic_positive_pct"] = ic_stats["ic_positive_pct"]
+
+        # Use evaluation module for full IC analysis with threshold checks
+        price_flat = _flatten_price_data(price_data)
+        ic_record = evaluate_factor_ic(
+            scores,
+            price_flat,
+            forward_days=5,
+            min_stocks_per_day=10,
+        )
+        logger.info("   {}", ic_record.summary())
+        result.metrics["ic_mean"] = ic_record.ic_mean
+        result.metrics["ic_ir"] = ic_record.ic_ir
+        result.metrics["ic_t_stat"] = ic_record.ic_t_stat
+        result.metrics["ic_positive_pct"] = ic_record.ic_positive_pct
+        result.metrics["ic_mean_pass"] = float(ic_record.ic_mean_pass)
+        result.metrics["ic_ir_pass"] = float(ic_record.ic_ir_pass)
+
+        # Layered test for monotonicity validation
+        layered = compute_layered_returns(
+            scores,
+            price_flat,
+            n_quantiles=5,
+            forward_days=5,
+            min_stocks_per_day=50,
+        )
+        logger.info("   {}", layered.summary())
+        result.metrics["top_bottom_spread"] = layered.top_bottom_spread
+        result.metrics["spread_t_stat"] = layered.spread_t_stat
+        result.metrics["monotonicity_t_stat"] = layered.monotonicity_t_stat
+        result.metrics["is_monotonic"] = float(layered.is_monotonic)
 
         # ── Stage 4: Signal generation ──
         logger.info("[4/6] 生成调仓信号...")
@@ -513,3 +555,43 @@ class MultiFactorPipeline(BasePipeline):
                         total_ret += px_last / px_first - 1
                         count += 1
         return round(total_ret / count * 100, 2) if count > 0 else 0.0
+
+
+# ------------------------------------------------------------------
+# Module-level helpers
+# ------------------------------------------------------------------
+
+
+def _flatten_price_data(
+    price_data: dict[str, pl.DataFrame],
+) -> pl.DataFrame:
+    """Flatten {symbol: DataFrame} into a single [trade_date, symbol, close] DataFrame."""
+    parts: list[pl.DataFrame] = []
+    for code, df in price_data.items():
+        if df is not None and not df.is_empty():
+            if "close" not in df.columns:
+                continue
+            parts.append(
+                df.select(["trade_date", pl.lit(code).alias("symbol"), "close"])
+            )
+    if not parts:
+        return pl.DataFrame(schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "close": pl.Float64})
+    return pl.concat(parts)
+
+
+def _build_industry_map(
+    price_data: dict[str, pl.DataFrame],
+) -> dict[str, str] | None:
+    """Build {symbol: industry} from price data if industry column exists."""
+    for df in price_data.values():
+        if df is not None and "industry" in df.columns:
+            mapping: dict[str, str] = {}
+            for code, stock_df in price_data.items():
+                if stock_df is not None and "industry" in stock_df.columns:
+                    ind = str(stock_df["industry"].tail(1).item() or "")
+                    if ind:
+                        mapping[code] = ind
+            if mapping:
+                return mapping
+            break
+    return None

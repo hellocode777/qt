@@ -42,6 +42,8 @@ class Volatility20D(BaseFeature):
                 -pl.col("log_return").rolling_std(20).over("symbol") * (TRADING_DAYS_PER_YEAR**0.5)
             ).alias("feature_value")
         )
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -67,6 +69,8 @@ class Volatility60D(BaseFeature):
                 -pl.col("log_return").rolling_std(60).over("symbol") * (TRADING_DAYS_PER_YEAR**0.5)
             ).alias("feature_value")
         )
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -97,6 +101,8 @@ class MaxDrawdown60D(BaseFeature):
                 "feature_value"
             )
         )
+        # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
+        df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])
 
@@ -147,6 +153,11 @@ def compute_volatility_factors(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     factor_names = ["Volatility_20D", "Volatility_60D", "MaxDD_60D"]
+
+    # shift(1): prevent future information leakage — each factor uses only data ≤ T-1
+    for name in factor_names:
+        df = df.with_columns(pl.col(name).shift(1).alias(name))
+
     return df.select(["trade_date"] + factor_names).drop_nulls()
 
 

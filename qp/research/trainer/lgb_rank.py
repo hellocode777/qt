@@ -1,7 +1,7 @@
 """LightGBM LambdaRank model — default ML model (TDR-012).
 
 Implements BaseModel with LambdaRank objective, early stopping,
-and save/load with hyperparameter metadata.
+monotone constraints, and save/load with hyperparameter metadata.
 
 See rule.md §7.9 and ADR-013.
 """
@@ -34,6 +34,55 @@ DEFAULT_LGB_PARAMS: dict[str, Any] = {
     "verbose": -1,
     "seed": 42,
 }
+
+
+def build_monotone_constraints(
+    feature_names: list[str],
+    directions: dict[str, int],
+    default: int = 0,
+) -> list[int]:
+    """Build LightGBM monotone_constraints from factor direction knowledge.
+
+    Maps factor economic intuition to model constraints:
+      - +1  = monotone increasing (higher factor → higher prediction)
+      - -1  = monotone decreasing (higher factor → lower prediction)
+      - 0   = no constraint
+
+    Per rule.md §7.9.5, features with clear economic direction should be
+    constrained to prevent the model from learning spurious inversions.
+
+    Example:
+        features = ["Momentum_3M", "Volatility_20D", "Volume_Ratio_5D"]
+        directions = {"Momentum_3M": -1, "Volatility_20D": -1, "Volume_Ratio_5D": -1}
+        constraints = build_monotone_constraints(features, directions)
+        # → [-1, -1, -1]  (all three negatively predict returns in A-shares)
+
+    Args:
+        feature_names: Ordered list of feature column names.
+        directions: {feature_name: 1 or -1} mapping.  +1 means higher
+                    factor value → higher expected return.
+        default: Default constraint for features not in directions dict (0).
+
+    Returns:
+        List of ints (-1, 0, 1) in the same order as feature_names.
+    """
+    return [directions.get(f, default) for f in feature_names]
+
+
+def build_monotone_constraints_dict(
+    feature_names: list[str],
+    directions: dict[str, int],
+) -> dict[str, int]:
+    """Build monotone_constraints as a feature-name-keyed dict.
+
+    Args:
+        feature_names: Ordered list of feature column names.
+        directions: {feature_name: 1 or -1} mapping.
+
+    Returns:
+        {feature_name: constraint_value} for only constrained features.
+    """
+    return {f: d for f in feature_names if (d := directions.get(f, 0)) != 0}
 
 
 class CrossSectionalStandardizer:
@@ -87,6 +136,7 @@ class LightGBMRankModel(BaseModel):
         self._model: lgb.Booster | None = None
         self._feature_names: list[str] = []
         self._best_iteration: int = 0
+        self._monotone_constraints: list[int] | dict[str, int] | None = None
 
     # ------------------------------------------------------------------
     # BaseModel interface
@@ -109,6 +159,10 @@ class LightGBMRankModel(BaseModel):
                 groups: Query group sizes for ranking (required).
                 eval_set: List of (X, y) validation tuples.
                 eval_group: Validation query group sizes.
+                monotone_constraints: List or dict of monotonic constraints
+                    (-1=decreasing, 0=unconstrained, 1=increasing).
+                    Per rule.md §7.9.5, features with clear economic direction
+                    should be constrained.
         """
         self._feature_names = list(X.columns)
         groups = kwargs.get("groups")
@@ -120,6 +174,16 @@ class LightGBMRankModel(BaseModel):
 
         eval_set = kwargs.get("eval_set")
         eval_group = kwargs.get("eval_group")
+
+        # Monotone constraints (rule.md §7.9.5)
+        monotone_constraints = kwargs.get("monotone_constraints", None)
+        if monotone_constraints is not None:
+            self._monotone_constraints = monotone_constraints
+            if isinstance(monotone_constraints, list):
+                self._params["monotone_constraints"] = monotone_constraints
+            elif isinstance(monotone_constraints, dict):
+                # LightGBM accepts dict mapping feature name → constraint
+                self._params["monotone_constraints"] = monotone_constraints
 
         callbacks = [
             lgb.early_stopping(early_stopping, verbose=False),
@@ -170,10 +234,24 @@ class LightGBMRankModel(BaseModel):
         self._model.save_model(path)
 
         # Save metadata sidecar
+        mono = self._monotone_constraints
+        # Convert dict constraints to serializable form
+        if isinstance(mono, dict):
+            mono_serialized = mono
+        elif isinstance(mono, list):
+            mono_serialized = {
+                self._feature_names[i]: v
+                for i, v in enumerate(mono)
+                if i < len(self._feature_names) and v != 0
+            }
+        else:
+            mono_serialized = None
+
         meta = {
             "params": self._params,
             "feature_names": self._feature_names,
             "best_iteration": self._best_iteration,
+            "monotone_constraints": mono_serialized,
         }
         with open(path + ".meta.json", "w") as f:
             json.dump(meta, f, indent=2)
@@ -190,6 +268,7 @@ class LightGBMRankModel(BaseModel):
             self._params = meta.get("params", self._params)
             self._feature_names = meta.get("feature_names", [])
             self._best_iteration = meta.get("best_iteration", 0)
+            self._monotone_constraints = meta.get("monotone_constraints", None)
         except FileNotFoundError:
             pass
 
@@ -217,3 +296,8 @@ class LightGBMRankModel(BaseModel):
     @property
     def best_iteration(self) -> int:
         return self._best_iteration
+
+    @property
+    def monotone_constraints(self) -> list[int] | dict[str, int] | None:
+        """Return the monotone constraints used during training."""
+        return self._monotone_constraints
