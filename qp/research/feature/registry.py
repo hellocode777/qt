@@ -1,4 +1,16 @@
-"""FeatureRegistry — tracks registered features (simplified for Walking Skeleton)."""
+"""FeatureRegistry — tracks registered features (simplified for Walking Skeleton).
+
+NOTE: This registry serves the Research Layer and tracks
+``qp.shared.protocols.base_feature.BaseFeature`` (ABC with ``compute()``).
+The canonical full-featured registry is at
+``qp.data.feature_store.registry.FeatureRegistry``, which tracks
+``qp.data.feature_store.base_feature.BaseFeature`` (concrete with
+``transform_batch()`` + ``update_stream()``).
+
+These two registries serve different architectural layers with
+incompatible ``BaseFeature`` types. Consolidation requires first
+unifying the ``BaseFeature`` hierarchy — deferred to a future phase.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +20,8 @@ from qp.shared.protocols.base_feature import BaseFeature
 class FeatureRegistry:
     """Simple feature registry (dictionary-backed).
 
-    Replaced by formal database-backed registry in Phase 2 (dp.md §8).
+    Serves the Research Layer. For Data Layer feature store, use
+    ``qp.data.feature_store.registry.FeatureRegistry`` instead.
     """
 
     def __init__(self) -> None:

@@ -36,6 +36,9 @@ class ModelMetadata:
         file_path: str = "",
         created_at: str = "",
         stage: StrategyLifecycle | None = None,
+        random_seed: int = 0,
+        dataset_version: str = "",
+        feature_versions: dict[str, str] | None = None,
     ) -> None:
         self.model_id = model_id
         self.strategy_id = strategy_id
@@ -48,6 +51,9 @@ class ModelMetadata:
         self.file_path = file_path
         self.created_at = created_at or datetime.now(UTC).isoformat()
         self.stage = stage or StrategyLifecycle.RESEARCH
+        self.random_seed = random_seed
+        self.dataset_version = dataset_version
+        self.feature_versions = feature_versions or {}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -62,6 +68,9 @@ class ModelMetadata:
             "file_path": self.file_path,
             "created_at": self.created_at,
             "stage": self.stage.value,
+            "random_seed": self.random_seed,
+            "dataset_version": self.dataset_version,
+            "feature_versions": self.feature_versions,
         }
 
     def summary(self) -> str:

@@ -66,14 +66,26 @@ class BaseFeature:
     required_data: list[str] = []
     window: int = 0  # 0 = no rolling window needed
 
-    def __init__(self, apply_shift: bool = True) -> None:
+    def __init__(
+        self,
+        apply_shift: bool = True,
+        point_in_time_safe: bool = True,
+        owner: str = "",
+    ) -> None:
         """Initialize the feature.
 
         Args:
             apply_shift: If True, automatically shifts feature output by 1
                          trading day to prevent look-ahead bias.
+            point_in_time_safe: True if the feature is PIT-safe (no future
+                                information leakage). Per docs/4_Registry_
+                                LineageLayer.md §1② core metadata.
+            owner: Author and review record. Per docs/4_Registry_LineageLayer.md
+                   §1② "owner: 作者与审核记录".
         """
         self.apply_shift = apply_shift
+        self.point_in_time_safe = point_in_time_safe
+        self.owner = owner
         self._buffer: deque[float] | None = None
         if self.window > 0:
             self._buffer = deque(maxlen=self.window)
