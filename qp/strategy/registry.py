@@ -13,10 +13,11 @@ LineageLayer.md §1④:
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from qp.shared.protocols.base_strategy import BaseStrategy
-from qp.shared.types import StrategyLifecycle
+from qp.shared.types import RebalanceSchedule, StrategyLifecycle
 
 if TYPE_CHECKING:
     from qp.lineage.engine import LineageRegistry
@@ -28,6 +29,72 @@ _LINEAGE_REQUIRED_STATES: frozenset[StrategyLifecycle] = frozenset({
     StrategyLifecycle.SHADOW_PRODUCTION,
     StrategyLifecycle.PRODUCTION,
 })
+
+
+@dataclass
+class StrategyMeta:
+    """Metadata for a registered strategy.
+
+    Per docs/6_Strategy_Engine.md §模块一, the registry should store:
+    strategy_id, strategy_version, model_version, feature_version,
+    feature_set, rebalance_frequency, status, owner.
+
+    Attributes:
+        strategy_version: Semantic version of the strategy logic.
+        model_version: Version of the underlying model.
+        feature_version: Version of the feature set used.
+        feature_set: List of factor/feature names used by this strategy.
+        rebalance_frequency: How often this strategy rebalances.
+        rebalance_day: For WEEKLY schedules, day of week (0=Mon, 4=Fri).
+        owner: Person or team responsible for this strategy.
+        description: Human-readable description.
+        tags: Free-form tags for categorisation.
+    """
+
+    strategy_version: str = "1.0.0"
+    model_version: str = ""
+    feature_version: str = ""
+    feature_set: list[str] = field(default_factory=list)
+    rebalance_frequency: RebalanceSchedule = RebalanceSchedule.DAILY
+    rebalance_day: int = 0
+    owner: str = ""
+    description: str = ""
+    tags: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "strategy_version": self.strategy_version,
+            "model_version": self.model_version,
+            "feature_version": self.feature_version,
+            "feature_set": self.feature_set,
+            "rebalance_frequency": self.rebalance_frequency.value,
+            "rebalance_day": self.rebalance_day,
+            "owner": self.owner,
+            "description": self.description,
+            "tags": self.tags,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> StrategyMeta:
+        freq_raw = data.get("rebalance_frequency", "daily")
+        if isinstance(freq_raw, RebalanceSchedule):
+            freq = freq_raw
+        else:
+            try:
+                freq = RebalanceSchedule(str(freq_raw))
+            except ValueError:
+                freq = RebalanceSchedule.DAILY
+        return cls(
+            strategy_version=str(data.get("strategy_version", "1.0.0")),
+            model_version=str(data.get("model_version", "")),
+            feature_version=str(data.get("feature_version", "")),
+            feature_set=list(data.get("feature_set", [])),
+            rebalance_frequency=freq,
+            rebalance_day=int(data.get("rebalance_day", 0)),
+            owner=str(data.get("owner", "")),
+            description=str(data.get("description", "")),
+            tags=list(data.get("tags", [])),
+        )
 
 
 class StrategyRegistry:
@@ -55,6 +122,7 @@ class StrategyRegistry:
     def __init__(self) -> None:
         self._strategies: dict[str, BaseStrategy] = {}
         self._lifecycles: dict[str, StrategyLifecycle] = {}
+        self._metadata: dict[str, StrategyMeta] = {}
         self._lineage_registry: LineageRegistry | None = None
 
     # ------------------------------------------------------------------
@@ -126,12 +194,14 @@ class StrategyRegistry:
         self,
         strategy: BaseStrategy,
         lifecycle: StrategyLifecycle = StrategyLifecycle.RESEARCH,
+        meta: StrategyMeta | None = None,
     ) -> None:
         """Register a strategy.
 
         Args:
             strategy: The strategy instance to register.
             lifecycle: Initial lifecycle state (default RESEARCH).
+            meta: Optional metadata (feature_set, model_version, owner, etc.).
 
         Raises:
             ValueError: If a strategy with the same ID is already registered,
@@ -161,6 +231,7 @@ class StrategyRegistry:
 
         self._strategies[sid] = strategy
         self._lifecycles[sid] = lifecycle
+        self._metadata[sid] = meta or StrategyMeta()
 
     def get(self, strategy_id: str) -> BaseStrategy:
         """Get a registered strategy by ID."""
@@ -233,3 +304,70 @@ class StrategyRegistry:
         if strategy_id not in self._strategies:
             raise KeyError(f"Strategy '{strategy_id}' not registered")
         return self._lifecycles[strategy_id]
+
+    # ------------------------------------------------------------------
+    # Metadata
+    # ------------------------------------------------------------------
+
+    def get_meta(self, strategy_id: str) -> StrategyMeta:
+        """Get a strategy's metadata.
+
+        Args:
+            strategy_id: Strategy to query.
+
+        Returns:
+            StrategyMeta for the strategy.
+
+        Raises:
+            KeyError: If strategy is not registered.
+        """
+        if strategy_id not in self._strategies:
+            raise KeyError(f"Strategy '{strategy_id}' not registered")
+        return self._metadata.get(strategy_id, StrategyMeta())
+
+    def set_meta(self, strategy_id: str, meta: StrategyMeta) -> None:
+        """Update a strategy's metadata.
+
+        Args:
+            strategy_id: Strategy to update.
+            meta: New metadata.
+
+        Raises:
+            KeyError: If strategy is not registered.
+        """
+        if strategy_id not in self._strategies:
+            raise KeyError(f"Strategy '{strategy_id}' not registered")
+        self._metadata[strategy_id] = meta
+
+    def get_by_owner(self, owner: str) -> list[str]:
+        """List strategy IDs owned by a specific person/team."""
+        return [
+            sid
+            for sid, meta in self._metadata.items()
+            if meta.owner == owner and sid in self._strategies
+        ]
+
+    def get_by_frequency(self, freq: RebalanceSchedule) -> list[str]:
+        """List strategy IDs with a specific rebalance frequency."""
+        return [
+            sid
+            for sid, meta in self._metadata.items()
+            if meta.rebalance_frequency == freq and sid in self._strategies
+        ]
+
+    def get_by_tag(self, tag: str) -> list[str]:
+        """List strategy IDs with a specific tag."""
+        return [
+            sid
+            for sid, meta in self._metadata.items()
+            if tag in meta.tags and sid in self._strategies
+        ]
+
+    def list_metadata(self) -> dict[str, StrategyMeta]:
+        """Get all strategy metadata keyed by strategy_id."""
+        return dict(self._metadata)
+
+    @property
+    def count(self) -> int:
+        """Total number of registered strategies."""
+        return len(self._strategies)

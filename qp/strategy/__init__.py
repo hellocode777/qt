@@ -4,6 +4,9 @@ See ADR-026: Strategy Produces Decision.
 """
 
 from qp.strategy.aggregator import SignalAggregator
+from qp.strategy.ensemble import EnsembleEngine, UniversePolicy, WeightEngine, WeightMethod
+from qp.strategy.generator import GeneratorConfig, SignalGenerator
+from qp.strategy.loader import StrategyLoader
 from qp.strategy.market_filter import (
     MarketStatus,
     apply_regime_gating,
@@ -17,6 +20,7 @@ from qp.strategy.market_regime import (
     regime_allows_buy,
     regime_to_position_pct,
 )
+from qp.strategy.models import AlphaSignal, AlphaSignalBatch, StrategyResult
 from qp.strategy.multifactor import (
     compute_cross_sectional_scores,
     generate_rebalance_signals,
@@ -28,15 +32,58 @@ from qp.strategy.paper_trading import (
     PaperTradingTracker,
 )
 from qp.strategy.quality_filter import apply_quality_filter, get_filter_report
-from qp.strategy.registry import StrategyRegistry
+from qp.strategy.registry import StrategyMeta, StrategyRegistry
+from qp.strategy.runner import RunnerResult, StrategyRunner
+from qp.strategy.signal import (
+    ClipMethod,
+    ConfidenceScorer,
+    NormMethod,
+    SignalClipper,
+    SignalNormalizer,
+    SignalSmoother,
+    SignalThreshold,
+    SmoothMethod,
+)
 from qp.strategy.simple_rank import Decision, SimpleRankStrategy
+from qp.strategy.strategies import MomentumStrategy, QualityStrategy, ValueStrategy
 
 __all__ = [
+    # Models
+    "AlphaSignal",
+    "AlphaSignalBatch",
+    "StrategyResult",
+    # Ensemble
+    "EnsembleEngine",
+    "UniversePolicy",
+    "WeightEngine",
+    "WeightMethod",
+    # Runner
+    "StrategyRunner",
+    "RunnerResult",
+    # Loader
+    "StrategyLoader",
+    # Generator
+    "SignalGenerator",
+    "GeneratorConfig",
+    # Signal post-processing
+    "SignalNormalizer",
+    "NormMethod",
+    "SignalSmoother",
+    "SmoothMethod",
+    "SignalClipper",
+    "ClipMethod",
+    "SignalThreshold",
+    "ConfidenceScorer",
+    # Concrete strategies
+    "MomentumStrategy",
+    "ValueStrategy",
+    "QualityStrategy",
     # Simple (walking skeleton, backward-compatible)
     "Decision",
     "SimpleRankStrategy",
     "SignalAggregator",
     "StrategyRegistry",
+    "StrategyMeta",
     # Multi-factor (full engine)
     "run_multifactor_strategy",
     "compute_cross_sectional_scores",

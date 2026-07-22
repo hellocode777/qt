@@ -106,6 +106,19 @@ class DataTier(Enum):
     GOLD = "gold"
 
 
+class RebalanceSchedule(Enum):
+    """Strategy rebalance frequency.
+
+    Used by StrategyRunner to determine which strategies should run
+    on a given trading day. See docs/6_Strategy_Engine.md §模块二.
+    """
+
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    BIWEEKLY = "biweekly"
+    MONTHLY = "monthly"
+
+
 __all__ = [
     "RuntimeState",
     "PipelineStatus",
@@ -117,4 +130,5 @@ __all__ = [
     "MarketRegime",
     "ValidationStatus",
     "DataTier",
+    "RebalanceSchedule",
 ]
