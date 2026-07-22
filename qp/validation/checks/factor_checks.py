@@ -1,9 +1,10 @@
-"""Factor validation checks — Rank IC, IC_IR, t-stat, stratification.
+"""Factor validation checks — Rank IC, IC_IR, t-stat, stratification,
+neutralization survival, and minimum sample period.
 
 All checks follow the BaseRule contract. Thresholds are constructor-injected
 so they can be overridden from config or CLI without code changes.
 
-See rule.md §7.9.1 for the complete specification.
+See rule.md §7.9.1, §10.1, §10.2 for the complete specification.
 """
 
 from __future__ import annotations
@@ -385,3 +386,161 @@ def _compute_quantile_spreads(
         spreads.append(top_ret - bottom_ret)
 
     return np.array(spreads) if spreads else None
+
+
+# ------------------------------------------------------------------
+# Neutralization Survival Check (P1 — rule.md §10.2, Rule 9)
+# ------------------------------------------------------------------
+
+
+class NeutralizationCheck(BaseRule):
+    """Validates that alpha survives industry/market-cap neutralization.
+
+    Per rule.md Rule 9 "Alpha Must Survive Neutralization":
+      "无法通过行业与市值中性化检验的'收益'，只是 Beta 风格暴露，非纯 Alpha。"
+
+    Computes Rank IC before and after neutralization. Fails if the
+    post-neutralization IC decays too much relative to pre-neutralization IC.
+
+    Threshold: post_neutralization_IC / pre_neutralization_IC ≥ min_ratio
+    (default 0.5 — post-IC must retain at least 50% of pre-IC).
+    """
+
+    def __init__(self, min_ratio: float = 0.5) -> None:
+        self._min_ratio = min_ratio
+
+    @property
+    def rule_name(self) -> str:
+        return "neutralization"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        pre_ic = context.metadata.get("pre_neutralization_ic")
+        post_ic = context.metadata.get("post_neutralization_ic")
+
+        if pre_ic is None or post_ic is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail=(
+                    "Missing pre_neutralization_ic or post_neutralization_ic "
+                    "in context.metadata. Compute IC before/after "
+                    "neutralize_cross_section_ols() and set both values."
+                ),
+            )
+
+        pre_ic = abs(float(pre_ic))
+        post_ic = abs(float(post_ic))
+
+        if pre_ic == 0:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Pre-neutralization IC is zero — factor has no predictive power.",
+            )
+
+        ratio = post_ic / pre_ic
+        passed = ratio >= self._min_ratio
+
+        # Score: ratio 1.0 (no decay) → 100, ratio 0.0 → 0
+        score = min(100.0, ratio * 100.0)
+
+        if passed:
+            detail = (
+                f"Alpha survives neutralization: post-IC {post_ic:.4f} = "
+                f"{ratio:.0%} of pre-IC {pre_ic:.4f} (≥ {self._min_ratio:.0%})"
+            )
+        else:
+            detail = (
+                f"Alpha FAILS neutralization: post-IC {post_ic:.4f} = "
+                f"{ratio:.0%} of pre-IC {pre_ic:.4f} (< {self._min_ratio:.0%}). "
+                f"Factor is likely Beta exposure, not pure Alpha."
+            )
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._min_ratio,
+            actual_value=round(ratio, 3),
+            detail=detail,
+        )
+
+
+# ------------------------------------------------------------------
+# Minimum Sample Period Check (P1 — rule.md §10.1)
+# ------------------------------------------------------------------
+
+
+class MinSamplePeriodCheck(BaseRule):
+    """Validates that training data spans sufficient market history.
+
+    Per rule.md §10.1:
+      "最小样本区间 ≥ 3 年（覆盖至少 1 轮牛熊）— 避免单一市场状态下的过拟合"
+
+    Reads training window from context.metadata["train_start"] and
+    ["train_end"]. Accepts date strings in ISO format.
+    """
+
+    def __init__(self, min_years: float = 3.0) -> None:
+        self._min_years = min_years
+
+    @property
+    def rule_name(self) -> str:
+        return "min_sample_period"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        train_start = context.metadata.get("train_start", "")
+        train_end = context.metadata.get("train_end", "")
+
+        if not train_start or not train_end:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail=(
+                    "Missing train_start or train_end in context.metadata. "
+                    "Set context.metadata['train_start'] = '2021-01-01' etc."
+                ),
+            )
+
+        from datetime import date, timedelta
+
+        try:
+            start = date.fromisoformat(str(train_start)[:10])
+            end = date.fromisoformat(str(train_end)[:10])
+        except (ValueError, TypeError):
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail=f"Cannot parse train_start='{train_start}' or train_end='{train_end}' as ISO date.",
+            )
+
+        days = (end - start).days
+        years = days / 365.25
+
+        if days <= 0:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail=f"train_end ({train_end}) is before train_start ({train_start}).",
+            )
+
+        passed = years >= self._min_years
+        score = min(100.0, (years / 5.0) * 100.0)  # 5 years → score 100
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._min_years,
+            actual_value=round(years, 2),
+            detail=(
+                f"Training period: {train_start} → {train_end} = {years:.1f} years "
+                f"({'≥' if passed else '<'} threshold {self._min_years} years). "
+                f"({days} calendar days)"
+            ),
+        )

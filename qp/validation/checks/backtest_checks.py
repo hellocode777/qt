@@ -1,9 +1,10 @@
 """Backtest validation checks.
 
 Validates backtest results against quality thresholds before a strategy
-can be promoted to Paper Trading or Production.
+can be promoted to Paper Trading or Production. Includes cost-adjusted
+validation per rule.md §10.2.
 
-See rule.md §7.9.5 and §10.1.
+See rule.md §7.9.5 and §10.1–§10.2.
 """
 
 from __future__ import annotations
@@ -142,5 +143,99 @@ class TurnoverCheck(BaseRule):
             actual_value=round(turnover, 2),
             detail=(
                 f"Turnover = {turnover:.1f}% (range: {self._min_turnover}%–{self._max_turnover}%)"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# Cost-Adjusted Check (P1 — rule.md §10.2)
+# ------------------------------------------------------------------
+
+
+class CostAdjustedCheck(BaseRule):
+    """Validates that strategy still meets thresholds after trading costs.
+
+    Per rule.md §10.2:
+      "剔除交易成本后仍满足以上条件"
+
+    Compares pre-cost and post-cost (net) metrics. Fails if post-cost
+    Sharpe or MaxDD fall below the Backtest Passed thresholds after
+    accounting for slippage, commissions, and impact.
+
+    Thresholds:
+      - net_sharpe ≥ min_sharpe (default 1.0)
+      - net_max_dd ≤ max_drawdown_pct (default 25%)
+    """
+
+    def __init__(
+        self,
+        min_sharpe: float = 1.0,
+        max_drawdown_pct: float = 25.0,
+    ) -> None:
+        self._min_sharpe = min_sharpe
+        self._max_drawdown = max_drawdown_pct
+
+    @property
+    def rule_name(self) -> str:
+        return "cost_adjusted"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        gross_sharpe = context.backtest_metrics.get("sharpe_ratio")
+        net_sharpe = context.backtest_metrics.get("sharpe_ratio_net")
+        gross_dd = context.backtest_metrics.get("max_drawdown_pct")
+        net_dd = context.backtest_metrics.get("max_drawdown_pct_net")
+
+        # If no net metrics, try to estimate cost impact
+        cost_pct = context.backtest_metrics.get("total_cost_pct", 0.0)
+
+        if net_sharpe is None and gross_sharpe is not None:
+            net_sharpe = gross_sharpe - cost_pct * 0.05  # rough estimate
+        if net_dd is None and gross_dd is not None:
+            net_dd = abs(float(gross_dd)) + cost_pct * 0.5
+
+        if net_sharpe is None or net_dd is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail=(
+                    "Missing net (post-cost) metrics in backtest_metrics. "
+                    "Set 'sharpe_ratio_net', 'max_drawdown_pct_net', "
+                    "or 'total_cost_pct' in context.backtest_metrics."
+                ),
+            )
+
+        net_sharpe = float(net_sharpe)
+        net_dd = abs(float(net_dd))
+
+        sharpe_pass = net_sharpe >= self._min_sharpe
+        dd_pass = net_dd <= self._max_drawdown
+
+        passed = sharpe_pass and dd_pass
+
+        failures = []
+        if not sharpe_pass:
+            failures.append(
+                f"Net Sharpe {net_sharpe:.2f} < {self._min_sharpe}"
+            )
+        if not dd_pass:
+            failures.append(
+                f"Net MaxDD {net_dd:.1f}% > {self._max_drawdown}%"
+            )
+
+        # Score: average of Sharpe score and DD score
+        sharpe_score = min(100.0, (net_sharpe / 2.0) * 100.0)
+        dd_score = max(0.0, 100.0 * (1.0 - net_dd / 50.0))
+        score = round((sharpe_score + dd_score) / 2.0, 2)
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=score,
+            threshold=self._min_sharpe,
+            actual_value=round(net_sharpe, 2),
+            detail=(
+                f"Post-cost: Sharpe={net_sharpe:.2f}, MaxDD={net_dd:.1f}%. "
+                + (", ".join(failures) if failures else "Both pass thresholds.")
             ),
         )

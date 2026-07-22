@@ -1,0 +1,33 @@
+{
+  "updated_at": "2026-07-22T13:00:22.330258+00:00",
+  "base_dir": "data/dataset",
+  "entries": {
+    "test_ds@2026-07-22": {
+      "name": "test_ds",
+      "version": "2026-07-22",
+      "path": "data/dataset/test_ds_2026-07-22.parquet",
+      "metadata": {
+        "name": "test_ds",
+        "owner": "me",
+        "source": "demo",
+        "schema": {
+          "trade_date": "date",
+          "symbol": "str"
+        },
+        "frequency": "daily",
+        "primary_key": [
+          "trade_date",
+          "symbol"
+        ],
+        "timezone": "Asia/Shanghai",
+        "coverage_start": "2024-01-01",
+        "coverage_end": "2024-01-05",
+        "pit_confidence": "high",
+        "update_policy": "daily_append",
+        "validation_rules": [],
+        "version": "2026-07-22"
+      },
+      "registered_at": "2026-07-22T13:00:22.330245+00:00"
+    }
+  }
+}
