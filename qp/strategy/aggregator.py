@@ -115,8 +115,11 @@ class SignalAggregator:
             vals = s[score_col]
             mean = vals.mean()
             std = vals.std(ddof=1)
-            z_col = pl.lit(0.0) if std is None or std == 0 else (pl.col(score_col) - mean) / std
-            n = s.select(["symbol"]).with_columns(z_col.alias(f"z_{i}"))
+            if std is None or std == 0:
+                z_series = pl.Series([0.0] * s.height)
+            else:
+                z_series = (vals - mean) / std
+            n = s.select(["symbol"]).with_columns(z_series.alias(f"z_{i}"))
             normalized.append(n)
 
         merged = normalized[0]
