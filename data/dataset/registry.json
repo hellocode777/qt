@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-22T15:09:59.032381+00:00",
+  "updated_at": "2026-07-22T15:34:14.782667+00:00",
   "base_dir": "data/dataset",
   "entries": {
     "test_ds@2026-07-22": {
@@ -39,6 +39,26 @@
         "rows": 11106
       },
       "registered_at": "2026-07-22T15:09:59.032360+00:00"
+    },
+    "daily_price_main@2026-07-22": {
+      "name": "daily_price_main",
+      "version": "2026-07-22",
+      "path": "data/dataset/daily_price_main_2026-07-22.parquet",
+      "metadata": {
+        "source": "quant_trading_db",
+        "board": "main",
+        "start_date": "2015-01-01",
+        "end_date": "2026-07-22",
+        "stocks": 3043,
+        "rows": 7309976,
+        "tiers": [
+          "raw",
+          "bronze",
+          "silver",
+          "gold"
+        ]
+      },
+      "registered_at": "2026-07-22T15:34:14.782593+00:00"
     }
   }
 }

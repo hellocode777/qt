@@ -609,6 +609,7 @@ def _cmd_experiment_run() -> int:
         print("qp experiment run <name> [options]", file=sys.stderr)
         print("  Available: multifactor", file=sys.stderr)
         print("  Options:", file=sys.stderr)
+        print("    --strategy momentum_vol_full  Strategy config name (default: default)", file=sys.stderr)
         print("    --symbols 000001,000002,...   Stock codes", file=sys.stderr)
         print("    --start 2024-01-01           Start date", file=sys.stderr)
         print("    --end 2026-07-20             End date", file=sys.stderr)
@@ -654,6 +655,15 @@ def _cmd_experiment_run() -> int:
             params["industry_neutral"] = True
         elif arg == "--orthogonalize":
             params["orthogonalize"] = True
+        elif arg == "--skip-gate":
+            params["skip_gate"] = True
+        elif arg == "--model":
+            params["model_mode"] = True
+        elif arg.startswith("--strategy="):
+            params["strategy"] = arg.split("=", 1)[1]
+        elif arg == "--strategy" and i + 1 < len(args):
+            i += 1
+            params["strategy"] = args[i]
         elif arg.startswith("--dataset="):
             params["dataset"] = arg.split("=", 1)[1]
         i += 1

@@ -40,6 +40,7 @@ from typing import Any
 
 import numpy as np
 import polars as pl
+from loguru import logger
 
 from qp.research.factor_processor import factor_pipeline
 from qp.research.feature.compute import (
@@ -63,6 +64,7 @@ def compute_cross_sectional_scores(
     live_mode: bool = False,
     live_lookback_dates: int = 60,
     return_diagnostics: bool = False,
+    model_mode: bool = False,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Compute daily cross-sectional multi-factor scores for all stocks.
 
@@ -125,62 +127,77 @@ def compute_cross_sectional_scores(
         if df is None or df.is_empty() or df.height < min_history:
             continue
 
-        # Ensure required columns exist
         required = {"trade_date", "close", "volume"}
         if not required.issubset(set(df.columns)):
             continue
 
         df = df.sort("trade_date")
 
-        # Compute all price/volume factors
+        # Compute all price/volume factors (vectorized, one pass)
         factors = compute_all_factors(df)
         if factors.is_empty():
             continue
 
-        # Get dates as list
-        dates_list = factors["trade_date"].to_list()
+        # ── Pre-extract as numpy arrays (QuantTrading pattern) ──
+        dates_arr = factors["trade_date"].cast(pl.Utf8).to_numpy()
+        price_dates_dt = df["trade_date"]
 
-        # Pre-extract fundamental data (if available)
-        fund_df = fundamental_data.get(code)
-        val_df = valuation_data.get(code)
+        # Price/volume factors → build column → array map
+        price_cols_available = [f for f in price_factor_names if f in factors.columns]
+        price_arrays = {f: factors[f].to_numpy() for f in price_cols_available}
 
-        # Iterate rows
-        for row_idx in range(factors.height):
-            date_str = str(dates_list[row_idx])
-            row = factors.row(row_idx, named=True)
+        # ── Pre-align fundamental data (ffill to stock dates, QuantTrading pattern) ──
+        fund_arrays: dict[str, np.ndarray] = {}
+        fund_df_src = fundamental_data.get(code)
+        if fund_df_src is not None and not fund_df_src.is_empty():
+            for fname in fundamental_factor_names:
+                if fname in fund_df_src.columns:
+                    aligned = _align_to_price_dates(
+                        fund_df_src, fname, price_dates_dt, "report_date"
+                    )
+                    if aligned is not None:
+                        fund_arrays[fname] = aligned
 
-            # Price/volume factors
-            for fname in price_factor_names:
-                if fname in row:
-                    val = row[fname]
-                    if val is not None and not (isinstance(val, float) and val != val):
-                        all_raw[date_str][code][fname] = float(val)
+        # ── Pre-align valuation data ──
+        val_arrays: dict[str, np.ndarray] = {}
+        val_df_src = valuation_data.get(code)
+        if val_df_src is not None and not val_df_src.is_empty():
+            for fname in valuation_factor_names:
+                if fname in val_df_src.columns:
+                    aligned = _align_to_price_dates(
+                        val_df_src, fname, price_dates_dt, "trade_date"
+                    )
+                    if aligned is not None:
+                        val_arrays[fname] = aligned
+
+        # ── Build all_raw by position (no per-row DataFrame ops) ──
+        n_rows = factors.height
+        for row_idx in range(n_rows):
+            date_str = dates_arr[row_idx]
+
+            # Price/volume factors — direct array access
+            pf_dict: dict[str, float] = {}
+            for fname, arr in price_arrays.items():
+                v = arr[row_idx]
+                if v is not None and v == v:  # not NaN
+                    pf_dict[fname] = float(v)
+            if pf_dict:
+                all_raw[date_str][code] = pf_dict
 
             # Fundamental factors
-            if fund_df is not None and not fund_df.is_empty():
-                for fname in fundamental_factor_names:
-                    if fname in fund_df.columns:
-                        # Use latest value up to this row's date
-                        latest = _get_latest_value_asof(fund_df, fname, date_str)
-                        if latest is not None:
-                            all_raw[date_str][code][fname] = latest
+            for fname, arr in fund_arrays.items():
+                v = arr[row_idx]
+                if v is not None and v == v:
+                    all_raw[date_str][code][fname] = float(v)
 
             # Valuation factors
-            if val_df is not None and not val_df.is_empty():
-                for fname in valuation_factor_names:
-                    if fname in val_df.columns:
-                        latest = _get_latest_value_asof(val_df, fname, date_str)
-                        if latest is not None and latest > 0:
-                            all_raw[date_str][code][fname] = latest
+            for fname, arr in val_arrays.items():
+                v = arr[row_idx]
+                if v is not None and v == v and v > 0:
+                    all_raw[date_str][code][fname] = float(v)
 
-        if (stock_idx + 1) % 50 == 0:
-            import sys
-
-            print(
-                f"  🧮 因子计算进度: {stock_idx + 1}/{total_stocks}",
-                file=sys.stderr,
-                flush=True,
-            )
+        if (stock_idx + 1) % 200 == 0:
+            logger.info("🧮 因子计算: {}/{}", stock_idx + 1, total_stocks)
 
     # Sort dates
     all_dates = sorted(all_raw.keys())
@@ -225,6 +242,8 @@ def compute_cross_sectional_scores(
         industry_map=industry_map,
         orthogonalize=orthogonalize,
         return_diagnostics=return_diagnostics,
+        model_mode=model_mode,
+        price_data=price_data,
     )
 
     if return_diagnostics:
@@ -424,6 +443,7 @@ def run_multifactor_strategy(
     regime_map: dict[str, str] | None = None,
     regime_positions: dict[str, int] | None = None,
     return_diagnostics: bool = False,
+    model_mode: bool = False,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Run the complete multi-factor stock selection strategy.
 
@@ -506,6 +526,7 @@ def run_multifactor_strategy(
         live_mode=is_live,
         live_lookback_dates=rebalance_freq * 3,
         return_diagnostics=return_diagnostics,
+        model_mode=model_mode,
     )
 
     diagnostics = None
@@ -538,6 +559,8 @@ def run_multifactor_strategy(
         signals = signals.with_columns(pl.Series("name", name_col))
 
     if return_diagnostics:
+        diagnostics = diagnostics or {}
+        diagnostics["scores"] = scores
         return signals, diagnostics  # type: ignore[return-value]
     return signals
 
@@ -547,33 +570,49 @@ def run_multifactor_strategy(
 # ------------------------------------------------------------------
 
 
-def _get_latest_value_asof(df: pl.DataFrame, field: str, asof_date: str) -> float | None:
-    """Get the latest value of a field on or before asof_date."""
-    if df is None or df.is_empty():
+def _align_to_price_dates(
+    src_df: pl.DataFrame,
+    field: str,
+    price_dates: pl.Series,
+    date_col: str,
+) -> np.ndarray | None:
+    """Forward-fill a fundamental/valuation field to match price dates.
+
+    Uses Polars join_asof (Rust-native asof join). Returns a numpy
+    float64 array aligned to price_dates, with NaN for missing values.
+    """
+    if src_df is None or src_df.is_empty():
         return None
-    if field not in df.columns:
+    if field not in src_df.columns:
         return None
-
-    # Find the first date column
-    date_col = None
-    for c in df.columns:
-        if c.lower() in ("date", "trade_date", "report_date", "日期"):
-            date_col = c
-            break
-
-    if date_col:
-        mask = pl.col(date_col).cast(pl.Utf8) <= asof_date
-        filtered = df.filter(mask).sort(date_col, descending=True)
-    else:
-        filtered = df
-
-    if filtered.is_empty():
+    if date_col not in src_df.columns:
         return None
 
-    col = filtered[field].drop_nulls()
-    if col.is_empty():
+    # Build lookup: [date, value], sorted, no nulls
+    lookup = (
+        src_df.select([
+            pl.col(date_col).cast(pl.Date).alias("_date"),
+            pl.col(field).alias("_value"),
+        ])
+        .drop_nulls("_value")
+        .sort("_date")
+    )
+    if lookup.is_empty():
         return None
-    return float(col.head(1).item())
+
+    # Build price frame with row index for re-sorting
+    prices_frame = pl.DataFrame({
+        "_date": price_dates.cast(pl.Date),
+    }).with_row_index("_row_idx")
+
+    # asof backward join: last lookup._date <= prices._date
+    joined = (
+        prices_frame.sort("_date")
+        .join_asof(lookup, on="_date", strategy="backward")
+        .sort("_row_idx")
+    )
+
+    return joined["_value"].to_numpy().astype(np.float64)
 
 
 def _build_industry_map(

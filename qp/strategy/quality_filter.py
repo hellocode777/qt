@@ -223,7 +223,63 @@ def apply_quality_filter(
         if not valuation_fail:
             passed.add(code)
 
+    # ── Log filter summary ──
+    _log_filter_summary(
+        total=len(all_codes),
+        passed=len(passed),
+        failed=len(failed),
+        failed_reasons=failed,
+        no_fundamental=no_fundamental,
+        no_valuation=no_valuation,
+    )
+
     return passed
+
+
+def _log_filter_summary(
+    total: int,
+    passed: int,
+    failed: int,
+    failed_reasons: dict[str, str],
+    no_fundamental: int,
+    no_valuation: int,
+) -> None:
+    """Log quality filter results with rejection reason breakdown."""
+    from collections import Counter
+
+    from loguru import logger
+
+    pct = passed / total * 100 if total > 0 else 0
+    logger.info("🔍 质量过滤: {} → {} 只 ({:.0f}% 通过)", total, passed, pct)
+
+    # Aggregate reasons into categories
+    reason_counts: Counter[str] = Counter()
+    for reason in failed_reasons.values():
+        # Normalize reasons into categories
+        if "ROE连续" in reason:
+            reason_counts["ROE连续2年<0 (硬性剔除)"] += 1
+        elif "debt_ratio=" in reason and ">" in reason and "硬性" in reason:
+            reason_counts["债务率>95% (硬性剔除)"] += 1
+        elif "ROE=" in reason and "<" in reason:
+            reason_counts["ROE<-5%"] += 1
+        elif "gross_margin" in reason:
+            reason_counts["毛利率<10%"] += 1
+        elif "net_profit_growth" in reason:
+            reason_counts["净利增速<-50%"] += 1
+        elif "debt_ratio" in reason:
+            reason_counts["债务率>85%"] += 1
+        elif "PE_TTM" in reason:
+            reason_counts["PE超标 (0~200)"] += 1
+        else:
+            reason_counts[reason] += 1
+
+    for reason, count in reason_counts.most_common():
+        logger.info("  ✂ {}: {} 只 ({:.1f}%)", reason, count, count / total * 100)
+
+    if no_fundamental > 0:
+        logger.info("  ⚠ 无基本面数据: {} 只 (默认放行)", no_fundamental)
+    if no_valuation > 0:
+        logger.info("  ⚠ 无估值数据: {} 只 (默认放行)", no_valuation)
 
 
 def get_filter_report(

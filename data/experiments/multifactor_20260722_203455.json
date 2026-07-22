@@ -1,0 +1,88 @@
+{
+  "experiment_id": "multifactor_20260722_203455",
+  "status": "completed",
+  "created_at": "2026-07-22T20:34:55.401118+00:00",
+  "completed_at": "2026-07-22T20:34:55.401125+00:00",
+  "config": {
+    "experiment_id": "multifactor_20260722_203455",
+    "created_at": "2026-07-22T20:34:55.401118+00:00",
+    "description": "Multi-factor experiment: 10 factors, Top-10, rebalance=20d",
+    "dataset_version": "daily_price_main@2024-01-01_2026-07-20",
+    "features": [
+      "Momentum_3M",
+      "Volatility_20D",
+      "Volume_Trend_10D",
+      "Volume_Price_Trend",
+      "Price_Volume_Corr",
+      "PE_TTM",
+      "PB",
+      "Implied_Net_Flow",
+      "Amplitude_5D",
+      "Volume_Concentration"
+    ],
+    "model_params": {
+      "Momentum_3M": 0.25,
+      "Volatility_20D": 0.25,
+      "Volume_Trend_10D": 0.12,
+      "Volume_Price_Trend": 0.1,
+      "Price_Volume_Corr": 0.08,
+      "PE_TTM": -0.12,
+      "PB": -0.08,
+      "Implied_Net_Flow": 0.06,
+      "Amplitude_5D": 0.04,
+      "Volume_Concentration": 0.04
+    },
+    "cv_folds": 5,
+    "purge_days": 20,
+    "embargo_days": 5,
+    "train_start": "2024-01-01",
+    "train_end": "2026-07-20",
+    "test_start": "",
+    "test_end": "",
+    "tags": [
+      "multifactor",
+      "top10",
+      "rebalance20d"
+    ],
+    "git_commit": ""
+  },
+  "metrics": {
+    "experiment_id": "multifactor_20260722_203455",
+    "in_sample_ic": 0.0,
+    "out_of_sample_ic": 0.0,
+    "ic_mean": 0.0367,
+    "ic_ir": 0.34,
+    "ic_t_stat": 0.0,
+    "sharpe_ratio": -0.05,
+    "max_drawdown_pct": 26.73,
+    "annual_return_pct": 0.0,
+    "annual_volatility_pct": 0.0,
+    "total_return_pct": -3.33,
+    "turnover_pct": 0.0,
+    "n_days": 0,
+    "feature_importance": {},
+    "custom": {}
+  },
+  "lineage": {
+    "dataset": "daily_price_main@2024-01-01",
+    "features": [
+      "Momentum_3M",
+      "Volatility_20D",
+      "Volume_Trend_10D",
+      "Volume_Price_Trend",
+      "Price_Volume_Corr",
+      "PE_TTM",
+      "PB",
+      "Implied_Net_Flow",
+      "Amplitude_5D",
+      "Volume_Concentration"
+    ],
+    "feature_versions": {},
+    "label": "",
+    "model_id": "",
+    "model_algo": "weighted_linear",
+    "strategy_id": "multifactor_top10"
+  },
+  "artifacts": [],
+  "errors": []
+}

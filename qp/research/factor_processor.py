@@ -30,6 +30,7 @@ from typing import Any, Literal, overload
 
 import numpy as np
 import polars as pl
+from loguru import logger
 
 # ------------------------------------------------------------------
 # Winsorize (outlier handling)
@@ -786,6 +787,8 @@ def factor_pipeline(
     ols_min_stocks_per_industry: int = 3,
     ols_min_samples: int = 30,
     return_diagnostics: bool = False,
+    model_mode: bool = False,
+    price_data: dict | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Complete factor processing pipeline.
 
@@ -827,6 +830,34 @@ def factor_pipeline(
         "n_factors": len(weights),
         "orthogonalized_factors": [],
     }
+
+    # ── ML branch: LightGBM walk-forward scoring ──
+    if model_mode:
+        from qp.research.model_trainer import MLPipelineKernel
+
+        ml = MLPipelineKernel()
+        ml_scores = ml.score_walk_forward(all_factors, price_data or {}, industry_map)
+
+        if ml_scores:
+            for date_str, sym_probs in ml_scores.items():
+                for symbol, prob in sym_probs.items():
+                    all_rows.append({
+                        "trade_date": date_str,
+                        "symbol": symbol,
+                        "score": prob,
+                    })
+
+            if all_rows:
+                scores_df = pl.DataFrame(all_rows).sort(["trade_date", "symbol"])
+                logger.info("✅ ML 完成: {} 日 × {} 只", len(ml_scores), scores_df["symbol"].n_unique())
+                if return_diagnostics:
+                    diagnostics["model_mode"] = "lightgbm"
+                    return scores_df, diagnostics
+                return scores_df
+
+        logger.warning("ML 模式失败，回退线性加权")
+
+    # ── Linear branch (original factor pipeline) ──
 
     for i, date_str in enumerate(dates):
         stock_factors = all_factors[date_str]
