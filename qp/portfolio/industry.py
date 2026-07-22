@@ -58,9 +58,14 @@ class IndustryMapper:
     def get_sector(self, symbol: str) -> str:
         """Get the top-level sector for a symbol.
 
+        Handles both raw codes ("600519") and exchange-suffixed
+        codes ("600519.SH", "000858.SZ").
+
         Returns "Other" for unknown symbols.
         """
-        mapping = _SECTOR_MAP.get(symbol)
+        # Strip exchange suffix if present
+        clean = symbol.split(".")[0] if "." in symbol else symbol
+        mapping = _SECTOR_MAP.get(clean)
         return mapping[0] if mapping else "Other"
 
     def get_sector_group(self, symbol: str) -> str:
@@ -68,7 +73,8 @@ class IndustryMapper:
 
         Returns "Other" for unknown symbols.
         """
-        mapping = _SECTOR_MAP.get(symbol)
+        clean = symbol.split(".")[0] if "." in symbol else symbol
+        mapping = _SECTOR_MAP.get(clean)
         return mapping[1] if mapping else "Other"
 
     def get_symbols_in_sector(self, sector: str) -> list[str]:

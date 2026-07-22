@@ -50,12 +50,8 @@ class CorrelationAnalyzer:
         )
         px = px.drop_nulls(subset=["daily_return"])
 
-        # Use last N days
-        max_date = px["trade_date"].max()
-        px = px.filter(
-            pl.col("trade_date").cast(pl.Int64)
-            >= (pl.lit(max_date).cast(pl.Int64) - self._lookback * 86400 * 1000)
-        )
+        # Use last N days (tail-based, avoids date type issues)
+        px = px.group_by("symbol").tail(self._lookback)
 
         # Pivot to wide format: rows=dates, cols=symbols, values=daily_return
         try:

@@ -9,10 +9,16 @@ from qp.portfolio.allocator import (
     KellyAllocator,
     RiskParityAllocator,
 )
+from qp.portfolio.budget import RiskBudget, RiskBudgetResult, VaRBudget, VolatilityBudget
+from qp.portfolio.clustering import RiskClusterer
+from qp.portfolio.constraints import TrimAndRefill, TrimResult
 from qp.portfolio.correlation import CorrelationAnalyzer
+from qp.portfolio.exposure import FactorExposureAnalyzer, MarketCapExposure
 from qp.portfolio.cost_model import CostBreakdown, CostModel, MarketImpactModel
 from qp.portfolio.industry import IndustryMapper
+from qp.portfolio.models import RiskApprovedCandidate
 from qp.portfolio.optimizer import MeanVarianceOptimizer, OptimizationResult
+from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine, RiskEngineConfig
 from qp.portfolio.risk_manager import PortfolioRiskManager, RiskReport
 from qp.portfolio.risk_model import (
     AttributionReport,
@@ -28,16 +34,28 @@ __all__ = [
     "CostBreakdown",
     "CostModel",
     "EqualWeightAllocator",
+    "FactorExposureAnalyzer",
     "IndustryMapper",
+    "MarketCapExposure",
     "KellyAllocator",
     "MarketImpactModel",
     "MeanVarianceOptimizer",
     "OptimizationResult",
     "Order",
+    "PortfolioRiskEngine",
     "PortfolioRiskManager",
+    "RiskApprovedCandidate",
+    "RiskClusterer",
     "RiskDecomposition",
+    "RiskEngineConfig",
     "RiskModel",
+    "RiskBudget",
+    "RiskBudgetResult",
     "RiskParityAllocator",
     "RiskReport",
     "SinglePortfolio",
+    "TrimAndRefill",
+    "TrimResult",
+    "VaRBudget",
+    "VolatilityBudget",
 ]
