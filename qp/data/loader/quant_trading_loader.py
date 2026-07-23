@@ -3,8 +3,12 @@
 Converts the quant.db daily_bar + adj_factors into Polars DataFrames
 suitable for the multi-factor strategy engine.
 
-Key: applies 前复权 (forward-adjusted) close prices so factor calculations
-use split/dividend-adjusted prices.
+前复权公式（与 QuantTrading compat.py 一致）:
+    adj_price = raw_price × cum_factor_on_date
+
+cum_factor ≤ 1.0 — 历史价格按比例缩小，当前价格不变。
+此公式于 2026-07-23 修正：之前错误使用了 latest_cum / cf（后复权），
+导致有除权历史的股票因子值颠倒。
 """
 
 from __future__ import annotations
@@ -100,12 +104,8 @@ def load_price_data(
     ).fetchall()
 
     adj_map: dict[str, dict[str, float]] = defaultdict(dict)
-    latest_cum: dict[str, float] = {}
     for row in adj_rows:
         adj_map[row["code"]][row["ex_date"]] = row["cum_factor"]
-    for code in adj_map:
-        latest_date = max(adj_map[code].keys())
-        latest_cum[code] = adj_map[code][latest_date]
 
     conn.close()
 
@@ -117,16 +117,17 @@ def load_price_data(
 
         df = pl.DataFrame(rows_list).sort("trade_date")
 
-        # Apply 前复权: close_adj = close * latest_cum / cum_factor_on_date
-        if code in latest_cum and code in adj_map:
-            lc = latest_cum[code]
+        # Apply 前复权: close_adj = close × cum_factor_on_date
+        # Matches QuantTrading compat.py get_all_adjusted_prices() formula.
+        # cum_factor ≤ 1.0 → historical prices are reduced proportionally.
+        if code in adj_map:
             cum_map = adj_map[code]
 
             # Build adjustment multipliers per date
             multipliers = []
             for d in df["trade_date"].to_list():
                 cf = _get_cum_factor(cum_map, str(d))
-                mult = lc / cf if cf > 0 else 1.0
+                mult = cf if cf > 0 else 1.0
                 multipliers.append(mult)
 
             df = df.with_columns(pl.Series("_adj_mult", multipliers))

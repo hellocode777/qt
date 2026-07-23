@@ -33,7 +33,8 @@ class QuantTradingDBAdapter(BaseDataSource):
     """Adapter for the QuantTrading SQLite database (quant.db).
 
     Provides access to daily_bar, adj_factors, and security_info tables
-    with automatic前复权 adjustment and board filtering.
+    with 前复权 adjustment matching QuantTrading compat.py formula:
+        adj_price = raw_price × cum_factor_on_date
 
     This adapter is the SINGLE entry point for accessing quant.db data.
     All other layers load data through this adapter, never via raw sqlite3.
@@ -191,22 +192,17 @@ class QuantTradingDBAdapter(BaseDataSource):
 
         # Build lookup
         adj_map: dict[str, dict[str, float]] = {}
-        latest_cum: dict[str, float] = {}
         for code, ex_d, cf in adj_rows:
             adj_map.setdefault(code, {})[ex_d] = float(cf)
-        for code in adj_map:
-            if adj_map[code]:
-                latest_cum[code] = adj_map[code][max(adj_map[code].keys())]
 
         # Build data
         data: list[dict[str, Any]] = []
         for code, td, o, h, lo, c, v in rows:
             px_mult = 1.0
-            if code in latest_cum and code in adj_map:
-                lc = latest_cum[code]
+            if code in adj_map:
                 cf = _lookup_cum(adj_map[code], td)
                 if cf > 0:
-                    px_mult = lc / cf
+                    px_mult = cf
 
             data.append({
                 "symbol": code,

@@ -250,29 +250,61 @@ def _log_filter_summary(
     from loguru import logger
 
     pct = passed / total * 100 if total > 0 else 0
-    logger.info("🔍 质量过滤: {} → {} 只 ({:.0f}% 通过)", total, passed, pct)
 
     # Aggregate reasons into categories
     reason_counts: Counter[str] = Counter()
+    hard_roe = 0
+    hard_debt = 0
+    quality_bad = 0
     for reason in failed_reasons.values():
-        # Normalize reasons into categories
         if "ROE连续" in reason:
             reason_counts["ROE连续2年<0 (硬性剔除)"] += 1
+            hard_roe += 1
         elif "debt_ratio=" in reason and ">" in reason and "硬性" in reason:
             reason_counts["债务率>95% (硬性剔除)"] += 1
+            hard_debt += 1
         elif "ROE=" in reason and "<" in reason:
             reason_counts["ROE<-5%"] += 1
+            quality_bad += 1
         elif "gross_margin" in reason:
             reason_counts["毛利率<10%"] += 1
+            quality_bad += 1
         elif "net_profit_growth" in reason:
             reason_counts["净利增速<-50%"] += 1
+            quality_bad += 1
         elif "debt_ratio" in reason:
             reason_counts["债务率>85%"] += 1
+            quality_bad += 1
         elif "PE_TTM" in reason:
             reason_counts["PE超标 (0~200)"] += 1
+            quality_bad += 1
         else:
             reason_counts[reason] += 1
+            quality_bad += 1
 
+    # ── 一行总览（与 QuantTrading 对齐）──
+    soft_desc = (
+        f"ROE>-5% 毛利率>10% 净利增速>-50% "
+        f"debt_ratio<{int(DEFAULT_QUALITY_FILTERS.get('debt_ratio', {}).get('max', 85))}% "
+        f"0<PE<200"
+    )
+    hard_desc = (
+        f"ROE连续{HARD_CUTOFFS['roe_consecutive_negative_years']}年<0剔除 "
+        f"debt_ratio>{int(HARD_CUTOFFS['debt_ratio_absolute_max'])}%剔除"
+    )
+    st_removed = reason_counts.get("ST/PT/退市", 0)
+    logger.info(
+        "🔍 质量过滤: {}/{} 合格 ({:.0f}%) | "
+        "质量不达标:{}, 无基本面:{}, 无估值:{}, ST/退市:{} | "
+        "硬性: {} | "
+        "软门槛: {}",
+        passed, total, pct,
+        quality_bad, no_fundamental, no_valuation, st_removed,
+        hard_desc,
+        soft_desc,
+    )
+
+    # ── 分级明细 ──
     for reason, count in reason_counts.most_common():
         logger.info("  ✂ {}: {} 只 ({:.1f}%)", reason, count, count / total * 100)
 

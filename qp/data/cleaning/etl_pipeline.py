@@ -286,8 +286,8 @@ def stage4_adjustment(
     """Apply 前复权 (forward adjustment) to OHLC prices.
 
     Uses adj_factors DataFrame with [code, ex_date, cum_factor].
-    For each stock on each date:
-      adjusted_price = raw_price × latest_cum_factor / cum_factor_on_date
+    Formula matches QuantTrading compat.py:
+      adjusted_price = raw_price × cum_factor_on_date
 
     If adj_factors is None, skips adjustment (prices assumed already adjusted).
 
@@ -313,45 +313,13 @@ def stage4_adjustment(
         ["code", "ex_date"]
     )
 
-    # ── Get latest cum_factor per stock ──
-    latest_cum = (
-        adj_factors.group_by("code")
-        .agg(pl.col("ex_date").max().alias("max_date"))
-        .join(
-            adj_factors,
-            left_on=["code", "max_date"],
-            right_on=["code", "ex_date"],
-        )
-        .select(
-            [
-                pl.col("code"),
-                pl.col("cum_factor").alias("latest_cum"),
-            ]
-        )
-    )
-
-    # ── Merge adj_factors into main DataFrame ──
-    # For each (code, trade_date), find the cum_factor on or before trade_date.
-    # This is an asof join: for each row in df, find the latest adj_factor row
-    # with ex_date <= trade_date.
-
-    # Strategy: for each stock, forward-fill cum_factor across dates
-    # 1. Get all unique (code, trade_date) pairs
-    # 2. Left join with adj_factors on (code, ex_date <= trade_date)
-    # 3. Take the max ex_date per (code, trade_date)
-
-    # Build a full date range per stock and forward-fill cum_factor
-    # Simpler approach: process per stock with Polars asof join simulation
-
-    # Create a lookup: for each stock, sort adj_factors by ex_date.
-    # For each trade_date, binary-search the right cum_factor.
+    # ── Build adj_factors lookup per stock ──
     adj_dict = {}
     for (code,), group in adj_factors.group_by("code"):
         adj_dict[code] = (
             group["ex_date"].to_list(),
             group["cum_factor"].to_list(),
         )
-    latest_dict = {r["code"]: r["latest_cum"] for r in latest_cum.iter_rows(named=True)}
 
     # Apply adjustment using vectorized approach
     symbols = df["symbol"].to_list()
@@ -365,9 +333,8 @@ def stage4_adjustment(
         cf = 1.0
         is_ex = False
 
-        if code in adj_dict and code in latest_dict:
+        if code in adj_dict:
             ex_dates, cum_factors = adj_dict[code]
-            lc = latest_dict[code]
             best_cf = 1.0
             best_ex = ""
             for j in range(len(ex_dates)):
@@ -377,7 +344,7 @@ def stage4_adjustment(
                 else:
                     break
             if best_cf > 0:
-                cf = lc / best_cf
+                cf = best_cf
             if best_ex == str(dt):
                 is_ex = True
 

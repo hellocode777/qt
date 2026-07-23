@@ -1,103 +1,7 @@
 {
-  "updated_at": "2026-07-23T07:14:07.689055+00:00",
+  "updated_at": "2026-07-23T08:46:07.722673+00:00",
   "base_dir": "data/dataset",
   "entries": {
-    "test_ds@2026-07-22": {
-      "name": "test_ds",
-      "version": "2026-07-22",
-      "path": "data/dataset/test_ds_2026-07-22.parquet",
-      "metadata": {
-        "name": "test_ds",
-        "owner": "me",
-        "source": "demo",
-        "schema": {
-          "trade_date": "date",
-          "symbol": "str"
-        },
-        "frequency": "daily",
-        "primary_key": [
-          "trade_date",
-          "symbol"
-        ],
-        "timezone": "Asia/Shanghai",
-        "coverage_start": "2024-01-01",
-        "coverage_end": "2024-01-05",
-        "pit_confidence": "high",
-        "update_policy": "daily_append",
-        "validation_rules": [],
-        "version": "2026-07-22"
-      },
-      "registered_at": "2026-07-22T15:08:18.256976+00:00"
-    },
-    "daily_price@2026-07-22": {
-      "name": "daily_price",
-      "version": "2026-07-22",
-      "path": "data/dataset/daily_price_2026-07-22.parquet",
-      "metadata": {
-        "start_date": "2024-01-01",
-        "end_date": "2026-07-22",
-        "rows": 11106
-      },
-      "registered_at": "2026-07-22T15:09:59.032360+00:00"
-    },
-    "daily_price_main@2026-07-22": {
-      "name": "daily_price_main",
-      "version": "2026-07-22",
-      "path": "data/dataset/daily_price_main_2026-07-22.parquet",
-      "metadata": {
-        "source": "quant_trading_db",
-        "board": "main",
-        "start_date": "2015-01-01",
-        "end_date": "2026-07-22",
-        "stocks": 3043,
-        "rows": 7309976,
-        "tiers": [
-          "raw",
-          "bronze",
-          "silver",
-          "gold"
-        ]
-      },
-      "registered_at": "2026-07-22T15:34:14.782593+00:00"
-    },
-    "test_ds@2026-07-23": {
-      "name": "test_ds",
-      "version": "2026-07-23",
-      "path": "data/dataset/test_ds_2026-07-23.parquet",
-      "metadata": {
-        "name": "test_ds",
-        "owner": "me",
-        "source": "demo",
-        "schema": {
-          "trade_date": "date",
-          "symbol": "str"
-        },
-        "frequency": "daily",
-        "primary_key": [
-          "trade_date",
-          "symbol"
-        ],
-        "timezone": "Asia/Shanghai",
-        "coverage_start": "2024-01-01",
-        "coverage_end": "2024-01-05",
-        "pit_confidence": "high",
-        "update_policy": "daily_append",
-        "validation_rules": [],
-        "version": "2026-07-23"
-      },
-      "registered_at": "2026-07-23T06:59:31.314247+00:00"
-    },
-    "daily_price@2026-07-23": {
-      "name": "daily_price",
-      "version": "2026-07-23",
-      "path": "data/dataset/daily_price_2026-07-23.parquet",
-      "metadata": {
-        "start_date": "2024-01-01",
-        "end_date": "2026-07-23",
-        "rows": 11106
-      },
-      "registered_at": "2026-07-23T07:14:07.689035+00:00"
-    },
     "daily_price_main@2026-07-23": {
       "name": "daily_price_main",
       "version": "2026-07-23",
@@ -116,7 +20,7 @@
           "gold"
         ]
       },
-      "registered_at": "2026-07-23T06:33:54.424416+00:00"
+      "registered_at": "2026-07-23T08:46:07.722623+00:00"
     }
   }
 }
