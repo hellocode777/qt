@@ -148,10 +148,20 @@ class MultiFactorPipeline(BasePipeline):
         elif industry_neutral:
             logger.info("行业中性化: ✅ | 因子正交化: {}", "✅" if orthogonalize else "❌")
 
+        # ML 模式：需要额外历史数据用于训练
+        fetch_start = start_date_str
+        if model_mode:
+            from datetime import datetime as _dt
+            from datetime import timedelta as _td
+            # 训练最少 252 天 + 25 天 gap ≈ 1.5 年
+            ml_start = _dt.fromisoformat(start_date_str) - _td(days=600)
+            fetch_start = ml_start.strftime("%Y-%m-%d")
+            logger.info("   🤖 ML 模式: 数据加载从 {} 起 (训练窗口)", fetch_start)
+
         # ── Stage 1: Fetch data ──
         logger.info("[1/6] 获取行情数据...")
         try:
-            price_data = self._fetch_data(symbols, start_date_str, end_date_str, dataset)
+            price_data = self._fetch_data(symbols, fetch_start, end_date_str, dataset)
         except Exception as e:
             logger.error("数据获取失败: {}", e)
             result.status = PipelineStatus.FAILED

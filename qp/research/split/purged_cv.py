@@ -176,9 +176,15 @@ def _days_between(d1: Any, d2: Any) -> int:  # type: ignore[misc]
     Handles: datetime.date, datetime.datetime, pd.Timestamp, np.datetime64.
     Returns absolute integer number of days.
     """
+    # Convert strings to datetime64 (common when dates come from Polars→Pandas)
+    if isinstance(d1, str):
+        d1 = np.datetime64(d1)
+    if isinstance(d2, str):
+        d2 = np.datetime64(d2)
+
     try:
         return abs(int((d2 - d1).days))
-    except AttributeError:
+    except (AttributeError, TypeError):
         pass
 
     try:

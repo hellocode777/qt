@@ -831,11 +831,11 @@ def factor_pipeline(
         "orthogonalized_factors": [],
     }
 
-    # ── ML branch: LightGBM walk-forward scoring ──
+    # ── ML branch: LightGBM LambdaRank walk-forward scoring ──
     if model_mode:
-        from qp.research.model_trainer import MLPipelineKernel
+        from qp.research.model_trainer import WalkForwardScorer
 
-        ml = MLPipelineKernel()
+        ml = WalkForwardScorer()
         ml_scores = ml.score_walk_forward(all_factors, price_data or {}, industry_map)
 
         if ml_scores:
@@ -851,7 +851,7 @@ def factor_pipeline(
                 scores_df = pl.DataFrame(all_rows).sort(["trade_date", "symbol"])
                 logger.info("✅ ML 完成: {} 日 × {} 只", len(ml_scores), scores_df["symbol"].n_unique())
                 if return_diagnostics:
-                    diagnostics["model_mode"] = "lightgbm"
+                    diagnostics["model_mode"] = "lambdarank"
                     return scores_df, diagnostics
                 return scores_df
 
