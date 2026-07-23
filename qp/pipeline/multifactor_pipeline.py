@@ -323,6 +323,13 @@ class MultiFactorPipeline(BasePipeline):
             min_stocks_per_day=50,
         )
         logger.info("   {}", layered.summary())
+        # Per-quantile detail for debugging monotonicity
+        if layered.quantile_returns:
+            qs = sorted(layered.quantile_returns.keys())
+            q_str = "  ".join(
+                f"Q{q}={layered.quantile_returns[q]:+.4f}" for q in qs
+            )
+            logger.info("   分位数收益: {}", q_str)
         result.metrics["top_bottom_spread"] = layered.top_bottom_spread
         result.metrics["spread_t_stat"] = layered.spread_t_stat
         result.metrics["monotonicity_t_stat"] = layered.monotonicity_t_stat
@@ -1260,29 +1267,38 @@ def _log_factor_ic_table(
 def _optimize_weights_from_ic(
     factor_ic_table: list[dict],
     current_weights: dict[str, float],
-    min_ic_threshold: float = 0.005,
+    min_ic_threshold: float = 0.02,
 ) -> dict[str, float]:
     """Optimize factor weights from IC attribution on the full dataset.
 
     Algorithm:
-      1. For each factor, new direction = sign(IC) (or keep economic prior if |IC| is tiny)
-      2. Weight magnitude ∝ |IC| (factors with stronger predictive power get higher weight)
-      3. Normalize so sum of absolute weights = 1.0
+      1. Drop factors with |IC| < min_ic_threshold (noise, breaks monotonicity)
+      2. Direction = sign(IC) — no economic prior overrides
+      3. Weight magnitude ∝ |IC|
+      4. Normalize so sum of absolute weights = 1.0
 
     This replaces the old 18-stock-tuned weights with data-driven weights
     computed on the full 3039-stock universe.
     """
     ic_map = {e["factor"]: e["ic_mean"] for e in factor_ic_table}
+    ic_ir_map = {e["factor"]: e["ic_ir"] for e in factor_ic_table}
     optimized: dict[str, float] = {}
+    dropped: list[str] = []
 
     for fname in current_weights:
         ic = ic_map.get(fname, 0.0)
-        if abs(ic) > min_ic_threshold:
+        if abs(ic) >= min_ic_threshold:
             # IC-driven: direction from IC sign, magnitude from |IC|
             optimized[fname] = ic  # weight = IC directly
         else:
-            # Weak signal — keep economic prior direction, but shrunken
-            optimized[fname] = current_weights[fname] * 0.1
+            dropped.append(fname)
+
+    if dropped:
+        from loguru import logger
+        logger.info(
+            "   🗑 移除弱因子 (|IC|<{:.0%}): {} — {} 因子",
+            min_ic_threshold, ", ".join(dropped), len(dropped),
+        )
 
     # Normalize so sum(|w|) = 1.0
     total_abs = sum(abs(w) for w in optimized.values())

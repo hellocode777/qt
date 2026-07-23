@@ -1,37 +1,19 @@
 """momentum_vol_full — 动量+成交量 完整版策略.
 
-从 QuantTrading 迁移，包含：
-  10 因子线性加权 → MAD 去极值 → 排名标准化 →
+从 QuantTrading 迁移，基于全量 IC 归因精简为 5 因子：
+  5 因子线性加权 → MAD 去极值 → 排名标准化 →
   行业中性化 → 因子正交化 → 质量过滤 → 防追高 →
   卖出缓冲 → 大盘双均线过滤 → 市场状态自适应仓位
 
-因子权重（从 QuantTrading 回测最佳配置）:
-  Momentum_3M         0.25  60日动量（残差动量剔除 Beta）
-  Volatility_20D      0.25  低波异象（低波动→高得分）
-  Volume_Trend_10D    0.12  成交量趋势（5日/20日均量）
-  Volume_Price_Trend  0.10  量价趋势方向一致性
-  Price_Volume_Corr   0.08  20日量价相关性
-  PE_TTM             -0.12  百分位改造后偏好高PE（成长预期）
-  PB                 -0.08  低市净率偏好
-  Implied_Net_Flow    0.06  近似主力净流入（阳线-阴线成交额）
-  Amplitude_5D        0.04  日内振幅比 5 日均值
-  Volume_Concentration 0.04  成交额变异系数（识别主力参与）
+因子权重（由全量 3039 只 IC 归因确定，2026-07-23）:
+  Amplitude_5D        -0.25  5日振幅（反转效应，高振幅→低得分）
+  Volatility_20D      +0.22  低波异象（唯一正向因子）
+  Momentum_3M         -0.20  60日动量（A股反转，高动量→低得分）
+  Volume_Concentration -0.19  成交量集中度
+  Volume_Trend_10D    -0.14  成交量趋势
 
-Usage:
-    from qp.strategy.strategies.momentum_vol_full import (
-        run_momentum_vol_full,
-        MOMENTUM_VOL_FULL_CONFIG,
-    )
-
-    # 回测模式
-    signals = run_momentum_vol_full(price_data, config=MOMENTUM_VOL_FULL_CONFIG)
-
-    # 管道模式（实盘）
-    live_config = MOMENTUM_VOL_FULL_CONFIG.for_live()
-    signals = run_momentum_vol_full(
-        price_data, config=live_config,
-        force_rebalance_today=True, holdings=current_holdings,
-    )
+已移除的弱因子（|IC|<0.02 或 IC_IR<0.3）:
+  PE_TTM, PB, Price_Volume_Corr, Implied_Net_Flow, Volume_Price_Trend
 """
 
 from __future__ import annotations
@@ -55,19 +37,15 @@ from qp.strategy.multifactor import run_multifactor_strategy
 # ------------------------------------------------------------------
 
 MOMENTUM_VOL_FULL_WEIGHTS: dict[str, float] = {
-    # 价量因子 5 个（regime_switch.py 基线权重）
-    "Momentum_3M": 0.25,
-    "Volatility_20D": 0.25,
-    "Volume_Trend_10D": 0.12,
-    "Volume_Price_Trend": 0.10,
-    "Price_Volume_Corr": 0.08,
-    # 估值因子 2 个
-    "PE_TTM": -0.12,
-    "PB": -0.08,
-    # 附加因子 3 个（资金流/振幅/集中度）
-    "Implied_Net_Flow": 0.06,
-    "Amplitude_5D": 0.04,
-    "Volume_Concentration": 0.04,
+    # 价量因子 5 个 — 权重方向由全量 IC 归因确定（2026-07-23）
+    # IC 方向均为负（A股存在反转效应），幅度 ∝ |IC|
+    "Amplitude_5D": -0.25,           # IC=-0.072, IR=0.40
+    "Volatility_20D": +0.22,         # IC=+0.063, IR=0.34 (低波异象，唯一正向)
+    "Momentum_3M": -0.20,            # IC=-0.057, IR=0.40
+    "Volume_Concentration": -0.19,   # IC=-0.055, IR=0.66
+    "Volume_Trend_10D": -0.14,       # IC=-0.041, IR=0.46
+    # 已移除（|IC|<0.02 或 IC_IR<0.3，噪音源）:
+    #   PE_TTM, PB, Price_Volume_Corr, Implied_Net_Flow, Volume_Price_Trend
 }
 
 # ------------------------------------------------------------------
