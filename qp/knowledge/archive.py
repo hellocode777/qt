@@ -70,25 +70,23 @@ class KnowledgeEntry:
 
     def to_markdown(self) -> str:
         """Serialize to Markdown with YAML frontmatter."""
-        lines = [
-            "---",
-            f"id: {self.entry_id}",
-            f"category: {self.category.value}",
-            f"title: {self.title}",
-            f"created_at: {self.created_at}",
-            f"tags: [{', '.join(self.tags)}]",
-        ]
+        import yaml
+
+        frontmatter_dict: dict[str, Any] = {
+            "id": self.entry_id,
+            "category": self.category.value,
+            "title": self.title,
+            "created_at": self.created_at,
+            "tags": self.tags,
+        }
         if self.related:
-            lines.append(f"related: [{', '.join(self.related)}]")
+            frontmatter_dict["related"] = self.related
         if self.metadata:
             for k, v in self.metadata.items():
-                lines.append(f"{k}: {v}")
-        lines.append("---")
-        lines.append("")
-        lines.append(f"# {self.title}")
-        lines.append("")
-        lines.append(self.content)
-        return "\n".join(lines)
+                frontmatter_dict[k] = v
+
+        yaml_str = yaml.dump(frontmatter_dict, allow_unicode=True, sort_keys=False).strip()
+        return f"---\n{yaml_str}\n---\n\n# {self.title}\n\n{self.content}"
 
     @classmethod
     def from_markdown(cls, raw: str) -> KnowledgeEntry:
@@ -475,6 +473,7 @@ class KnowledgeArchive:
         title: str,
         content: str,
         tags: list[str] | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> KnowledgeEntry:
         """Log a failed/abandoned research hypothesis."""
         return self.create_entry(
@@ -482,6 +481,7 @@ class KnowledgeArchive:
             title=title,
             content=content,
             tags=tags,
+            metadata=metadata,
         )
 
     # ------------------------------------------------------------------

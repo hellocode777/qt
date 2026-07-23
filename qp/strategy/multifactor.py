@@ -269,6 +269,8 @@ def generate_rebalance_signals(
     sell_buffer_rank: int = 0,
     regime_map: dict[str, str] | None = None,
     regime_positions: dict[str, int] | None = None,
+    score_percentile_min: float | None = None,
+    score_percentile_max: float | None = None,
 ) -> pl.DataFrame:
     """Generate buy/sell signals from cross-sectional scores.
 
@@ -278,19 +280,26 @@ def generate_rebalance_signals(
       - Stocks falling out of Top-(N+buffer) → SELL signal.
       - On first rebalance day, all Top-N are bought.
 
+    Score band selection (when score_percentile_min/max are set):
+      - Instead of selecting absolute Top-N by score, select from a
+        specific score percentile range (e.g. 60-80 = Q4 sweet spot).
+      - This addresses the inverted-U return pattern where Q4 > Q5.
+
     Sell buffer: prevents whipsaw at the boundary.
       With top_n=5, buffer=5: buy at rank 1-5, sell at rank 11+.
 
     Args:
-        scores: [trade_date, symbol, score] from compute_cross_sectional_scores.
+        scores: [trade_date, symbol, score].
         top_n: Number of stocks to hold.
         rebalance_freq: Days between rebalance checks.
         force_rebalance_today: Treat last day as rebalance day.
-        holdings: Currently held stock codes (for sell signal targeting).
+        holdings: Currently held stock codes.
         chased_codes: Stocks to skip due to recent surge.
         sell_buffer_rank: Extra ranks before selling (recommend top_n*2).
         regime_map: {date_str: regime} for adaptive position sizing.
         regime_positions: {regime: top_n} — different N per market regime.
+        score_percentile_min: If set, only select from scores above this percentile.
+        score_percentile_max: If set, only select from scores below this percentile.
 
     Returns:
         Polars DataFrame [date, symbol, signal, score, reason].
@@ -341,7 +350,18 @@ def generate_rebalance_signals(
         symbols = day_scores["symbol"].to_list()
         score_vals = day_scores["score"].to_list()
 
-        current_top = set(symbols[:_tn])
+        # Score band selection: filter to percentile range if specified
+        if score_percentile_min is not None or score_percentile_max is not None:
+            n_total = len(score_vals)
+            lo = int(n_total * (score_percentile_min or 0) / 100)
+            hi = int(n_total * (score_percentile_max or 100) / 100)
+            lo = max(0, lo)
+            hi = min(n_total, hi)
+            top_pool = symbols[lo:hi]
+        else:
+            top_pool = symbols
+
+        current_top = set(top_pool[:_tn])
 
         if idx == 0:
             # First rebalance: buy all Top-N
@@ -444,6 +464,8 @@ def run_multifactor_strategy(
     regime_positions: dict[str, int] | None = None,
     return_diagnostics: bool = False,
     model_mode: bool = False,
+    score_percentile_min: float | None = None,
+    score_percentile_max: float | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Run the complete multi-factor stock selection strategy.
 
@@ -546,6 +568,8 @@ def run_multifactor_strategy(
         sell_buffer_rank=sell_buffer_rank,
         regime_map=regime_map,
         regime_positions=regime_positions,
+        score_percentile_min=score_percentile_min,
+        score_percentile_max=score_percentile_max,
     )
 
     # ── 3. Add stock names ──

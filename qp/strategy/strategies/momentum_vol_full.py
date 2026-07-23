@@ -33,7 +33,95 @@ from qp.strategy.market_regime import MarketRegimeDetector
 from qp.strategy.multifactor import run_multifactor_strategy
 
 # ------------------------------------------------------------------
-# 10 因子权重（QuantTrading 回测验证配置）
+# low_vol_reversal — 低波+反转（从 momentum_vol_full IC 归因演化）
+# ------------------------------------------------------------------
+
+LOW_VOL_REVERSAL_WEIGHTS: dict[str, float] = {
+    "Amplitude_5D": -0.25,
+    "Volatility_20D": +0.22,
+    "Momentum_3M": -0.20,
+    "Volume_Concentration": -0.19,
+    "Volume_Trend_10D": -0.14,
+}
+
+# ── 消融实验: 拆因子定位 Q5 塌陷来源 ──
+
+LVR_VOL_ONLY_WEIGHTS: dict[str, float] = {
+    "Volatility_20D": +1.00,  # 低波异象
+}
+
+LVR_VOL_MOM_WEIGHTS: dict[str, float] = {
+    "Volatility_20D": +0.55,
+    "Momentum_3M": -0.45,     # 最强反转因子
+}
+
+LVR_VOL_ALL_REVERSAL_WEIGHTS: dict[str, float] = {
+    "Volatility_20D": +0.35,
+    "Momentum_3M": -0.25,
+    "Amplitude_5D": -0.15,
+    "Volume_Trend_10D": -0.15,
+    "Volume_Concentration": -0.10,
+}
+
+
+def _make_lvr_config(name: str, display: str, factors: dict) -> StrategyConfig:
+    """Factory for low_vol_reversal ablation configs."""
+    return StrategyConfig(
+        name=name,
+        display_name=display,
+        factors=dict(factors),
+        max_positions=10, rebalance_freq=20, sell_buffer_multiplier=2,
+        model_mode=False, quality_filter=True, industry_neutral=True,
+        orthogonalize=True, anti_chase=True, chase_threshold=0.20,
+        chase_lookback=5, use_market_filter=True,
+        regime_positions={
+            "bull": 5, "sideways_up": 8, "neutral": 10,
+            "sideways_down": 12, "bear": 15, "crisis": 20,
+        },
+        regime_freq={
+            "bull": 15, "sideways_up": 20, "neutral": 20,
+            "sideways_down": 30, "bear": 40, "crisis": 60,
+        },
+    )
+
+
+LVR_VOL_ONLY = register_config(_make_lvr_config(
+    "lvr_vol_only", "低波(仅波动率)", LVR_VOL_ONLY_WEIGHTS))
+LVR_VOL_MOM = register_config(_make_lvr_config(
+    "lvr_vol_mom", "低波+动量", LVR_VOL_MOM_WEIGHTS))
+LVR_VOL_ALL_REV = register_config(_make_lvr_config(
+    "lvr_vol_all_rev", "低波+全部反转", LVR_VOL_ALL_REVERSAL_WEIGHTS))
+
+LOW_VOL_REVERSAL_CONFIG = register_config(
+    StrategyConfig(
+        name="low_vol_reversal",
+        display_name="低波+反转",
+        factors=dict(LOW_VOL_REVERSAL_WEIGHTS),
+        max_positions=10,
+        rebalance_freq=20,
+        sell_buffer_multiplier=2,
+        model_mode=False,
+        quality_filter=True,
+        industry_neutral=True,
+        orthogonalize=True,
+        anti_chase=True,
+        chase_threshold=0.20,
+        chase_lookback=5,
+        use_market_filter=True,
+        regime_positions={
+            "bull": 5, "sideways_up": 8, "neutral": 10,
+            "sideways_down": 12, "bear": 15, "crisis": 20,
+        },
+        regime_freq={
+            "bull": 15, "sideways_up": 20, "neutral": 20,
+            "sideways_down": 30, "bear": 40, "crisis": 60,
+        },
+    )
+)
+
+
+# ------------------------------------------------------------------
+# momentum_vol_full — 原始配置（保留向后兼容）
 # ------------------------------------------------------------------
 
 MOMENTUM_VOL_FULL_WEIGHTS: dict[str, float] = {
@@ -157,6 +245,10 @@ def run_momentum_vol_full(
 
     # 3. 运行多因子策略（核心引擎）
     # Always request scores for IC analysis, even if diagnostics not needed
+    # Extract score band overrides for inverted-U selection
+    score_percentile_min = overrides.pop("score_percentile_min", None)
+    score_percentile_max = overrides.pop("score_percentile_max", None)
+
     mf_result = run_multifactor_strategy(
         price_data,
         weights=weights,
@@ -175,8 +267,10 @@ def run_momentum_vol_full(
         holdings=holdings,
         regime_map=regime_map,
         regime_positions=config.regime_positions if regime_map else None,
-        return_diagnostics=True,  # Always true — need scores for IC
+        return_diagnostics=True,
         model_mode=config.model_mode,
+        score_percentile_min=score_percentile_min,
+        score_percentile_max=score_percentile_max,
     )
 
     diagnostics = None

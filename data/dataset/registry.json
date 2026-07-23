@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-23T08:46:07.722673+00:00",
+  "updated_at": "2026-07-23T09:58:11.595564+00:00",
   "base_dir": "data/dataset",
   "entries": {
     "daily_price_main@2026-07-23": {
@@ -21,6 +21,17 @@
         ]
       },
       "registered_at": "2026-07-23T08:46:07.722623+00:00"
+    },
+    "daily_price@2026-07-23": {
+      "name": "daily_price",
+      "version": "2026-07-23",
+      "path": "data/dataset/daily_price_2026-07-23.parquet",
+      "metadata": {
+        "start_date": "2024-01-01",
+        "end_date": "2026-07-23",
+        "rows": 11106
+      },
+      "registered_at": "2026-07-23T09:58:11.595530+00:00"
     }
   }
 }

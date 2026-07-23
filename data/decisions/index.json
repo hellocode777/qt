@@ -20,5 +20,16 @@
     "risk_passed": false,
     "human_reviewed": true,
     "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-23-253c194a",
+    "date": "2026-07-23",
+    "generated_at": "2026-07-23T09:58:14.803730+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 11,
+    "estimated_cost_pct": 0.1623,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
   }
 ]

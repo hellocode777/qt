@@ -32,7 +32,7 @@ Usage via CLI:
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 import numpy as np
@@ -117,9 +117,14 @@ class MultiFactorPipeline(BasePipeline):
         strategy_name: str = params.get("strategy", "default")
         skip_gate: bool = params.get("skip_gate", False)
         model_mode: bool = params.get("model_mode", False)
+        score_band: str | None = params.get("score_band", None)  # e.g. "60-80" = Q4 only
 
         # ── Strategy mode ──
-        use_full_strategy = strategy_name in ("momentum_vol_full", "mvf", "mv_full", "full")
+        use_full_strategy = strategy_name in (
+            "momentum_vol_full", "mvf", "mv_full", "full",
+            "low_vol_reversal", "lvr",
+            "lvr_vol_only", "lvr_vol_mom", "lvr_vol_all_rev",
+        )
 
         result = PipelineResult(
             status=PipelineStatus.SUCCESS,
@@ -182,10 +187,13 @@ class MultiFactorPipeline(BasePipeline):
                 sell_buffer=sell_buffer,
                 strategy_name=strategy_name,
                 model_mode=model_mode,
+                score_band=score_band,
             )
-            n_factors = len(MOMENTUM_VOL_FULL_WEIGHTS)
-            weights = dict(MOMENTUM_VOL_FULL_WEIGHTS)
-            features = list(MOMENTUM_VOL_FULL_WEIGHTS.keys())
+            from qp.strategy.config import get_strategy_config
+            cfg = get_strategy_config(strategy_name)
+            weights = dict(cfg.factors)
+            features = list(cfg.factors.keys())
+            n_factors = len(features)
             result.metrics["score_rows"] = float(scores.height if not scores.is_empty() else 0)
         else:
             # ── Legacy: bare factor pipeline ──
@@ -298,6 +306,7 @@ class MultiFactorPipeline(BasePipeline):
                         strategy_name=strategy_name,
                         model_mode=model_mode,
                         config_override=optimized_config,
+                        score_band=score_band,
                     )
                     ic2 = evaluate_factor_ic(
                         scores2 if not scores2.is_empty() else scores,
@@ -372,21 +381,90 @@ class MultiFactorPipeline(BasePipeline):
             logger.error("   Research Debt Archive，不允许进入回测。")
             logger.error("   若确认要跳过门禁（仅限探索），使用 --skip-gate。")
 
-            # ── Archive to Research Debt per Rule 12 ──
-            _archive_research_debt(
+            # ── Build GateResult and archive to Research Debt ──
+            from qp.shared.types import ValidationStatus
+            from qp.validation.result import GateDecision, GateResult, RuleResult
+
+            gate_rules: list[RuleResult] = []
+            gate_rules.append(RuleResult(
+                "rank_ic", ValidationStatus.PASS if ic_record.ic_mean_pass else ValidationStatus.FAIL,
+                80 if ic_record.ic_mean_pass else 30,
+                threshold=0.02, actual_value=abs(ic_record.ic_mean),
+                detail=f"|IC|={abs(ic_record.ic_mean):.4f}",
+            ))
+            gate_rules.append(RuleResult(
+                "ic_ir", ValidationStatus.PASS if ic_record.ic_ir_pass else ValidationStatus.FAIL,
+                80 if ic_record.ic_ir_pass else 30,
+                threshold=0.3, actual_value=ic_record.ic_ir,
+                detail=f"IC_IR={ic_record.ic_ir:.2f}",
+            ))
+            gate_rules.append(RuleResult(
+                "ic_t_stat", ValidationStatus.PASS if ic_record.ic_t_stat_pass else ValidationStatus.FAIL,
+                80 if ic_record.ic_t_stat_pass else 30,
+                threshold=2.0, actual_value=ic_record.ic_t_stat,
+                detail=f"t={ic_record.ic_t_stat:.2f}",
+            ))
+            gate_rules.append(RuleResult(
+                "monotonicity", ValidationStatus.PASS if layered.is_monotonic else ValidationStatus.FAIL,
+                80 if layered.is_monotonic else 30,
+                threshold=2.0, actual_value=layered.monotonicity_t_stat,
+                detail=f"monotonicity t={layered.monotonicity_t_stat:.2f}",
+            ))
+            gate_rules.append(RuleResult(
+                "spread", ValidationStatus.PASS if layered.spread_t_stat >= 2.0 else ValidationStatus.FAIL,
+                80 if layered.spread_t_stat >= 2.0 else 30,
+                threshold=2.0, actual_value=layered.spread_t_stat,
+                detail=f"Q5-Q1 spread t={layered.spread_t_stat:.2f}",
+            ))
+
+            gate = GateResult(
+                strategy_id=strategy_name,
+                stage="backtest_passed",
+                decision=GateDecision.RESEARCH_ONLY if (ic_pass and not layered_pass)
+                    else GateDecision.BLOCKED,
+                score=sum(r.score for r in gate_rules) / len(gate_rules),
+                confidence=sum(1 for r in gate_rules if r.status == ValidationStatus.PASS) / len(gate_rules),
+                data_integrity="PASS",
+                factor_validity="PASS" if ic_pass else "FAIL",
+                portfolio_conversion="PASS" if layered_pass else "FAIL",
+                rules=gate_rules,
+                recommendation=(
+                    f"策略 {strategy_name} 具有统计预测力 (IC={ic_record.ic_mean:+.4f}, "
+                    f"IR={ic_record.ic_ir:.2f}) 但分层收益不单调 (t={layered.monotonicity_t_stat:.2f})。"
+                    f"建议: 研究 Q5 顶部塌陷原因或重新定义因子。"
+                ) if (ic_pass and not layered_pass) else (
+                    f"策略 {strategy_name} 因子检验未通过。建议: 检查因子计算、数据源、"
+                    f"或缩减因子数量。"
+                ),
+            )
+
+            # Archive to Research Debt with structured GateResult
+            debt_id = _archive_research_debt(
                 strategy_name=strategy_name,
                 ic_record=ic_record,
                 layered=layered,
                 failures=failures,
                 start=start_date_str,
                 end=end_date_str,
+                gate_result=gate,
             )
+            gate.artifacts.append(f"data/knowledge/research_debt/{debt_id}.md")
+
+            # Persist GateResult JSON
+            from pathlib import Path
+            gate_dir = Path("data/experiments")
+            gate_dir.mkdir(parents=True, exist_ok=True)
+            gate_file = gate_dir / f"{strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_gate.json"
+            import json as _json
+            gate_file.write_text(_json.dumps(gate.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+            gate.artifacts.append(str(gate_file))
 
             result.status = PipelineStatus.FAILED
             result.errors.append(
                 f"§10.1 Gate: {len(failures)} threshold(s) not met — "
                 + "; ".join(failures)
             )
+            result.metadata["gate_result"] = gate.to_dict()  # type: ignore[assignment]
             result.metadata["gate_failures"] = "; ".join(failures)
             return result
 
@@ -506,6 +584,7 @@ class MultiFactorPipeline(BasePipeline):
         strategy_name: str,
         model_mode: bool = False,
         config_override: object = None,
+        score_band: str | None = None,
     ) -> tuple[pl.DataFrame, pl.DataFrame, dict, dict, pl.DataFrame]:
         """Run the momentum_vol_full strategy through the strategy layer.
 
@@ -515,15 +594,13 @@ class MultiFactorPipeline(BasePipeline):
         Returns:
             (signals, scores, fundamental_data, valuation_data, index_df).
         """
-        from qp.strategy.strategies.momentum_vol_full import (
-            MOMENTUM_VOL_FULL_CONFIG,
-            run_momentum_vol_full,
-        )
+        from qp.strategy.config import get_strategy_config
+        from qp.strategy.strategies.momentum_vol_full import run_momentum_vol_full
 
         if config_override is not None:
             config = config_override
         else:
-            config = MOMENTUM_VOL_FULL_CONFIG
+            config = get_strategy_config(strategy_name)
         config.max_positions = top_n
         config.rebalance_freq = rebalance_freq
         config.sell_buffer_multiplier = max(1, sell_buffer // top_n) if top_n > 0 else 2
@@ -543,7 +620,7 @@ class MultiFactorPipeline(BasePipeline):
         )
         n_val = len(valuation_data)
 
-        logger.info("[2/6] 策略引擎 — momentum_vol_full 完整版...")
+        logger.info("[2/6] 策略引擎 — {} 完整版...", config.display_name or config.name)
         logger.info(
             "   因子: {} 个 | 质量过滤: ✅ ({}只有基本面) | "
             "估值: ✅ ({}只有估值) | 行业中性: ✅ | "
@@ -555,12 +632,24 @@ class MultiFactorPipeline(BasePipeline):
         )
 
         # Run full strategy pipeline for signals + scores (with all filters)
+        extra_overrides: dict[str, Any] = {}
+        if score_band:
+            parts = score_band.split("-")
+            if len(parts) == 2:
+                extra_overrides["score_percentile_min"] = float(parts[0])
+                extra_overrides["score_percentile_max"] = float(parts[1])
+                logger.info(
+                    "   🎯 Score band: {:.0f}%-{:.0f}% (Q{:.0f} region)",
+                    float(parts[0]), float(parts[1]),
+                    float(parts[0]) / 20 + 1,
+                )
         strategy_result = run_momentum_vol_full(
             price_data=price_data,
             config=config,
             index_df=index_df,
             fundamental_data=fundamental_data,
             valuation_data=valuation_data,
+            **extra_overrides,
         )
 
         if isinstance(strategy_result, tuple):
@@ -1347,63 +1436,102 @@ def _archive_research_debt(
     failures: list[str],
     start: str,
     end: str,
-) -> None:
+    gate_result: object | None = None,
+) -> str:
     """Archive failed factor research per Rule 12 (Pay Down Research Debt).
+
+    Uses KnowledgeArchive for structured, queryable YAML frontmatter entries.
 
     rule.md §10.1: 不满足条件的因子只能进入 Research Debt Archive,
     避免在相同错误方向上重复浪费时间。
+
+    Returns:
+        entry_id of the archived research debt entry.
     """
-    from datetime import datetime
-    from pathlib import Path
+    from datetime import datetime as _archive_dt
 
-    debt_dir = Path("data/knowledge/research_debt")
-    debt_dir.mkdir(parents=True, exist_ok=True)
+    from qp.knowledge.archive import KnowledgeArchive
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = debt_dir / f"gate_failure_{strategy_name}_{timestamp}.md"
+    # ── Build parameterized next steps based on failure type ──
+    next_steps: list[str] = []
+    has_ic_fail = any("IC" in f for f in failures)
+    has_mono_fail = any("单调" in f for f in failures) or any("mono" in f.lower() for f in failures)
+    has_spread_fail = any("spread" in f.lower() for f in failures) or any("Q5" in f for f in failures)
 
-    lines = [
-        f"# Research Debt: {strategy_name} — Gate Failure",
-        "",
-        f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        f"**Period**: {start} → {end}",
-        f"**Strategy**: {strategy_name}",
-        "",
-        "## Failed Thresholds (§10.1)",
-        "",
-    ]
-    for f in failures:
-        lines.append(f"- ❌ {f}")
-    lines.append("")
-    lines.extend([
-        "## Metrics",
-        "",
-        f"| Metric | Value | Threshold |",
-        f"|--------|-------|-----------|",
-        f"| IC Mean | {ic_record.ic_mean:+.4f} | \\|IC\\| ≥ 0.02 |",
-        f"| IC IR | {ic_record.ic_ir:.2f} | ≥ 0.3 |",
-        f"| IC t-stat | {ic_record.ic_t_stat:.2f} | ≥ 2.0 |",
-        f"| IC>0% | {ic_record.ic_positive_pct:.1f}% | — |",
-        f"| Q5-Q1 spread | {layered.top_bottom_spread:+.4f} | t ≥ 2.0 |",
-        f"| Spread t | {layered.spread_t_stat:.2f} | ≥ 2.0 |",
-        f"| Monotonicity t | {layered.monotonicity_t_stat:.2f} | ≥ 2.0 |",
-        f"| N days | {ic_record.n_days} | — |",
-        "",
-        "## Next Steps",
-        "",
-        "- [ ] 回到因子计算，检查原始因子值是否有计算错误",
-        "- [ ] 检查因子方向是否与经济学先验一致",
-        "- [ ] 考虑因子中性化/去极值参数调整",
-        "- [ ] 缩减因子数量，只保留|IC| > 0.03 的因子",
-        "- [ ] 检查数据源是否有前视偏差",
-        "",
-        "---",
-        "",
-        "*Auto-generated by MultiFactorPipeline §10.1 Gate*",
-    ])
+    if has_ic_fail:
+        next_steps.append("- [ ] 检查因子计算是否有错误（前视偏差、数据对齐）")
+        next_steps.append("- [ ] 考虑替换弱因子 (|IC| < 0.02) 或调整因子定义")
+    if has_mono_fail:
+        next_steps.append("- [ ] 研究 Q5 顶部塌陷原因（价值陷阱 / 极端反转）")
+        next_steps.append("- [ ] 尝试非线性得分变换或叠加质量过滤")
+    if has_spread_fail:
+        next_steps.append("- [ ] 扩大持仓数量 (Top10 → Top30) 或缩短调仓周期")
+        next_steps.append("- [ ] 测试不同 forward period 下的 spread 稳定性")
+    if not next_steps:
+        next_steps = [
+            "- [ ] 回到因子计算，检查原始因子值是否有计算错误",
+            "- [ ] 缩减因子数量，只保留 |IC| > 0.03 的因子",
+            "- [ ] 检查数据源是否有前视偏差",
+        ]
 
-    filename.write_text("\n".join(lines), encoding="utf-8")
-    logger.info("   📋 已归档到 Research Debt: {}", filename)
+    # ── Build content ──
+    failure_lines = "\n".join(f"- ❌ {f}" for f in failures)
+    content = f"""## Context
+**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+**Period**: {start} → {end}
+**Strategy**: {strategy_name}
+
+## Failed Thresholds (§10.1)
+
+{failure_lines}
+
+## Metrics
+
+| Metric | Value | Threshold |
+|--------|-------|-----------|
+| IC Mean | {ic_record.ic_mean:+.4f} | \\|IC\\| ≥ 0.02 |
+| IC IR | {ic_record.ic_ir:.2f} | ≥ 0.3 |
+| IC t-stat | {ic_record.ic_t_stat:.2f} | ≥ 2.0 |
+| IC>0% | {ic_record.ic_positive_pct:.1f}% | — |
+| Q5-Q1 spread | {layered.top_bottom_spread:+.4f} | t ≥ 2.0 |
+| Spread t | {layered.spread_t_stat:.2f} | ≥ 2.0 |
+| Monotonicity t | {layered.monotonicity_t_stat:.2f} | ≥ 2.0 |
+| N days | {ic_record.n_days} | — |
+
+## Next Steps
+
+{chr(10).join(next_steps)}
+
+---
+*Archived by MultiFactorPipeline §10.1 Gate*
+"""
+
+    # ── Determine primary failure for tagging ──
+    if has_mono_fail:
+        primary = "portfolio_conversion_failure"
+    elif has_ic_fail:
+        primary = "factor_validity_failure"
+    else:
+        primary = "gate_failure"
+
+    archive = KnowledgeArchive()
+    entry = archive.create_research_debt(
+        title=f"{strategy_name} — Gate Failure: {primary.replace('_', ' ').title()}",
+        content=content,
+        tags=[strategy_name, "gate_failure", primary],
+        metadata={
+            "strategy_id": str(strategy_name),
+            "gate_stage": "backtest_passed",
+            "ic_mean": f"{ic_record.ic_mean:+.4f}",
+            "ic_ir": f"{ic_record.ic_ir:.2f}",
+            "q5_q1_spread": f"{layered.top_bottom_spread:+.4f}",
+            "monotonicity_t": f"{layered.monotonicity_t_stat:.2f}",
+            "n_days": str(ic_record.n_days),
+        },
+    )
+
+    logger.info("   📋 已归档到 Research Debt: {}", entry.entry_id)
+    return entry.entry_id
 
 
 def _build_industry_map(

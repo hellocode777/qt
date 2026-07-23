@@ -153,6 +153,7 @@ class ExperimentRecord:
     completed_at: datetime | None = None
     artifacts: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    gate_result: dict[str, Any] | None = None  # GateResult.to_dict()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -165,4 +166,5 @@ class ExperimentRecord:
             "lineage": self.lineage.to_dict(),
             "artifacts": self.artifacts,
             "errors": self.errors,
+            "gate_result": self.gate_result,
         }

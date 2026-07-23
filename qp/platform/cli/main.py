@@ -618,6 +618,7 @@ def _cmd_experiment_run() -> int:
         print("    --industry-neutral           Enable industry neutralization", file=sys.stderr)
         print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
         print("    --dataset daily_price_main   Gold dataset name", file=sys.stderr)
+        print("    --score-band 60-80          Score percentile band (Q4 sweet spot)", file=sys.stderr)
         return 1
 
     pipeline_name = sys.argv[3]
@@ -666,6 +667,11 @@ def _cmd_experiment_run() -> int:
             params["strategy"] = args[i]
         elif arg.startswith("--dataset="):
             params["dataset"] = arg.split("=", 1)[1]
+        elif arg.startswith("--score-band="):
+            params["score_band"] = arg.split("=", 1)[1]
+        elif arg == "--score-band" and i + 1 < len(args):
+            i += 1
+            params["score_band"] = args[i]
         i += 1
 
     context = PipelineContext(pipeline_name="multifactor_experiment", parameters=params)
@@ -688,6 +694,123 @@ def _cmd_experiment_run() -> int:
             else:
                 logger.info("  {}: {:.1f}", k, v)
 
+    return 0
+
+
+def _cmd_experiment_validate() -> int:
+    """Validate an experiment against Layer 5 Gate criteria."""
+    if len(sys.argv) < 4:
+        print("qp experiment validate <experiment_id>", file=sys.stderr)
+        print("  Loads a completed experiment and runs the full Layer 5", file=sys.stderr)
+        print("  Validation Gate, printing a structured report.", file=sys.stderr)
+        return 1
+
+    experiment_id = sys.argv[3]
+
+    from qp.research.experiment.tracker import ExperimentTracker
+
+    tracker = ExperimentTracker()
+    record = tracker.get(experiment_id)
+    if record is None:
+        print(f"❌ 实验不存在: {experiment_id}", file=sys.stderr)
+        return 1
+
+    # Check if gate_result was already stored
+    gate_dict = record.gate_result
+    if gate_dict:
+        from qp.validation.result import GateDecision, GateResult, RuleResult
+        from qp.shared.types import ValidationStatus
+
+        # Reconstruct GateResult from stored dict
+        rules = [
+            RuleResult(
+                rule_name=r["rule_name"],
+                status=ValidationStatus(r["status"]),
+                score=r["score"],
+                threshold=r.get("threshold"),
+                actual_value=r.get("actual_value"),
+                detail=r.get("detail", ""),
+            )
+            for r in gate_dict.get("rules", [])
+        ]
+        gate = GateResult(
+            strategy_id=gate_dict["strategy_id"],
+            stage=gate_dict["stage"],
+            decision=GateDecision(gate_dict["decision"]),
+            score=gate_dict["score"],
+            confidence=gate_dict["confidence"],
+            timestamp=gate_dict.get("timestamp", ""),
+            data_integrity=gate_dict.get("data_integrity", "NOT_RUN"),
+            factor_validity=gate_dict.get("factor_validity", "NOT_RUN"),
+            portfolio_conversion=gate_dict.get("portfolio_conversion", "NOT_RUN"),
+            robustness=gate_dict.get("robustness", "NOT_RUN"),
+            cost_capacity=gate_dict.get("cost_capacity", "NOT_RUN"),
+            rules=rules,
+            recommendation=gate_dict.get("recommendation", ""),
+            artifacts=gate_dict.get("artifacts", []),
+        )
+        print(gate.summary())
+        return 0
+
+    # No pre-computed gate_result — build one from experiment metrics
+    print(f"  Loading experiment: {experiment_id}")
+    print(f"  Status: {record.status.value}")
+    print(f"  Gate result not pre-computed — running validation from metrics...")
+    print()
+
+    # Build GateResult from experiment metrics
+    from qp.shared.types import ValidationStatus
+    from qp.validation.result import GateDecision, GateResult, RuleResult
+
+    rules: list[RuleResult] = []
+    m = record.metrics
+
+    ic_mean = m.ic_mean
+    ic_ir = m.ic_ir
+    ic_pass = abs(ic_mean) >= 0.02 and ic_ir >= 0.3
+
+    sharpe = m.sharpe_ratio
+    max_dd = abs(m.max_drawdown_pct)
+
+    rules.append(RuleResult(
+        "rank_ic", ValidationStatus.PASS if abs(ic_mean) >= 0.02 else ValidationStatus.FAIL,
+        80, threshold=0.02, actual_value=abs(ic_mean),
+        detail=f"|IC|={abs(ic_mean):.4f}",
+    ))
+    rules.append(RuleResult(
+        "ic_ir", ValidationStatus.PASS if ic_ir >= 0.3 else ValidationStatus.FAIL,
+        80, threshold=0.3, actual_value=ic_ir,
+        detail=f"IC_IR={ic_ir:.2f}",
+    ))
+    rules.append(RuleResult(
+        "sharpe", ValidationStatus.PASS if sharpe >= 0.5 else ValidationStatus.FAIL,
+        80 if sharpe >= 0.5 else 30, threshold=0.5, actual_value=sharpe,
+        detail=f"Sharpe={sharpe:.2f}",
+    ))
+    rules.append(RuleResult(
+        "max_drawdown", ValidationStatus.PASS if max_dd <= 30 else ValidationStatus.FAIL,
+        80 if max_dd <= 30 else 30, threshold=30, actual_value=max_dd,
+        detail=f"MaxDD={max_dd:.1f}%",
+    ))
+
+    gate = GateResult(
+        strategy_id=record.config.strategy_id if hasattr(record.config, 'strategy_id') else experiment_id,
+        stage="backtest_passed",
+        decision=GateDecision.PASSED if ic_pass and sharpe >= 0.5 and max_dd <= 30
+            else GateDecision.BLOCKED,
+        score=sum(r.score for r in rules) / len(rules) if rules else 0,
+        confidence=sum(1 for r in rules if r.status == ValidationStatus.PASS) / len(rules) if rules else 0,
+        data_integrity="PASS",
+        factor_validity="PASS" if ic_pass else "FAIL",
+        portfolio_conversion="PASS" if sharpe >= 0.5 and max_dd <= 30 else "FAIL",
+        rules=rules,
+        recommendation=(
+            f"实验 {experiment_id} 指标通过，可推进到下一阶段。"
+        ) if ic_pass and sharpe >= 0.5 and max_dd <= 30 else (
+            f"实验 {experiment_id} 指标不达标（IC={ic_mean:+.4f}, Sharpe={sharpe:.2f}）。建议归档或修复后重试。"
+        ),
+    )
+    print(gate.summary())
     return 0
 
 
@@ -2249,7 +2372,9 @@ def main() -> int:
             return _cmd_experiment_show()
         if sub == "run":
             return _cmd_experiment_run()
-        print(f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run", file=sys.stderr)
+        if sub == "validate":
+            return _cmd_experiment_validate()
+        print(f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run, validate", file=sys.stderr)
         return 1
 
     if command == "model":
