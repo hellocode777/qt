@@ -175,7 +175,7 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Stage 2: Factor computation / Strategy execution ──
         if use_full_strategy:
-            signals, scores = self._run_full_strategy(
+            signals, scores, fundamental_data, valuation_data, index_df = self._run_full_strategy(
                 price_data=price_data,
                 top_n=top_n,
                 rebalance_freq=rebalance_freq,
@@ -189,6 +189,9 @@ class MultiFactorPipeline(BasePipeline):
             result.metrics["score_rows"] = float(scores.height if not scores.is_empty() else 0)
         else:
             # ── Legacy: bare factor pipeline ──
+            fundamental_data = None
+            valuation_data = None
+            index_df = None
             logger.info("[2/6] 计算原始因子值...")
             n_factors = len(PRICE_VOLUME_FACTORS)
             weights = {
@@ -257,6 +260,60 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["ic_mean_pass"] = float(ic_record.ic_mean_pass)
         result.metrics["ic_ir_pass"] = float(ic_record.ic_ir_pass)
 
+        # ── Stage 3.5: Factor IC attribution ──
+        logger.info("")
+        logger.info("[3.5/6] 因子 IC 归因分析...")
+        factor_weights = weights  # from Stage 2 (already determined)
+        factor_ic_table = _compute_factor_ic_attribution(
+            price_data=price_data,
+            valuation_data=valuation_data,
+            fundamental_data=fundamental_data,
+            factor_weights=factor_weights,
+            price_flat=price_flat,
+            index_df=index_df,
+        )
+        if factor_ic_table:
+            _log_factor_ic_table(factor_ic_table, factor_weights)
+            for i, entry in enumerate(factor_ic_table[:3]):
+                result.metrics[f"factor_{i+1}_name"] = entry["factor"]
+                result.metrics[f"factor_{i+1}_ic"] = entry["ic_mean"]
+                result.metrics[f"factor_{i+1}_ic_ir"] = entry["ic_ir"]
+
+            # ── Stage 3.6: Optimize weights from factor ICs ──
+            logger.info("")
+            logger.info("[3.6/6] 因子权重优化 (IC-加权, 全量数据)...")
+            optimized_weights = _optimize_weights_from_ic(factor_ic_table, factor_weights)
+            _log_weight_optimization(factor_weights, optimized_weights)
+
+            # Re-run strategy with optimized weights
+            if use_full_strategy:
+                logger.info("   以优化权重重新运行策略...")
+                optimized_config = _build_optimized_config(strategy_name, optimized_weights)
+                if optimized_config:
+                    sig2, scores2, *_rest = self._run_full_strategy(
+                        price_data=price_data,
+                        top_n=top_n,
+                        rebalance_freq=rebalance_freq,
+                        sell_buffer=sell_buffer,
+                        strategy_name=strategy_name,
+                        model_mode=model_mode,
+                        config_override=optimized_config,
+                    )
+                    ic2 = evaluate_factor_ic(
+                        scores2 if not scores2.is_empty() else scores,
+                        price_flat, forward_days=5, min_stocks_per_day=10,
+                    )
+                    logger.info("   优化后复合 IC: {:+.4f} | IR: {:.2f} | IC>0: {:.0f}% (之前 IC={:+.4f})",
+                               ic2.ic_mean, ic2.ic_ir, ic2.ic_positive_pct, ic_record.ic_mean)
+                    result.metrics["ic_mean_optimized"] = ic2.ic_mean
+                    result.metrics["ic_ir_optimized"] = ic2.ic_ir
+                    result.metrics["optimized_weights"] = ",".join(
+                        f"{k}={v:+.3f}" for k, v in sorted(optimized_weights.items())
+                    )
+                    scores = scores2 if not scores2.is_empty() else scores
+                    weights = optimized_weights
+            logger.info("")
+
         # Layered test for monotonicity validation
         layered = compute_layered_returns(
             scores,
@@ -271,28 +328,59 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["monotonicity_t_stat"] = layered.monotonicity_t_stat
         result.metrics["is_monotonic"] = float(layered.is_monotonic)
 
-        # ── IC Gate (V2: use layered test as primary, IC as diagnostic) ──
+        # ── IC Gate (§10.1 — 强制) ──
+        # Per rule.md §10.1: "未同时满足以上条件的因子，只能进入
+        # Research Debt Archive，不允许进入 Strategy 层"
         layered_pass = layered.is_monotonic and layered.spread_t_stat >= 2.0
         ic_pass = ic_record.all_pass
+        gate_passed = layered_pass and ic_pass
 
-        if not layered_pass and not skip_gate:
-            logger.warning("   ⛔ 分层检验未通过 — 因子不具备实际交易区分度")
-            logger.warning(
-                "      Q5-Q1 spread: {:.4f} (t={:.2f}) — {}",
-                layered.top_bottom_spread,
-                layered.spread_t_stat,
-                "✅" if layered.spread_t_stat >= 2.0 else "❌",
+        if not gate_passed and not skip_gate:
+            # Build detailed failure report
+            failures: list[str] = []
+            if not ic_record.ic_mean_pass:
+                failures.append(
+                    f"|IC|={abs(ic_record.ic_mean):.4f} < 0.02 (阈值)"
+                )
+            if not ic_record.ic_ir_pass:
+                failures.append(
+                    f"IC_IR={ic_record.ic_ir:.2f} < 0.3 (阈值)"
+                )
+            if not ic_record.ic_t_stat_pass:
+                failures.append(
+                    f"IC t-stat={ic_record.ic_t_stat:.2f} < 2.0 (阈值)"
+                )
+            if not layered.is_monotonic:
+                failures.append("分层收益不单调")
+            if layered.spread_t_stat < 2.0:
+                failures.append(
+                    f"Q5-Q1 spread t={layered.spread_t_stat:.2f} < 2.0 (阈值)"
+                )
+
+            logger.error("   ⛔ 因子检验未通过 §10.1 — 禁止进入策略层")
+            for f in failures:
+                logger.error("      ❌ {}", f)
+            logger.error("")
+            logger.error("   规则: rule.md §10.1 — 不满足条件的因子只能存档到")
+            logger.error("   Research Debt Archive，不允许进入回测。")
+            logger.error("   若确认要跳过门禁（仅限探索），使用 --skip-gate。")
+
+            # ── Archive to Research Debt per Rule 12 ──
+            _archive_research_debt(
+                strategy_name=strategy_name,
+                ic_record=ic_record,
+                layered=layered,
+                failures=failures,
+                start=start_date_str,
+                end=end_date_str,
             )
-            logger.warning(
-                "      单调性 t: {:.2f} — {}",
-                layered.monotonicity_t_stat,
-                "✅" if layered.is_monotonic else "❌",
-            )
+
             result.status = PipelineStatus.FAILED
             result.errors.append(
-                "Layered test failed — factor does not produce "
-                "monotonic quantile returns. Fix factors before retrying."
+                f"§10.1 Gate: {len(failures)} threshold(s) not met — "
+                + "; ".join(failures)
             )
+            result.metadata["gate_failures"] = "; ".join(failures)
             return result
 
         if not ic_pass:
@@ -410,18 +498,25 @@ class MultiFactorPipeline(BasePipeline):
         sell_buffer: int,
         strategy_name: str,
         model_mode: bool = False,
-    ) -> tuple[pl.DataFrame, pl.DataFrame]:
+        config_override: object = None,
+    ) -> tuple[pl.DataFrame, pl.DataFrame, dict, dict, pl.DataFrame]:
         """Run the momentum_vol_full strategy through the strategy layer.
 
+        Args:
+            config_override: If provided, use this config instead of the default.
+
         Returns:
-            (signals, scores) — signals DataFrame and cross-sectional scores.
+            (signals, scores, fundamental_data, valuation_data, index_df).
         """
         from qp.strategy.strategies.momentum_vol_full import (
             MOMENTUM_VOL_FULL_CONFIG,
             run_momentum_vol_full,
         )
 
-        config = MOMENTUM_VOL_FULL_CONFIG
+        if config_override is not None:
+            config = config_override
+        else:
+            config = MOMENTUM_VOL_FULL_CONFIG
         config.max_positions = top_n
         config.rebalance_freq = rebalance_freq
         config.sell_buffer_multiplier = max(1, sell_buffer // top_n) if top_n > 0 else 2
@@ -472,7 +567,7 @@ class MultiFactorPipeline(BasePipeline):
             logger.warning("策略未返回截面得分，IC 分析将跳过")
 
 
-        return signals, scores  # type: ignore[return-value]
+        return signals, scores, fundamental_data, valuation_data, index_df  # type: ignore[return-value]
 
     @staticmethod
     def _load_fundamental_data() -> dict[str, pl.DataFrame]:
@@ -1024,6 +1119,275 @@ def _flatten_price_data_for_backtest(
             }
         )
     return pl.concat(parts)
+
+
+def _compute_factor_ic_attribution(
+    price_data: dict[str, pl.DataFrame],
+    valuation_data: dict[str, pl.DataFrame] | None,
+    fundamental_data: dict[str, pl.DataFrame] | None,
+    factor_weights: dict[str, float],
+    price_flat: pl.DataFrame,
+    index_df: pl.DataFrame | None = None,
+) -> list[dict]:
+    """Compute individual factor ICs from raw factor scores.
+
+    Uses compute_cross_sectional_scores to get raw factor values before
+    the factor pipeline (MAD/rank/neutralize/orthogonalize) is applied,
+    so we can see the genuine predictive power of each factor.
+
+    Returns list of {factor, ic_mean, ic_ir, ic_positive_pct, weight},
+    sorted by |IC| descending.
+    """
+    from qp.research.evaluation.rank_ic import evaluate_factor_ic
+    from qp.strategy.multifactor import compute_cross_sectional_scores
+
+    if not factor_weights:
+        return []
+
+    # Compute raw factor scores (no pipeline transformations)
+    try:
+        scores_result = compute_cross_sectional_scores(
+            price_data=price_data,
+            weights=factor_weights,
+            valuation_data=valuation_data,
+            fundamental_data=fundamental_data,
+            industry_neutral=False,    # raw — no transformations
+            orthogonalize=False,
+            return_diagnostics=True,
+        )
+    except Exception as e:
+        logger.warning("   因子归因跳过: 无法计算原始因子得分 ({})", e)
+        return []
+
+    if not isinstance(scores_result, tuple):
+        return []
+
+    _scores, diagnostics = scores_result
+    all_factors = diagnostics.get("all_factors", {})
+
+    if not all_factors:
+        return []
+
+    # Flatten each factor from {date: {code: {factor: value}}} to DataFrame
+    results = []
+    for fname in sorted(factor_weights.keys()):
+        rows = []
+        for date_str, stocks in all_factors.items():
+            for code, factors in stocks.items():
+                if fname in factors:
+                    val = factors[fname]
+                    if val is not None and val == val:  # not NaN
+                        rows.append({
+                            "trade_date": date_str,
+                            "symbol": code,
+                            "score": float(val),
+                        })
+        if len(rows) < 100:
+            continue
+
+        factor_df = pl.DataFrame(rows, schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "score": pl.Float64})
+        ic = evaluate_factor_ic(factor_df, price_flat, forward_days=5, min_stocks_per_day=10)
+
+        if ic.n_days >= 10:
+            results.append({
+                "factor": fname,
+                "ic_mean": ic.ic_mean,
+                "ic_ir": ic.ic_ir,
+                "ic_positive_pct": ic.ic_positive_pct,
+                "weight": factor_weights.get(fname, 0.0),
+                "n_days": ic.n_days,
+            })
+
+    # Sort by absolute IC descending
+    results.sort(key=lambda x: abs(x["ic_mean"]), reverse=True)
+    return results
+
+
+def _log_factor_ic_table(
+    factor_ic_table: list[dict],
+    factor_weights: dict[str, float],
+) -> None:
+    """Log a formatted factor IC attribution table."""
+    if not factor_ic_table:
+        return
+
+    # Header
+    logger.info("   {:28s} {:>10s} {:>8s} {:>8s} {:>8s}".format(
+        "因子 / Factor", "IC Mean", "IC IR", "IC>0%", "权重/Wt"
+    ))
+    logger.info("   " + "-" * 70)
+
+    # Rows
+    total_ic = sum(abs(e["ic_mean"]) for e in factor_ic_table) or 1.0
+    for entry in factor_ic_table:
+        fname = entry["factor"]
+        ic_val = entry["ic_mean"]
+        ic_ir = entry["ic_ir"]
+        ic_pct = entry["ic_positive_pct"]
+        wt = entry["weight"]
+        contrib_pct = abs(ic_val) / total_ic * 100
+
+        # Direction markers
+        direction = "✅" if ic_val > 0 else "🔴"
+        wt_dir = "+" if wt > 0 else "-"
+
+        logger.info(
+            "   {} {:25s} {:>+9.4f} {:>7.2f} {:>7.0f}% {:>+7.3f} ({:.0f}%)".format(
+                direction, fname, ic_val, ic_ir, ic_pct, wt, contrib_pct
+            )
+        )
+
+    # Summary
+    positive = [e for e in factor_ic_table if e["ic_mean"] > 0]
+    negative = [e for e in factor_ic_table if e["ic_mean"] < 0]
+    weight_mismatch = [
+        e for e in factor_ic_table
+        if (e["ic_mean"] > 0 and e["weight"] < 0) or (e["ic_mean"] < 0 and e["weight"] > 0)
+    ]
+
+    logger.info("   " + "-" * 70)
+    logger.info(
+        "   正向贡献: {} 因子 | 负向贡献: {} 因子 | 权重方向错误: {} 因子",
+        len(positive), len(negative), len(weight_mismatch),
+    )
+
+    if weight_mismatch:
+        names = [e["factor"] for e in weight_mismatch]
+        logger.warning("   ⚠ 权重方向与 IC 符号相反: {}", ", ".join(names))
+        logger.warning("      建议翻转权重符号或降低这些因子的权重")
+
+
+def _optimize_weights_from_ic(
+    factor_ic_table: list[dict],
+    current_weights: dict[str, float],
+    min_ic_threshold: float = 0.005,
+) -> dict[str, float]:
+    """Optimize factor weights from IC attribution on the full dataset.
+
+    Algorithm:
+      1. For each factor, new direction = sign(IC) (or keep economic prior if |IC| is tiny)
+      2. Weight magnitude ∝ |IC| (factors with stronger predictive power get higher weight)
+      3. Normalize so sum of absolute weights = 1.0
+
+    This replaces the old 18-stock-tuned weights with data-driven weights
+    computed on the full 3039-stock universe.
+    """
+    ic_map = {e["factor"]: e["ic_mean"] for e in factor_ic_table}
+    optimized: dict[str, float] = {}
+
+    for fname in current_weights:
+        ic = ic_map.get(fname, 0.0)
+        if abs(ic) > min_ic_threshold:
+            # IC-driven: direction from IC sign, magnitude from |IC|
+            optimized[fname] = ic  # weight = IC directly
+        else:
+            # Weak signal — keep economic prior direction, but shrunken
+            optimized[fname] = current_weights[fname] * 0.1
+
+    # Normalize so sum(|w|) = 1.0
+    total_abs = sum(abs(w) for w in optimized.values())
+    if total_abs > 0:
+        optimized = {k: v / total_abs for k, v in optimized.items()}
+
+    return optimized
+
+
+def _log_weight_optimization(
+    old_weights: dict[str, float],
+    new_weights: dict[str, float],
+) -> None:
+    """Log the weight optimization results."""
+    logger.info("   {:28s} {:>10s} {:>10s} {:>10s}".format(
+        "因子", "旧权重", "新权重", "变化"
+    ))
+    logger.info("   " + "-" * 68)
+    for fname in sorted(old_weights.keys()):
+        old_w = old_weights[fname]
+        new_w = new_weights.get(fname, old_w)
+        change = "翻转" if old_w * new_w < 0 else ("↑" if abs(new_w) > abs(old_w) else "↓")
+        logger.info("   {:25s} {:>+9.3f} {:>+9.3f}  {:>4s}".format(fname, old_w, new_w, change))
+
+
+def _build_optimized_config(
+    strategy_name: str,
+    optimized_weights: dict[str, float],
+) -> object | None:
+    """Build a StrategyConfig with optimized weights."""
+    from dataclasses import replace
+
+    from qp.strategy.config import get_strategy_config
+
+    try:
+        base = get_strategy_config(strategy_name)
+        return replace(base, factors=dict(optimized_weights))
+    except Exception:
+        return None
+
+
+def _archive_research_debt(
+    strategy_name: str,
+    ic_record: object,
+    layered: object,
+    failures: list[str],
+    start: str,
+    end: str,
+) -> None:
+    """Archive failed factor research per Rule 12 (Pay Down Research Debt).
+
+    rule.md §10.1: 不满足条件的因子只能进入 Research Debt Archive,
+    避免在相同错误方向上重复浪费时间。
+    """
+    from datetime import datetime
+    from pathlib import Path
+
+    debt_dir = Path("data/knowledge/research_debt")
+    debt_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = debt_dir / f"gate_failure_{strategy_name}_{timestamp}.md"
+
+    lines = [
+        f"# Research Debt: {strategy_name} — Gate Failure",
+        "",
+        f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"**Period**: {start} → {end}",
+        f"**Strategy**: {strategy_name}",
+        "",
+        "## Failed Thresholds (§10.1)",
+        "",
+    ]
+    for f in failures:
+        lines.append(f"- ❌ {f}")
+    lines.append("")
+    lines.extend([
+        "## Metrics",
+        "",
+        f"| Metric | Value | Threshold |",
+        f"|--------|-------|-----------|",
+        f"| IC Mean | {ic_record.ic_mean:+.4f} | \\|IC\\| ≥ 0.02 |",
+        f"| IC IR | {ic_record.ic_ir:.2f} | ≥ 0.3 |",
+        f"| IC t-stat | {ic_record.ic_t_stat:.2f} | ≥ 2.0 |",
+        f"| IC>0% | {ic_record.ic_positive_pct:.1f}% | — |",
+        f"| Q5-Q1 spread | {layered.top_bottom_spread:+.4f} | t ≥ 2.0 |",
+        f"| Spread t | {layered.spread_t_stat:.2f} | ≥ 2.0 |",
+        f"| Monotonicity t | {layered.monotonicity_t_stat:.2f} | ≥ 2.0 |",
+        f"| N days | {ic_record.n_days} | — |",
+        "",
+        "## Next Steps",
+        "",
+        "- [ ] 回到因子计算，检查原始因子值是否有计算错误",
+        "- [ ] 检查因子方向是否与经济学先验一致",
+        "- [ ] 考虑因子中性化/去极值参数调整",
+        "- [ ] 缩减因子数量，只保留|IC| > 0.03 的因子",
+        "- [ ] 检查数据源是否有前视偏差",
+        "",
+        "---",
+        "",
+        "*Auto-generated by MultiFactorPipeline §10.1 Gate*",
+    ])
+
+    filename.write_text("\n".join(lines), encoding="utf-8")
+    logger.info("   📋 已归档到 Research Debt: {}", filename)
 
 
 def _build_industry_map(

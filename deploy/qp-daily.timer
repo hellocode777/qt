@@ -1,0 +1,11 @@
+[Unit]
+Description=QP Daily Pipeline Timer
+Requires=qp-daily.service
+
+[Timer]
+OnCalendar=Mon..Fri 17:57
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

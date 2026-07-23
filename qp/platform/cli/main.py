@@ -804,8 +804,247 @@ def _cmd_data_fetch() -> int:
     return 0 if result.status.value == "success" else 1
 
 
+def _backtest_config_strategy(
+    strategy_id: str,
+    price_data: dict[str, pl.DataFrame],
+    prices: pl.DataFrame,
+    today: object,
+) -> int:
+    """Run broker backtest for a config-based strategy."""
+    import numpy as np
+    import polars as pl
+
+    from qp.simulation.broker import SimulatedBroker
+    from qp.simulation.result import SimulationResult
+    from qp.strategy.config import get_strategy_config
+
+    config = get_strategy_config(strategy_id)
+
+    # Import the strategy's run function dynamically
+    strategy_module_map = {
+        "momentum_vol_full": "qp.strategy.strategies.momentum_vol_full",
+    }
+
+    module_path = strategy_module_map.get(strategy_id)
+    if module_path is None:
+        print(f"❌ 策略 '{strategy_id}' 已注册但无执行模块映射。")
+        return 1
+
+    import importlib
+    mod = importlib.import_module(module_path)
+    run_func = getattr(mod, f"run_{strategy_id}", None)
+    if run_func is None:
+        # Try snake_case to function name conversion
+        import re
+        func_name = "run_" + strategy_id
+        run_func = getattr(mod, func_name, None)
+    if run_func is None:
+        print(f"❌ 策略 '{strategy_id}' 模块加载失败。")
+        return 1
+
+    # Build index proxy from price data
+    index_df = _build_index_df_from_prices(price_data)
+
+    print(f"  数据覆盖:  {len(price_data)} stocks")
+    print(f"  策略配置:  {config.display_name}")
+    print()
+
+    # Generate signals for all dates
+    try:
+        result = run_func(
+            price_data=price_data,
+            config=config,
+            index_df=index_df,
+            return_diagnostics=True,
+        )
+        if isinstance(result, tuple):
+            signals, diagnostics = result
+        else:
+            signals = result
+            diagnostics = {}
+    except Exception as exc:
+        print(f"❌ 策略执行失败: {exc}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+    if signals.is_empty():
+        print("❌ 无信号。")
+        return 1
+
+    # Signals have columns: [date, symbol, signal, score, reason, name]
+    symbols = signals["symbol"].unique().to_list()
+    n_signals = len(signals)
+    print(f"  信号总数 / Signals:    {n_signals}")
+    print(f"  涉及标的 / Symbols:     {len(symbols)}")
+    if diagnostics:
+        print(f"  诊断 / Diagnostics:")
+        for k, v in diagnostics.items():
+            if isinstance(v, (int, float, str)):
+                print(f"    {k}: {v}")
+    print()
+
+    # ── Broker backtest ──
+    initial_capital = 1_000_000
+    broker = SimulatedBroker(initial_cash=initial_capital, slippage_model="fixed")
+
+    dates = sorted(signals["trade_date"].unique().to_list() if "trade_date" in signals.columns else prices["trade_date"].unique().to_list())
+    if not dates:
+        print("❌ 无交易日数据。")
+        return 1
+
+    price_lookup = prices.sort(["symbol", "trade_date"])
+    daily_nav: list[dict] = []
+    daily_returns: list[float] = []
+
+    current_holdings: dict[str, int] = {}
+    for i, d in enumerate(dates):
+        day_signals = signals.filter(pl.col("trade_date") == d) if "trade_date" in signals.columns else signals
+        day_prices = price_lookup.filter(pl.col("trade_date") == d)
+
+        price_map: dict[str, float] = {}
+        adv_map: dict[str, float] = {}
+        for row in day_prices.iter_rows(named=True):
+            sym = str(row["symbol"])
+            px = float(row["close"])
+            vol = float(row.get("volume", 0))
+            price_map[sym] = px
+            if vol > 0 and px > 0:
+                adv_map[sym] = px * vol
+
+        broker.set_prices(price_map, adv_map, str(d))
+
+        # On signal dates, rebalance to top-N
+        if not day_signals.is_empty():
+            # Sell everything we hold
+            for sym, qty in list(current_holdings.items()):
+                if qty > 0:
+                    broker.submit_order({
+                        "symbol": sym,
+                        "side": "SELL",
+                        "quantity": qty,
+                        "order_type": "market",
+                    })
+            current_holdings.clear()
+
+            # Buy new top-N
+            day_symbols = day_signals["symbol"].to_list()
+            top_n = min(config.max_positions, len(day_symbols))
+            per_stock = initial_capital / top_n
+            for sym in day_symbols[:top_n]:
+                px = price_map.get(sym, 10.0)
+                qty = int(per_stock // px // 100 * 100)
+                if qty > 0:
+                    broker.submit_order({
+                        "symbol": sym,
+                        "side": "BUY",
+                        "quantity": qty,
+                        "order_type": "market",
+                    })
+                    current_holdings[sym] = qty
+
+        broker.execute_pending()
+        equity = broker.get_equity()
+        daily_nav.append({"date": str(d), "equity": equity})
+
+        if i > 0 and daily_nav[-2]["equity"] > 0:
+            ret = equity / daily_nav[-2]["equity"] - 1
+            daily_returns.append(ret)
+
+    # ── Compute metrics ──
+    result = SimulationResult(
+        strategy_id=strategy_id,
+        initial_capital=initial_capital,
+        final_equity=broker.get_equity(),
+        n_days=len(dates),
+        n_trades=broker.trade_count,
+        total_commission=broker.total_commission,
+        total_stamp_tax=broker.total_stamp_tax,
+        total_slippage=broker.total_slippage,
+        total_market_impact=broker.total_market_impact,
+        total_cost=broker.total_trading_cost,
+        start_date=str(dates[0]),
+        end_date=str(dates[-1]),
+    )
+
+    if daily_returns:
+        rets = np.array(daily_returns)
+        result.total_return_pct = float(((1 + rets).prod() - 1) * 100)
+        result.annual_return_pct = float(rets.mean() * 252 * 100)
+        result.sharpe_ratio = (
+            float(np.sqrt(252) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+        )
+        result.annual_volatility_pct = float(rets.std() * np.sqrt(252) * 100)
+        cum = (1 + rets).cumprod()
+        running_max = np.maximum.accumulate(cum)
+        result.max_drawdown_pct = (
+            float(np.abs((cum - running_max).min() / running_max.min()) * 100)
+            if len(cum) > 0
+            else 0.0
+        )
+
+    # ── Print ──
+    print()
+    print("  ── 回测结果 / Backtest Results ──")
+    print(f"  起始日期 / Start:       {result.start_date}")
+    print(f"  结束日期 / End:         {result.end_date}")
+    print(f"  交易天数 / Days:         {result.n_days}")
+    print(f"  交易次数 / Trades:       {result.n_trades}")
+    print(f"  总收益 / Total Return:   {result.total_return_pct:.1f}%")
+    print(f"  年化收益 / Ann. Return:  {result.annual_return_pct:.1f}%")
+    print(f"  夏普比率 / Sharpe:       {result.sharpe_ratio:.2f}")
+    print(f"  最大回撤 / Max DD:       {result.max_drawdown_pct:.1f}%")
+    print(f"  年化波动 / Ann. Vol:     {result.annual_volatility_pct:.1f}%")
+    print()
+    print("  ── 交易成本 / Trading Costs ──")
+    print(f"  佣金 / Commission:       ¥{result.total_commission:,.0f}")
+    print(f"  印花税 / Stamp Tax:      ¥{result.total_stamp_tax:,.0f}")
+    print(f"  滑点 / Slippage:        ¥{result.total_slippage:,.0f}")
+    print(f"  冲击成本 / Impact:       ¥{result.total_market_impact:,.0f}")
+    print(f"  总成本 / Total Cost:     ¥{result.total_cost:,.0f}")
+
+    return 0
+
+
+def _build_index_df_from_prices(price_data: dict[str, pl.DataFrame]) -> pl.DataFrame:
+    """Build proxy index from average close across all stocks."""
+    import polars as pl
+
+    if not price_data:
+        return pl.DataFrame()
+
+    closes: list[pl.DataFrame] = []
+    for code, pdf in price_data.items():
+        if pdf is None or pdf.is_empty():
+            continue
+        date_col = next((c for c in ["trade_date", "date"] if c in pdf.columns), None)
+        if date_col is None:
+            continue
+        sub = pdf.select([date_col, "close"]).rename({"close": f"close_{code}"})
+        closes.append(sub)
+
+    if not closes:
+        return pl.DataFrame()
+
+    merged = closes[0]
+    for df in closes[1:]:
+        date_col = df.columns[0]
+        merged = merged.join(df, on=date_col, how="inner")
+
+    close_cols = [c for c in merged.columns if c.startswith("close_")]
+    date_col = merged.columns[0]
+    return merged.select([
+        pl.col(date_col).alias("date"),
+        (pl.sum_horizontal([pl.col(c) for c in close_cols]) / len(close_cols)).alias("close"),
+    ])
+
+
 def _cmd_backtest_run() -> int:
-    """Run broker-based backtest."""
+    """Run broker-based backtest.
+
+    Supports both SimpleRankStrategy (legacy) and config-based strategies
+    (momentum_vol_full, etc.) via StrategyLoader.
+    """
     from datetime import date
 
     import numpy as np
@@ -813,13 +1052,16 @@ def _cmd_backtest_run() -> int:
 
     from qp.simulation.broker import SimulatedBroker
     from qp.simulation.result import SimulationResult
+    from qp.strategy.config import get_strategy_config, list_strategy_configs
+    from qp.strategy.loader import StrategyLoader
     from qp.strategy.registry import StrategyRegistry
     from qp.strategy.simple_rank import SimpleRankStrategy
+    from qp.shared.types import StrategyLifecycle
 
     today = date.today()
     strategy_id = "simple_rank_v1.0"
-    if len(sys.argv) > 2:
-        strategy_id = sys.argv[2]
+    if len(sys.argv) > 3:
+        strategy_id = sys.argv[3]
 
     print(f"=== QP 回测 / Backtest: {strategy_id} ===")
     print()
@@ -828,13 +1070,39 @@ def _cmd_backtest_run() -> int:
     try:
         prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
     except FileNotFoundError:
-        print("❌ 未找到数据文件。请先运行 qp run daily")
-        return 1
+        # Try the main dataset
+        try:
+            prices = pl.read_parquet("data/dataset/daily_price_main_" + today.isoformat() + ".parquet")
+        except FileNotFoundError:
+            print("❌ 未找到数据文件。请先运行 qp run daily")
+            return 1
 
-    # Generate signals
+    # Build price_data dict for config-based strategies
+    price_data: dict[str, pl.DataFrame] = {}
+    if "symbol" in prices.columns:
+        for sym in prices["symbol"].unique().to_list():
+            sub = prices.filter(pl.col("symbol") == sym)
+            if not sub.is_empty():
+                price_data[sym] = sub
+
+    # ── Try config-based strategies first ──
+    available_configs = list_strategy_configs()
+    if strategy_id in available_configs:
+        return _backtest_config_strategy(
+            strategy_id, price_data, prices, today
+        )
+
+    # ── Try SimpleRankStrategy (legacy) ──
     registry = StrategyRegistry()
     registry.register(SimpleRankStrategy(top_n=10))
-    strategy = registry.get(strategy_id)
+    try:
+        strategy = registry.get(strategy_id)
+    except KeyError:
+        print(f"❌ 策略 '{strategy_id}' 未找到。")
+        print(f"   可用 SimpleRank: simple_rank_v1.0")
+        print(f"   可用 Config: {', '.join(available_configs)}")
+        return 1
+
     signals = strategy.generate_signals(today)
 
     if signals.is_empty():
@@ -1230,11 +1498,21 @@ def _cmd_knowledge_search() -> int:
 
 
 def _cmd_decide() -> int:
-    """Generate trading recommendations for manual review."""
+    """Load or generate daily DecisionPackage.
+
+    Default: loads today's DecisionPackage from data/decisions/.
+    Flags:
+      --force    Re-run daily pipeline to generate a fresh DecisionPackage
+      --review   Open today's DecisionPackage for human review
+      --history  List all past decision packages
+      --show ID  Display a specific DecisionPackage
+    Legacy (without DecisionPackage): strategy_id + --capital
+    """
     from datetime import date
 
     import polars as pl
 
+    from qp.decision.decision_package import DecisionPackage
     from qp.decision.engine import DecisionEngine
     from qp.monitoring.regime import MarketRegimeEngine
     from qp.portfolio.cost_model import CostModel
@@ -1242,22 +1520,87 @@ def _cmd_decide() -> int:
     from qp.strategy.registry import StrategyRegistry
     from qp.strategy.simple_rank import SimpleRankStrategy
 
-    # Parse arguments
+    today = date.today()
+
+    # Parse flags
+    force = False
+    review = False
+    show_history = False
+    show_id = ""
     strategy_id = "simple_rank_v1.0"
     total_capital = 1_000_000.0
 
     args = sys.argv[2:]
-    for arg in args:
-        if arg.startswith("--capital="):
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--force":
+            force = True
+        elif arg == "--review":
+            review = True
+        elif arg == "--history":
+            show_history = True
+        elif arg.startswith("--show="):
+            show_id = arg.split("=", 1)[1]
+        elif arg == "--show" and i + 1 < len(args):
+            i += 1
+            show_id = args[i]
+        elif arg.startswith("--capital="):
             total_capital = float(arg.split("=")[1])
         elif not arg.startswith("--"):
             strategy_id = arg
+        i += 1
 
+    # ── --history: list all past decisions ──
+    if show_history:
+        return _cmd_decide_history()
+
+    # ── --show: display a specific package ──
+    if show_id:
+        return _cmd_decide_show(show_id)
+
+    # ── --review: interactive human review ──
+    if review:
+        return _cmd_decide_review(today)
+
+    # ── Default / --force: load or generate DecisionPackage ──
+    if not force:
+        try:
+            pkg = DecisionPackage.load_latest()
+            if pkg is not None:
+                _print_decision_package_summary(pkg)
+                return 0
+        except Exception:
+            pass  # Fall through to legacy/generate
+
+    # ── --force or no cached package: run daily pipeline ──
+    if force:
+        print("⏳ 重新运行每日管道 / Re-running daily pipeline...")
+        from qp.pipeline.daily_pipeline import DailyPipeline
+        from qp.platform.pipeline.context import PipelineContext
+
+        context = PipelineContext(
+            pipeline_name="daily",
+            parameters={"capital": total_capital},
+        )
+        pipeline = DailyPipeline()
+        result = pipeline.run(context)
+        if result.status.value != "success":
+            print(f"❌ Pipeline failed: {result.errors}")
+            return 1
+        # Reload the newly created package
+        try:
+            pkg = DecisionPackage.load_latest()
+            if pkg is not None:
+                _print_decision_package_summary(pkg)
+                return 0
+        except Exception:
+            pass
+
+    # ── Fallback: legacy live generate (no DecisionPackage) ──
     print("═══ QP 交易建议 / Trading Recommendations ═══")
     print()
 
-    # Load data
-    today = date.today()
     try:
         prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
     except FileNotFoundError:
@@ -1272,9 +1615,7 @@ def _cmd_decide() -> int:
         regime_result = engine.classify(prices)
         regime_str = regime_result.summary
         print(f"  市场状态 / Regime: {regime_result.regime.value}")
-        print(
-            f"  趋势/波动: ADX={regime_result.trend_strength:.1f} | Vol={regime_result.annualized_vol:.1%}"
-        )
+        print(f"  趋势/波动: ADX={regime_result.trend_strength:.1f} | Vol={regime_result.annualized_vol:.1%}")
     except Exception:
         pass
     print()
@@ -1287,7 +1628,6 @@ def _cmd_decide() -> int:
         signals = strategy.generate_signals(today)
     except Exception:
         print(f"❌ 策略 '{strategy_id}' 未注册或信号生成失败")
-        print(f"   Strategy '{strategy_id}' not registered or signal generation failed.")
         return 1
 
     if signals.is_empty():
@@ -1302,9 +1642,7 @@ def _cmd_decide() -> int:
     # Risk check
     risk_manager = PortfolioRiskManager()
     filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(signals, prices)
-    print(
-        f"  风控过滤 / Risk Filter: {risk_report.candidates_out}/{risk_report.candidates_in} 通过"
-    )
+    print(f"  风控过滤 / Risk Filter: {risk_report.candidates_out}/{risk_report.candidates_in} 通过")
     if risk_report.violations:
         for v in risk_report.violations:
             print(f"    ⚠ {v}")
@@ -1320,9 +1658,7 @@ def _cmd_decide() -> int:
         if trade_val > 0:
             cost = cost_model.estimate_trade(sym, trade_val, "BUY")
             total_est_cost += cost.total_cost
-    print(
-        f"  预估总成本 / Est. Cost: ¥{total_est_cost:,.0f} ({total_est_cost / total_capital * 100:.2f}%)"
-    )
+    print(f"  预估总成本 / Est. Cost: ¥{total_est_cost:,.0f} ({total_est_cost / total_capital * 100:.2f}%)")
     print()
 
     # Generate recommendations via DecisionEngine
@@ -1335,10 +1671,193 @@ def _cmd_decide() -> int:
         strategy_id=strategy_id,
         market_regime=regime_str,
     )
-
-    # Print bilingual output
     print(decision_engine.format_bilingual(report))
 
+    return 0
+
+
+# ------------------------------------------------------------------
+# DecisionPackage helpers
+# ------------------------------------------------------------------
+
+
+def _print_decision_package_summary(pkg: object) -> None:
+    """Print a DecisionPackage summary for terminal display."""
+
+    pkg = pkg  # type: DecisionPackage
+
+    print("═══ QP 决策包 / Decision Package ═══")
+    print(f"  编号 / ID:       {pkg.package_id}")
+    print(f"  日期 / Date:      {pkg.date}")
+    print(f"  生成时间 / Time:  {pkg.generated_at[:19]}")
+    print()
+
+    print("  ── 数据血缘 / Lineage ──")
+    print(f"  数据集: {pkg.lineage.dataset_name} v{pkg.lineage.dataset_version}")
+    print(f"  覆盖: {pkg.lineage.dataset_symbols} stocks, {pkg.lineage.dataset_rows:,} rows")
+    print()
+
+    print("  ── 市场状态 / Regime ──")
+    print(f"  状态: {pkg.regime.regime} (置信度 {pkg.regime.confidence:.0%})")
+    print(f"  建议敞口: {pkg.regime.suggested_exposure:.0%}")
+    print()
+
+    print("  ── 策略执行 / Strategies ──")
+    for sid, count in pkg.strategy_signals.items():
+        print(f"  {sid}: {count} signals")
+    print(f"  融合方式: {pkg.ensemble_method}")
+    print()
+
+    # Validation
+    if pkg.validation:
+        print("  ── 验证状态 / Validation ──")
+        for sid, v in pkg.validation.items():
+            icon = "✅" if v.get("passed") else "❌"
+            print(f"  {icon} {sid}: {v.get('score', 0)}/100 ({v.get('rules_failed', 0)}/{v.get('rules_total', 0)} failed)")
+        print()
+
+    # Risk audit
+    ra = pkg.risk_audit
+    print("  ── 风控审计 / Risk Audit ──")
+    print(f"  候选: {ra.candidates_in} → {ra.candidates_out}")
+    if ra.dropped_symbols:
+        print(f"  剔除: {', '.join(ra.dropped_symbols)}")
+    if ra.entries:
+        print(f"  违规项: {len(ra.entries)}")
+        for e in ra.entries[:5]:
+            print(f"    ⚠ {e.violation_type}: {e.detail}")
+    print()
+
+    # Top recommendations
+    report = pkg.report
+    if not report.is_empty:
+        print("  ── 建议交易 / Top Picks ──")
+        for i, rec in enumerate(report.recommendations[:5], 1):
+            warnings = " ⚠" if rec.risk_warnings else ""
+            print(f"  {i}. {rec.symbol} {rec.action} ¥{rec.estimated_price:.2f} x {rec.quantity_shares} ({rec.target_weight_pct:.1f}%){warnings}")
+        print(f"  ... 共 {report.n_buys} 条建议")
+        print(f"  预估总成本: {pkg.estimated_cost_pct:.2f}%")
+    print()
+
+    # Human review status
+    hr = pkg.human_review
+    print("  ── 人工审核 / Human Review ──")
+    if hr.reviewed:
+        print(f"  ✅ 已审核 by {hr.reviewer}")
+        if hr.executed:
+            print(f"  ✅ 已执行 at {hr.execution_time}")
+    else:
+        print("  ❌ 待审核 — 运行 'qp decide --review' 进行审核")
+    print()
+
+    # Commands hint
+    print("  操作: qp decide --force | qp decide --review | qp decide --history")
+
+
+def _cmd_decide_history() -> int:
+    """List all past decision packages from index.json."""
+    from qp.decision.decision_package import DecisionPackage
+
+    entries = DecisionPackage.load_index()
+    if not entries:
+        print("(empty) — 暂无决策记录。运行 qp run daily 生成第一条。")
+        return 0
+
+    print(f"{'Package ID':<32s} {'Date':<12s} {'Regime':<14s} {'Recs':>5s} {'Cost%':>7s} {'Risk':>6s} {'Reviewed':>9s}")
+    print("-" * 95)
+    for e in entries:
+        risk_icon = "✅" if e.get("risk_passed") else "⚠️"
+        rev_icon = "✅" if e.get("human_reviewed") else "❌"
+        print(
+            f"{e.get('package_id', ''):<32s} "
+            f"{e.get('date', ''):<12s} "
+            f"{e.get('regime', ''):<14s} "
+            f"{e.get('n_recommendations', 0):>5d} "
+            f"{e.get('estimated_cost_pct', 0):>6.2f}% "
+            f"{risk_icon:<6s} "
+            f"{rev_icon:<9s}"
+        )
+    print(f"\n共 {len(entries)} 条记录 / {len(entries)} decisions total")
+    return 0
+
+
+def _cmd_decide_show(package_id: str) -> int:
+    """Display a specific DecisionPackage."""
+
+    from qp.decision.decision_package import DECISIONS_DIR, DecisionPackage
+
+    # Support both full ID and short suffix
+    json_path = DECISIONS_DIR / f"{package_id}.json"
+    if not json_path.exists():
+        # Try glob match
+        candidates = sorted(DECISIONS_DIR.glob(f"*{package_id}*.json"))
+        if candidates:
+            json_path = candidates[0]
+        else:
+            print(f"❌ DecisionPackage '{package_id}' not found in {DECISIONS_DIR}")
+            return 1
+
+    try:
+        pkg = DecisionPackage.from_json(json_path)
+        _print_decision_package_summary(pkg)
+        print(f"\n  完整报告: data/decisions/{pkg.date}.md")
+        return 0
+    except Exception as exc:
+        print(f"❌ Failed to load: {exc}")
+        return 1
+
+
+def _cmd_decide_review(today: object) -> int:
+    """Interactive human review of today's DecisionPackage."""
+    from datetime import datetime
+
+    from qp.decision.decision_package import DecisionPackage
+
+    pkg = DecisionPackage.load_latest()
+    if pkg is None:
+        print("❌ 今天还没有决策包。请先运行 qp run daily 或 qp decide --force")
+        print("   No DecisionPackage for today. Run 'qp run daily' first.")
+        return 1
+
+    _print_decision_package_summary(pkg)
+
+    print("── 人工审核 / Human Review ──")
+    print()
+
+    # Prompt user
+    try:
+        ans = input("  审核通过? [y/n]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  已取消。")
+        return 0
+
+    if ans not in ("y", "yes"):
+        print("  已标记为未通过 / Marked as rejected.")
+        pkg.human_review.reviewed = True
+        pkg.human_review.reviewer = "user"
+        pkg.human_review.notes = "REJECTED — manual review failed"
+        pkg.human_review.executed = False
+    else:
+        try:
+            notes = input("  备注 / Notes: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            notes = ""
+
+        pkg.human_review.reviewed = True
+        pkg.human_review.reviewer = "user"
+        pkg.human_review.notes = notes
+        pkg.human_review.executed = True
+        pkg.human_review.execution_time = datetime.now().isoformat()
+
+    # Save updated package
+    json_path = pkg.to_json()
+    pkg.to_markdown()
+    pkg.update_index()
+
+    print()
+    status = "✅ 已通过并标记执行" if pkg.human_review.executed else "⚠️ 已标记未通过"
+    print(f"  {status}")
+    print(f"  已保存至 / Saved to: {json_path}")
     return 0
 
 
@@ -1485,6 +2004,122 @@ def _cmd_retrain() -> int:
     return 0
 
 
+def _cmd_scheduler_start() -> int:
+    """Start the background job scheduler for daily automation.
+
+    Registers and starts:
+      - daily_pipeline: qp run daily        (weekdays 17:30)
+      - monitor_check:  qp monitor check    (weekdays 09:00)
+      - data_fetch:     qp data fetch       (weekdays 08:00)
+
+    Runs in foreground until Ctrl+C.
+    """
+    import signal
+    import time
+
+    from qp.platform.scheduler.job import Job
+    from qp.platform.scheduler.scheduler import QPScheduler
+    from qp.platform.scheduler.trigger import CronTrigger
+
+    scheduler = QPScheduler(timezone="Asia/Shanghai")
+
+    # ── Job 1: daily data fetch (08:00 on weekdays) ──
+    def _job_data_fetch() -> None:
+        from qp.data.loader.full_pipeline import FullDataPipeline
+        from qp.platform.pipeline.context import PipelineContext
+
+        ctx = PipelineContext(pipeline_name="scheduled_data_fetch", parameters={})
+        pipeline = FullDataPipeline()
+        result = pipeline.run(ctx)
+        status = result.status.value
+        print(f"[scheduler] data_fetch: {status}")
+
+    scheduler.add_job(Job(
+        name="data_fetch",
+        task=_job_data_fetch,
+        trigger=CronTrigger(day="1-5", hour="8", minute="3"),
+    ))
+
+    # ── Job 2: daily monitor check (09:00 on weekdays) ──
+    def _job_monitor_check() -> None:
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "qp.platform.cli.main", "monitor", "check"],
+            capture_output=True, text=True,
+        )
+        print(result.stdout)
+        if result.returncode != 0:
+            print(f"[scheduler] monitor_check FAILED: {result.stderr}")
+
+    scheduler.add_job(Job(
+        name="monitor_check",
+        task=_job_monitor_check,
+        trigger=CronTrigger(day="1-5", hour="9", minute="7"),
+    ))
+
+    # ── Job 3: daily decision pipeline (17:30 on weekdays) ──
+    def _job_daily_pipeline() -> None:
+        from qp.pipeline.daily_pipeline import DailyPipeline
+        from qp.platform.pipeline.context import PipelineContext
+
+        ctx = PipelineContext(pipeline_name="scheduled_daily", parameters={})
+        pipeline = DailyPipeline()
+        result = pipeline.run(ctx)
+        status = result.status.value
+        package_id = result.metadata.get("decision_package_id", "?")
+        print(f"[scheduler] daily_pipeline: {status} → {package_id}")
+
+    scheduler.add_job(Job(
+        name="daily_pipeline",
+        task=_job_daily_pipeline,
+        trigger=CronTrigger(day="1-5", hour="17", minute="57"),
+    ))
+
+    # ── Graceful shutdown ──
+    _shutdown_flag = {"done": False}
+
+    def _shutdown(signum, frame):
+        if _shutdown_flag["done"]:
+            return
+        _shutdown_flag["done"] = True
+        print("\n[scheduler] Shutting down...")
+        try:
+            scheduler.stop()
+        except Exception:
+            pass
+        print("[scheduler] Stopped.")
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    print("═══ QP Scheduler ═══")
+    print(f"  时区 / Timezone: Asia/Shanghai")
+    print(f"  已注册任务 / Jobs:")
+    for name in scheduler.list_jobs():
+        print(f"    - {name}")
+    print()
+    print("  运行中... 按 Ctrl+C 停止")
+    print()
+
+    scheduler.start()
+
+    # Keep alive
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if not _shutdown_flag["done"]:
+            try:
+                scheduler.stop()
+            except Exception:
+                pass
+    return 0
+
+
 def _print_help() -> int:
     """Print help message."""
     print("qp — Quant Platform CLI")
@@ -1506,15 +2141,22 @@ def _print_help() -> int:
     print("  model list               List registered models")
     print("  model show <id>          Show model details")
     print("  backtest run [strategy]  Run broker-based backtest")
+    print("    Available strategies: simple_rank_v1.0, momentum_vol_full")
     print("  monitor check            Run daily safety checks (KS + drift + decay)")
     print("  monitor regime           Detect current market regime")
     print("  monitor alert-test       Test all alert channels")
     print("  knowledge stats          Knowledge archive statistics")
     print("  knowledge search <q>     Search knowledge archive")
-    print("  decide [strategy] [--capital=N]  Generate trade recommendations")
+    print("  decide [strategy] [--force] [--review] [--history]")
+    print("                           Load or generate DecisionPackage")
+    print("    decide --force          Re-run daily pipeline for fresh package")
+    print("    decide --review         Interactive human review of today's package")
+    print("    decide --history        List all past decision packages")
+    print("    decide --show <id>      Display a specific DecisionPackage")
     print("  paper start [strategy]   Start 30-day paper trading run")
     print("  paper status [strategy]  Show paper trading status")
     print("  retrain [strategy] [--dry-run]  Run monthly model retrain")
+    print("  scheduler start          Start background job scheduler")
     print()
     print("Phase 1 (available):")
     print("  qp data fetch [--batch=500] [--skip-etl]")
@@ -1543,8 +2185,11 @@ def _print_help() -> int:
     print("  qp knowledge search <query>   Search knowledge archive")
     print()
     print("Phase 6 (available):")
-    print("  qp decide [strategy]           Generate trade recommendations")
-    print("  qp decide --capital=500000     Custom capital amount")
+    print("  qp decide                      Load today's DecisionPackage")
+    print("  qp decide --force              Re-run daily pipeline")
+    print("  qp decide --review             Interactive human review")
+    print("  qp decide --history            List all past decisions")
+    print("  qp decide --show <id>          Display a specific DecisionPackage")
     print()
     print("Gap closure (Phase 6 continued):")
     print("  qp paper start [strategy]      Start 30-day paper trading")
@@ -1687,6 +2332,13 @@ def main() -> int:
 
     if command == "retrain":
         return _cmd_retrain()
+
+    if command == "scheduler" and len(sys.argv) > 2 and sys.argv[2] == "start":
+        return _cmd_scheduler_start()
+
+    if command == "scheduler":
+        print("qp scheduler: missing subcommand. Try: qp scheduler start", file=sys.stderr)
+        return 1
 
     print(f"qp: unknown command '{command}'. Try 'qp --help'", file=sys.stderr)
     return 1

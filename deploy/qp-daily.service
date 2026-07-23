@@ -1,0 +1,11 @@
+[Unit]
+Description=QP Daily Pipeline (one-shot)
+Wants=qp-daily.timer
+
+[Service]
+Type=oneshot
+User=shuai
+WorkingDirectory=/home/shuai/workspace/qt
+ExecStart=/home/shuai/workspace/qt/.venv/bin/python -m qp.platform.cli.main run daily
+StandardOutput=append:/home/shuai/workspace/qt/logs/daily-pipeline.log
+StandardError=append:/home/shuai/workspace/qt/logs/daily-pipeline.log

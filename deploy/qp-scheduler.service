@@ -1,0 +1,19 @@
+[Unit]
+Description=QP Quant Platform Daily Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shuai
+WorkingDirectory=/home/shuai/workspace/qt
+ExecStart=/home/shuai/workspace/qt/.venv/bin/python -m qp.platform.cli.main scheduler start
+Restart=on-failure
+RestartSec=30
+
+# Logging
+StandardOutput=append:/home/shuai/workspace/qt/logs/scheduler.log
+StandardError=append:/home/shuai/workspace/qt/logs/scheduler.log
+
+[Install]
+WantedBy=default.target

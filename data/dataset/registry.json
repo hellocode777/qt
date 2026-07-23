@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-22T20:51:20.170166+00:00",
+  "updated_at": "2026-07-23T07:14:07.689055+00:00",
   "base_dir": "data/dataset",
   "entries": {
     "test_ds@2026-07-22": {
@@ -85,7 +85,7 @@
         "validation_rules": [],
         "version": "2026-07-23"
       },
-      "registered_at": "2026-07-22T20:49:13.451816+00:00"
+      "registered_at": "2026-07-23T06:59:31.314247+00:00"
     },
     "daily_price@2026-07-23": {
       "name": "daily_price",
@@ -96,7 +96,27 @@
         "end_date": "2026-07-23",
         "rows": 11106
       },
-      "registered_at": "2026-07-22T20:51:20.170146+00:00"
+      "registered_at": "2026-07-23T07:14:07.689035+00:00"
+    },
+    "daily_price_main@2026-07-23": {
+      "name": "daily_price_main",
+      "version": "2026-07-23",
+      "path": "data/dataset/daily_price_main_2026-07-23.parquet",
+      "metadata": {
+        "source": "quant_trading_db",
+        "board": "main",
+        "start_date": "2015-01-01",
+        "end_date": "2026-07-23",
+        "stocks": 3043,
+        "rows": 7309976,
+        "tiers": [
+          "raw",
+          "bronze",
+          "silver",
+          "gold"
+        ]
+      },
+      "registered_at": "2026-07-23T06:33:54.424416+00:00"
     }
   }
 }

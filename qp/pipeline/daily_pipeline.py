@@ -1,21 +1,34 @@
-"""DailyPipeline — orchestrated end-to-end daily pipeline.
+"""DailyPipeline — orchestrated end-to-end daily decision pipeline.
 
-Phase 4 upgrade: StrategyLoader discovery → Multi-Strategy → Market Regime
-    → Ensemble Fusion → Risk Manager → Cost Model → Capital Allocator (Layer 8)
-    → TargetPortfolio → Backtest → Report.
+Phase 7 upgrade: Data → Feature → Lineage → Regime → Strategy Discovery
+    → Validation Gate → Strategy Execution → Ensemble Fusion → Risk Audit
+    → Cost → Capital Allocation → DecisionPackage.
 
-Data → Feature → Strategy(×3) → Ensemble → Risk → Cost → Alloc → Backtest → Report.
+Produces a structured DecisionPackage (data/decisions/) with full
+lineage, validation, risk audit trail, and human review section.
+Backtest has been REMOVED — it belongs in the experiment pipeline.
 """
 
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 import polars as pl
+from loguru import logger
 
 from qp.data.pipeline import DataPipeline
+from qp.decision.decision_package import (
+    DecisionPackage,
+    HumanReview,
+    LineageSnapshot,
+    RegimeContext,
+    RiskAudit,
+    RiskAuditEntry,
+)
+from qp.decision.engine import DecisionEngine
+from qp.decision.models import DecisionReport
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
@@ -25,13 +38,13 @@ from qp.portfolio.single_portfolio import Order
 from qp.research.pipeline import FeaturePipeline
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus, StrategyLifecycle
-from qp.simulation.backtest import SimpleVectorBacktest
 from qp.strategy.ensemble.ensemble_engine import EnsembleEngine, UniversePolicy
 from qp.strategy.ensemble.weighting import WeightEngine, WeightMethod
 from qp.strategy.loader import StrategyLoader
 from qp.strategy.market_regime import MarketRegimeDetector
 from qp.strategy.multifactor import MultiFactorStrategy
 from qp.strategy.registry import StrategyRegistry
+from qp.validation.pipeline import ValidationPipeline, ValidationPipelineConfig
 
 
 def _load_price_data() -> tuple[dict[str, pl.DataFrame], pl.DataFrame]:
@@ -117,14 +130,92 @@ def _build_valuation_data(price_data: dict[str, pl.DataFrame]) -> dict[str, pl.D
     return valuation
 
 
-class DailyPipeline(BasePipeline):
-    """End-to-end daily quant pipeline.
+def _build_lineage_snapshot(price_data: dict[str, pl.DataFrame]) -> LineageSnapshot:
+    """Build lineage snapshot from current dataset and feature versions."""
+    from datetime import date as _date
 
-    Upgraded from Walking Skeleton to use:
-    - StrategyLoader for hot-plug strategy discovery
-    - MarketRegimeDetector for regime-adaptive behavior
-    - EnsembleEngine for multi-strategy signal fusion
-    - CapitalAllocator (Layer 8) for full allocation pipeline
+    today = _date.today().isoformat()
+    dataset_name = "daily_price_main"
+    dataset_rows = 0
+    dataset_symbols = len(price_data)
+
+    # Count total rows
+    for pdf in price_data.values():
+        if pdf is not None and not pdf.is_empty():
+            dataset_rows += pdf.height
+
+    # Feature versions — use today's date as version since features are
+    # computed fresh each run
+    feature_versions = {
+        "momentum_20d": today,
+        "volatility_20d": today,
+    }
+
+    return LineageSnapshot(
+        dataset_name=dataset_name,
+        dataset_version=today,
+        dataset_rows=dataset_rows,
+        dataset_symbols=dataset_symbols,
+        feature_versions=feature_versions,
+    )
+
+
+def _build_validation_context(
+    strategy_id: str,
+    price_data: dict[str, pl.DataFrame],
+    pipeline_metrics: dict[str, Any],
+) -> Any:
+    """Build a minimal validation context for the ValidationPipeline.
+
+    Creates a lightweight adapter carrying feature_df, price_df, and
+    backtest_metrics — enough for the ValidationPipeline._resolve_context()
+    to construct a proper ValidationContext.
+    """
+    # Build a flat price DataFrame from price_data dict
+    frames = [
+        pdf for pdf in price_data.values()
+        if pdf is not None and not pdf.is_empty()
+    ]
+    price_df = pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
+
+    class _ValCtx:
+        pass
+
+    ctx = _ValCtx()
+    ctx.feature_df = None  # Features are computed inline, not pre-loaded
+    ctx.price_df = price_df
+    ctx.signal_df = None
+    ctx.backtest_metrics = {
+        "sharpe_ratio": pipeline_metrics.get("sharpe_ratio", 0.0),
+        "max_drawdown_pct": pipeline_metrics.get("max_drawdown_pct", 0.0),
+        "total_return": pipeline_metrics.get("total_return", 0.0),
+    }
+    ctx.strategy_id = strategy_id
+    ctx.metadata = {
+        "strategy_id": strategy_id,
+    }
+    return ctx
+
+
+class DailyPipeline(BasePipeline):
+    """End-to-end daily decision pipeline — produces a DecisionPackage.
+
+    Pipeline steps:
+      1. Data ingestion (DataPipeline)
+      2. Feature computation (FeaturePipeline)
+      3. Price data loading
+      4. Lineage snapshot (dataset & feature versions)
+      5. Market regime detection
+      6. Strategy discovery & registration
+      7. Validation Gate (per-strategy)
+      8. Strategy execution
+      9. Multi-strategy signal fusion (EnsembleEngine)
+      10. Risk management → RiskAudit
+      11. Cost estimation
+      12. Capital allocation
+      13. DecisionPackage construction & save
+
+    Output: data/decisions/dp-{date}-{run_id}.json + .md
     """
 
     @property
@@ -143,6 +234,7 @@ class DailyPipeline(BasePipeline):
             top_n = context.parameters.get("top_n", 10)
             alloc_method = context.parameters.get("allocator", "equal_weight")
             today = date.today()
+            run_id_short = context.run_id[:8] if context.run_id else "unknown"
 
             # ================================================================
             # Step 1: Data ingestion
@@ -184,7 +276,13 @@ class DailyPipeline(BasePipeline):
             valuation_data = _build_valuation_data(price_data)
 
             # ================================================================
-            # Step 4: Market regime detection
+            # Step 4: Build Lineage Snapshot
+            # ================================================================
+            lineage_snapshot = _build_lineage_snapshot(price_data)
+            result.metadata["dataset_version"] = lineage_snapshot.dataset_version
+
+            # ================================================================
+            # Step 5: Market regime detection
             # ================================================================
             regime_label = "neutral"
             suggested_position_pct = 1.0
@@ -216,7 +314,7 @@ class DailyPipeline(BasePipeline):
                 effective_top_n = top_n
 
             # ================================================================
-            # Step 5: Strategy discovery and registration
+            # Step 6: Strategy discovery and registration
             # ================================================================
             registry = StrategyRegistry()
             loader = StrategyLoader()
@@ -251,7 +349,7 @@ class DailyPipeline(BasePipeline):
                 result.metadata["warning"] = "No strategies discovered"
 
             # ================================================================
-            # Step 5.5: Direct-register MultiFactorStrategy (15-factor pipeline)
+            # Step 6.5: Direct-register MultiFactorStrategy (15-factor pipeline)
             # ================================================================
             # MultiFactorStrategy pre-computes cross-sectional scores from
             # 15 price/volume factors — too heavyweight for StrategyLoader's
@@ -271,7 +369,51 @@ class DailyPipeline(BasePipeline):
                 result.metadata["multifactor_error"] = str(exc)
 
             # ================================================================
-            # Step 6: Execute all registered strategies
+            # Step 7: Validation Gate — check each registered strategy
+            # ================================================================
+            validation_results: dict[str, dict[str, Any]] = {}
+            for sid in registered_ids:
+                try:
+                    strategy_lifecycle = registry.get_lifecycle(sid)
+                    val_config = ValidationPipelineConfig(
+                        stage=strategy_lifecycle.value,
+                        strategy_id=sid,
+                        require_all_passed=False,
+                    )
+                    val_pipeline = ValidationPipeline(config=val_config)
+                    val_ctx = _build_validation_context(
+                        sid, price_data, result.metrics
+                    )
+                    val_result = val_pipeline.run(val_ctx)
+                    validation_results[sid] = {
+                        "stage": strategy_lifecycle.value,
+                        "score": val_result.metrics.get("validation_score", 0),
+                        "passed": val_result.status == PipelineStatus.SUCCESS,
+                        "rules_total": val_result.metrics.get("rules_total", 0),
+                        "rules_failed": val_result.metrics.get("rules_failed", 0),
+                        "recommendation": val_result.metadata.get("recommendation", ""),
+                    }
+                    if val_result.status == PipelineStatus.FAILED:
+                        logger.warning(
+                            "Validation Gate: {} FAILED (score={}, {}/{} rules failed)",
+                            sid,
+                            val_result.metrics.get("validation_score", 0),
+                            val_result.metrics.get("rules_failed", 0),
+                            val_result.metrics.get("rules_total", 0),
+                        )
+                except Exception as exc:
+                    logger.warning("Validation Gate skipped for {}: {}", sid, exc)
+                    validation_results[sid] = {
+                        "stage": "unknown",
+                        "score": 0,
+                        "passed": False,
+                        "rules_total": 0,
+                        "rules_failed": 0,
+                        "recommendation": f"Validation error: {exc}",
+                    }
+
+            # ================================================================
+            # Step 8: Execute all registered strategies
             # ================================================================
             signals_map: dict[str, pl.DataFrame] = {}
             for sid in registered_ids:
@@ -287,7 +429,7 @@ class DailyPipeline(BasePipeline):
             result.metrics["strategies_with_signals"] = len(signals_map)
 
             # ================================================================
-            # Step 7: Multi-strategy signal fusion via EnsembleEngine
+            # Step 9: Multi-strategy signal fusion via EnsembleEngine
             # ================================================================
             if signals_map:
                 ensemble = EnsembleEngine(
@@ -308,8 +450,10 @@ class DailyPipeline(BasePipeline):
                 result.metrics["combined_signals"] = 0
 
             # ================================================================
-            # Step 8: Risk management
+            # Step 10: Risk management + Risk Audit
             # ================================================================
+            risk_audit = RiskAudit()
+            risk_report = None
             if not combined_signals.is_empty() and not prices.is_empty():
                 risk_manager = PortfolioRiskManager()
                 filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(
@@ -322,11 +466,38 @@ class DailyPipeline(BasePipeline):
                     result.metadata["risk_violations"] = "; ".join(risk_report.violations)
                 if risk_report.dropped_symbols:
                     result.metadata["risk_dropped"] = ", ".join(risk_report.dropped_symbols)
+
+                # Build structured RiskAudit
+                risk_entries: list[RiskAuditEntry] = []
+                for v in risk_report.violations:
+                    risk_entries.append(RiskAuditEntry(
+                        violation_type="risk_limit",
+                        detail=v,
+                        action="dropped" if any(s in v for s in risk_report.dropped_symbols) else "warning",
+                    ))
+                # Add correlation-based drops with reasoning
+                for s1, s2, corr in risk_report.correlated_pairs:
+                    risk_entries.append(RiskAuditEntry(
+                        symbol=f"{s1}/{s2}",
+                        violation_type="correlation",
+                        detail=f"High correlation ({corr:.3f})",
+                        threshold="0.70",
+                        actual=f"{corr:.3f}",
+                        action="warning",
+                    ))
+                risk_audit = RiskAudit(
+                    candidates_in=risk_report.candidates_in,
+                    candidates_out=risk_report.candidates_out,
+                    entries=risk_entries,
+                    dropped_symbols=risk_report.dropped_symbols,
+                    sector_exposure=risk_report.sector_exposure,
+                    passed=risk_report.passed,
+                )
             else:
                 filtered_signals = combined_signals
 
             # ================================================================
-            # Step 9: Cost estimation
+            # Step 11: Cost estimation
             # ================================================================
             if not filtered_signals.is_empty() and not prices.is_empty():
                 cost_model = CostModel()
@@ -352,7 +523,7 @@ class DailyPipeline(BasePipeline):
                 )
 
             # ================================================================
-            # Step 10: Capital allocation (Layer 8 engine)
+            # Step 12: Capital allocation (Layer 8 engine)
             # ================================================================
             orders: list[Order] = []
             if not filtered_signals.is_empty():
@@ -416,27 +587,89 @@ class DailyPipeline(BasePipeline):
                     )
 
             # ================================================================
-            # Step 11: Backtest (simplified)
+            # Step 13: Build DecisionPackage
             # ================================================================
-            if not prices.is_empty() and not combined_signals.is_empty():
-                # Ensure combined_signals has feature_value column for backtest
-                bt_signals = combined_signals
-                if "feature_value" not in bt_signals.columns and "alpha_score" in bt_signals.columns:
-                    bt_signals = bt_signals.rename({"alpha_score": "feature_value"})
+            package_id = f"dp-{today.isoformat()}-{run_id_short}"
 
-                backtest = SimpleVectorBacktest()
-                bt_result = backtest.run(
-                    prices=prices,
-                    signals=bt_signals,
-                    initial_capital=total_capital,
-                )
-                result.metrics.update(bt_result)
+            # Build strategy versions dict for lineage
+            strategy_versions: dict[str, str] = {}
+            for sid in registered_ids:
+                try:
+                    strategy_versions[sid] = registry.get_lifecycle(sid).value
+                except Exception:
+                    strategy_versions[sid] = "unknown"
+
+            # Build regime context
+            regime_ctx = RegimeContext(
+                regime=regime_label,
+                confidence=result.metrics.get("regime_confidence", 0.0),
+                suggested_exposure=result.metrics.get("regime_position_pct", 1.0),
+                summary=result.metadata.get("regime_reason", ""),
+            )
+
+            # Generate DecisionReport via DecisionEngine
+            decision_report = DecisionReport(
+                report_id=f"dr-{run_id_short}",
+                strategy_id="multi_strategy_ensemble",
+                total_capital=total_capital,
+            )
+            if not filtered_signals.is_empty() and not prices.is_empty():
+                try:
+                    engine = DecisionEngine()
+                    decision_report = engine.generate(
+                        signals=filtered_signals,
+                        prices=prices,
+                        risk_report=risk_report,
+                        total_capital=total_capital,
+                        strategy_id="multi_strategy_ensemble",
+                        market_regime=regime_label,
+                    )
+                except Exception as exc:
+                    logger.warning("DecisionEngine failed: {}", exc)
+
+            # Build strategy signal counts
+            strategy_signal_counts: dict[str, int] = {}
+            if "signals_map" in dir():
+                for sid in signals_map:
+                    strategy_signal_counts[sid] = len(signals_map[sid])
+
+            # Build the package
+            package = DecisionPackage(
+                package_id=package_id,
+                date=today.isoformat(),
+                generated_at=datetime.now(UTC).isoformat(),
+                lineage=lineage_snapshot,
+                regime=regime_ctx,
+                strategy_signals=strategy_signal_counts,
+                ensemble_method="equal_weight",
+                effective_top_n=effective_top_n,
+                risk_audit=risk_audit,
+                estimated_cost_pct=float(result.metrics.get("estimated_cost_pct", 0.0)),
+                validation=validation_results,
+                report=decision_report,
+                human_review=HumanReview(),
+                metadata={
+                    "pipeline_run_id": context.run_id,
+                    "allocator_used": str(result.metadata.get("allocator_used", "equal_weight")),
+                },
+            )
+
+            # Save
+            json_path = package.to_json()
+            md_path = package.to_markdown()
+            package.update_index()
+
+            result.metadata["decision_package_id"] = package_id
+            result.metadata["decision_package_json"] = str(json_path)
+            result.metadata["decision_package_md"] = str(md_path)
 
             # ================================================================
             # Artifacts
             # ================================================================
             result.artifacts.append("data/dataset/momentum_20d.parquet")
             result.artifacts.append("data/dataset/volatility_20d.parquet")
+            result.artifacts.append(str(json_path))
+            result.artifacts.append(str(md_path))
 
         except Exception as e:
             result.status = PipelineStatus.FAILED

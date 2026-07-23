@@ -1,0 +1,11 @@
+[Unit]
+Description=QP Daily Monitor Check (one-shot)
+Wants=qp-monitor.timer
+
+[Service]
+Type=oneshot
+User=shuai
+WorkingDirectory=/home/shuai/workspace/qt
+ExecStart=/home/shuai/workspace/qt/.venv/bin/python -m qp.platform.cli.main monitor check
+StandardOutput=append:/home/shuai/workspace/qt/logs/monitor-check.log
+StandardError=append:/home/shuai/workspace/qt/logs/monitor-check.log

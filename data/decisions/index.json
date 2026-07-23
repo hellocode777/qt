@@ -1,0 +1,24 @@
+[
+  {
+    "package_id": "dp-2026-07-23-3c5e144f",
+    "date": "2026-07-23",
+    "generated_at": "2026-07-23T07:14:09.810010+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 12,
+    "estimated_cost_pct": 0.159,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-23-72571675",
+    "date": "2026-07-23",
+    "generated_at": "2026-07-23T06:56:36.657129+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 12,
+    "estimated_cost_pct": 0.1593,
+    "risk_passed": false,
+    "human_reviewed": true,
+    "human_executed": false
+  }
+]

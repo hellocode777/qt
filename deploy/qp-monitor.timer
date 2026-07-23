@@ -1,0 +1,11 @@
+[Unit]
+Description=QP Daily Monitor Check Timer
+Requires=qp-monitor.service
+
+[Timer]
+OnCalendar=Mon..Fri 09:07
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
