@@ -203,10 +203,15 @@ def _cmd_validate() -> int:
         print(f"=== QP Validation Gate ({stage}) ===")
         print()
 
-    # Load data
+    # Load data — use the most recent daily price snapshot on disk
+    from pathlib import Path
+
+    price_files = sorted(Path("data/dataset").glob("daily_price_*.parquet"))
     try:
         feature_df = pl.read_parquet("data/dataset/momentum_20d.parquet")
-        price_df = pl.read_parquet("data/dataset/daily_price_2026-07-20.parquet")
+        if not price_files:
+            raise FileNotFoundError("no data/dataset/daily_price_*.parquet found")
+        price_df = pl.read_parquet(str(price_files[-1]))
     except FileNotFoundError as e:
         msg = f"Data not found. Run 'qp run daily' first. ({e})"
         if json_output:
