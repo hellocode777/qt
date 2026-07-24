@@ -60,31 +60,85 @@ class DatasetRegistry:
         }
         self._save_to_disk()
 
-    def resolve(self, name: str, version: str | None = None) -> dict[str, Any]:
+    def resolve(
+        self,
+        name: str,
+        version: str | None = None,
+        *,
+        require_exists: bool = False,
+    ) -> dict[str, Any]:
         """Resolve a dataset by name and optional version.
 
         Args:
             name: Dataset name.
             version: Version string. If None, returns the latest version.
+            require_exists: When True, skip entries whose file doesn't exist
+                            and fall back to the next available version.
 
         Returns:
             Dataset entry dict with name, version, path, metadata.
 
         Raises:
-            KeyError: If the dataset is not found.
+            KeyError: If the dataset is not found (or no version has a valid file
+                      when require_exists=True).
         """
         if version:
             key = f"{name}@{version}"
-            if key in self._entries:
-                return self._entries[key]
-            raise KeyError(f"Dataset not found: {key}")
+            entry = self._entries.get(key)
+            if entry is None:
+                raise KeyError(f"Dataset not found: {key}")
+            if require_exists:
+                path = Path(str(entry["path"]))
+                full_path = path if path.is_absolute() else self._base_dir / path
+                if not full_path.exists():
+                    raise KeyError(
+                        f"Dataset file not found: {full_path} "
+                        f"(registry entry: {key})"
+                    )
+            return entry
 
-        # Find latest version
+        # Find latest version (with optional file existence check)
         matching = [(k, v) for k, v in self._entries.items() if v["name"] == name]
         if not matching:
             raise KeyError(f"Dataset not found: {name}")
         matching.sort(key=lambda x: x[1]["version"], reverse=True)
-        return matching[0][1]
+
+        if not require_exists:
+            return matching[0][1]
+
+        # Skip entries whose file doesn't exist
+        for _key, entry in matching:
+            path = Path(str(entry["path"]))
+            full_path = path if path.is_absolute() else self._base_dir / path
+            if full_path.exists():
+                return entry
+
+        raise KeyError(
+            f"Dataset '{name}' resolved but no version has a valid file "
+            f"on disk (checked {len(matching)} versions)"
+        )
+
+    def prune(self) -> int:
+        """Remove registry entries whose parquet files no longer exist on disk.
+
+        Returns:
+            Number of pruned entries.
+        """
+        removed = 0
+        stale_keys: list[str] = []
+        for key, entry in self._entries.items():
+            path = Path(str(entry["path"]))
+            full_path = path if path.is_absolute() else self._base_dir / path
+            if not full_path.exists():
+                stale_keys.append(key)
+
+        for key in stale_keys:
+            del self._entries[key]
+            removed += 1
+
+        if removed > 0:
+            self._save_to_disk()
+        return removed
 
     def list_datasets(self) -> list[str]:
         """List all registered dataset names."""

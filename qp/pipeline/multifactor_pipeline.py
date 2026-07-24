@@ -852,23 +852,31 @@ class MultiFactorPipeline(BasePipeline):
         The Gold tier is already ETL-cleaned, Contract-validated, and
         Universe-filtered. No additional processing needed.
         """
-        from pathlib import Path
 
-        # Resolve Gold path: try DatasetRegistry first, fallback to direct parquet
+        # Resolve Gold path: try DatasetRegistry first, fallback to glob latest parquet
         gold_path = ""
         try:
             registry = DatasetRegistry(base_dir="data/dataset")
-            entry = registry.resolve(dataset)
+            entry = registry.resolve(dataset, require_exists=True)
             gold_path = entry["path"]
             logger.info("    📂 Gold (Registry): {} (v{})", dataset, entry["version"])
         except KeyError:
-            # Fallback: read directly from data/dataset/
-            candidate = Path(f"data/dataset/{dataset}_2026-07-21.parquet")
-            if candidate.exists():
-                gold_path = str(candidate)
-                logger.info("    📂 Gold (direct): {}", candidate.name)
+            # Fallback: glob the latest {dataset}_*.parquet from data/dataset/
+            from pathlib import Path as _Path
+
+            pattern = f"data/dataset/{dataset}_*.parquet"
+            candidates = sorted(_Path().glob(pattern), reverse=True)
+            for candidate in candidates:
+                if candidate.exists():
+                    gold_path = str(candidate)
+                    logger.info("    📂 Gold (direct): {}", candidate.name)
+                    break
             else:
-                logger.error("Gold 数据集未找到。请先运行 qp data fetch")
+                logger.error(
+                    "Gold 数据集未找到。请先运行 qp data fetch "
+                    "(glob pattern: {})",
+                    pattern,
+                )
                 return {}
 
         df_all = pl.read_parquet(gold_path)

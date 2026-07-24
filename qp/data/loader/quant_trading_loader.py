@@ -14,8 +14,10 @@ cum_factor ≤ 1.0 — 历史价格按比例缩小，当前价格不变。
 from __future__ import annotations
 
 import sqlite3
+from datetime import date as _date
 
 import polars as pl
+from loguru import logger
 
 DEFAULT_DB_PATH = "/home/shuai/workspace/QuantTrading/data/quant.db"
 
@@ -23,7 +25,7 @@ DEFAULT_DB_PATH = "/home/shuai/workspace/QuantTrading/data/quant.db"
 def load_price_data(
     db_path: str = DEFAULT_DB_PATH,
     start_date: str = "2024-01-01",
-    end_date: str = "2026-07-20",
+    end_date: str | None = None,
     min_rows: int = 60,
     universe: str | None = "csi300",
 ) -> dict[str, pl.DataFrame]:
@@ -32,7 +34,7 @@ def load_price_data(
     Args:
         db_path: Path to quant.db.
         start_date: Filter start (inclusive).
-        end_date: Filter end (inclusive).
+        end_date: Filter end (inclusive). Defaults to today.
         min_rows: Minimum rows per stock (filters out new listings).
         universe: Stock pool filter. None = all stocks. "csi300" = stock_pool.
 
@@ -40,6 +42,8 @@ def load_price_data(
         {code: polars DataFrame with [trade_date, open, high, low, close,
          volume, amount, name]}.
     """
+    if end_date is None:
+        end_date = _date.today().isoformat()
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
@@ -67,7 +71,7 @@ def load_price_data(
         name_map[row["code"]] = row["name"]
 
     # 3. Load daily bars
-    print(f"   SQL: 加载 {len(codes)} 只股票的日线数据...")
+    logger.info("SQL: 加载 {} 只股票的日线数据...", len(codes))
     placeholders = _placeholders(codes)
     rows = conn.execute(
         f"SELECT code, date, open, high, low, close, volume, amount "
@@ -155,9 +159,11 @@ def load_index_data(
     index_code: str = "000300",
     db_path: str = DEFAULT_DB_PATH,
     start_date: str = "2024-01-01",
-    end_date: str = "2026-07-20",
+    end_date: str | None = None,
 ) -> pl.DataFrame:
     """Load index daily data for market filter."""
+    if end_date is None:
+        end_date = _date.today().isoformat()
     conn = sqlite3.connect(db_path)
     rows = conn.execute(
         "SELECT date, open, high, low, close, volume "

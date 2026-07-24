@@ -670,8 +670,14 @@ def _cmd_experiment_run() -> int:
             params["symbols"] = args[i].split(",")
         elif arg.startswith("--start="):
             params["start_date"] = arg.split("=", 1)[1]
+        elif arg == "--start" and i + 1 < len(args):
+            i += 1
+            params["start_date"] = args[i]
         elif arg.startswith("--end="):
             params["end_date"] = arg.split("=", 1)[1]
+        elif arg == "--end" and i + 1 < len(args):
+            i += 1
+            params["end_date"] = args[i]
         elif arg.startswith("--top-n="):
             params["top_n"] = int(arg.split("=", 1)[1])
         elif arg.startswith("--rebalance="):
@@ -949,8 +955,14 @@ def _cmd_data_fetch() -> int:
             params["skip_etl"] = True
         elif arg.startswith("--start="):
             params["start_date"] = arg.split("=", 1)[1]
+        elif arg == "--start" and i + 1 < len(args):
+            i += 1
+            params["start_date"] = args[i]
         elif arg.startswith("--end="):
             params["end_date"] = arg.split("=", 1)[1]
+        elif arg == "--end" and i + 1 < len(args):
+            i += 1
+            params["end_date"] = args[i]
         i += 1
 
     print("═══ QP Data Fetch ═══")

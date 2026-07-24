@@ -129,7 +129,7 @@ class SignalAggregator:
 
         merged = normalized[0]
         for _i, n in enumerate(normalized[1:], start=1):
-            merged = merged.join(n, on="symbol", how="outer")  # outer = union
+            merged = merged.join(n, on="symbol", how="full")  # full = union
             if "symbol_right" in merged.columns:
                 merged = merged.with_columns(
                     pl.coalesce(["symbol", "symbol_right"]).alias("symbol")

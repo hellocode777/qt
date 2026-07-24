@@ -59,7 +59,7 @@ def compute_median_volume(
     # Get the most recent N trading days
     if "trade_date" in df.columns:
         dates = df["trade_date"].unique().sort(descending=True).head(lookback_days)
-        recent = df.filter(pl.col("trade_date").is_in(pl.Series(dates)))
+        recent = df.filter(pl.col("trade_date").is_in(dates.implode()))
     else:
         recent = df
 
@@ -88,7 +88,7 @@ def compute_avg_volume(
 
     if "trade_date" in df.columns:
         dates = df["trade_date"].unique().sort(descending=True).head(lookback_days)
-        recent = df.filter(pl.col("trade_date").is_in(pl.Series(dates)))
+        recent = df.filter(pl.col("trade_date").is_in(dates.implode()))
     else:
         recent = df
 

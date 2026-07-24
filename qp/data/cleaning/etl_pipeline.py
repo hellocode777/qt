@@ -308,8 +308,8 @@ def stage4_adjustment(
         )
 
     # Ensure date types match
-    df = df.with_columns(pl.col("trade_date").cast(pl.Date))
-    adj_factors = adj_factors.with_columns(pl.col("ex_date").cast(pl.Date)).sort(
+    df = df.with_columns(pl.col("trade_date").str.to_date())
+    adj_factors = adj_factors.with_columns(pl.col("ex_date").str.to_date()).sort(
         ["code", "ex_date"]
     )
 
