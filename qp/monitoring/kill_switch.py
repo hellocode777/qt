@@ -324,4 +324,3 @@ class ModelDecayTrigger(_BaseTrigger):
             "rolling_window_days": self._rolling_window,
             "message": message,
         }
-

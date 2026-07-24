@@ -392,7 +392,7 @@ class PurgedGroupTimeSeriesSplit:
 # ------------------------------------------------------------------
 
 try:
-    from sklearn.model_selection._split import _BaseKFold
+    from sklearn.model_selection._split import _BaseKFold  # type: ignore[reportMissingImports]
 
     class PurgedKFoldSklearn(_BaseKFold):
         """Purged K-Fold as an sklearn _BaseKFold subclass.
@@ -430,9 +430,7 @@ try:
             sklearn calls this internally from split().
             """
             if groups is None:
-                raise ValueError(
-                    "groups (dates) is required for PurgedKFoldSklearn"
-                )
+                raise ValueError("groups (dates) is required for PurgedKFoldSklearn")
 
             dates = np.asarray(groups)
             n = len(dates)
@@ -446,9 +444,7 @@ try:
         def _iter_train_indices(self, X=None, y=None, groups=None):
             """Generate train indices for each split with purging."""
             if groups is None:
-                raise ValueError(
-                    "groups (dates) is required for PurgedKFoldSklearn"
-                )
+                raise ValueError("groups (dates) is required for PurgedKFoldSklearn")
 
             dates = np.asarray(groups)
             n = len(dates)
@@ -456,7 +452,6 @@ try:
 
             for fold_idx in range(self.n_splits - 1):
                 test_start_idx = int(fold_boundaries[fold_idx + 1])
-                test_end_idx = int(fold_boundaries[fold_idx + 2])
 
                 # Purge training boundary
                 test_start_date = dates[test_start_idx]

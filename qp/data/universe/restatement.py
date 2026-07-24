@@ -139,13 +139,26 @@ class RestatementTracker:
                         row = row.with_columns(
                             pl.lit(version).alias("version"),
                             pl.lit(version > 1).alias("is_restated"),
-                            pl.lit(
-                                max(existing_pub_dates) if existing_pub_dates else None
-                            ).cast(pl.Date).alias("prev_publish_date"),
+                            pl.lit(max(existing_pub_dates) if existing_pub_dates else None)
+                            .cast(pl.Date)
+                            .alias("prev_publish_date"),
                         )
                         # Keep schema columns + any extra data columns
                         keep_cols = [c for c in RESTATEMENT_SCHEMA if c in row.columns]
-                        keep_cols += [c for c in row.columns if c not in RESTATEMENT_SCHEMA and c not in ["symbol", "period_end", "publish_date", "version", "is_restated", "prev_publish_date"]]
+                        keep_cols += [
+                            c
+                            for c in row.columns
+                            if c not in RESTATEMENT_SCHEMA
+                            and c
+                            not in [
+                                "symbol",
+                                "period_end",
+                                "publish_date",
+                                "version",
+                                "is_restated",
+                                "prev_publish_date",
+                            ]
+                        ]
                         entry = row.select(keep_cols)
                         # Update store incrementally so next version gets correct number
                         if self._store is None:

@@ -11,7 +11,7 @@ Every strategy in the engine ultimately produces one thing:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 
 
@@ -40,9 +40,7 @@ class AlphaSignal:
     raw_components: dict[str, float] = field(default_factory=dict)
     confidence: float = 1.0
     strategy_id: str = ""
-    generated_at: str = field(
-        default_factory=lambda: datetime.now().astimezone().isoformat()
-    )
+    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
 
     # ------------------------------------------------------------------
     # Validation
@@ -159,7 +157,7 @@ class AlphaSignalBatch:
         n = len(scores)
         mean_score = sum(scores) / n
         variance = sum((x - mean_score) ** 2 for x in scores) / n
-        std_score = variance ** 0.5
+        std_score = variance**0.5
 
         return {
             "date": self.date,
@@ -187,9 +185,7 @@ class AlphaSignalBatch:
         """Deserialize from a plain dict."""
         return cls(
             date=str(data.get("date", "")),
-            signals=[
-                AlphaSignal.from_dict(s) for s in data.get("signals", [])
-            ],
+            signals=[AlphaSignal.from_dict(s) for s in data.get("signals", [])],
         )
 
     # ------------------------------------------------------------------

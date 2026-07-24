@@ -13,9 +13,9 @@ from enum import StrEnum
 class Severity(StrEnum):
     """Check failure severity — drives circuit breaker logic."""
 
-    ERROR = "error"        # Blocks pipeline (data is corrupt)
-    WARNING = "warning"    # Does not block but triggers alert
-    INFO = "info"          # Purely informational
+    ERROR = "error"  # Blocks pipeline (data is corrupt)
+    WARNING = "warning"  # Does not block but triggers alert
+    INFO = "info"  # Purely informational
 
 
 @dataclass

@@ -164,9 +164,7 @@ def compute_cross_sectional_scores(
         if val_df_src is not None and not val_df_src.is_empty():
             for fname in valuation_factor_names:
                 if fname in val_df_src.columns:
-                    aligned = _align_to_price_dates(
-                        val_df_src, fname, price_dates_dt, "trade_date"
-                    )
+                    aligned = _align_to_price_dates(val_df_src, fname, price_dates_dt, "trade_date")
                     if aligned is not None:
                         val_arrays[fname] = aligned
 
@@ -614,10 +612,12 @@ def _align_to_price_dates(
 
     # Build lookup: [date, value], sorted, no nulls
     lookup = (
-        src_df.select([
-            pl.col(date_col).cast(pl.Date).alias("_date"),
-            pl.col(field).alias("_value"),
-        ])
+        src_df.select(
+            [
+                pl.col(date_col).cast(pl.Date).alias("_date"),
+                pl.col(field).alias("_value"),
+            ]
+        )
         .drop_nulls("_value")
         .sort("_date")
     )
@@ -625,9 +625,11 @@ def _align_to_price_dates(
         return None
 
     # Build price frame with row index for re-sorting
-    prices_frame = pl.DataFrame({
-        "_date": price_dates.cast(pl.Date),
-    }).with_row_index("_row_idx")
+    prices_frame = pl.DataFrame(
+        {
+            "_date": price_dates.cast(pl.Date),
+        }
+    ).with_row_index("_row_idx")
 
     # asof backward join: last lookup._date <= prices._date
     joined = (

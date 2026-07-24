@@ -15,27 +15,21 @@ Covers:
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 
 import pytest
 
 from qp.lineage import (
-    DataNodeMeta,
     EdgeRelation,
-    FeatureNodeMeta,
     LineageRegistry,
-    ModelNodeMeta,
     NodeType,
-    StrategyNodeMeta,
     make_data_node_id,
     make_feature_node_id,
     make_model_node_id,
     make_strategy_node_id,
     parse_node_id,
 )
-
 
 # ==================================================================
 # Fixtures
@@ -183,9 +177,7 @@ class TestCodeHash:
 
 class TestRegistration:
     def test_register_dataset(self, empty_registry):
-        node_id = empty_registry.register_dataset(
-            "daily_price", "s3://bucket/data.parquet", "v1"
-        )
+        node_id = empty_registry.register_dataset("daily_price", "s3://bucket/data.parquet", "v1")
         assert node_id == "data::daily_price::v1"
         assert empty_registry.data_count == 1
         assert empty_registry.node_count == 1
@@ -226,9 +218,7 @@ class TestRegistration:
         assert node_id == "feature::my_factor::hash_deadbeef00"
 
     def test_register_feature_auto_creates_edges(self, empty_registry):
-        data_node = empty_registry.register_dataset(
-            "prices", "s3://b/prices.parquet", "v1"
-        )
+        data_node = empty_registry.register_dataset("prices", "s3://b/prices.parquet", "v1")
         feat_node = empty_registry.register_feature(
             feature_name="factor_1",
             compute_func=lambda df: df,
@@ -291,9 +281,7 @@ class TestRegistration:
         assert meta["lifecycle"] == "paper_trading"
 
     def test_register_strategy_auto_creates_edges(self, empty_registry):
-        model_node = empty_registry.register_model(
-            model_name="M1", version="v1"
-        )
+        model_node = empty_registry.register_model(model_name="M1", version="v1")
         strat_node = empty_registry.register_strategy(
             strategy_id="s1",
             model_nodes=[model_node],
@@ -330,9 +318,7 @@ class TestDownstreamImpact:
 
     def test_impact_report_with_no_strategies(self, empty_registry):
         data = empty_registry.register_dataset("d", "/x", "v1")
-        feat = empty_registry.register_feature(
-            "f1", code_hash="aa", input_data_nodes=[data]
-        )
+        feat = empty_registry.register_feature("f1", code_hash="aa", input_data_nodes=[data])
         empty_registry.register_model("m1", "v1", used_feature_nodes=[feat])
         report = empty_registry.get_impact_report(data)
         assert "RECHECK" in report["recommendation"]
@@ -382,7 +368,7 @@ class TestLineageValidation:
 
     def test_incomplete_lineage_no_model(self, empty_registry):
         """Strategy without model connection is incomplete."""
-        feat = empty_registry.register_feature("f1", code_hash="aa")
+        empty_registry.register_feature("f1", code_hash="aa")
         empty_registry.register_strategy("s1", model_nodes=[])
         # Even if we add data → feature, strategy has no model edge
         assert not empty_registry.has_complete_lineage("strategy::s1")
@@ -611,7 +597,7 @@ class TestEdgeCases:
         empty_registry._graph.add_edge(f_a, f_b, relation=EdgeRelation.DERIVED_FROM)
 
         model = empty_registry.register_model("m", "v1", used_feature_nodes=[f_b])
-        strategy = empty_registry.register_strategy("s", model_nodes=[model])
+        empty_registry.register_strategy("s", model_nodes=[model])
 
         # Impact from data should reach everything
         affected = empty_registry.trace_downstream_impact(data)

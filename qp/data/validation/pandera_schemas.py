@@ -50,23 +50,34 @@ class DailyPriceSchema(DataFrameModel):
 
     symbol: Series[pl.Utf8] = pa.Field(nullable=False, description="6-digit stock code")
     trade_date: Series[pl.Date] = pa.Field(
-        nullable=False, description="Trading date (ISO 8601 date)",
+        nullable=False,
+        description="Trading date (ISO 8601 date)",
     )
 
     open: Series[pl.Float64] = pa.Field(
-        gt=0, nullable=False, description="Opening price",
+        gt=0,
+        nullable=False,
+        description="Opening price",
     )
     high: Series[pl.Float64] = pa.Field(
-        gt=0, nullable=False, description="Highest price of the day",
+        gt=0,
+        nullable=False,
+        description="Highest price of the day",
     )
     low: Series[pl.Float64] = pa.Field(
-        gt=0, nullable=False, description="Lowest price of the day",
+        gt=0,
+        nullable=False,
+        description="Lowest price of the day",
     )
     close: Series[pl.Float64] = pa.Field(
-        gt=0, nullable=False, description="Closing price",
+        gt=0,
+        nullable=False,
+        description="Closing price",
     )
     volume: Series[pl.Float64] = pa.Field(
-        ge=0, nullable=False, description="Trading volume (shares)",
+        ge=0,
+        nullable=False,
+        description="Trading volume (shares)",
     )
 
     # NOTE: Cross-column checks (High>=Low, etc.) are handled by
@@ -74,7 +85,7 @@ class DailyPriceSchema(DataFrameModel):
     # column-level type/null/range checks; our checks.py handles cross-column
     # business logic.  This separation keeps each tool in its sweet spot.
 
-    class Config:
+    class Config:  # type: ignore[reportIncompatibleVariableOverride]
         name: str = "DailyPriceSchema"
         strict: bool = False  # Allow extra columns (timestamps, flags)
         coerce: bool = False  # Don't coerce types — fail explicitly
@@ -88,19 +99,23 @@ class DailyPriceExtendedSchema(DailyPriceSchema):
     """
 
     source_event_time: Series[pl.Utf8] | None = pa.Field(
-        nullable=True, description="ISO 8601 event time (Asia/Shanghai)",
+        nullable=True,
+        description="ISO 8601 event time (Asia/Shanghai)",
     )
     ingestion_received_time: Series[pl.Utf8] | None = pa.Field(
-        nullable=True, description="ISO 8601 UTC ingestion time",
+        nullable=True,
+        description="ISO 8601 UTC ingestion time",
     )
     is_suspended: Series[pl.Boolean] | None = pa.Field(
-        nullable=True, description="Trading suspended flag",
+        nullable=True,
+        description="Trading suspended flag",
     )
     is_tradeable: Series[pl.Boolean] | None = pa.Field(
-        nullable=True, description="Stock is tradeable today",
+        nullable=True,
+        description="Stock is tradeable today",
     )
 
-    class Config:
+    class Config:  # type: ignore[reportIncompatibleVariableOverride]
         name: str = "DailyPriceExtendedSchema"
         strict: bool = False
 
@@ -121,12 +136,16 @@ class BalanceSheetSchema(DataFrameModel):
     report_date: Series[pl.Date] = pa.Field(nullable=False)
 
     total_assets: Series[pl.Float64] = pa.Field(nullable=False, description="Total assets")
-    total_liabilities: Series[pl.Float64] = pa.Field(nullable=False, description="Total liabilities")
+    total_liabilities: Series[pl.Float64] = pa.Field(
+        nullable=False, description="Total liabilities"
+    )
     total_equity: Series[pl.Float64] = pa.Field(
-        ge=0, nullable=False, description="Total shareholders' equity (should be >= 0 for going concern)",
+        ge=0,
+        nullable=False,
+        description="Total shareholders' equity (should be >= 0 for going concern)",
     )
 
-    class Config:
+    class Config:  # type: ignore[reportIncompatibleVariableOverride]
         name: str = "BalanceSheetSchema"
         strict: bool = False
         coerce: bool = False
@@ -156,7 +175,7 @@ class FundamentalIndicatorSchema(DataFrameModel):
     NAV: Series[pl.Float64] | None = pa.Field(nullable=True, ge=0)
     cashflow_per_share: Series[pl.Float64] | None = pa.Field(nullable=True)
 
-    class Config:
+    class Config:  # type: ignore[reportIncompatibleVariableOverride]
         name: str = "FundamentalIndicatorSchema"
         strict: bool = False
         coerce: bool = False

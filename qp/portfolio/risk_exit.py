@@ -38,14 +38,16 @@ from loguru import logger
 
 class Priority(IntEnum):
     """退出优先级 — 数字越小越高."""
+
     CRITICAL = 1  # ST、退市
-    HIGH = 2      # Stop Loss
-    MEDIUM = 3    # 流动性风险、长期停牌
-    LOW = 4       # Rank Drop、仓位调整
+    HIGH = 2  # Stop Loss
+    MEDIUM = 3  # 流动性风险、长期停牌
+    LOW = 4  # Rank Drop、仓位调整
 
 
 class TradeReason(str):
     """交易原因标签（V2.1 多重原因共存）."""
+
     STOP_LOSS = "STOP_LOSS"
     RISK_ST = "RISK_ST"
     RISK_DELIST = "RISK_DELIST"
@@ -67,6 +69,7 @@ class RiskExitSignal:
 
     V2.1 §5: 同一天多条原因合并为一条建议，保留多个 reason tag.
     """
+
     symbol: str
     action: str = "SELL"
     priority: Priority = Priority.HIGH
@@ -76,10 +79,7 @@ class RiskExitSignal:
 
     def __repr__(self) -> str:
         reasons_str = ", ".join(self.reasons)
-        return (
-            f"RiskExit({self.symbol}, {self.action}, "
-            f"{self.priority.name}, [{reasons_str}])"
-        )
+        return f"RiskExit({self.symbol}, {self.action}, {self.priority.name}, [{reasons_str}])"
 
 
 # ------------------------------------------------------------------
@@ -90,12 +90,13 @@ class RiskExitSignal:
 @dataclass
 class RiskExitConfig:
     """Risk Exit 配置."""
-    stop_loss_pct: float = -0.10        # 固定止损线
-    stop_loss_check: str = "EOD"        # 检查频率
+
+    stop_loss_pct: float = -0.10  # 固定止损线
+    stop_loss_check: str = "EOD"  # 检查频率
     stop_loss_execute: str = "NEXT_OPEN"  # 执行时间
-    force_sell_st: bool = True           # ST 强制卖出
-    force_sell_delist: bool = True       # 退市强制卖出
-    max_suspension_days: int = 30        # 长期停牌阈值
+    force_sell_st: bool = True  # ST 强制卖出
+    force_sell_delist: bool = True  # 退市强制卖出
+    max_suspension_days: int = 30  # 长期停牌阈值
 
 
 # ------------------------------------------------------------------
@@ -213,9 +214,13 @@ class RiskExitManager:
                 parts.append(f"HIGH={n_high}")
             if n_med:
                 parts.append(f"MEDIUM={n_med}")
-            logger.info("🛡️ Risk Exit ({}/{}): {} — {}",
-                        date_str, len(holdings), ", ".join(parts),
-                        [f"{e.symbol}({','.join(e.reasons)})" for e in result[:5]])
+            logger.info(
+                "🛡️ Risk Exit ({}/{}): {} — {}",
+                date_str,
+                len(holdings),
+                ", ".join(parts),
+                [f"{e.symbol}({','.join(e.reasons)})" for e in result[:5]],
+            )
 
         return result
 
@@ -296,6 +301,7 @@ class RiskExitManager:
         """加载已知退市列表."""
         try:
             from qp.data.cleaning.delisted_handler import DelistedHandler
+
             handler = DelistedHandler()
             return set(handler.get_delisted_codes())
         except Exception:

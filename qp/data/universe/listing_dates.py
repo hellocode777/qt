@@ -251,7 +251,12 @@ class ListingDateRegistry:
 
         # 4. Cache
         self._save_cache(result)
-        logger.info("IPO 日期注册: {} 只 (AkShare {}, 硬编码 {})", len(result), len(akshare_data), len(self._build_hardcoded()))
+        logger.info(
+            "IPO 日期注册: {} 只 (AkShare {}, 硬编码 {})",
+            len(result),
+            len(akshare_data),
+            len(self._build_hardcoded()),
+        )
 
         return result
 
@@ -276,7 +281,9 @@ class ListingDateRegistry:
             result: dict[str, date_t] = {}
             for _, row in df.iterrows():
                 code = str(row.get("code", row.get("代码", "")))[:6]
-                listing_str = row.get("listing_date", row.get("上市日期", row.get("list_date", None)))
+                listing_str = row.get(
+                    "listing_date", row.get("上市日期", row.get("list_date", None))
+                )
                 if code and listing_str:
                     try:
                         result[code] = date_t.fromisoformat(str(listing_str)[:10])
@@ -293,10 +300,7 @@ class ListingDateRegistry:
         path = _DEFAULT_CACHE_PATH
         if not path.exists():
             return None
-        age = (
-            datetime.now(tz=UTC)
-            - datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
-        ).days
+        age = (datetime.now(tz=UTC) - datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)).days
         if age > _CACHE_TTL_DAYS:
             logger.debug("IPO 日期缓存过期 ({} 天)", age)
             return None

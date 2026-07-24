@@ -55,12 +55,18 @@ class SMACross(BaseFeature):
         super().__init__(apply_shift=apply_shift)
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
-        sma_fast = pl.col("close").rolling_mean(window_size=self.fast, min_samples=self.fast).over("symbol")
-        sma_slow = pl.col("close").rolling_mean(window_size=self.slow, min_samples=self.slow).over("symbol")
-
-        return df.with_columns(
-            (sma_fast / (sma_slow + 1e-10) - 1.0).alias(self.feature_name)
+        sma_fast = (
+            pl.col("close")
+            .rolling_mean(window_size=self.fast, min_samples=self.fast)
+            .over("symbol")
         )
+        sma_slow = (
+            pl.col("close")
+            .rolling_mean(window_size=self.slow, min_samples=self.slow)
+            .over("symbol")
+        )
+
+        return df.with_columns((sma_fast / (sma_slow + 1e-10) - 1.0).alias(self.feature_name))
 
     def update_stream(self, new_value: float) -> float | None:
         if self._buffer is None:
@@ -69,8 +75,8 @@ class SMACross(BaseFeature):
         if len(self._buffer) < self.slow:
             return None
         vals = list(self._buffer)
-        sma_fast = sum(vals[-self.fast:]) / self.fast
-        sma_slow = sum(vals[-self.slow:]) / self.slow
+        sma_fast = sum(vals[-self.fast :]) / self.fast
+        sma_slow = sum(vals[-self.slow :]) / self.slow
         return sma_fast / (sma_slow + 1e-10) - 1.0
 
 
@@ -105,11 +111,27 @@ class PricePosition(BaseFeature):
         use_low = "low" in df.columns
 
         if use_high and use_low:
-            high_n = pl.col("high").rolling_max(window_size=self.window, min_samples=self.window // 2).over("symbol")
-            low_n = pl.col("low").rolling_min(window_size=self.window, min_samples=self.window // 2).over("symbol")
+            high_n = (
+                pl.col("high")
+                .rolling_max(window_size=self.window, min_samples=self.window // 2)
+                .over("symbol")
+            )
+            low_n = (
+                pl.col("low")
+                .rolling_min(window_size=self.window, min_samples=self.window // 2)
+                .over("symbol")
+            )
         else:
-            high_n = pl.col("close").rolling_max(window_size=self.window, min_samples=self.window // 2).over("symbol")
-            low_n = pl.col("close").rolling_min(window_size=self.window, min_samples=self.window // 2).over("symbol")
+            high_n = (
+                pl.col("close")
+                .rolling_max(window_size=self.window, min_samples=self.window // 2)
+                .over("symbol")
+            )
+            low_n = (
+                pl.col("close")
+                .rolling_min(window_size=self.window, min_samples=self.window // 2)
+                .over("symbol")
+            )
 
         return df.with_columns(
             ((pl.col("close") - low_n) / (high_n - low_n + 1e-10)).alias(self.feature_name)
@@ -162,16 +184,28 @@ class MACD(BaseFeature):
         super().__init__(apply_shift=apply_shift)
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
-        ema_fast = pl.col("close").ewm_mean(span=self.fast, min_samples=self.fast, adjust=False).over("symbol")
-        ema_slow = pl.col("close").ewm_mean(span=self.slow, min_samples=self.slow, adjust=False).over("symbol")
+        ema_fast = (
+            pl.col("close")
+            .ewm_mean(span=self.fast, min_samples=self.fast, adjust=False)
+            .over("symbol")
+        )
+        ema_slow = (
+            pl.col("close")
+            .ewm_mean(span=self.slow, min_samples=self.slow, adjust=False)
+            .over("symbol")
+        )
         macd_line = ema_fast - ema_slow
-        signal_line = macd_line.ewm_mean(span=self.signal_period, min_samples=self.signal_period, adjust=False).over("symbol")
+        signal_line = macd_line.ewm_mean(
+            span=self.signal_period, min_samples=self.signal_period, adjust=False
+        ).over("symbol")
 
-        return df.with_columns([
-            (macd_line - signal_line).alias("macd_hist"),
-            macd_line.alias("macd_line"),
-            signal_line.alias("macd_signal"),
-        ])
+        return df.with_columns(
+            [
+                (macd_line - signal_line).alias("macd_hist"),
+                macd_line.alias("macd_line"),
+                signal_line.alias("macd_signal"),
+            ]
+        )
 
     def update_stream(self, new_value: float) -> float | None:
         if self._buffer is None:

@@ -4,21 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-QP (Quant Platform) is a quantitative investment research and trading platform with a strict 10-layer architecture. The project is currently in **Sprint 0 (Bootstrap)** — the directory skeleton and design documentation are in place, but all source files are empty placeholders awaiting implementation.
+QP (Quant Platform) is a quantitative investment research and investment-decision platform with a strict 10-layer architecture. The 10 layers are **fully implemented** (Phase 0-6 complete): ~400 source files, a working `qp` CLI with 20+ commands, and an end-to-end `qp run daily --demo` pipeline. Quality gates are green: `ruff check` = 0, `pyright` = 0, and 1049 passing tests. Python is pinned to **3.12** via `.python-version` (NumPy/LightGBM wheels are not yet ABI-compatible with 3.14).
 
 ## Build & Quality Commands
 
-The project uses `uv` for package management. No `pyproject.toml` exists yet — creating one is Milestone 0.
+The project uses `uv` for package management; `pyproject.toml` (Hatchling) defines the `qp` package and its `dev` extra.
 
 ```bash
-uv sync          # Install dependencies (once pyproject.toml exists)
-uv run qp version  # Verify the CLI works
-ruff format      # Auto-format code
-ruff check       # Lint (zero errors required)
-pyright          # Type-check (zero errors required)
-pytest           # Run all tests
-pytest tests/unit/path/to/test_file.py  # Run a single test file
+uv sync --extra dev   # Install runtime + dev dependencies
+uv run qp version     # Verify the CLI works
+uv run qp doctor      # Environment self-check
+uv run qp run daily --demo  # End-to-end pipeline on synthetic data
+uv run ruff format    # Auto-format code
+uv run ruff check     # Lint (zero errors required)
+uv run pyright        # Type-check (zero errors required)
+uv run pytest         # Run all tests (1049 passing)
+uv run pytest tests/unit/path/to/test_file.py  # Run a single test file
 ```
+
+Pre-commit hooks are configured in `.pre-commit-config.yaml` (ruff-format + ruff-check); install them with `uv run pre-commit install`.
 
 Definition of Done for every milestone:
 - `uv sync` succeeds

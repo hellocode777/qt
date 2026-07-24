@@ -86,9 +86,7 @@ class DatasetMetadata:
         if not self.primary_key:
             errors.append("primary_key 不能为空（至少需要一个主键列）")
         if self.pit_confidence not in ("high", "medium", "low", ""):
-            errors.append(
-                f"pit_confidence 非法值 '{self.pit_confidence}'（期望: high/medium/low）"
-            )
+            errors.append(f"pit_confidence 非法值 '{self.pit_confidence}'（期望: high/medium/low）")
         return errors
 
 

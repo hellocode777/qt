@@ -99,9 +99,7 @@ class DataNodeMeta:
     data_id: str = ""
     uri: str = ""
     version: str = ""
-    registered_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    registered_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     node_type: str = NodeType.DATA
 
     def to_dict(self) -> dict[str, Any]:
@@ -129,9 +127,7 @@ class FeatureNodeMeta:
 
     feature_name: str = ""
     code_hash: str = ""
-    registered_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    registered_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     point_in_time_safe: bool = True
     owner: str = ""
     node_type: str = NodeType.FEATURE
@@ -163,9 +159,7 @@ class ModelNodeMeta:
 
     model_name: str = ""
     version: str = ""
-    registered_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    registered_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     metrics: dict[str, float] = field(default_factory=dict)
     hyperparams: dict[str, Any] = field(default_factory=dict)
     random_seed: int = 0
@@ -206,9 +200,7 @@ class StrategyNodeMeta:
 
     strategy_id: str = ""
     lifecycle: str = "research"
-    registered_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    registered_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     node_type: str = NodeType.STRATEGY
 
     def to_dict(self) -> dict[str, Any]:

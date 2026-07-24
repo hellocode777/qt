@@ -102,10 +102,12 @@ def _build_index_df(price_data: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     # Average close
     close_cols = [c for c in merged.columns if c.startswith("close_")]
-    result = merged.select([
-        pl.col(date_col).alias("date"),
-        (pl.sum_horizontal([pl.col(c) for c in close_cols]) / len(close_cols)).alias("close"),
-    ])
+    result = merged.select(
+        [
+            pl.col(date_col).alias("date"),
+            (pl.sum_horizontal([pl.col(c) for c in close_cols]) / len(close_cols)).alias("close"),
+        ]
+    )
     return result
 
 
@@ -122,11 +124,13 @@ def _build_valuation_data(price_data: dict[str, pl.DataFrame]) -> dict[str, pl.D
         date_col = "trade_date" if "trade_date" in pdf.columns else "date"
         dates = pdf[date_col].to_list()
         # Synthetic valuation: use inverse of return as PE proxy
-        valuation[code] = pl.DataFrame({
-            "date": dates,
-            "PE_TTM": [15.0 + (hash(code) % 30)] * len(dates),
-            "PB": [2.0 + (hash(code + "pb") % 5)] * len(dates),
-        })
+        valuation[code] = pl.DataFrame(
+            {
+                "date": dates,
+                "PE_TTM": [15.0 + (hash(code) % 30)] * len(dates),
+                "PB": [2.0 + (hash(code + "pb") % 5)] * len(dates),
+            }
+        )
     return valuation
 
 
@@ -172,14 +176,16 @@ def _build_validation_context(
     to construct a proper ValidationContext.
     """
     # Build a flat price DataFrame from price_data dict
-    frames = [
-        pdf for pdf in price_data.values()
-        if pdf is not None and not pdf.is_empty()
-    ]
+    frames = [pdf for pdf in price_data.values() if pdf is not None and not pdf.is_empty()]
     price_df = pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
 
     class _ValCtx:
-        pass
+        feature_df: pl.DataFrame | None
+        price_df: pl.DataFrame
+        signal_df: pl.DataFrame | None
+        backtest_metrics: dict[str, float]
+        strategy_id: str
+        metadata: dict[str, str]
 
     ctx = _ValCtx()
     ctx.feature_df = None  # Features are computed inline, not pre-loaded
@@ -381,9 +387,7 @@ class DailyPipeline(BasePipeline):
                         require_all_passed=False,
                     )
                     val_pipeline = ValidationPipeline(config=val_config)
-                    val_ctx = _build_validation_context(
-                        sid, price_data, result.metrics
-                    )
+                    val_ctx = _build_validation_context(sid, price_data, result.metrics)
                     val_result = val_pipeline.run(val_ctx)
                     validation_results[sid] = {
                         "stage": strategy_lifecycle.value,
@@ -470,21 +474,27 @@ class DailyPipeline(BasePipeline):
                 # Build structured RiskAudit
                 risk_entries: list[RiskAuditEntry] = []
                 for v in risk_report.violations:
-                    risk_entries.append(RiskAuditEntry(
-                        violation_type="risk_limit",
-                        detail=v,
-                        action="dropped" if any(s in v for s in risk_report.dropped_symbols) else "warning",
-                    ))
+                    risk_entries.append(
+                        RiskAuditEntry(
+                            violation_type="risk_limit",
+                            detail=v,
+                            action="dropped"
+                            if any(s in v for s in risk_report.dropped_symbols)
+                            else "warning",
+                        )
+                    )
                 # Add correlation-based drops with reasoning
                 for s1, s2, corr in risk_report.correlated_pairs:
-                    risk_entries.append(RiskAuditEntry(
-                        symbol=f"{s1}/{s2}",
-                        violation_type="correlation",
-                        detail=f"High correlation ({corr:.3f})",
-                        threshold="0.70",
-                        actual=f"{corr:.3f}",
-                        action="warning",
-                    ))
+                    risk_entries.append(
+                        RiskAuditEntry(
+                            symbol=f"{s1}/{s2}",
+                            violation_type="correlation",
+                            detail=f"High correlation ({corr:.3f})",
+                            threshold="0.70",
+                            actual=f"{corr:.3f}",
+                            action="warning",
+                        )
+                    )
                 risk_audit = RiskAudit(
                     candidates_in=risk_report.candidates_in,
                     candidates_out=risk_report.candidates_out,
@@ -518,9 +528,7 @@ class DailyPipeline(BasePipeline):
                     )
                     total_impact += cost.total_cost
 
-                result.metrics["estimated_cost_pct"] = round(
-                    total_impact / total_capital * 100, 4
-                )
+                result.metrics["estimated_cost_pct"] = round(total_impact / total_capital * 100, 4)
 
             # ================================================================
             # Step 12: Capital allocation (Layer 8 engine)
@@ -534,17 +542,22 @@ class DailyPipeline(BasePipeline):
                 #    liquidity_score]
                 # Missing optional columns get sensible defaults.
                 score_col = (
-                    "alpha_score" if "alpha_score" in filtered_signals.columns
-                    else "feature_value" if "feature_value" in filtered_signals.columns
-                    else "raw_score" if "raw_score" in filtered_signals.columns
+                    "alpha_score"
+                    if "alpha_score" in filtered_signals.columns
+                    else "feature_value"
+                    if "feature_value" in filtered_signals.columns
+                    else "raw_score"
+                    if "raw_score" in filtered_signals.columns
                     else None
                 )
-                candidates_pl = filtered_signals.select([
-                    "symbol",
-                    (pl.col(score_col) if score_col else pl.lit(0.5)).alias("alpha_score"),
-                    pl.lit(0.15).alias("max_weight_limit"),
-                    pl.lit("").alias("risk_cluster"),
-                ])
+                candidates_pl = filtered_signals.select(
+                    [
+                        "symbol",
+                        (pl.col(score_col) if score_col else pl.lit(0.5)).alias("alpha_score"),
+                        pl.lit(0.15).alias("max_weight_limit"),
+                        pl.lit("").alias("risk_cluster"),
+                    ]
+                )
                 candidates_pd = candidates_pl.to_pandas()
 
                 alloc_config = CapitalAllocatorConfig(
@@ -569,7 +582,7 @@ class DailyPipeline(BasePipeline):
                     result.metadata["alloc_warnings"] = "; ".join(alloc_result.warnings)
 
                 # Generate orders from TargetPortfolio
-                for pos in (tp.positions if tp else []):
+                for pos in tp.positions if tp else []:
                     sym = str(pos.get("symbol", ""))
                     if sym == "CASH":
                         continue

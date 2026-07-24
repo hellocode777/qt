@@ -1,4 +1,5 @@
 """Tests for qp.data.builder — DatasetBuilder, DatasetMetadata, BuildResult."""
+
 from __future__ import annotations
 
 import json
@@ -29,12 +30,14 @@ def _make_price_df(n_days: int = 30) -> pl.DataFrame:
     for sym in ["600519", "000001"]:
         close = 100.0 + rng.normal(0, 2, n_days).cumsum()
         for d_idx in range(n_days):
-            rows.append({
-                "symbol": sym,
-                "trade_date": f"2024-01-{d_idx+1:02d}",
-                "close": float(close[d_idx]),
-                "volume": float(abs(rng.normal(1e6, 2e5))),
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "trade_date": f"2024-01-{d_idx + 1:02d}",
+                    "close": float(close[d_idx]),
+                    "volume": float(abs(rng.normal(1e6, 2e5))),
+                }
+            )
     return pl.DataFrame(rows).with_columns(
         pl.col("trade_date").str.to_date(),
     )
@@ -185,9 +188,7 @@ class TestBuildResult:
 
 class TestDatasetBuilder:
     def test_build_successful(self, tmp_path):
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=False)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=False))
         df = _make_price_df(n_days=10)
         meta = _make_valid_metadata()
 
@@ -210,8 +211,12 @@ class TestDatasetBuilder:
         builder = DatasetBuilder()
         df = _make_price_df(n_days=5)
         meta = DatasetMetadata(
-            name="", owner="", source="", schema={},
-            frequency="", primary_key=[],
+            name="",
+            owner="",
+            source="",
+            schema={},
+            frequency="",
+            primary_key=[],
         )
         result = builder.build(df, meta)
         assert not result.success
@@ -240,9 +245,7 @@ class TestDatasetBuilder:
 
     def test_build_no_contract_registered_strict(self, tmp_path):
         """With require_contract=True and no registered contract, build fails."""
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=True)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=True))
         # NOT calling register_source()
         df = _make_price_df(n_days=5)
         meta = _make_valid_metadata()
@@ -253,9 +256,7 @@ class TestDatasetBuilder:
 
     def test_build_no_contract_but_not_required(self, tmp_path):
         """With require_contract=False, builds succeed without a contract."""
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=False)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=False))
         df = _make_price_df(n_days=5)
         meta = _make_valid_metadata()
 
@@ -265,21 +266,22 @@ class TestDatasetBuilder:
     def test_build_dataset_convenience(self, tmp_path):
         """build_dataset() module-level function."""
         df = _make_price_df(n_days=5)
-        result = build_dataset(df, {
-            "name": "test_ds",
-            "owner": "me",
-            "source": "demo",
-            "schema": {"trade_date": "date", "symbol": "str"},
-            "frequency": "daily",
-            "primary_key": ["trade_date", "symbol"],
-        })
+        result = build_dataset(
+            df,
+            {
+                "name": "test_ds",
+                "owner": "me",
+                "source": "demo",
+                "schema": {"trade_date": "date", "symbol": "str"},
+                "frequency": "daily",
+                "primary_key": ["trade_date", "symbol"],
+            },
+        )
         # build_dataset() convenience wrapper builds without contract requirement
         assert result.success
 
     def test_version_auto_assign(self, tmp_path):
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=False)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=False))
         df = _make_price_df(n_days=5)
         meta = _make_valid_metadata()
         meta.version = ""  # empty → auto-assigned

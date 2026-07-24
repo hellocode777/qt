@@ -184,8 +184,12 @@ class TestEmptyDataFrame:
     def test_empty_df_returns_empty(self):
         df = pl.DataFrame(
             schema={
-                "trade_date": pl.Utf8, "open": pl.Float64, "close": pl.Float64,
-                "high": pl.Float64, "low": pl.Float64, "volume": pl.Float64,
+                "trade_date": pl.Utf8,
+                "open": pl.Float64,
+                "close": pl.Float64,
+                "high": pl.Float64,
+                "low": pl.Float64,
+                "volume": pl.Float64,
                 "symbol": pl.Utf8,
             },
         ).clear()

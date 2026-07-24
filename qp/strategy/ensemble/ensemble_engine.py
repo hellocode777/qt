@@ -37,9 +37,8 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 import numpy as np
 import polars as pl
@@ -52,11 +51,11 @@ from qp.strategy.models.alpha_signal import AlphaSignal, AlphaSignalBatch
 class UniversePolicy(Enum):
     """How to handle symbols present in one strategy but not another."""
 
-    FILL_ZERO = "fill_zero"          # Missing → score 0.0
-    FILL_MEDIAN = "fill_median"      # Missing → cross-sectional median
-    RENORMALIZE = "renormalize"      # Re-normalize after filling
-    INTERSECTION = "intersection"     # Only common symbols
-    UNION = "union"                   # All symbols (same as fill_zero)
+    FILL_ZERO = "fill_zero"  # Missing → score 0.0
+    FILL_MEDIAN = "fill_median"  # Missing → cross-sectional median
+    RENORMALIZE = "renormalize"  # Re-normalize after filling
+    INTERSECTION = "intersection"  # Only common symbols
+    UNION = "union"  # All symbols (same as fill_zero)
 
 
 @dataclass
@@ -147,16 +146,15 @@ class EnsembleEngine:
             w = weights.get(sid, 1.0 / len(aligned))
             if w <= 0:
                 continue
-            weighted = df.with_columns(
-                (pl.col(score_col) * w).alias(score_col)
-            )
+            weighted = df.with_columns((pl.col(score_col) * w).alias(score_col))
             weighted_dfs.append(weighted)
 
         if not weighted_dfs:
             return AlphaSignalBatch(date=date_str)
 
         # ── 4. Fuse via aggregator ──
-        fused = self.aggregator.aggregate(weighted_dfs)
+        aggregator = self.aggregator or SignalAggregator(method="rank_blend")
+        fused = aggregator.aggregate(weighted_dfs)
         if fused.is_empty():
             return AlphaSignalBatch(date=date_str)
 
@@ -221,7 +219,6 @@ class EnsembleEngine:
         all_symbols: set[str] = set()
         for df in signals.values():
             all_symbols.update(df["symbol"].to_list())
-        all_list = sorted(all_symbols)
 
         result: dict[str, pl.DataFrame] = {}
         for sid, df in signals.items():
@@ -238,17 +235,17 @@ class EnsembleEngine:
                 fill_val = float(np.median(scores))
 
             # Append missing rows
-            missing_df = pl.DataFrame({
-                "symbol": list(missing),
-                score_col: [fill_val] * len(missing),
-            })
+            missing_df = pl.DataFrame(
+                {
+                    "symbol": list(missing),
+                    score_col: [fill_val] * len(missing),
+                }
+            )
 
             # Preserve other columns
             for col in df.columns:
                 if col not in missing_df.columns:
-                    missing_df = missing_df.with_columns(
-                        pl.lit(None).alias(col)
-                    )
+                    missing_df = missing_df.with_columns(pl.lit(None).alias(col))
 
             result[sid] = pl.concat([df, missing_df])
 
@@ -267,10 +264,7 @@ class EnsembleEngine:
             scores = df[score_col].to_numpy()
             mn = float(scores.min())
             mx = float(scores.max())
-            if mx - mn > 1e-12:
-                normalized = (scores - mn) / (mx - mn)
-            else:
-                normalized = np.full_like(scores, 0.5)
+            normalized = (scores - mn) / (mx - mn) if mx - mn > 1e-12 else np.full_like(scores, 0.5)
             result[sid] = df.with_columns(pl.Series(score_col, normalized))
 
         return result
@@ -358,5 +352,5 @@ class EnsembleEngine:
         total = sum(result.values())
         if total < 1e-12:
             n = len(strategy_ids)
-            return {sid: 1.0 / n for sid in strategy_ids}
+            return dict.fromkeys(strategy_ids, 1.0 / n)
         return {k: v / total for k, v in result.items()}

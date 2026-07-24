@@ -113,10 +113,12 @@ class MomentumStrategy(BaseStrategy):
             mom_score = self._compute_momentum(close, lookback, variant)
 
             if mom_score is not None and not np.isnan(mom_score):
-                results.append({
-                    "symbol": code,
-                    "raw_score": float(mom_score),
-                })
+                results.append(
+                    {
+                        "symbol": code,
+                        "raw_score": float(mom_score),
+                    }
+                )
 
         if not results:
             return pl.DataFrame(
@@ -124,9 +126,7 @@ class MomentumStrategy(BaseStrategy):
             )
 
         df = pl.DataFrame(results).sort("raw_score", descending=True)
-        df = df.with_columns(
-            pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
-        )
+        df = df.with_columns(pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank"))
         return df.head(top_n)
 
     # ------------------------------------------------------------------
@@ -178,7 +178,7 @@ class MomentumStrategy(BaseStrategy):
             return recent_ret - 0.5 * old_ret
 
         if variant == "risk_adjusted":
-            returns = np.diff(close[-lookback - 1:]) / close[-lookback - 1 : -1]
+            returns = np.diff(close[-lookback - 1 :]) / close[-lookback - 1 : -1]
             std = float(np.std(returns, ddof=1))
             if std < 1e-12:
                 return 0.0

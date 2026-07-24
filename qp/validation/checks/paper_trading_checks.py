@@ -16,7 +16,6 @@ import numpy as np
 from qp.shared.types import ValidationStatus
 from qp.validation.engine import BaseRule, RuleResult, ValidationContext
 
-
 # ------------------------------------------------------------------
 # Signal Correlation Check
 # ------------------------------------------------------------------
@@ -214,8 +213,8 @@ class SignalInterruptionCheck(BaseRule):
                 ),
             )
 
-        expected_set = set(str(d) for d in expected_dates)
-        actual_set = set(str(d) for d in actual_dates)
+        expected_set = {str(d) for d in expected_dates}
+        actual_set = {str(d) for d in actual_dates}
 
         if len(expected_set) == 0:
             return RuleResult(
@@ -251,8 +250,7 @@ class SignalInterruptionCheck(BaseRule):
             )
         if not consec_pass:
             failures.append(
-                f"max {max_consecutive} consecutive missing "
-                f"(> {self._max_consecutive_missing})"
+                f"max {max_consecutive} consecutive missing (> {self._max_consecutive_missing})"
             )
 
         # Score: 0 missing → 100, max_missing_ratio → 50

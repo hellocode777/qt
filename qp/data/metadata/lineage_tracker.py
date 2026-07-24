@@ -59,14 +59,8 @@ class DataLineage:
         notes: Human-readable notes.
     """
 
-    lineage_id: str = field(
-        default_factory=lambda: datetime.now(UTC).strftime(
-            "%Y%m%dT%H%M%S"
-        )
-    )
-    recorded_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    lineage_id: str = field(default_factory=lambda: datetime.now(UTC).strftime("%Y%m%dT%H%M%S"))
+    recorded_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     source_name: str = ""
     source_version: str = ""
     cleaning_run_id: str = ""
@@ -93,9 +87,7 @@ class DataLineage:
         if self.pit_correction_applied:
             parts.append("PIT")
         if self.dataset_name:
-            version_suffix = (
-                f"@{self.dataset_version}" if self.dataset_version else ""
-            )
+            version_suffix = f"@{self.dataset_version}" if self.dataset_version else ""
             parts.append(f"{self.dataset_name}{version_suffix}")
         return " → ".join(parts) if parts else "(empty)"
 
@@ -132,9 +124,7 @@ class LineageTracker:
     consumers can trace their data back to its origin.
     """
 
-    def __init__(
-        self, store_path: str | Path = "data/metadata/lineage.json"
-    ) -> None:
+    def __init__(self, store_path: str | Path = "data/metadata/lineage.json") -> None:
         self._store_path = Path(store_path)
         self._records: list[DataLineage] = []
         self._load_from_disk()
@@ -149,15 +139,11 @@ class LineageTracker:
         """
         self._records.append(lineage)
         self._save_to_disk()
-        logger.info(
-            "血缘记录已保存: {} (共 {} 条)", lineage.chain_str(), len(self._records)
-        )
+        logger.info("血缘记录已保存: {} (共 {} 条)", lineage.chain_str(), len(self._records))
 
     # ── Queries ──
 
-    def find_by_dataset(
-        self, dataset_name: str, version: str | None = None
-    ) -> list[DataLineage]:
+    def find_by_dataset(self, dataset_name: str, version: str | None = None) -> list[DataLineage]:
         """Find all lineage records for a specific dataset.
 
         Args:
@@ -167,9 +153,7 @@ class LineageTracker:
         Returns:
             Matching DataLineage records, most recent first.
         """
-        results = [
-            r for r in self._records if r.dataset_name == dataset_name
-        ]
+        results = [r for r in self._records if r.dataset_name == dataset_name]
         if version:
             results = [r for r in results if r.dataset_version == version]
         return sorted(results, key=lambda r: r.recorded_at, reverse=True)
@@ -184,20 +168,14 @@ class LineageTracker:
 
     def find_by_pipeline(self, pipeline_run_id: str) -> list[DataLineage]:
         """Find all lineage records for a specific pipeline run."""
-        return [
-            r
-            for r in self._records
-            if r.pipeline_run_id == pipeline_run_id
-        ]
+        return [r for r in self._records if r.pipeline_run_id == pipeline_run_id]
 
     def get_latest(self, dataset_name: str) -> DataLineage | None:
         """Get the most recent lineage record for a dataset."""
         matching = self.find_by_dataset(dataset_name)
         return matching[0] if matching else None
 
-    def trace_backward(
-        self, dataset_name: str, version: str
-    ) -> DataLineage | None:
+    def trace_backward(self, dataset_name: str, version: str) -> DataLineage | None:
         """Trace a dataset version back to its source.
 
         Args:
@@ -230,9 +208,7 @@ class LineageTracker:
         before = len(self._records)
         threshold = datetime.now(UTC) - timedelta(days=days)
         threshold_str = threshold.isoformat()
-        self._records = [
-            r for r in self._records if r.recorded_at >= threshold_str
-        ]
+        self._records = [r for r in self._records if r.recorded_at >= threshold_str]
         removed = before - len(self._records)
         if removed > 0:
             self._save_to_disk()
@@ -259,10 +235,7 @@ class LineageTracker:
             return
         try:
             data = json.loads(self._store_path.read_text(encoding="utf-8"))
-            self._records = [
-                DataLineage.from_dict(r)
-                for r in data.get("records", [])
-            ]
+            self._records = [DataLineage.from_dict(r) for r in data.get("records", [])]
             logger.debug("已从磁盘加载 {} 条血缘记录", len(self._records))
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             logger.warning("血缘数据加载失败 ({}), 使用空注册表", e)

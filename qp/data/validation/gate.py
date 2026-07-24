@@ -44,7 +44,7 @@ from qp.data.validation.drift import check_all_drift
 from qp.data.validation.result import CheckResult, ValidationReport
 
 if TYPE_CHECKING:
-    import pandera as pa
+    from pandera.api.polars.model import DataFrameModel
 
 # ------------------------------------------------------------------
 # Gate configuration
@@ -87,7 +87,7 @@ class GateConfig:
         default_factory=lambda: ["open", "high", "low", "close", "volume"]
     )
 
-    pandera_schema: type[pa.DataFrameModel] | None = None  # type: ignore[name-defined]
+    pandera_schema: type[DataFrameModel] | None = None
     breaker_config: BreakerConfig | None = None
 
 
@@ -146,9 +146,7 @@ class ValidationGate:
         if self.config.enable_pandera and self.config.pandera_schema is not None:
             from qp.data.validation.pandera_validator import PanderaValidator
 
-            all_checks.append(
-                PanderaValidator.validate(df, self.config.pandera_schema)
-            )
+            all_checks.append(PanderaValidator.validate(df, self.config.pandera_schema))
 
         # ── Physical checks ──
         if self.config.enable_gaps:
@@ -236,7 +234,9 @@ class ValidationGate:
         if report.passed:
             logger.info("✓ ValidationGate: {}/{} 校验通过", passed, total)
         else:
-            logger.warning("✗ ValidationGate: {}/{} 校验通过, {} 失败", passed, total, report.failed_checks)
+            logger.warning(
+                "✗ ValidationGate: {}/{} 校验通过, {} 失败", passed, total, report.failed_checks
+            )
 
         for check in report.checks:
             icon = "✓" if check.passed else "✗"

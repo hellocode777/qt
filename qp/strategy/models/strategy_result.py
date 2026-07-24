@@ -52,9 +52,7 @@ class StrategyResult:
     n_stocks_evaluated: int = 0
     n_stocks_selected: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
-    generated_at: str = field(
-        default_factory=lambda: datetime.now().astimezone().isoformat()
-    )
+    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
     success: bool = True
     error_message: str = ""
 
@@ -136,9 +134,7 @@ class StrategyResult:
         return cls(
             strategy_id=str(data.get("strategy_id", "")),
             date=str(data.get("date", "")),
-            signals=[
-                AlphaSignal.from_dict(s) for s in data.get("signals", [])
-            ],
+            signals=[AlphaSignal.from_dict(s) for s in data.get("signals", [])],
             elapsed_ms=float(data.get("elapsed_ms", 0.0)),
             n_stocks_evaluated=int(data.get("n_stocks_evaluated", 0)),
             n_stocks_selected=int(data.get("n_stocks_selected", 0)),

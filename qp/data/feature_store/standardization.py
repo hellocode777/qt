@@ -65,13 +65,17 @@ def cross_sectional_zscore(
         DataFrame with z-score column added.
     """
     if df.is_empty():
-        return df.with_columns(pl.lit(None, dtype=pl.Float64).alias(output_col or f"{value_col}_zscore"))
+        return df.with_columns(
+            pl.lit(None, dtype=pl.Float64).alias(output_col or f"{value_col}_zscore")
+        )
 
     out = output_col or f"{value_col}_zscore"
 
     result = df.with_columns(
-        ((pl.col(value_col) - pl.col(value_col).mean().over(date_col))
-         / (pl.col(value_col).std().over(date_col) + epsilon)).alias(out)
+        (
+            (pl.col(value_col) - pl.col(value_col).mean().over(date_col))
+            / (pl.col(value_col).std().over(date_col) + epsilon)
+        ).alias(out)
     )
 
     logger.debug(
@@ -109,18 +113,27 @@ def cross_sectional_rank(
         DataFrame with rank column added.
     """
     if df.is_empty():
-        return df.with_columns(pl.lit(None, dtype=pl.Float64).alias(output_col or f"{value_col}_rank"))
+        return df.with_columns(
+            pl.lit(None, dtype=pl.Float64).alias(output_col or f"{value_col}_rank")
+        )
 
     out = output_col or f"{value_col}_rank"
 
-    result = df.with_columns(
-        pl.col(value_col).rank("ordinal", descending=not ascending).over(date_col).alias("_rank_n")
-    ).with_columns(
-        (
-            (pl.col("_rank_n").cast(pl.Float64) - 1)
-            / (pl.col("_rank_n").max().over(date_col).cast(pl.Float64) - 1)
-        ).alias(out)
-    ).drop("_rank_n")
+    result = (
+        df.with_columns(
+            pl.col(value_col)
+            .rank("ordinal", descending=not ascending)
+            .over(date_col)
+            .alias("_rank_n")
+        )
+        .with_columns(
+            (
+                (pl.col("_rank_n").cast(pl.Float64) - 1)
+                / (pl.col("_rank_n").max().over(date_col).cast(pl.Float64) - 1)
+            ).alias(out)
+        )
+        .drop("_rank_n")
+    )
 
     return result
 
@@ -160,14 +173,24 @@ def rolling_zscore(
         DataFrame with rolling z-score column.
     """
     if df.is_empty():
-        return df.with_columns(pl.lit(None, dtype=pl.Float64).alias(output_col or f"{value_col}_roll_z"))
+        return df.with_columns(
+            pl.lit(None, dtype=pl.Float64).alias(output_col or f"{value_col}_roll_z")
+        )
 
     out = output_col or f"{value_col}_roll_z"
 
     result = df.sort([symbol_col, date_col]).with_columns(
         (
-            (pl.col(value_col) - pl.col(value_col).rolling_mean(window_size=window, min_samples=max(10, window // 4)))
-            / (pl.col(value_col).rolling_std(window_size=window, min_samples=max(10, window // 4)) + epsilon)
+            (
+                pl.col(value_col)
+                - pl.col(value_col).rolling_mean(
+                    window_size=window, min_samples=max(10, window // 4)
+                )
+            )
+            / (
+                pl.col(value_col).rolling_std(window_size=window, min_samples=max(10, window // 4))
+                + epsilon
+            )
         )
         .over(symbol_col)
         .alias(out)
@@ -214,9 +237,7 @@ def shift_features(
             continue
 
         shifted_name = f"{col}{suffix}{shifts}"
-        result = result.with_columns(
-            pl.col(col).shift(shifts).over(symbol_col).alias(shifted_name)
-        )
+        result = result.with_columns(pl.col(col).shift(shifts).over(symbol_col).alias(shifted_name))
 
     return result
 
@@ -318,14 +339,16 @@ def resample_safe(
 
     # Polars group_by_dynamic with label="left" equivalent
     try:
-        result = df.sort([symbol_col, time_col]).group_by_dynamic(
-            index_column=time_col,
-            every=rule,
-            group_by=symbol_col,
-            label=label,
-            closed=closed,
-        ).agg(
-            pl.all().exclude([symbol_col, time_col]).last()
+        result = (
+            df.sort([symbol_col, time_col])
+            .group_by_dynamic(
+                index_column=time_col,
+                every=rule,
+                group_by=symbol_col,
+                label=label,
+                closed=closed,
+            )
+            .agg(pl.all().exclude([symbol_col, time_col]).last())
         )
         return result
     except Exception as e:
@@ -374,7 +397,9 @@ def standardize_features(
             continue
 
     if apply_shift:
-        shifted_cols = [f"{c}_zscore" if method == "cross_sectional" else f"{c}_roll_z" for c in value_cols]
+        shifted_cols = [
+            f"{c}_zscore" if method == "cross_sectional" else f"{c}_roll_z" for c in value_cols
+        ]
         result = shift_features(result, [c for c in shifted_cols if c in result.columns])
 
     return result

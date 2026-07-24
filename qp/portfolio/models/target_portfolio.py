@@ -15,11 +15,19 @@ Fields:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date as date_type
 from datetime import UTC, datetime
+from typing import cast
 
 import pandas as pd
 import polars as pl
+
+# A position is a mapping of field name → value (symbol string or numeric).
+Position = dict[str, float | str]
+
+
+def _to_float(value: object) -> float:
+    """Coerce a loosely-typed mapping value to float."""
+    return float(cast("float | int | str", value))
 
 
 @dataclass
@@ -40,7 +48,7 @@ class TargetPortfolio:
     """
 
     date: str = ""
-    positions: list[dict[str, object]] = field(default_factory=list)
+    positions: list[Position] = field(default_factory=list)
     allocator_used: str = ""
     cash_reserve: float = 0.0
     total_capital: float = 0.0
@@ -74,7 +82,9 @@ class TargetPortfolio:
     @property
     def total_equity_weight(self) -> float:
         """Sum of equity target weights."""
-        return sum(float(p.get("target_weight", 0)) for p in self.positions if str(p["symbol"]) != "CASH")
+        return sum(
+            float(p.get("target_weight", 0)) for p in self.positions if str(p["symbol"]) != "CASH"
+        )
 
     @property
     def cash_weight(self) -> float:
@@ -97,7 +107,14 @@ class TargetPortfolio:
         """Convert positions to a pandas DataFrame."""
         if not self.positions:
             return pd.DataFrame(
-                columns=["date", "symbol", "target_weight", "target_capital", "allocator_used", "cash_reserve"]
+                columns=[
+                    "date",
+                    "symbol",
+                    "target_weight",
+                    "target_capital",
+                    "allocator_used",
+                    "cash_reserve",
+                ]
             )
         rows = []
         for p in self.positions:
@@ -134,12 +151,12 @@ class TargetPortfolio:
         """Deserialize from a dictionary."""
         return cls(
             date=str(data.get("date", "")),
-            positions=list(data.get("positions", [])),
+            positions=list(cast("list[Position]", data.get("positions", []))),
             allocator_used=str(data.get("allocator_used", "")),
-            cash_reserve=float(data.get("cash_reserve", 0)),
-            total_capital=float(data.get("total_capital", 0)),
+            cash_reserve=_to_float(data.get("cash_reserve", 0)),
+            total_capital=_to_float(data.get("total_capital", 0)),
             generated_at=str(data.get("generated_at", "")),
-            metadata=dict(data.get("metadata", {})),
+            metadata=dict(cast("dict[str, str]", data.get("metadata", {}))),
         )
 
     # ------------------------------------------------------------------
@@ -167,13 +184,13 @@ class TargetPortfolio:
         Returns:
             TargetPortfolio instance.
         """
-        positions: list[dict[str, object]] = []
+        positions: list[Position] = []
         for _, row in positions_df.iterrows():
             positions.append(
                 {
                     "symbol": str(row["symbol"]),
-                    "target_weight": float(row.get("target_weight", 0)),
-                    "target_capital": float(row.get("target_capital", 0)),
+                    "target_weight": _to_float(row.get("target_weight", 0)),
+                    "target_capital": _to_float(row.get("target_capital", 0)),
                 }
             )
 

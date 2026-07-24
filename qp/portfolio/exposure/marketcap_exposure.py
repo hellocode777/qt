@@ -19,14 +19,12 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
-
 # Classification thresholds in CNY
-LARGE_CAP_THRESHOLD = 50e8   # 50B CNY
-MID_CAP_THRESHOLD = 10e8     # 10B CNY
+LARGE_CAP_THRESHOLD = 50e8  # 50B CNY
+MID_CAP_THRESHOLD = 10e8  # 10B CNY
 
 # Doc default: small cap ≤ 20% (per docs/7_Portfolio_Risk_Layer.md §第三部分)
 DEFAULT_MAX_SMALL_CAP = 0.20
@@ -157,12 +155,7 @@ class MarketCapExposure:
         Returns:
             List of violation messages (empty = all pass).
         """
-        small_wt = sum(
-            wt for sym, wt in weights.items()
-            if cap_labels.get(sym, "mid") == "small"
-        )
+        small_wt = sum(wt for sym, wt in weights.items() if cap_labels.get(sym, "mid") == "small")
         if small_wt > self.max_small_cap:
-            return [
-                f"Small-cap exposure {small_wt:.1%} > {self.max_small_cap:.0%}"
-            ]
+            return [f"Small-cap exposure {small_wt:.1%} > {self.max_small_cap:.0%}"]
         return []

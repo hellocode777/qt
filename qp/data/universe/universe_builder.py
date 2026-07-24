@@ -109,9 +109,7 @@ class UniverseBuilder:
 
     def __init__(self, config: UniverseConfig | None = None) -> None:
         self.config = config or UniverseConfig()
-        self._listing_registry = ListingDateRegistry(
-            min_listing_days=self.config.min_listing_days
-        )
+        self._listing_registry = ListingDateRegistry(min_listing_days=self.config.min_listing_days)
         self._delisted_handler = DelistedHandler()
 
     # ------------------------------------------------------------------
@@ -191,9 +189,11 @@ class UniverseBuilder:
         # ── Filter 5: Liquidity cutoff ──
         if self.config.enable_liquidity_filter:
             before = working_df["symbol"].n_unique()
-            df_for_volume = working_df.filter(
-                pl.col("trade_date") <= as_of_date
-            ) if "trade_date" in working_df.columns else working_df
+            df_for_volume = (
+                working_df.filter(pl.col("trade_date") <= as_of_date)
+                if "trade_date" in working_df.columns
+                else working_df
+            )
 
             if self.config.use_volume_percentile:
                 liquid = filter_by_percentile(
@@ -217,9 +217,7 @@ class UniverseBuilder:
 
         # Liquidity statistics (for audit)
         if self.config.enable_liquidity_filter and not working_df.is_empty():
-            liq_stats = get_liquidity_stats(
-                working_df, lookback_days=self.config.volume_lookback
-            )
+            liq_stats = get_liquidity_stats(working_df, lookback_days=self.config.volume_lookback)
             stats["liquidity_stats"] = liq_stats  # type: ignore[assignment]
 
         logger.info(
@@ -265,9 +263,7 @@ class UniverseBuilder:
     def _filter_st(df: pl.DataFrame) -> pl.DataFrame:
         """Exclude ST / *ST stocks."""
         if "name" in df.columns:
-            return df.filter(
-                ~pl.col("name").str.contains(r"(?i)ST")
-            )
+            return df.filter(~pl.col("name").str.contains(r"(?i)ST"))
         return df
 
     @staticmethod

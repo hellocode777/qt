@@ -62,9 +62,10 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import networkx as nx
 from loguru import logger
@@ -128,7 +129,9 @@ class LineageRegistry:
             source_code = inspect.getsource(func)
         except (OSError, TypeError):
             # Fallback: use function name + module as identifier
-            source_code = f"{getattr(func, '__module__', '')}.{getattr(func, '__name__', str(func))}"
+            source_code = (
+                f"{getattr(func, '__module__', '')}.{getattr(func, '__name__', str(func))}"
+            )
         return hashlib.md5(source_code.encode("utf-8")).hexdigest()[:10]
 
     # ==================================================================
@@ -201,9 +204,7 @@ class LineageRegistry:
         if not code_hash and compute_func is not None:
             code_hash = self._generate_code_hash(compute_func)
         elif not code_hash:
-            code_hash = hashlib.md5(
-                feature_name.encode("utf-8")
-            ).hexdigest()[:10]
+            code_hash = hashlib.md5(feature_name.encode("utf-8")).hexdigest()[:10]
 
         node_id = make_feature_node_id(feature_name, code_hash)
 
@@ -227,8 +228,7 @@ class LineageRegistry:
                 )
             else:
                 logger.warning(
-                    "Feature '{}' references unknown data node '{}' — "
-                    "edge not created",
+                    "Feature '{}' references unknown data node '{}' — edge not created",
                     feature_name,
                     parent_node,
                 )
@@ -294,13 +294,14 @@ class LineageRegistry:
                 )
             else:
                 logger.warning(
-                    "Model '{}' references unknown feature node '{}' — "
-                    "edge not created",
+                    "Model '{}' references unknown feature node '{}' — edge not created",
                     model_name,
                     f_node,
                 )
 
-        logger.info("🧠 [Model Registered] {} (features={})", node_id, len(used_feature_nodes or []))
+        logger.info(
+            "🧠 [Model Registered] {} (features={})", node_id, len(used_feature_nodes or [])
+        )
         return node_id
 
     # ==================================================================
@@ -345,8 +346,7 @@ class LineageRegistry:
                 )
             else:
                 logger.warning(
-                    "Strategy '{}' references unknown model node '{}' — "
-                    "edge not created",
+                    "Strategy '{}' references unknown model node '{}' — edge not created",
                     strategy_id,
                     m_node,
                 )
@@ -428,8 +428,7 @@ class LineageRegistry:
             )
         elif report["affected_features"]:
             report["recommendation"] = (
-                f"RECOMPUTE {len(report['affected_features'])} feature(s) "
-                f"from corrected data."
+                f"RECOMPUTE {len(report['affected_features'])} feature(s) from corrected data."
             )
 
         return report
@@ -510,10 +509,7 @@ class LineageRegistry:
             return False
 
         ancestor_types = {parse_node_id(a).get("node_type", "") for a in ancestors}
-        return all(
-            t in ancestor_types
-            for t in (NodeType.MODEL, NodeType.FEATURE, NodeType.DATA)
-        )
+        return all(t in ancestor_types for t in (NodeType.MODEL, NodeType.FEATURE, NodeType.DATA))
 
     def validate_lineage(self, strategy_node_id: str) -> dict[str, Any]:
         """Validate lineage completeness with detailed report.
@@ -588,27 +584,17 @@ class LineageRegistry:
 
     def get_features_for_data(self, data_node_id: str) -> list[str]:
         """Get all Feature nodes derived from a Data node."""
-        return sorted(
-            self._graph.successors(data_node_id)
-            if data_node_id in self._graph
-            else []
-        )
+        return sorted(self._graph.successors(data_node_id) if data_node_id in self._graph else [])
 
     def get_models_for_feature(self, feature_node_id: str) -> list[str]:
         """Get all Model nodes trained on a Feature node."""
         return sorted(
-            self._graph.successors(feature_node_id)
-            if feature_node_id in self._graph
-            else []
+            self._graph.successors(feature_node_id) if feature_node_id in self._graph else []
         )
 
     def get_strategies_for_model(self, model_node_id: str) -> list[str]:
         """Get all Strategy nodes deployed from a Model node."""
-        return sorted(
-            self._graph.successors(model_node_id)
-            if model_node_id in self._graph
-            else []
-        )
+        return sorted(self._graph.successors(model_node_id) if model_node_id in self._graph else [])
 
     # ==================================================================
     # Properties
@@ -661,18 +647,10 @@ class LineageRegistry:
             "version": "1.0",
             "exported_at": datetime.now(UTC).isoformat(),
             "graph": graph_data,
-            "data_registry": {
-                k: v.to_dict() for k, v in self._data_registry.items()
-            },
-            "feature_registry": {
-                k: v.to_dict() for k, v in self._feature_registry.items()
-            },
-            "model_registry": {
-                k: v.to_dict() for k, v in self._model_registry.items()
-            },
-            "strategy_registry": {
-                k: v.to_dict() for k, v in self._strategy_registry.items()
-            },
+            "data_registry": {k: v.to_dict() for k, v in self._data_registry.items()},
+            "feature_registry": {k: v.to_dict() for k, v in self._feature_registry.items()},
+            "model_registry": {k: v.to_dict() for k, v in self._model_registry.items()},
+            "strategy_registry": {k: v.to_dict() for k, v in self._strategy_registry.items()},
         }
 
     @classmethod
@@ -693,9 +671,7 @@ class LineageRegistry:
         # Restore graph from node_link_data
         graph_data = data.get("graph", {})
         if graph_data:
-            registry._graph = nx.node_link_graph(
-                graph_data, edges="links"
-            )
+            registry._graph = nx.node_link_graph(graph_data, edges="links")
 
         logger.info(
             "Loaded LineageRegistry: {} nodes, {} edges",
@@ -753,7 +729,7 @@ class LineageRegistry:
             Number of nodes imported.
         """
         count = 0
-        for key, entry in registry._entries.items():
+        for _key, entry in registry._entries.items():
             name = entry.get("name", "")
             version = entry.get("version", "")
             path_val = entry.get("path", "")
@@ -807,7 +783,7 @@ class LineageRegistry:
                 hyperparams=metadata.hyperparams,
                 random_seed=metadata.hyperparams.get("random_seed", 0),
                 dataset_version=metadata.training_window.get("start", ""),
-                feature_versions={f: "" for f in metadata.features},
+                feature_versions=dict.fromkeys(metadata.features, ""),
             )
             count += 1
         logger.info("Synced {} models from ModelRegistry", count)

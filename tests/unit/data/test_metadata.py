@@ -1,4 +1,5 @@
 """Tests for qp.data.metadata — SourceMetadata, SchemaTracker, LineageTracker."""
+
 from __future__ import annotations
 
 import pytest
@@ -219,12 +220,16 @@ class TestSchemaVersion:
 
     def test_diff_type_change(self):
         v1 = SchemaVersion(
-            dataset_name="test", version="v1",
-            columns={"a": "int64"}, primary_key=["a"],
+            dataset_name="test",
+            version="v1",
+            columns={"a": "int64"},
+            primary_key=["a"],
         )
         v2 = SchemaVersion(
-            dataset_name="test", version="v2",
-            columns={"a": "float64"}, primary_key=["a"],
+            dataset_name="test",
+            version="v2",
+            columns={"a": "float64"},
+            primary_key=["a"],
         )
         changes = v2.diff(v1)
         assert any("类型变更" in c for c in changes)
@@ -238,12 +243,16 @@ class TestSchemaVersion:
 
     def test_diff_primary_key_change(self):
         v1 = SchemaVersion(
-            dataset_name="test", version="v1",
-            columns={"a": "int64"}, primary_key=["a"],
+            dataset_name="test",
+            version="v1",
+            columns={"a": "int64"},
+            primary_key=["a"],
         )
         v2 = SchemaVersion(
-            dataset_name="test", version="v2",
-            columns={"a": "int64"}, primary_key=["a", "b"],
+            dataset_name="test",
+            version="v2",
+            columns={"a": "int64"},
+            primary_key=["a", "b"],
         )
         changes = v2.diff(v1)
         assert any("主键变更" in c for c in changes)
@@ -315,8 +324,10 @@ class TestSchemaTracker:
         tracker = SchemaTracker(store_path=str(tmp_path / "schemas.json"))
         tracker.record(_make_schema_v1())
         v = SchemaVersion(
-            dataset_name="another", version="v1",
-            columns={"a": "int64"}, primary_key=["a"],
+            dataset_name="another",
+            version="v1",
+            columns={"a": "int64"},
+            primary_key=["a"],
         )
         tracker.record(v)
         assert tracker.list_datasets() == ["another", "daily_price"]
@@ -419,12 +430,18 @@ class TestLineageTracker:
 
     def test_find_by_pipeline(self, tmp_path):
         tracker = LineageTracker(store_path=str(tmp_path / "lineage.json"))
-        tracker.record(DataLineage(
-            pipeline_run_id="run_abc", dataset_name="ds",
-        ))
-        tracker.record(DataLineage(
-            pipeline_run_id="run_xyz", dataset_name="ds",
-        ))
+        tracker.record(
+            DataLineage(
+                pipeline_run_id="run_abc",
+                dataset_name="ds",
+            )
+        )
+        tracker.record(
+            DataLineage(
+                pipeline_run_id="run_xyz",
+                dataset_name="ds",
+            )
+        )
 
         assert len(tracker.find_by_pipeline("run_abc")) == 1
 
@@ -446,12 +463,18 @@ class TestLineageTracker:
 
     def test_get_latest(self, tmp_path):
         tracker = LineageTracker(store_path=str(tmp_path / "lineage.json"))
-        tracker.record(DataLineage(
-            dataset_name="ds", dataset_version="old",
-        ))
-        tracker.record(DataLineage(
-            dataset_name="ds", dataset_version="new",
-        ))
+        tracker.record(
+            DataLineage(
+                dataset_name="ds",
+                dataset_version="old",
+            )
+        )
+        tracker.record(
+            DataLineage(
+                dataset_name="ds",
+                dataset_version="new",
+            )
+        )
         latest = tracker.get_latest("ds")
         assert latest is not None
         assert latest.dataset_version == "new"
@@ -459,9 +482,12 @@ class TestLineageTracker:
     def test_prune_older_than(self, tmp_path):
         tracker = LineageTracker(store_path=str(tmp_path / "lineage.json"))
         # Add a recent record
-        tracker.record(DataLineage(
-            dataset_name="ds", dataset_version="v1",
-        ))
+        tracker.record(
+            DataLineage(
+                dataset_name="ds",
+                dataset_version="v1",
+            )
+        )
         # Prune with very large days (should keep everything)
         removed = tracker.prune_older_than(days=9999)
         assert removed == 0
@@ -470,11 +496,13 @@ class TestLineageTracker:
     def test_persistence(self, tmp_path):
         store_path = tmp_path / "lineage.json"
         tracker = LineageTracker(store_path=str(store_path))
-        tracker.record(DataLineage(
-            source_name="akshare",
-            dataset_name="daily_price",
-            dataset_version="2026-07-20",
-        ))
+        tracker.record(
+            DataLineage(
+                source_name="akshare",
+                dataset_name="daily_price",
+                dataset_version="2026-07-20",
+            )
+        )
 
         tracker2 = LineageTracker(store_path=str(store_path))
         assert tracker2.count() == 1

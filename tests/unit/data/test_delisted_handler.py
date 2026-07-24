@@ -39,6 +39,7 @@ class TestDelistedHandler:
         """scan_inactive requires a {code: date_str} dict with recent dates."""
         handler = DelistedHandler()
         from datetime import date
+
         today = date.today().isoformat()
         code_date_map = {
             "600519": today,

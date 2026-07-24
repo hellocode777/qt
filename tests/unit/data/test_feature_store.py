@@ -28,14 +28,13 @@ from qp.data.feature_store import (
 
 class Momentum5(BaseFeature):
     """5-day momentum feature for testing."""
+
     feature_name = "momentum_5"
     required_data = ["close"]
     window = 5
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
-        return df.with_columns(
-            pl.col("close").pct_change(5).over("symbol").alias("momentum_5")
-        )
+        return df.with_columns(pl.col("close").pct_change(5).over("symbol").alias("momentum_5"))
 
     def update_stream(self, new_value: float) -> float | None:
         if self._buffer is None:
@@ -48,6 +47,7 @@ class Momentum5(BaseFeature):
 
 class SimpleMA3(BaseFeature):
     """3-period moving average for testing."""
+
     feature_name = "ma_3"
     required_data = ["close"]
     window = 3
@@ -86,21 +86,27 @@ def _make_ohlcv_df(
     rows: list[dict] = []
     for sym in symbols:
         close = 100.0 + rng.normal(0, 2, n_days).cumsum()
-        dates = [f"2024-01-{d+1:02d}" for d in range(n_days)]
+        dates = [f"2024-01-{d + 1:02d}" for d in range(n_days)]
         for _i, (d, c) in enumerate(zip(dates, close, strict=True)):
-            rows.append({
-                "symbol": sym,
-                "trade_date": d,
-                "open": c + rng.normal(0, 0.5),
-                "high": c + abs(rng.normal(0, 1)),
-                "low": c - abs(rng.normal(0, 1)),
-                "close": c,
-                "volume": float(abs(rng.normal(1e6, 2e5))),
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "trade_date": d,
+                    "open": c + rng.normal(0, 0.5),
+                    "high": c + abs(rng.normal(0, 1)),
+                    "low": c - abs(rng.normal(0, 1)),
+                    "close": c,
+                    "volume": float(abs(rng.normal(1e6, 2e5))),
+                }
+            )
 
-    return pl.DataFrame(rows).with_columns(
-        pl.col("trade_date").str.to_date(),
-    ).sort(["symbol", "trade_date"])
+    return (
+        pl.DataFrame(rows)
+        .with_columns(
+            pl.col("trade_date").str.to_date(),
+        )
+        .sort(["symbol", "trade_date"])
+    )
 
 
 # ==================================================================
@@ -276,12 +282,20 @@ class TestFeatureRegistry:
 
 class TestStandardization:
     def test_cross_sectional_zscore(self):
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C", "A", "B", "C"],
-            "trade_date": ["2024-01-15", "2024-01-15", "2024-01-15",
-                           "2024-01-16", "2024-01-16", "2024-01-16"],
-            "value": [10.0, 20.0, 30.0, 5.0, 15.0, 25.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "A", "B", "C"],
+                "trade_date": [
+                    "2024-01-15",
+                    "2024-01-15",
+                    "2024-01-15",
+                    "2024-01-16",
+                    "2024-01-16",
+                    "2024-01-16",
+                ],
+                "value": [10.0, 20.0, 30.0, 5.0, 15.0, 25.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
 
         result = cross_sectional_zscore(df, "value")
         assert "value_zscore" in result.columns
@@ -293,11 +307,13 @@ class TestStandardization:
 
     def test_cross_sectional_zscore_no_leakage(self):
         """Day T's z-score must not be affected by Day T+1's data."""
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "A", "B"],
-            "trade_date": ["2024-01-15", "2024-01-15", "2024-01-16", "2024-01-16"],
-            "value": [10.0, 20.0, 100.0, 200.0],  # Day 2 much larger
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "A", "B"],
+                "trade_date": ["2024-01-15", "2024-01-15", "2024-01-16", "2024-01-16"],
+                "value": [10.0, 20.0, 100.0, 200.0],  # Day 2 much larger
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
 
         result = cross_sectional_zscore(df, "value")
         # Day 1 z-scores should be the same regardless of day 2 values
@@ -308,11 +324,13 @@ class TestStandardization:
         assert z_a < 0 < z_b
 
     def test_cross_sectional_rank(self):
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C"],
-            "trade_date": ["2024-01-15"] * 3,
-            "value": [10.0, 20.0, 30.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "trade_date": ["2024-01-15"] * 3,
+                "value": [10.0, 20.0, 30.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
 
         result = cross_sectional_rank(df, "value")
         assert "value_rank" in result.columns
@@ -321,11 +339,13 @@ class TestStandardization:
         assert ranks[-1] == 1.0  # Largest → rank 1
 
     def test_cross_sectional_rank_descending(self):
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C"],
-            "trade_date": ["2024-01-15"] * 3,
-            "value": [10.0, 20.0, 30.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "trade_date": ["2024-01-15"] * 3,
+                "value": [10.0, 20.0, 30.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
 
         result = cross_sectional_rank(df, "value", ascending=False)
         ranks = result.sort("value")["value_rank"].to_list()
@@ -363,12 +383,15 @@ class TestStandardization:
     def test_validate_no_future_leakage_clean(self):
         """Uncorrelated random data should NOT trigger leakage warning."""
         import numpy as np
+
         rng = np.random.default_rng(42)
         n = 200
-        df = pl.DataFrame({
-            "feature": rng.normal(0, 1, n),
-            "return": rng.normal(0, 1, n),
-        })
+        df = pl.DataFrame(
+            {
+                "feature": rng.normal(0, 1, n),
+                "return": rng.normal(0, 1, n),
+            }
+        )
         # With n=200, ~1/sqrt(n) ≈ 0.07 sampling noise; 0.20 safe threshold
         assert validate_no_future_leakage(df, "feature", "return", max_corr=0.20) is True
 
@@ -378,10 +401,12 @@ class TestStandardization:
 
         n = 200
         vals = np.random.default_rng(42).normal(0, 1, n)
-        df = pl.DataFrame({
-            "feature": vals,
-            "return": vals * 0.9 + np.random.default_rng(99).normal(0, 0.1, n),
-        })
+        df = pl.DataFrame(
+            {
+                "feature": vals,
+                "return": vals * 0.9 + np.random.default_rng(99).normal(0, 0.1, n),
+            }
+        )
         # Very high correlation → should flag
         result = validate_no_future_leakage(df, "feature", "return", max_corr=0.01)
         assert result is False
@@ -509,12 +534,14 @@ class TestOfflineStore:
         rows = []
         for sym in symbols:
             for d in range(n_days):
-                rows.append({
-                    "symbol": sym,
-                    "trade_date": f"2024-01-{d+1:02d}",
-                    "momentum_5": rng.normal(0, 1),
-                    "rsi_14": rng.uniform(30, 70),
-                })
+                rows.append(
+                    {
+                        "symbol": sym,
+                        "trade_date": f"2024-01-{d + 1:02d}",
+                        "momentum_5": rng.normal(0, 1),
+                        "rsi_14": rng.uniform(30, 70),
+                    }
+                )
         return pl.DataFrame(rows).with_columns(pl.col("trade_date").str.to_date())
 
     def test_write_and_load(self):
@@ -549,6 +576,7 @@ class TestOfflineStore:
         if not loaded.is_empty() and "trade_date" in loaded.columns:
             dates = loaded["trade_date"].unique().to_list()
             from datetime import date
+
             min_d = date(2024, 1, 5)
             assert all(d >= min_d for d in dates)
 
@@ -656,10 +684,12 @@ class TestOnlineCache:
 
     def test_batch_update(self):
         cache = OnlineCache()
-        cache.update_batch({
-            "600519": {"mom": 0.05},
-            "000001": {"mom": -0.02},
-        })
+        cache.update_batch(
+            {
+                "600519": {"mom": 0.05},
+                "000001": {"mom": -0.02},
+            }
+        )
         assert cache.symbol_count == 2
         assert cache.get("600519")["mom"] == 0.05
         assert cache.get("000001")["mom"] == -0.02
@@ -695,8 +725,12 @@ class TestOnlineCache:
         cache = OnlineCache()
         cache.update("600519", {"a": 1.0, "b": 2.0})
         cache.update("000001", {"b": 3.0, "c": 4.0})
-        assert cache.feature_names == {"a", "b", "c", "updated_at"} or \
-            cache.feature_names.issuperset({"a", "b", "c"})
+        assert cache.feature_names == {
+            "a",
+            "b",
+            "c",
+            "updated_at",
+        } or cache.feature_names.issuperset({"a", "b", "c"})
 
     def test_is_cached(self):
         cache = OnlineCache()
@@ -737,12 +771,14 @@ class TestOnlineCache:
     def test_refresh_from_offline(self, tmp_path):
         """Integration: Write to OfflineStore, refresh OnlineCache."""
         offline = OfflineStore(tmp_path / "offline")
-        df = pl.DataFrame({
-            "symbol": ["600519", "000001"],
-            "trade_date": ["2024-06-15", "2024-06-15"],
-            "mom": [0.05, -0.02],
-            "rsi": [62.0, 45.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["600519", "000001"],
+                "trade_date": ["2024-06-15", "2024-06-15"],
+                "mom": [0.05, -0.02],
+                "rsi": [62.0, 45.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         offline.write(df, factor_group="test")
 
         cache = OnlineCache()

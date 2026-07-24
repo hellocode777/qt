@@ -12,7 +12,7 @@ and caps individual positions per risk management limits.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 import polars as pl
@@ -80,9 +80,6 @@ class KellyAllocator(BaseCapitalAllocator):
         if candidates.empty:
             return pd.DataFrame(columns=["symbol", "target_weight", "target_capital"])
 
-        n = len(candidates)
-        investable = total_capital * (1.0 - self._cash_buffer)
-
         # Use per-candidate max_weight_limit from Layer 7 if available
         has_limits = "max_weight_limit" in candidates.columns
 
@@ -91,12 +88,12 @@ class KellyAllocator(BaseCapitalAllocator):
             symbol = str(row["symbol"])
 
             if has_limits:
-                layer7_limit = float(row.get("max_weight_limit", self._max_single))
+                layer7_limit = float(cast("float", row.get("max_weight_limit", self._max_single)))
             else:
                 layer7_limit = self._max_single
 
             # Kelly fraction ∝ alpha_score (proxy when no price history)
-            alpha = float(row.get("alpha_score", 0.5))
+            alpha = float(cast("float", row.get("alpha_score", 0.5)))
             kelly_f = alpha * self._fraction  # scaled by fraction
 
             # Cap at the tighter of: max_single, layer7_limit

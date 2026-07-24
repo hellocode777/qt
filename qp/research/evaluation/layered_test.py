@@ -80,9 +80,9 @@ def compute_layered_returns(
     # Compute forward returns
     px = price_df.sort(["symbol", "trade_date"])
     px = px.with_columns(
-        (
-            pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1
-        ).alias("forward_return")
+        (pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1).alias(
+            "forward_return"
+        )
     )
     px = px.drop_nulls(subset=["forward_return"])
 
@@ -111,7 +111,7 @@ def compute_layered_returns(
 
     # Accumulate returns per quantile across dates
     quantile_daily_rets: dict[int, list[float]] = {q: [] for q in range(1, n_quantiles + 1)}
-    quantile_total_count: dict[int, int] = {q: 0 for q in range(1, n_quantiles + 1)}
+    quantile_total_count: dict[int, int] = dict.fromkeys(range(1, n_quantiles + 1), 0)
 
     for d in dates:
         day_data = merged.filter(pl.col("trade_date") == d)
@@ -123,7 +123,6 @@ def compute_layered_returns(
         day_data = day_data.sort("score", descending=True)
 
         # Assign quantiles (equal-sized groups)
-        scores_arr = day_data["score"].to_numpy()
         rets_arr = day_data["forward_return"].to_numpy()
         quantile_edges = np.linspace(0, n, n_quantiles + 1, dtype=int)
 
@@ -133,7 +132,7 @@ def compute_layered_returns(
             if start < end:
                 q_ret = float(np.mean(rets_arr[start:end]))
                 quantile_daily_rets[q].append(q_ret)
-                quantile_total_count[q] += (end - start)
+                quantile_total_count[q] += end - start
 
     # Compute statistics
     quantile_returns: dict[int, float] = {}
@@ -215,9 +214,9 @@ def compute_quantile_spread_series(
     """
     px = price_df.sort(["symbol", "trade_date"])
     px = px.with_columns(
-        (
-            pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1
-        ).alias("forward_return")
+        (pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1).alias(
+            "forward_return"
+        )
     )
     px = px.drop_nulls(subset=["forward_return"])
 

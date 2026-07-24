@@ -33,7 +33,7 @@ Usage via CLI:
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import polars as pl
@@ -53,9 +53,11 @@ from qp.research.feature.compute import (
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus
 from qp.strategy.multifactor import generate_rebalance_signals
-from qp.strategy.strategies.momentum_vol_full import (
-    MOMENTUM_VOL_FULL_WEIGHTS,
-)
+
+if TYPE_CHECKING:
+    from qp.research.evaluation.layered_test import LayeredTestResult
+    from qp.research.evaluation.rank_ic import ICRecord
+    from qp.strategy.config import StrategyConfig
 
 # Default stock pool: liquid large-cap + representative sectors
 DEFAULT_SYMBOLS = [
@@ -121,9 +123,15 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Strategy mode ──
         use_full_strategy = strategy_name in (
-            "momentum_vol_full", "mvf", "mv_full", "full",
-            "low_vol_reversal", "lvr",
-            "lvr_vol_only", "lvr_vol_mom", "lvr_vol_all_rev",
+            "momentum_vol_full",
+            "mvf",
+            "mv_full",
+            "full",
+            "low_vol_reversal",
+            "lvr",
+            "lvr_vol_only",
+            "lvr_vol_mom",
+            "lvr_vol_all_rev",
         )
 
         result = PipelineResult(
@@ -158,6 +166,7 @@ class MultiFactorPipeline(BasePipeline):
         if model_mode:
             from datetime import datetime as _dt
             from datetime import timedelta as _td
+
             # 训练最少 252 天 + 25 天 gap ≈ 1.5 年
             ml_start = _dt.fromisoformat(start_date_str) - _td(days=600)
             fetch_start = ml_start.strftime("%Y-%m-%d")
@@ -179,6 +188,7 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["n_rows"] = float(total_rows)
 
         # ── Stage 2: Factor computation / Strategy execution ──
+        signals: pl.DataFrame = pl.DataFrame()
         if use_full_strategy:
             signals, scores, fundamental_data, valuation_data, index_df = self._run_full_strategy(
                 price_data=price_data,
@@ -190,6 +200,7 @@ class MultiFactorPipeline(BasePipeline):
                 score_band=score_band,
             )
             from qp.strategy.config import get_strategy_config
+
             cfg = get_strategy_config(strategy_name)
             weights = dict(cfg.factors)
             features = list(cfg.factors.keys())
@@ -202,16 +213,15 @@ class MultiFactorPipeline(BasePipeline):
             index_df = None
             logger.info("[2/6] 计算原始因子值...")
             n_factors = len(PRICE_VOLUME_FACTORS)
-            weights = {
-                f: ALL_FACTOR_DIRECTIONS.get(f, 1) / n_factors
-                for f in PRICE_VOLUME_FACTORS
-            }
+            weights = {f: ALL_FACTOR_DIRECTIONS.get(f, 1) / n_factors for f in PRICE_VOLUME_FACTORS}
             features = list(PRICE_VOLUME_FACTORS)
             n_pos = sum(1 for v in weights.values() if v > 0)
             n_neg = sum(1 for v in weights.values() if v < 0)
             logger.info(
                 "   因子: {} 个 ({} IC+, {} IC-) / 方向校准",
-                n_factors, n_pos, n_neg,
+                n_factors,
+                n_pos,
+                n_neg,
             )
 
             # Compute raw factors for all stocks
@@ -283,9 +293,9 @@ class MultiFactorPipeline(BasePipeline):
         if factor_ic_table:
             _log_factor_ic_table(factor_ic_table, factor_weights)
             for i, entry in enumerate(factor_ic_table[:3]):
-                result.metrics[f"factor_{i+1}_name"] = entry["factor"]
-                result.metrics[f"factor_{i+1}_ic"] = entry["ic_mean"]
-                result.metrics[f"factor_{i+1}_ic_ir"] = entry["ic_ir"]
+                result.metrics[f"factor_{i + 1}_name"] = entry["factor"]
+                result.metrics[f"factor_{i + 1}_ic"] = entry["ic_mean"]
+                result.metrics[f"factor_{i + 1}_ic_ir"] = entry["ic_ir"]
 
             # ── Stage 3.6: Optimize weights from factor ICs ──
             logger.info("")
@@ -310,13 +320,20 @@ class MultiFactorPipeline(BasePipeline):
                     )
                     ic2 = evaluate_factor_ic(
                         scores2 if not scores2.is_empty() else scores,
-                        price_flat, forward_days=5, min_stocks_per_day=10,
+                        price_flat,
+                        forward_days=5,
+                        min_stocks_per_day=10,
                     )
-                    logger.info("   优化后复合 IC: {:+.4f} | IR: {:.2f} | IC>0: {:.0f}% (之前 IC={:+.4f})",
-                               ic2.ic_mean, ic2.ic_ir, ic2.ic_positive_pct, ic_record.ic_mean)
+                    logger.info(
+                        "   优化后复合 IC: {:+.4f} | IR: {:.2f} | IC>0: {:.0f}% (之前 IC={:+.4f})",
+                        ic2.ic_mean,
+                        ic2.ic_ir,
+                        ic2.ic_positive_pct,
+                        ic_record.ic_mean,
+                    )
                     result.metrics["ic_mean_optimized"] = ic2.ic_mean
                     result.metrics["ic_ir_optimized"] = ic2.ic_ir
-                    result.metrics["optimized_weights"] = ",".join(
+                    result.metadata["optimized_weights"] = ",".join(
                         f"{k}={v:+.3f}" for k, v in sorted(optimized_weights.items())
                     )
                     scores = scores2 if not scores2.is_empty() else scores
@@ -335,9 +352,7 @@ class MultiFactorPipeline(BasePipeline):
         # Per-quantile detail for debugging monotonicity
         if layered.quantile_returns:
             qs = sorted(layered.quantile_returns.keys())
-            q_str = "  ".join(
-                f"Q{q}={layered.quantile_returns[q]:+.4f}" for q in qs
-            )
+            q_str = "  ".join(f"Q{q}={layered.quantile_returns[q]:+.4f}" for q in qs)
             logger.info("   分位数收益: {}", q_str)
         result.metrics["top_bottom_spread"] = layered.top_bottom_spread
         result.metrics["spread_t_stat"] = layered.spread_t_stat
@@ -355,23 +370,15 @@ class MultiFactorPipeline(BasePipeline):
             # Build detailed failure report
             failures: list[str] = []
             if not ic_record.ic_mean_pass:
-                failures.append(
-                    f"|IC|={abs(ic_record.ic_mean):.4f} < 0.02 (阈值)"
-                )
+                failures.append(f"|IC|={abs(ic_record.ic_mean):.4f} < 0.02 (阈值)")
             if not ic_record.ic_ir_pass:
-                failures.append(
-                    f"IC_IR={ic_record.ic_ir:.2f} < 0.3 (阈值)"
-                )
+                failures.append(f"IC_IR={ic_record.ic_ir:.2f} < 0.3 (阈值)")
             if not ic_record.ic_t_stat_pass:
-                failures.append(
-                    f"IC t-stat={ic_record.ic_t_stat:.2f} < 2.0 (阈值)"
-                )
+                failures.append(f"IC t-stat={ic_record.ic_t_stat:.2f} < 2.0 (阈值)")
             if not layered.is_monotonic:
                 failures.append("分层收益不单调")
             if layered.spread_t_stat < 2.0:
-                failures.append(
-                    f"Q5-Q1 spread t={layered.spread_t_stat:.2f} < 2.0 (阈值)"
-                )
+                failures.append(f"Q5-Q1 spread t={layered.spread_t_stat:.2f} < 2.0 (阈值)")
 
             logger.error("   ⛔ 因子检验未通过 §10.1 — 禁止进入策略层")
             for f in failures:
@@ -386,44 +393,68 @@ class MultiFactorPipeline(BasePipeline):
             from qp.validation.result import GateDecision, GateResult, RuleResult
 
             gate_rules: list[RuleResult] = []
-            gate_rules.append(RuleResult(
-                "rank_ic", ValidationStatus.PASS if ic_record.ic_mean_pass else ValidationStatus.FAIL,
-                80 if ic_record.ic_mean_pass else 30,
-                threshold=0.02, actual_value=abs(ic_record.ic_mean),
-                detail=f"|IC|={abs(ic_record.ic_mean):.4f}",
-            ))
-            gate_rules.append(RuleResult(
-                "ic_ir", ValidationStatus.PASS if ic_record.ic_ir_pass else ValidationStatus.FAIL,
-                80 if ic_record.ic_ir_pass else 30,
-                threshold=0.3, actual_value=ic_record.ic_ir,
-                detail=f"IC_IR={ic_record.ic_ir:.2f}",
-            ))
-            gate_rules.append(RuleResult(
-                "ic_t_stat", ValidationStatus.PASS if ic_record.ic_t_stat_pass else ValidationStatus.FAIL,
-                80 if ic_record.ic_t_stat_pass else 30,
-                threshold=2.0, actual_value=ic_record.ic_t_stat,
-                detail=f"t={ic_record.ic_t_stat:.2f}",
-            ))
-            gate_rules.append(RuleResult(
-                "monotonicity", ValidationStatus.PASS if layered.is_monotonic else ValidationStatus.FAIL,
-                80 if layered.is_monotonic else 30,
-                threshold=2.0, actual_value=layered.monotonicity_t_stat,
-                detail=f"monotonicity t={layered.monotonicity_t_stat:.2f}",
-            ))
-            gate_rules.append(RuleResult(
-                "spread", ValidationStatus.PASS if layered.spread_t_stat >= 2.0 else ValidationStatus.FAIL,
-                80 if layered.spread_t_stat >= 2.0 else 30,
-                threshold=2.0, actual_value=layered.spread_t_stat,
-                detail=f"Q5-Q1 spread t={layered.spread_t_stat:.2f}",
-            ))
+            gate_rules.append(
+                RuleResult(
+                    "rank_ic",
+                    ValidationStatus.PASS if ic_record.ic_mean_pass else ValidationStatus.FAIL,
+                    80 if ic_record.ic_mean_pass else 30,
+                    threshold=0.02,
+                    actual_value=abs(ic_record.ic_mean),
+                    detail=f"|IC|={abs(ic_record.ic_mean):.4f}",
+                )
+            )
+            gate_rules.append(
+                RuleResult(
+                    "ic_ir",
+                    ValidationStatus.PASS if ic_record.ic_ir_pass else ValidationStatus.FAIL,
+                    80 if ic_record.ic_ir_pass else 30,
+                    threshold=0.3,
+                    actual_value=ic_record.ic_ir,
+                    detail=f"IC_IR={ic_record.ic_ir:.2f}",
+                )
+            )
+            gate_rules.append(
+                RuleResult(
+                    "ic_t_stat",
+                    ValidationStatus.PASS if ic_record.ic_t_stat_pass else ValidationStatus.FAIL,
+                    80 if ic_record.ic_t_stat_pass else 30,
+                    threshold=2.0,
+                    actual_value=ic_record.ic_t_stat,
+                    detail=f"t={ic_record.ic_t_stat:.2f}",
+                )
+            )
+            gate_rules.append(
+                RuleResult(
+                    "monotonicity",
+                    ValidationStatus.PASS if layered.is_monotonic else ValidationStatus.FAIL,
+                    80 if layered.is_monotonic else 30,
+                    threshold=2.0,
+                    actual_value=layered.monotonicity_t_stat,
+                    detail=f"monotonicity t={layered.monotonicity_t_stat:.2f}",
+                )
+            )
+            gate_rules.append(
+                RuleResult(
+                    "spread",
+                    ValidationStatus.PASS
+                    if layered.spread_t_stat >= 2.0
+                    else ValidationStatus.FAIL,
+                    80 if layered.spread_t_stat >= 2.0 else 30,
+                    threshold=2.0,
+                    actual_value=layered.spread_t_stat,
+                    detail=f"Q5-Q1 spread t={layered.spread_t_stat:.2f}",
+                )
+            )
 
             gate = GateResult(
                 strategy_id=strategy_name,
                 stage="backtest_passed",
-                decision=GateDecision.RESEARCH_ONLY if (ic_pass and not layered_pass)
-                    else GateDecision.BLOCKED,
+                decision=GateDecision.RESEARCH_ONLY
+                if (ic_pass and not layered_pass)
+                else GateDecision.BLOCKED,
                 score=sum(r.score for r in gate_rules) / len(gate_rules),
-                confidence=sum(1 for r in gate_rules if r.status == ValidationStatus.PASS) / len(gate_rules),
+                confidence=sum(1 for r in gate_rules if r.status == ValidationStatus.PASS)
+                / len(gate_rules),
                 data_integrity="PASS",
                 factor_validity="PASS" if ic_pass else "FAIL",
                 portfolio_conversion="PASS" if layered_pass else "FAIL",
@@ -432,7 +463,9 @@ class MultiFactorPipeline(BasePipeline):
                     f"策略 {strategy_name} 具有统计预测力 (IC={ic_record.ic_mean:+.4f}, "
                     f"IR={ic_record.ic_ir:.2f}) 但分层收益不单调 (t={layered.monotonicity_t_stat:.2f})。"
                     f"建议: 研究 Q5 顶部塌陷原因或重新定义因子。"
-                ) if (ic_pass and not layered_pass) else (
+                )
+                if (ic_pass and not layered_pass)
+                else (
                     f"策略 {strategy_name} 因子检验未通过。建议: 检查因子计算、数据源、"
                     f"或缩减因子数量。"
                 ),
@@ -452,17 +485,22 @@ class MultiFactorPipeline(BasePipeline):
 
             # Persist GateResult JSON
             from pathlib import Path
+
             gate_dir = Path("data/experiments")
             gate_dir.mkdir(parents=True, exist_ok=True)
-            gate_file = gate_dir / f"{strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_gate.json"
+            gate_file = (
+                gate_dir / f"{strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_gate.json"
+            )
             import json as _json
-            gate_file.write_text(_json.dumps(gate.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+
+            gate_file.write_text(
+                _json.dumps(gate.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+            )
             gate.artifacts.append(str(gate_file))
 
             result.status = PipelineStatus.FAILED
             result.errors.append(
-                f"§10.1 Gate: {len(failures)} threshold(s) not met — "
-                + "; ".join(failures)
+                f"§10.1 Gate: {len(failures)} threshold(s) not met — " + "; ".join(failures)
             )
             result.metadata["gate_result"] = gate.to_dict()  # type: ignore[assignment]
             result.metadata["gate_failures"] = "; ".join(failures)
@@ -583,7 +621,7 @@ class MultiFactorPipeline(BasePipeline):
         sell_buffer: int,
         strategy_name: str,
         model_mode: bool = False,
-        config_override: object = None,
+        config_override: StrategyConfig | None = None,
         score_band: str | None = None,
     ) -> tuple[pl.DataFrame, pl.DataFrame, dict, dict, pl.DataFrame]:
         """Run the momentum_vol_full strategy through the strategy layer.
@@ -640,7 +678,8 @@ class MultiFactorPipeline(BasePipeline):
                 extra_overrides["score_percentile_max"] = float(parts[1])
                 logger.info(
                     "   🎯 Score band: {:.0f}%-{:.0f}% (Q{:.0f} region)",
-                    float(parts[0]), float(parts[1]),
+                    float(parts[0]),
+                    float(parts[1]),
                     float(parts[0]) / 20 + 1,
                 )
         strategy_result = run_momentum_vol_full(
@@ -661,7 +700,6 @@ class MultiFactorPipeline(BasePipeline):
 
         if scores is None:
             logger.warning("策略未返回截面得分，IC 分析将跳过")
-
 
         return signals, scores, fundamental_data, valuation_data, index_df  # type: ignore[return-value]
 
@@ -697,8 +735,8 @@ class MultiFactorPipeline(BasePipeline):
             # Collect by code
             from collections import defaultdict
 
-            code_data: dict[str, dict[str, dict[str, float | str]]] = (
-                defaultdict(lambda: defaultdict(dict))
+            code_data: dict[str, dict[str, dict[str, float | str]]] = defaultdict(
+                lambda: defaultdict(dict)
             )
             # code → {report_date → {field_name: value, ..., "publish_date": str}}
 
@@ -710,8 +748,14 @@ class MultiFactorPipeline(BasePipeline):
 
             # Convert to DataFrames
             QUALITY_FIELDS = [
-                "ROE", "gross_margin", "revenue_growth", "net_margin",
-                "debt_ratio", "net_profit_growth", "EPS", "NAV",
+                "ROE",
+                "gross_margin",
+                "revenue_growth",
+                "net_margin",
+                "debt_ratio",
+                "net_profit_growth",
+                "EPS",
+                "NAV",
             ]
 
             result: dict[str, pl.DataFrame] = {}
@@ -745,6 +789,7 @@ class MultiFactorPipeline(BasePipeline):
         """
         try:
             from qp.data.valuation.loader import load_valuation_data
+
             return load_valuation_data(symbols, price_data)
         except Exception:
             return {}
@@ -783,11 +828,11 @@ class MultiFactorPipeline(BasePipeline):
                     for r in rows
                 ]
             )
-            logger.info("   📊 上证指数(000001) 数据: {} 行 "
-                        "({} → {})",
-                        idx_df.height,
-                        idx_df["date"].min(),
-                        idx_df["date"].max(),
+            logger.info(
+                "   📊 上证指数(000001) 数据: {} 行 ({} → {})",
+                idx_df.height,
+                idx_df["date"].min(),
+                idx_df["date"].max(),
             )
             return idx_df
         except Exception as e:
@@ -934,12 +979,12 @@ class MultiFactorPipeline(BasePipeline):
             # ═══ V2.1 Risk Exit (每日检查) ═══
             positions_df = broker.get_positions()
             if not positions_df.empty:
-                holdings: dict[str, int] = {}
+                holdings: dict[str, int | float] = {}
                 prices_for_risk: dict[str, float] = {}
                 cb_for_risk: dict[str, float] = {}
                 for _, pos_row in positions_df.iterrows():  # type: ignore[assignment]
                     sym = str(pos_row["symbol"])
-                    shares = int(float(pos_row["shares"]))
+                    shares = int(float(cast("float", pos_row["shares"])))
                     if shares > 0:
                         holdings[sym] = shares
                         prices_for_risk[sym] = price_map.get(sym, 0.0)
@@ -957,12 +1002,14 @@ class MultiFactorPipeline(BasePipeline):
                     for rx in risk_exits:
                         sym_shares = holdings.get(rx.symbol, 0)
                         if sym_shares > 0:
-                            broker.submit_order({
-                                "symbol": rx.symbol,
-                                "side": "SELL",
-                                "quantity": sym_shares,
-                                "order_type": "market",
-                            })
+                            broker.submit_order(
+                                {
+                                    "symbol": rx.symbol,
+                                    "side": "SELL",
+                                    "quantity": sym_shares,
+                                    "order_type": "market",
+                                }
+                            )
                             del cost_basis[rx.symbol]
                             risk_exit_hits += 1
                             if TradeReason.STOP_LOSS in rx.reasons:  # type: ignore[truthy-function]
@@ -1125,9 +1172,7 @@ class MultiFactorPipeline(BasePipeline):
         from qp.research.experiment.tracker import ExperimentTracker
 
         tracker = ExperimentTracker()
-        experiment_id = (
-            f"multifactor_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-        )
+        experiment_id = f"multifactor_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
         tracker.log_experiment(
             experiment_id=experiment_id,
             config={
@@ -1178,13 +1223,9 @@ def _flatten_price_data(
         if df is not None and not df.is_empty():
             if "close" not in df.columns:
                 continue
-            parts.append(
-                df.select(["trade_date", pl.lit(code).alias("symbol"), "close"])
-            )
+            parts.append(df.select(["trade_date", pl.lit(code).alias("symbol"), "close"]))
     if not parts:
-        return pl.DataFrame(
-            schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "close": pl.Float64}
-        )
+        return pl.DataFrame(schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "close": pl.Float64})
     return pl.concat(parts)
 
 
@@ -1247,7 +1288,7 @@ def _compute_factor_ic_attribution(
             weights=factor_weights,
             valuation_data=valuation_data,
             fundamental_data=fundamental_data,
-            industry_neutral=False,    # raw — no transformations
+            industry_neutral=False,  # raw — no transformations
             orthogonalize=False,
             return_diagnostics=True,
         )
@@ -1273,26 +1314,32 @@ def _compute_factor_ic_attribution(
                 if fname in factors:
                     val = factors[fname]
                     if val is not None and val == val:  # not NaN
-                        rows.append({
-                            "trade_date": date_str,
-                            "symbol": code,
-                            "score": float(val),
-                        })
+                        rows.append(
+                            {
+                                "trade_date": date_str,
+                                "symbol": code,
+                                "score": float(val),
+                            }
+                        )
         if len(rows) < 100:
             continue
 
-        factor_df = pl.DataFrame(rows, schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "score": pl.Float64})
+        factor_df = pl.DataFrame(
+            rows, schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "score": pl.Float64}
+        )
         ic = evaluate_factor_ic(factor_df, price_flat, forward_days=5, min_stocks_per_day=10)
 
         if ic.n_days >= 10:
-            results.append({
-                "factor": fname,
-                "ic_mean": ic.ic_mean,
-                "ic_ir": ic.ic_ir,
-                "ic_positive_pct": ic.ic_positive_pct,
-                "weight": factor_weights.get(fname, 0.0),
-                "n_days": ic.n_days,
-            })
+            results.append(
+                {
+                    "factor": fname,
+                    "ic_mean": ic.ic_mean,
+                    "ic_ir": ic.ic_ir,
+                    "ic_positive_pct": ic.ic_positive_pct,
+                    "weight": factor_weights.get(fname, 0.0),
+                    "n_days": ic.n_days,
+                }
+            )
 
     # Sort by absolute IC descending
     results.sort(key=lambda x: abs(x["ic_mean"]), reverse=True)
@@ -1308,9 +1355,11 @@ def _log_factor_ic_table(
         return
 
     # Header
-    logger.info("   {:28s} {:>10s} {:>8s} {:>8s} {:>8s}".format(
-        "因子 / Factor", "IC Mean", "IC IR", "IC>0%", "权重/Wt"
-    ))
+    logger.info(
+        "   {:28s} {:>10s} {:>8s} {:>8s} {:>8s}".format(
+            "因子 / Factor", "IC Mean", "IC IR", "IC>0%", "权重/Wt"
+        )
+    )
     logger.info("   " + "-" * 70)
 
     # Rows
@@ -1325,26 +1374,26 @@ def _log_factor_ic_table(
 
         # Direction markers
         direction = "✅" if ic_val > 0 else "🔴"
-        wt_dir = "+" if wt > 0 else "-"
 
         logger.info(
-            "   {} {:25s} {:>+9.4f} {:>7.2f} {:>7.0f}% {:>+7.3f} ({:.0f}%)".format(
-                direction, fname, ic_val, ic_ir, ic_pct, wt, contrib_pct
-            )
+            f"   {direction} {fname:25s} {ic_val:>+9.4f} {ic_ir:>7.2f} {ic_pct:>7.0f}% {wt:>+7.3f} ({contrib_pct:.0f}%)"
         )
 
     # Summary
     positive = [e for e in factor_ic_table if e["ic_mean"] > 0]
     negative = [e for e in factor_ic_table if e["ic_mean"] < 0]
     weight_mismatch = [
-        e for e in factor_ic_table
+        e
+        for e in factor_ic_table
         if (e["ic_mean"] > 0 and e["weight"] < 0) or (e["ic_mean"] < 0 and e["weight"] > 0)
     ]
 
     logger.info("   " + "-" * 70)
     logger.info(
         "   正向贡献: {} 因子 | 负向贡献: {} 因子 | 权重方向错误: {} 因子",
-        len(positive), len(negative), len(weight_mismatch),
+        len(positive),
+        len(negative),
+        len(weight_mismatch),
     )
 
     if weight_mismatch:
@@ -1370,7 +1419,6 @@ def _optimize_weights_from_ic(
     computed on the full 3039-stock universe.
     """
     ic_map = {e["factor"]: e["ic_mean"] for e in factor_ic_table}
-    ic_ir_map = {e["factor"]: e["ic_ir"] for e in factor_ic_table}
     optimized: dict[str, float] = {}
     dropped: list[str] = []
 
@@ -1384,9 +1432,12 @@ def _optimize_weights_from_ic(
 
     if dropped:
         from loguru import logger
+
         logger.info(
             "   🗑 移除弱因子 (|IC|<{:.0%}): {} — {} 因子",
-            min_ic_threshold, ", ".join(dropped), len(dropped),
+            min_ic_threshold,
+            ", ".join(dropped),
+            len(dropped),
         )
 
     # Normalize so sum(|w|) = 1.0
@@ -1402,21 +1453,19 @@ def _log_weight_optimization(
     new_weights: dict[str, float],
 ) -> None:
     """Log the weight optimization results."""
-    logger.info("   {:28s} {:>10s} {:>10s} {:>10s}".format(
-        "因子", "旧权重", "新权重", "变化"
-    ))
+    logger.info("   {:28s} {:>10s} {:>10s} {:>10s}".format("因子", "旧权重", "新权重", "变化"))
     logger.info("   " + "-" * 68)
     for fname in sorted(old_weights.keys()):
         old_w = old_weights[fname]
         new_w = new_weights.get(fname, old_w)
         change = "翻转" if old_w * new_w < 0 else ("↑" if abs(new_w) > abs(old_w) else "↓")
-        logger.info("   {:25s} {:>+9.3f} {:>+9.3f}  {:>4s}".format(fname, old_w, new_w, change))
+        logger.info(f"   {fname:25s} {old_w:>+9.3f} {new_w:>+9.3f}  {change:>4s}")
 
 
 def _build_optimized_config(
     strategy_name: str,
     optimized_weights: dict[str, float],
-) -> object | None:
+) -> StrategyConfig | None:
     """Build a StrategyConfig with optimized weights."""
     from dataclasses import replace
 
@@ -1431,8 +1480,8 @@ def _build_optimized_config(
 
 def _archive_research_debt(
     strategy_name: str,
-    ic_record: object,
-    layered: object,
+    ic_record: ICRecord,
+    layered: LayeredTestResult,
     failures: list[str],
     start: str,
     end: str,
@@ -1448,7 +1497,6 @@ def _archive_research_debt(
     Returns:
         entry_id of the archived research debt entry.
     """
-    from datetime import datetime as _archive_dt
 
     from qp.knowledge.archive import KnowledgeArchive
 
@@ -1456,7 +1504,9 @@ def _archive_research_debt(
     next_steps: list[str] = []
     has_ic_fail = any("IC" in f for f in failures)
     has_mono_fail = any("单调" in f for f in failures) or any("mono" in f.lower() for f in failures)
-    has_spread_fail = any("spread" in f.lower() for f in failures) or any("Q5" in f for f in failures)
+    has_spread_fail = any("spread" in f.lower() for f in failures) or any(
+        "Q5" in f for f in failures
+    )
 
     if has_ic_fail:
         next_steps.append("- [ ] 检查因子计算是否有错误（前视偏差、数据对齐）")
@@ -1477,7 +1527,7 @@ def _archive_research_debt(
     # ── Build content ──
     failure_lines = "\n".join(f"- ❌ {f}" for f in failures)
     content = f"""## Context
-**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+**Date**: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 **Period**: {start} → {end}
 **Strategy**: {strategy_name}
 

@@ -11,14 +11,12 @@ See research_layer.md artifact/ section.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import polars as pl
-
 
 DEFAULT_ARTIFACT_DIR = "data/artifacts"
 
@@ -190,9 +188,8 @@ class ArtifactManager:
             "snapshot_id": snapshot_id,
             "created_at": datetime.now(UTC).isoformat(),
             "description": description,
-            "feature_names": feature_names or [
-                c for c in factor_df.columns if c not in ("trade_date", "symbol")
-            ],
+            "feature_names": feature_names
+            or [c for c in factor_df.columns if c not in ("trade_date", "symbol")],
             "n_rows": factor_df.height,
             "n_symbols": factor_df["symbol"].n_unique() if "symbol" in factor_df.columns else 0,
             "date_range": (
@@ -302,9 +299,7 @@ class ArtifactManager:
 
         to_remove: list[str] = []
         cutoff_date = (
-            datetime.now(UTC) - timedelta(days=older_than_days)
-            if older_than_days
-            else None
+            datetime.now(UTC) - timedelta(days=older_than_days) if older_than_days else None
         )
 
         for i, model in enumerate(models):
@@ -344,10 +339,7 @@ class ArtifactManager:
         if len(snapshots) <= keep_latest:
             return []
 
-        to_remove = [
-            s.get("snapshot_id", "")
-            for s in snapshots[keep_latest:]
-        ]
+        to_remove = [s.get("snapshot_id", "") for s in snapshots[keep_latest:]]
 
         if not dry_run:
             for snap_id in to_remove:

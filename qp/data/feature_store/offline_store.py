@@ -81,10 +81,12 @@ class OfflineStore:
         write_df = df.clone()
 
         # Ensure year column for partitioning
-        if partition_by == "year" and "trade_date" in write_df.columns and "year" not in write_df.columns:
-            write_df = write_df.with_columns(
-                pl.col("trade_date").dt.year().alias("year")
-            )
+        if (
+            partition_by == "year"
+            and "trade_date" in write_df.columns
+            and "year" not in write_df.columns
+        ):
+            write_df = write_df.with_columns(pl.col("trade_date").dt.year().alias("year"))
 
         # Write metadata
         self._write_metadata(factor_group, df)
@@ -218,11 +220,7 @@ class OfflineStore:
             return df
 
         # Get the latest row per symbol
-        return (
-            df.sort(["symbol", "trade_date"])
-            .group_by("symbol")
-            .agg(pl.all().last())
-        )
+        return df.sort(["symbol", "trade_date"]).group_by("symbol").agg(pl.all().last())
 
     # ── Group management ──
 

@@ -298,8 +298,13 @@ def _log_filter_summary(
         "质量不达标:{}, 无基本面:{}, 无估值:{}, ST/退市:{} | "
         "硬性: {} | "
         "软门槛: {}",
-        passed, total, pct,
-        quality_bad, no_fundamental, no_valuation, st_removed,
+        passed,
+        total,
+        pct,
+        quality_bad,
+        no_fundamental,
+        no_valuation,
+        st_removed,
         hard_desc,
         soft_desc,
     )

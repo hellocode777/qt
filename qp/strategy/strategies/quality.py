@@ -50,9 +50,9 @@ DEFAULT_QUALITY_METRICS: dict[str, float] = {
 
 # Hard cutoff: stocks failing these are immediately excluded
 HARD_CUTOFFS: dict[str, tuple[str, float]] = {
-    "ROE": ("min", 0.0),           # ROE must be positive
+    "ROE": ("min", 0.0),  # ROE must be positive
     "gross_margin": ("min", 0.05),  # Gross margin > 5%
-    "debt_ratio": ("max", 85.0),    # Debt ratio < 85%
+    "debt_ratio": ("max", 85.0),  # Debt ratio < 85%
 }
 
 
@@ -160,10 +160,12 @@ class QualityStrategy(BaseStrategy):
 
             if total_weight > 0:
                 score /= total_weight
-                results.append({
-                    "symbol": code,
-                    "raw_score": round(score, 6),
-                })
+                results.append(
+                    {
+                        "symbol": code,
+                        "raw_score": round(score, 6),
+                    }
+                )
 
         if not results:
             return pl.DataFrame(
@@ -171,9 +173,7 @@ class QualityStrategy(BaseStrategy):
             )
 
         df = pl.DataFrame(results).sort("raw_score", descending=True)
-        df = df.with_columns(
-            pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
-        )
+        df = df.with_columns(pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank"))
         return df.head(top_n)
 
     # ------------------------------------------------------------------

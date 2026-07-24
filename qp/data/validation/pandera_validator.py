@@ -23,9 +23,10 @@ Usage::
 
 from __future__ import annotations
 
-import pandera as pa
 import polars as pl
 from loguru import logger
+from pandera.api.polars.model import DataFrameModel
+from pandera.errors import SchemaErrors
 
 from qp.data.validation.result import CheckResult, Severity
 
@@ -39,7 +40,7 @@ class PanderaValidator:
     @staticmethod
     def validate(
         df: pl.DataFrame,
-        schema: type[pa.DataFrameModel],
+        schema: type[DataFrameModel],
         schema_name: str | None = None,
     ) -> CheckResult:
         """Validate a Polars DataFrame against a Pandera schema.
@@ -57,7 +58,7 @@ class PanderaValidator:
 
         try:
             schema.validate(df, lazy=True)
-        except pa.errors.SchemaErrors as exc:
+        except SchemaErrors as exc:
             # Lazy mode collects all errors at once
             error_count = len(exc.schema_errors)
             # Categorize: missing columns / wrong types are ERROR, constraint
@@ -111,7 +112,7 @@ class PanderaValidator:
     @staticmethod
     def validate_or_raise(
         df: pl.DataFrame,
-        schema: type[pa.DataFrameModel],
+        schema: type[DataFrameModel],
     ) -> None:
         """Strict validation — raises SchemaErrors on failure.
 

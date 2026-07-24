@@ -26,7 +26,8 @@ def daily_df() -> pl.DataFrame:
     return pl.DataFrame(
         {
             "symbol": symbols,
-            "trade_date": ["2024-01-15", "2024-01-16", "2024-01-17", "2024-01-18", "2024-01-19"] * 3,
+            "trade_date": ["2024-01-15", "2024-01-16", "2024-01-17", "2024-01-18", "2024-01-19"]
+            * 3,
             "open": [10.0, 10.2, 10.1, 9.8, 10.3] * 3,
             "high": [10.5, 10.4, 10.3, 10.0, 10.6] * 3,
             "low": [9.8, 10.0, 9.9, 9.6, 10.1] * 3,
@@ -56,15 +57,17 @@ class TestStage1AnomalyDetection:
 
     def test_limit_up_detected(self):
         """A +10% move triggers limit_up for main board."""
-        df = pl.DataFrame({
-            "symbol": ["000001", "000001"],
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "open": [10.0, 11.0],
-            "high": [10.5, 11.5],
-            "low": [9.8, 10.8],
-            "close": [10.0, 11.0],  # exactly +10%
-            "volume": [1000000, 2000000],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000001"],
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "open": [10.0, 11.0],
+                "high": [10.5, 11.5],
+                "low": [9.8, 10.8],
+                "close": [10.0, 11.0],  # exactly +10%
+                "volume": [1000000, 2000000],
+            }
+        )
         result = stage1_anomaly_detection(df)
         assert result.df["is_limit_up"][1] is True
 
@@ -72,19 +75,29 @@ class TestStage1AnomalyDetection:
         """A 30% spike over 20-day baseline triggers anomaly."""
         rows = []
         for d in range(20):
-            rows.append({
-                "symbol": "000001",
-                "trade_date": f"2024-01-{d+1:02d}",
-                "open": 10.0, "high": 10.5, "low": 9.5, "close": 10.2,
-                "volume": 1000000.0,
-            })
+            rows.append(
+                {
+                    "symbol": "000001",
+                    "trade_date": f"2024-01-{d + 1:02d}",
+                    "open": 10.0,
+                    "high": 10.5,
+                    "low": 9.5,
+                    "close": 10.2,
+                    "volume": 1000000.0,
+                }
+            )
         # Day 21: extreme spike
-        rows.append({
-            "symbol": "000001",
-            "trade_date": "2024-01-21",
-            "open": 10.0, "high": 14.0, "low": 10.0, "close": 13.5,
-            "volume": 5000000.0,
-        })
+        rows.append(
+            {
+                "symbol": "000001",
+                "trade_date": "2024-01-21",
+                "open": 10.0,
+                "high": 14.0,
+                "low": 10.0,
+                "close": 13.5,
+                "volume": 5000000.0,
+            }
+        )
         df = pl.DataFrame(rows)
         result = stage1_anomaly_detection(df)
         # The +32% spike should exceed 3-sigma on daily returns
@@ -145,16 +158,18 @@ class TestStage3SuspensionHandling:
         assert result.df["is_tradeable"].sum() == result.df.height
 
     def test_suspended_stocks_not_tradeable(self):
-        df = pl.DataFrame({
-            "symbol": ["000001"] * 3,
-            "trade_date": ["2024-01-15", "2024-01-16", "2024-01-17"],
-            "open": [10.0, 10.2, 10.1],
-            "high": [10.5, 10.4, 10.3],
-            "low": [9.8, 10.0, 9.9],
-            "close": [10.2, 10.1, 9.8],
-            "volume": [0.0, 0.0, 1000000.0],
-            "is_suspended": [True, True, False],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"] * 3,
+                "trade_date": ["2024-01-15", "2024-01-16", "2024-01-17"],
+                "open": [10.0, 10.2, 10.1],
+                "high": [10.5, 10.4, 10.3],
+                "low": [9.8, 10.0, 9.9],
+                "close": [10.2, 10.1, 9.8],
+                "volume": [0.0, 0.0, 1000000.0],
+                "is_suspended": [True, True, False],
+            }
+        )
         result = stage3_suspension_handling(df)
         assert not result.df[0, "is_tradeable"]
         assert not result.df[1, "is_tradeable"]
@@ -173,20 +188,24 @@ class TestStage4Adjustment:
         assert result.df["is_ex_date"].sum() == 0
 
     def test_adj_factors_applied(self):
-        df = pl.DataFrame({
-            "symbol": ["000001", "000001"],
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "open": [10.0, 10.0],
-            "high": [11.0, 11.0],
-            "low": [9.0, 9.0],
-            "close": [10.5, 10.5],
-            "volume": [1000000.0, 1000000.0],
-        })
-        adj = pl.DataFrame({
-            "code": ["000001", "000001"],
-            "ex_date": ["2024-01-14", "2024-01-16"],
-            "cum_factor": [1.0, 2.0],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000001"],
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "open": [10.0, 10.0],
+                "high": [11.0, 11.0],
+                "low": [9.0, 9.0],
+                "close": [10.5, 10.5],
+                "volume": [1000000.0, 1000000.0],
+            }
+        )
+        adj = pl.DataFrame(
+            {
+                "code": ["000001", "000001"],
+                "ex_date": ["2024-01-14", "2024-01-16"],
+                "cum_factor": [1.0, 2.0],
+            }
+        )
         result = stage4_adjustment(df, adj_factors=adj)
         # After adjustment, prices should differ from original
         assert result.df[0, "close"] != pytest.approx(10.5, abs=0.01)
@@ -228,12 +247,17 @@ class TestETLPipeline:
 
     def test_single_row(self):
         """Single row of data should process without error."""
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "trade_date": ["2024-01-15"],
-            "open": [10.0], "high": [10.5], "low": [9.5], "close": [10.2],
-            "volume": [1000000.0],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "trade_date": ["2024-01-15"],
+                "open": [10.0],
+                "high": [10.5],
+                "low": [9.5],
+                "close": [10.2],
+                "volume": [1000000.0],
+            }
+        )
         pipeline = ETLPipeline()
         result = pipeline.run(df)
         assert result.total_rows_in == 1

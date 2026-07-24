@@ -38,45 +38,51 @@ class StrategyConfig:
 
     # ── 选股参数 ──
     max_positions: int = 10
-    rebalance_freq: int = 20          # 基础调仓周期（交易日）
-    sell_buffer_multiplier: int = 2   # 卖出缓冲区 = max_positions * multiplier
+    rebalance_freq: int = 20  # 基础调仓周期（交易日）
+    sell_buffer_multiplier: int = 2  # 卖出缓冲区 = max_positions * multiplier
 
     # ── 过滤器开关 ──
-    model_mode: bool = False           # True=LightGBM, False=线性加权（回测默认关）
-    quality_filter: bool = True        # 质量预筛选（ROE>0, 毛利率>10%等）
-    industry_neutral: bool = True      # 行业中性化
-    orthogonalize: bool = True         # 因子正交化（Gram-Schmidt / VIF）
-    anti_chase: bool = True            # 防追高
-    chase_threshold: float = 0.20      # 防追高阈值（近N日涨幅超过此值跳过）
-    chase_lookback: int = 5            # 防追高回溯天数
-    use_market_filter: bool = True     # 大盘双均线过滤（MA20>MA60 + 连续3日站稳）
+    model_mode: bool = False  # True=LightGBM, False=线性加权（回测默认关）
+    quality_filter: bool = True  # 质量预筛选（ROE>0, 毛利率>10%等）
+    industry_neutral: bool = True  # 行业中性化
+    orthogonalize: bool = True  # 因子正交化（Gram-Schmidt / VIF）
+    anti_chase: bool = True  # 防追高
+    chase_threshold: float = 0.20  # 防追高阈值（近N日涨幅超过此值跳过）
+    chase_lookback: int = 5  # 防追高回溯天数
+    use_market_filter: bool = True  # 大盘双均线过滤（MA20>MA60 + 连续3日站稳）
 
     # ── 市场过滤器强度（按市场状态分级） ──
-    regime_filter_strictness: dict[str, dict[str, int]] = field(default_factory=lambda: {
-        "bull":           {"confirmation_days": 2, "ma_slow": 60},
-        "sideways_up":    {"confirmation_days": 2, "ma_slow": 60},
-        "sideways_down":  {"confirmation_days": 1, "ma_slow": 0},
-        "bear":           {"confirmation_days": 1, "ma_slow": 0},
-        "crisis":         {"confirmation_days": 3, "ma_slow": 60},
-    })
+    regime_filter_strictness: dict[str, dict[str, int]] = field(
+        default_factory=lambda: {
+            "bull": {"confirmation_days": 2, "ma_slow": 60},
+            "sideways_up": {"confirmation_days": 2, "ma_slow": 60},
+            "sideways_down": {"confirmation_days": 1, "ma_slow": 0},
+            "bear": {"confirmation_days": 1, "ma_slow": 0},
+            "crisis": {"confirmation_days": 3, "ma_slow": 60},
+        }
+    )
 
     # ── 市场状态自适应持仓 ──
-    regime_positions: dict[str, int] = field(default_factory=lambda: {
-        "bull": 5,
-        "sideways_up": 8,
-        "neutral": 10,
-        "sideways_down": 12,
-        "bear": 15,
-        "crisis": 20,
-    })
-    regime_freq: dict[str, int] = field(default_factory=lambda: {
-        "bull": 15,
-        "sideways_up": 20,
-        "neutral": 20,
-        "sideways_down": 30,
-        "bear": 40,
-        "crisis": 60,
-    })
+    regime_positions: dict[str, int] = field(
+        default_factory=lambda: {
+            "bull": 5,
+            "sideways_up": 8,
+            "neutral": 10,
+            "sideways_down": 12,
+            "bear": 15,
+            "crisis": 20,
+        }
+    )
+    regime_freq: dict[str, int] = field(
+        default_factory=lambda: {
+            "bull": 15,
+            "sideways_up": 20,
+            "neutral": 20,
+            "sideways_down": 30,
+            "bear": 40,
+            "crisis": 60,
+        }
+    )
 
     # ── 行业中性化强度 ──
     industry_neutral_strength: float = 1.0
@@ -125,7 +131,7 @@ class StrategyConfig:
             f"行业中性: {'开' if self.industry_neutral else '关'} | "
             f"正交化: {'开' if self.orthogonalize else '关'}",
             f"防追高: {'开' if self.anti_chase else '关'} "
-            f"(阈值{self.chase_threshold*100:.0f}%, 回溯{self.chase_lookback}天)",
+            f"(阈值{self.chase_threshold * 100:.0f}%, 回溯{self.chase_lookback}天)",
             f"大盘过滤: {'开' if self.use_market_filter else '关'} | "
             f"卖出缓冲: {self.get_sell_buffer_rank()}",
         ]
@@ -153,9 +159,7 @@ def get_strategy_config(name: str) -> StrategyConfig:
         KeyError: 策略名不存在
     """
     if name not in STRATEGY_CONFIGS:
-        raise KeyError(
-            f"未知策略: {name}，可用: {list(STRATEGY_CONFIGS)}"
-        )
+        raise KeyError(f"未知策略: {name}，可用: {list(STRATEGY_CONFIGS)}")
     return STRATEGY_CONFIGS[name]
 
 

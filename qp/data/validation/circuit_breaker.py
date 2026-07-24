@@ -31,9 +31,9 @@ from qp.data.validation.result import CheckResult, Severity
 class BreakerState(StrEnum):
     """Circuit breaker lifecycle states."""
 
-    CLOSED = "closed"         # Normal operation — data flows through
-    OPEN = "open"             # Tripped — data is blocked
-    HALF_OPEN = "half_open"   # Testing — one batch allowed, then re-evaluate
+    CLOSED = "closed"  # Normal operation — data flows through
+    OPEN = "open"  # Tripped — data is blocked
+    HALF_OPEN = "half_open"  # Testing — one batch allowed, then re-evaluate
 
 
 # ------------------------------------------------------------------
@@ -54,8 +54,8 @@ class BreakerConfig:
                            severity blocks).
     """
 
-    max_critical_failures: int = 0    # 0 = any ERROR failure trips the breaker
-    max_warnings: int = 10            # More than this many warnings trips it
+    max_critical_failures: int = 0  # 0 = any ERROR failure trips the breaker
+    max_warnings: int = 10  # More than this many warnings trips it
     auto_reset_after_seconds: float = 0.0  # 0 = manual reset
     require_all_checks: bool = False
 
@@ -132,9 +132,7 @@ class CircuitBreaker:
         if self.config.require_all_checks:
             all_failed = [r for r in results if not r.passed]
             if all_failed:
-                trip_reasons.append(
-                    f"require_all_checks=True: {len(all_failed)} check(s) failed"
-                )
+                trip_reasons.append(f"require_all_checks=True: {len(all_failed)} check(s) failed")
 
         if len(errors) > self.config.max_critical_failures:
             trip_reasons.append(

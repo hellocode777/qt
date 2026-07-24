@@ -10,7 +10,12 @@ Uses Polars for vectorized, high-performance columnar operations.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import polars as pl
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class CleaningEngine:
@@ -35,7 +40,7 @@ class CleaningEngine:
         "换手率": "turnover",
     }
 
-    def clean(self, df: pl.DataFrame | pd.DataFrame) -> pl.DataFrame:  # noqa: F821
+    def clean(self, df: pl.DataFrame | pd.DataFrame) -> pl.DataFrame:
         """Apply all cleaning steps to raw data.
 
         Args:
@@ -45,8 +50,8 @@ class CleaningEngine:
             Cleaned Polars DataFrame with standardized English column names.
         """
         # Auto-convert Pandas → Polars for backward compatibility
-        if type(df).__module__.startswith("pandas"):
-            df = pl.from_pandas(df)  # type: ignore[arg-type]
+        if not isinstance(df, pl.DataFrame):
+            df = pl.from_pandas(df)
 
         if df.is_empty():
             return df
@@ -57,14 +62,10 @@ class CleaningEngine:
         # 2. Convert date column
         if "trade_date" in df.columns:
             try:
-                df = df.with_columns(
-                    pl.col("trade_date").str.to_date().alias("trade_date")
-                )
+                df = df.with_columns(pl.col("trade_date").str.to_date().alias("trade_date"))
             except Exception:
                 # Already date type or non-standard format — try cast
-                df = df.with_columns(
-                    pl.col("trade_date").cast(pl.Date).alias("trade_date")
-                )
+                df = df.with_columns(pl.col("trade_date").cast(pl.Date).alias("trade_date"))
 
         # 3. Ensure numeric types
         numeric_cols = ["open", "high", "low", "close", "volume", "amount"]
@@ -75,16 +76,11 @@ class CleaningEngine:
         # 4. Mark suspension (volume <= 0)
         if "volume" in df.columns:
             df = df.with_columns(
-                pl.when(pl.col("volume") <= 0)
-                .then(True)
-                .otherwise(False)
-                .alias("is_suspended")
+                pl.when(pl.col("volume") <= 0).then(True).otherwise(False).alias("is_suspended")
             )
 
         # 5. Sort by symbol and date
-        sort_cols = (
-            ["symbol", "trade_date"] if "symbol" in df.columns else ["trade_date"]
-        )
+        sort_cols = ["symbol", "trade_date"] if "symbol" in df.columns else ["trade_date"]
         df = df.sort(sort_cols)
 
         # 6. Drop rows with NaN prices

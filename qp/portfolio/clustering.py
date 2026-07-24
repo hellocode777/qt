@@ -28,7 +28,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -76,7 +76,7 @@ class RiskClusterer:
             {symbol: cluster_label} mapping (e.g. "Cluster_1").
         """
         if len(symbols) < 2:
-            return {s: "Cluster_1" for s in symbols}
+            return dict.fromkeys(symbols, "Cluster_1")
 
         # 1. Compute correlation matrix
         corr_matrix = self._correlation_matrix(prices, symbols)
@@ -91,7 +91,7 @@ class RiskClusterer:
 
         # 3. Hierarchical clustering
         try:
-            from scipy.cluster.hierarchy import fcluster, linkage
+            from scipy.cluster.hierarchy import linkage
         except ImportError:
             # Fallback: use simple threshold-based grouping
             return self._fallback_cluster(corr_matrix, symbols)
@@ -109,10 +109,7 @@ class RiskClusterer:
         labels = self._cut_dendrogram(Z, n, n_min, n_max)
 
         # 5. Map to symbol → cluster names
-        return {
-            symbols[i]: f"Cluster_{labels[i]}"
-            for i in range(n)
-        }
+        return {symbols[i]: f"Cluster_{labels[i]}" for i in range(n)}
 
     # ------------------------------------------------------------------
     # Cluster report
@@ -159,7 +156,7 @@ class RiskClusterer:
                     vals = [matrix[c].drop_nulls().mean() for c in syms if c in matrix.columns]
                     if vals:
                         cluster_info["intra_corr"] = round(
-                            float(np.mean(vals)), 3
+                            float(np.mean(cast("list[float]", vals))), 3
                         )
             report["clusters"][lbl] = cluster_info
 
@@ -193,9 +190,7 @@ class RiskClusterer:
         violations: list[str] = []
         for lbl, wt in sorted(cluster_wt.items(), key=lambda x: -x[1]):
             if wt > max_per_cluster:
-                violations.append(
-                    f"Cluster {lbl}: weight {wt:.1%} > {max_per_cluster:.0%}"
-                )
+                violations.append(f"Cluster {lbl}: weight {wt:.1%} > {max_per_cluster:.0%}")
         return violations
 
     # ------------------------------------------------------------------

@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import polars as pl
+
 if TYPE_CHECKING:
     import pandas as pd
-    import polars as pl
 
 
 class DailyPriceContract:
@@ -35,7 +36,7 @@ class DailyPriceContract:
 
     # Optional metadata columns (not validated as required)
     optional_schema: dict[str, str] = {
-        "source_event_time": "str",   # ISO 8601 — event occurrence (data_layer.md §1)
+        "source_event_time": "str",  # ISO 8601 — event occurrence (data_layer.md §1)
         "ingestion_received_time": "str",  # ISO 8601 UTC — system receipt time
     }
 
@@ -52,7 +53,7 @@ class DailyPriceContract:
             List of validation errors. Empty list means valid.
         """
         # Detect Polars vs Pandas
-        if type(df).__module__.startswith("polars"):
+        if isinstance(df, pl.DataFrame):
             return cls._validate_polars(df)
         return cls._validate_pandas(df)
 
@@ -76,7 +77,7 @@ class DailyPriceContract:
             errors.append("trade_date must be datetime64")
 
         for col in ["trade_date", "symbol", "close"]:
-            if col in df.columns and df[col].isnull().any():
+            if col in df.columns and bool(df[col].isnull().any()):
                 errors.append(f"Null values found in column: {col}")
 
         return errors

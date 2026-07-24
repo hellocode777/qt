@@ -63,9 +63,7 @@ class SourceMetadata:
             self.avg_latency_seconds = latency_seconds
         else:
             # Exponential moving average
-            self.avg_latency_seconds = (
-                0.8 * self.avg_latency_seconds + 0.2 * latency_seconds
-            )
+            self.avg_latency_seconds = 0.8 * self.avg_latency_seconds + 0.2 * latency_seconds
         self._recompute_health()
 
     def record_fetch_failure(self, error_message: str = "") -> None:
@@ -144,9 +142,7 @@ class SourceMetadataStore:
             ValueError: If a source with the same name already exists.
         """
         if meta.source_name in self._entries:
-            raise ValueError(
-                f"数据源 '{meta.source_name}' 已存在。使用 update 或先获取现有条目。"
-            )
+            raise ValueError(f"数据源 '{meta.source_name}' 已存在。使用 update 或先获取现有条目。")
         self._entries[meta.source_name] = meta
         self._save_to_disk()
         logger.debug("数据源已注册: {}", meta.source_name)
@@ -169,9 +165,7 @@ class SourceMetadataStore:
 
     # ── Event recording ──
 
-    def record_success(
-        self, source_name: str, latency_seconds: float = 0.0
-    ) -> None:
+    def record_success(self, source_name: str, latency_seconds: float = 0.0) -> None:
         """Record a successful fetch for a source. Auto-creates entry if missing."""
         if source_name not in self._entries:
             self._entries[source_name] = SourceMetadata(source_name=source_name)
@@ -179,9 +173,7 @@ class SourceMetadataStore:
         self._save_to_disk()
         logger.debug("{} 抓取成功 (延迟 {:.1f}s)", source_name, latency_seconds)
 
-    def record_failure(
-        self, source_name: str, error_message: str = ""
-    ) -> None:
+    def record_failure(self, source_name: str, error_message: str = "") -> None:
         """Record a failed fetch for a source. Auto-creates entry if missing."""
         if source_name not in self._entries:
             self._entries[source_name] = SourceMetadata(source_name=source_name)

@@ -330,8 +330,7 @@ class DecisionPackage:
             entries=risk_entries,
             dropped_symbols=risk_data.get("dropped_symbols", []),
             sector_exposure={
-                str(k): float(v)
-                for k, v in risk_data.get("sector_exposure", {}).items()
+                str(k): float(v) for k, v in risk_data.get("sector_exposure", {}).items()
             },
             passed=risk_data.get("passed", True),
         )
@@ -578,12 +577,8 @@ class DecisionPackage:
             lines.append(f"- **Dropped**: {', '.join(self.risk_audit.dropped_symbols)}")
         if self.risk_audit.entries:
             lines.append("")
-            lines.append(
-                "| Symbol | Violation | Detail | Threshold | Actual | Action |"
-            )
-            lines.append(
-                "|--------|-----------|--------|-----------|--------|--------|"
-            )
+            lines.append("| Symbol | Violation | Detail | Threshold | Actual | Action |")
+            lines.append("|--------|-----------|--------|-----------|--------|--------|")
             for e in self.risk_audit.entries:
                 lines.append(
                     f"| {e.symbol} | {e.violation_type} | {e.detail} | "
@@ -592,9 +587,7 @@ class DecisionPackage:
         if self.risk_audit.sector_exposure:
             lines.append("")
             lines.append("**Sector Exposure**:")
-            for sector, wt in sorted(
-                self.risk_audit.sector_exposure.items(), key=lambda x: -x[1]
-            ):
+            for sector, wt in sorted(self.risk_audit.sector_exposure.items(), key=lambda x: -x[1]):
                 lines.append(f"- {sector}: {wt:.1%}")
         lines.append("")
 

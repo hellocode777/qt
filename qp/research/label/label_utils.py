@@ -145,17 +145,24 @@ def check_label_coverage(
         zip(
             price_df["trade_date"].cast(str).to_list(),
             price_df["symbol"].cast(str).to_list(),
+            strict=False,
         )
     )
     label_pairs = set(
         zip(
             label_df["trade_date"].cast(str).to_list(),
             label_df["symbol"].cast(str).to_list(),
+            strict=False,
         )
     )
 
     if not price_pairs:
-        return {"coverage_ratio": 0.0, "n_price_rows": n_price, "n_label_rows": n_label, "sufficient": False}
+        return {
+            "coverage_ratio": 0.0,
+            "n_price_rows": n_price,
+            "n_label_rows": n_label,
+            "sufficient": False,
+        }
 
     coverage = len(label_pairs) / len(price_pairs)
     return {

@@ -13,6 +13,7 @@ This is the MVP alternative to complex portfolio optimization.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import cast
 
 import pandas as pd
 
@@ -40,7 +41,7 @@ class NormalizationResult:
         """Total weight after normalization."""
         if self.positions.empty:
             return 0.0
-        return float(self.positions["target_weight"].sum())
+        return float(cast("float", self.positions["target_weight"].sum()))
 
 
 class WeightNormalizer:
@@ -101,7 +102,7 @@ class WeightNormalizer:
             df["_alpha"] = df[weight_col]
 
         # If no caps column, just do one-pass normalization
-        has_caps = cap_col in df.columns and not (df[cap_col].isna().all())
+        has_caps = cap_col in df.columns and not bool(df[cap_col].isna().all())
 
         if not has_caps:
             df = self._simple_normalize(df, target_total, weight_col)
@@ -124,6 +125,7 @@ class WeightNormalizer:
         capped_count = 0
         freed_weight = 0.0
         converged = False
+        iteration = 0
 
         for iteration in range(1, self._max_iterations + 1):
             # Phase 2: Clip overshooting positions
@@ -136,9 +138,7 @@ class WeightNormalizer:
                 if current > 0 and abs(current - target_total) > self._tolerance:
                     df[weight_col] = df[weight_col] / current * target_total
                 converged = True
-                capped_count = int(
-                    df["_cap"].notna().sum() - (df[weight_col] < df["_cap"]).sum()
-                )
+                capped_count = int(df["_cap"].notna().sum() - (df[weight_col] < df["_cap"]).sum())
                 break
 
             # Mark capped positions
@@ -155,11 +155,7 @@ class WeightNormalizer:
             if uncapped_sum > 0:
                 # Redistribute proportionally to current weights (preserve ordering)
                 for idx in uncapped[uncapped].index:
-                    proportion = (
-                        df.loc[idx, weight_col] / uncapped_sum
-                        if uncapped_sum > 0
-                        else 0.0
-                    )
+                    proportion = df.loc[idx, weight_col] / uncapped_sum if uncapped_sum > 0 else 0.0
                     df.loc[idx, weight_col] += freed_weight * proportion
             else:
                 # All positions are capped — stop

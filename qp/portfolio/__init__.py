@@ -10,7 +10,13 @@ from qp.portfolio.allocator import (
     RiskParityAllocator,
     VolatilityTargetAllocator,
 )
-from qp.portfolio.budget import CVaRBudget, RiskBudget, RiskBudgetResult, VaRBudget, VolatilityBudget
+from qp.portfolio.budget import (
+    CVaRBudget,
+    RiskBudget,
+    RiskBudgetResult,
+    VaRBudget,
+    VolatilityBudget,
+)
 from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
 from qp.portfolio.cash import CashDecision, CashManager, ReservePolicy
 from qp.portfolio.clustering import RiskClusterer
@@ -19,9 +25,14 @@ from qp.portfolio.correlation import CorrelationAnalyzer
 from qp.portfolio.cost_model import CostBreakdown, CostModel, MarketImpactModel
 from qp.portfolio.exposure import FactorExposureAnalyzer, LiquidityExposure, MarketCapExposure
 from qp.portfolio.industry import IndustryMapper
-from qp.portfolio.models import AllocationResult, PortfolioSnapshot, RiskApprovedCandidate, TargetPortfolio
-from qp.portfolio.optimizer import MeanVarianceOptimizer, OptimizationResult
+from qp.portfolio.models import (
+    AllocationResult,
+    PortfolioSnapshot,
+    RiskApprovedCandidate,
+    TargetPortfolio,
+)
 from qp.portfolio.optimization import ConstraintSet, OptimizationConstraintsBuilder
+from qp.portfolio.optimizer import MeanVarianceOptimizer, OptimizationResult
 from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine, RiskEngineConfig
 from qp.portfolio.risk_manager import PortfolioRiskManager, RiskReport
 from qp.portfolio.risk_model import (

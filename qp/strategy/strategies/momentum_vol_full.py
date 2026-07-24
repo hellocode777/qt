@@ -52,7 +52,7 @@ LVR_VOL_ONLY_WEIGHTS: dict[str, float] = {
 
 LVR_VOL_MOM_WEIGHTS: dict[str, float] = {
     "Volatility_20D": +0.55,
-    "Momentum_3M": -0.45,     # 最强反转因子
+    "Momentum_3M": -0.45,  # 最强反转因子
 }
 
 LVR_VOL_ALL_REVERSAL_WEIGHTS: dict[str, float] = {
@@ -70,27 +70,43 @@ def _make_lvr_config(name: str, display: str, factors: dict) -> StrategyConfig:
         name=name,
         display_name=display,
         factors=dict(factors),
-        max_positions=10, rebalance_freq=20, sell_buffer_multiplier=2,
-        model_mode=False, quality_filter=True, industry_neutral=True,
-        orthogonalize=True, anti_chase=True, chase_threshold=0.20,
-        chase_lookback=5, use_market_filter=True,
+        max_positions=10,
+        rebalance_freq=20,
+        sell_buffer_multiplier=2,
+        model_mode=False,
+        quality_filter=True,
+        industry_neutral=True,
+        orthogonalize=True,
+        anti_chase=True,
+        chase_threshold=0.20,
+        chase_lookback=5,
+        use_market_filter=True,
         regime_positions={
-            "bull": 5, "sideways_up": 8, "neutral": 10,
-            "sideways_down": 12, "bear": 15, "crisis": 20,
+            "bull": 5,
+            "sideways_up": 8,
+            "neutral": 10,
+            "sideways_down": 12,
+            "bear": 15,
+            "crisis": 20,
         },
         regime_freq={
-            "bull": 15, "sideways_up": 20, "neutral": 20,
-            "sideways_down": 30, "bear": 40, "crisis": 60,
+            "bull": 15,
+            "sideways_up": 20,
+            "neutral": 20,
+            "sideways_down": 30,
+            "bear": 40,
+            "crisis": 60,
         },
     )
 
 
-LVR_VOL_ONLY = register_config(_make_lvr_config(
-    "lvr_vol_only", "低波(仅波动率)", LVR_VOL_ONLY_WEIGHTS))
-LVR_VOL_MOM = register_config(_make_lvr_config(
-    "lvr_vol_mom", "低波+动量", LVR_VOL_MOM_WEIGHTS))
-LVR_VOL_ALL_REV = register_config(_make_lvr_config(
-    "lvr_vol_all_rev", "低波+全部反转", LVR_VOL_ALL_REVERSAL_WEIGHTS))
+LVR_VOL_ONLY = register_config(
+    _make_lvr_config("lvr_vol_only", "低波(仅波动率)", LVR_VOL_ONLY_WEIGHTS)
+)
+LVR_VOL_MOM = register_config(_make_lvr_config("lvr_vol_mom", "低波+动量", LVR_VOL_MOM_WEIGHTS))
+LVR_VOL_ALL_REV = register_config(
+    _make_lvr_config("lvr_vol_all_rev", "低波+全部反转", LVR_VOL_ALL_REVERSAL_WEIGHTS)
+)
 
 LOW_VOL_REVERSAL_CONFIG = register_config(
     StrategyConfig(
@@ -109,12 +125,20 @@ LOW_VOL_REVERSAL_CONFIG = register_config(
         chase_lookback=5,
         use_market_filter=True,
         regime_positions={
-            "bull": 5, "sideways_up": 8, "neutral": 10,
-            "sideways_down": 12, "bear": 15, "crisis": 20,
+            "bull": 5,
+            "sideways_up": 8,
+            "neutral": 10,
+            "sideways_down": 12,
+            "bear": 15,
+            "crisis": 20,
         },
         regime_freq={
-            "bull": 15, "sideways_up": 20, "neutral": 20,
-            "sideways_down": 30, "bear": 40, "crisis": 60,
+            "bull": 15,
+            "sideways_up": 20,
+            "neutral": 20,
+            "sideways_down": 30,
+            "bear": 40,
+            "crisis": 60,
         },
     )
 )
@@ -127,11 +151,11 @@ LOW_VOL_REVERSAL_CONFIG = register_config(
 MOMENTUM_VOL_FULL_WEIGHTS: dict[str, float] = {
     # 价量因子 5 个 — 权重方向由全量 IC 归因确定（2026-07-23）
     # IC 方向均为负（A股存在反转效应），幅度 ∝ |IC|
-    "Amplitude_5D": -0.25,           # IC=-0.072, IR=0.40
-    "Volatility_20D": +0.22,         # IC=+0.063, IR=0.34 (低波异象，唯一正向)
-    "Momentum_3M": -0.20,            # IC=-0.057, IR=0.40
-    "Volume_Concentration": -0.19,   # IC=-0.055, IR=0.66
-    "Volume_Trend_10D": -0.14,       # IC=-0.041, IR=0.46
+    "Amplitude_5D": -0.25,  # IC=-0.072, IR=0.40
+    "Volatility_20D": +0.22,  # IC=+0.063, IR=0.34 (低波异象，唯一正向)
+    "Momentum_3M": -0.20,  # IC=-0.057, IR=0.40
+    "Volume_Concentration": -0.19,  # IC=-0.055, IR=0.66
+    "Volume_Trend_10D": -0.14,  # IC=-0.041, IR=0.46
     # 已移除（|IC|<0.02 或 IC_IR<0.3，噪音源）:
     #   PE_TTM, PB, Price_Volume_Corr, Implied_Net_Flow, Volume_Price_Trend
 }
@@ -148,7 +172,7 @@ MOMENTUM_VOL_FULL_CONFIG = register_config(
         max_positions=10,
         rebalance_freq=20,
         sell_buffer_multiplier=2,
-        model_mode=False,          # 回测默认线性加权；管道 .for_live() 开启 LightGBM
+        model_mode=False,  # 回测默认线性加权；管道 .for_live() 开启 LightGBM
         quality_filter=True,
         industry_neutral=True,
         orthogonalize=True,
@@ -157,12 +181,20 @@ MOMENTUM_VOL_FULL_CONFIG = register_config(
         chase_lookback=5,
         use_market_filter=True,
         regime_positions={
-            "bull": 5, "sideways_up": 8, "neutral": 10,
-            "sideways_down": 12, "bear": 15, "crisis": 20,
+            "bull": 5,
+            "sideways_up": 8,
+            "neutral": 10,
+            "sideways_down": 12,
+            "bear": 15,
+            "crisis": 20,
         },
         regime_freq={
-            "bull": 15, "sideways_up": 20, "neutral": 20,
-            "sideways_down": 30, "bear": 40, "crisis": 60,
+            "bull": 15,
+            "sideways_up": 20,
+            "neutral": 20,
+            "sideways_down": 30,
+            "bear": 40,
+            "crisis": 60,
         },
     )
 )
@@ -232,13 +264,18 @@ def run_momentum_vol_full(
             regime_history = detector.detect_history(index_df)
             if not regime_history.is_empty():
                 regime_map = dict(
-                    zip(regime_history["date"].cast(pl.Utf8).to_list(),
-                        regime_history["regime"].to_list(), strict=False)
+                    zip(
+                        regime_history["date"].cast(pl.Utf8).to_list(),
+                        regime_history["regime"].to_list(),
+                        strict=False,
+                    )
                 )
                 logger.info(
                     "📊 市场状态检测: {} 天, 当前={}",
                     len(regime_map),
-                    regime_history["regime"].tail(1).item() if not regime_history.is_empty() else "?",
+                    regime_history["regime"].tail(1).item()
+                    if not regime_history.is_empty()
+                    else "?",
                 )
         except Exception as e:
             logger.warning("市场状态检测失败: {}，跳过", e)

@@ -1,6 +1,6 @@
 # QP 开发进度与使用指南
 
-> 最后更新：2026-07-20
+> 最后更新：2026-07-24
 
 ---
 
@@ -110,8 +110,8 @@ qp validate → simple_rank_v1.0:
 |---|---|---|
 | M6.1 | ✅ | Decision Layer：TradeRecommendation + DecisionReport + DecisionEngine + `qp decide` CLI 命令（中英双语输出） |
 | M6.2 | ✅ | 架构完整性自查：`docs/credibility_check.md` 七类可信性全部审计（5 通过 / 2 基本满足） |
-| M6.3 | ✅ | 业务层单元测试：test_decision + test_portfolio + test_strategy + test_monitoring（34 → 109 个测试） |
-| M6.4 | ✅ | 最终检查：ruff=0, pyright=0, pytest=109/109 passed, 文档同步 |
+| M6.3 | ✅ | 业务层单元测试：test_decision + test_portfolio + test_strategy + test_monitoring（34 → 1049 个测试） |
+| M6.4 | ✅ | 最终检查：ruff=0, pyright=0, pytest=1049 passed, 文档同步 |
 
 ---
 
@@ -232,7 +232,7 @@ qp/
 └── knowledge/         # Layer 10: ✅ Phase 5
     └── archive.py     #   KnowledgeArchive + 5类模板
 tests/
-├── unit/              # 单元测试 (109 个) ✅
+├── unit/              # 单元测试 (1049 个) ✅
 ├── integration/       # 集成测试 ⏳
 └── e2e/               # 端到端测试 ⏳
 ```
@@ -311,11 +311,15 @@ DecisionEngine.to_markdown()     → 审计日志
 ### 最终质量门禁
 
 ```bash
-uv sync      # ✅ 62 packages
-ruff check   # ✅ 0 errors
-pyright      # ✅ 0 errors
-pytest       # ✅ 109/109 passed
+uv sync --extra dev   # ✅ 安装运行时 + 开发依赖
+uv run ruff check     # ✅ 0 errors
+uv run ruff format --check  # ✅ 406 files formatted
+uv run pyright        # ✅ 0 errors
+uv run pytest         # ✅ 1049 passed
+uv run qp run daily --demo  # ✅ Status: success
 ```
+
+> Python 固定为 3.12（`.python-version`）：NumPy / LightGBM 尚无与 3.14 兼容的 ABI wheel。
 
 ### 10 层架构完成度
 

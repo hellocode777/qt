@@ -48,10 +48,12 @@ class RollingVolatility(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         daily_ret = pl.col("close").pct_change().over("symbol")
-        vol = daily_ret.rolling_std(window_size=self.window, min_samples=self.window // 2).over("symbol")
+        vol = daily_ret.rolling_std(window_size=self.window, min_samples=self.window // 2).over(
+            "symbol"
+        )
 
         if self._annualize:
-            vol = vol * (252.0 ** 0.5)
+            vol = vol * (252.0**0.5)
 
         return df.with_columns(vol.alias(self.feature_name))
 
@@ -73,16 +75,17 @@ class RollingVolatility(BaseFeature):
         rets = list(self._ret_buffer)
         mean_ret = sum(rets) / len(rets)
         var = sum((r - mean_ret) ** 2 for r in rets) / (len(rets) - 1)
-        vol = var ** 0.5
+        vol = var**0.5
 
         if self._annualize:
-            vol *= 252.0 ** 0.5
+            vol *= 252.0**0.5
 
         return vol
 
 
 class RollingVolatility20(RollingVolatility):
     """20-day rolling volatility (~1 month)."""
+
     feature_name: str = "volatility_20"
     window: int = 20
 
@@ -92,6 +95,7 @@ class RollingVolatility20(RollingVolatility):
 
 class RollingVolatility60(RollingVolatility):
     """60-day rolling volatility (~3 months)."""
+
     feature_name: str = "volatility_60"
     window: int = 60
 
@@ -122,7 +126,9 @@ class ATR(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         true_range = pl.col("close").diff().abs().over("symbol")
-        atr = true_range.ewm_mean(alpha=1.0 / self.window, min_samples=self.window, adjust=False).over("symbol")
+        atr = true_range.ewm_mean(
+            alpha=1.0 / self.window, min_samples=self.window, adjust=False
+        ).over("symbol")
 
         return df.with_columns(atr.alias(self.feature_name))
 
@@ -146,6 +152,7 @@ class ATR(BaseFeature):
 
 class ATR14(ATR):
     """14-period ATR (the standard default)."""
+
     feature_name: str = "atr_14"
     window: int = 14
 

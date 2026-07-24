@@ -108,7 +108,6 @@ class TrimAndRefill:
         # Track cumulative weights
         cum_sector: dict[str, float] = {}
         cum_cluster: dict[str, float] = {}
-        cum_position: dict[str, float] = {}
 
         # Build correlation graph for refill lookup
         correlated_of: dict[str, set[str]] = {}
@@ -236,7 +235,9 @@ class TrimAndRefill:
             f"Freed weight: {freed_weight:.1%}",
         ]
         if refill_symbols:
-            summary_parts.append(f"Refilled: {len(refill_symbols)} stocks ({', '.join(refill_symbols[:3])})")
+            summary_parts.append(
+                f"Refilled: {len(refill_symbols)} stocks ({', '.join(refill_symbols[:3])})"
+            )
         if rejected:
             top_reasons = sorted(reject_reasons.items(), key=lambda x: -x[1])[:3]
             summary_parts.append(f"Top reject reasons: {top_reasons}")

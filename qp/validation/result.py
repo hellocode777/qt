@@ -7,28 +7,27 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from qp.shared.types import ValidationStatus
-
 
 # ------------------------------------------------------------------
 # Gate Decision — 系统决策，在 ValidationResult 之上
 # ------------------------------------------------------------------
 
 
-class GateDecision(str, Enum):
+class GateDecision(StrEnum):
     """系统对一次 Gate 评估的决策。
 
     与 ValidationResult.status (PASS/FAIL) 不同，
     GateDecision 表达了"系统应该怎么做"。
     """
 
-    PASSED = "passed"             # 全通过 → 可进入下一阶段
+    PASSED = "passed"  # 全通过 → 可进入下一阶段
     RESEARCH_ONLY = "research_only"  # 有预测力但不可交易 → 归档研究
-    BLOCKED = "blocked"           # 数据/因子问题 → 修复后重试
-    OVERRIDDEN = "overridden"     # 人工跳过 Gate（需记录原因）
+    BLOCKED = "blocked"  # 数据/因子问题 → 修复后重试
+    OVERRIDDEN = "overridden"  # 人工跳过 Gate（需记录原因）
 
 
 # ------------------------------------------------------------------
@@ -196,19 +195,27 @@ class GateResult:
         """
         # Determine factor and portfolio pass status from rules
         factor_rules = [
-            r for r in validation.rules
-            if r.rule_name in {
-                "rank_ic", "ic_ir", "ic_t_stat",
-                "neutralization", "min_sample_period",
+            r
+            for r in validation.rules
+            if r.rule_name
+            in {
+                "rank_ic",
+                "ic_ir",
+                "ic_t_stat",
+                "neutralization",
+                "min_sample_period",
             }
         ]
-        portfolio_rules = [
-            r for r in validation.rules
-            if r.rule_name in {"stratification"}
-        ]
+        portfolio_rules = [r for r in validation.rules if r.rule_name in {"stratification"}]
 
-        factor_pass = all(r.status == ValidationStatus.PASS for r in factor_rules) if factor_rules else False
-        portfolio_pass = all(r.status == ValidationStatus.PASS for r in portfolio_rules) if portfolio_rules else False
+        factor_pass = (
+            all(r.status == ValidationStatus.PASS for r in factor_rules) if factor_rules else False
+        )
+        portfolio_pass = (
+            all(r.status == ValidationStatus.PASS for r in portfolio_rules)
+            if portfolio_rules
+            else False
+        )
 
         if validation.passed:
             decision = GateDecision.PASSED
@@ -230,10 +237,7 @@ class GateResult:
             )
         else:
             failed_names = ", ".join(validation.failed_rules)
-            rec = (
-                f"策略 {strategy_id} 未通过检验: {failed_names}。"
-                f"请修复后重新实验。"
-            )
+            rec = f"策略 {strategy_id} 未通过检验: {failed_names}。请修复后重新实验。"
 
         return cls(
             strategy_id=strategy_id,
@@ -243,7 +247,9 @@ class GateResult:
             confidence=validation.confidence,
             data_integrity=data_integrity,
             factor_validity="PASS" if factor_pass else ("FAIL" if factor_rules else "NOT_RUN"),
-            portfolio_conversion="PASS" if portfolio_pass else ("FAIL" if portfolio_rules else "NOT_RUN"),
+            portfolio_conversion="PASS"
+            if portfolio_pass
+            else ("FAIL" if portfolio_rules else "NOT_RUN"),
             robustness=robustness,
             cost_capacity=cost_capacity,
             rules=validation.rules,
@@ -283,7 +289,7 @@ class GateResult:
         lines = [
             "",
             "=" * 60,
-            f"  Validation Gate Report",
+            "  Validation Gate Report",
             "=" * 60,
             f"  Strategy:     {self.strategy_id}",
             f"  Stage:        {self.stage}",

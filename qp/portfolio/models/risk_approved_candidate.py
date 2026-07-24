@@ -7,7 +7,7 @@ Per docs/7_Portfolio_Risk_Layer.md §"推荐的 Layer 7 数据结构定义":
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 

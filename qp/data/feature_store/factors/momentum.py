@@ -40,7 +40,9 @@ class Momentum(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.with_columns(
-            (pl.col("close") / pl.col("close").shift(self.window).over("symbol") - 1.0).alias(self.feature_name)
+            (pl.col("close") / pl.col("close").shift(self.window).over("symbol") - 1.0).alias(
+                self.feature_name
+            )
         )
 
     def update_stream(self, new_value: float) -> float | None:
@@ -54,6 +56,7 @@ class Momentum(BaseFeature):
 
 class Momentum5(Momentum):
     """5-day momentum (short-term trend)."""
+
     feature_name: str = "momentum_5"
     window: int = 5
 
@@ -63,6 +66,7 @@ class Momentum5(Momentum):
 
 class Momentum20(Momentum):
     """20-day momentum (~1 month)."""
+
     feature_name: str = "momentum_20"
     window: int = 20
 
@@ -72,6 +76,7 @@ class Momentum20(Momentum):
 
 class Momentum60(Momentum):
     """60-day momentum (~3 months)."""
+
     feature_name: str = "momentum_60"
     window: int = 60
 
@@ -118,8 +123,12 @@ class RSI(BaseFeature):
         loss = pl.when(delta < 0).then(-delta).otherwise(0.0)
 
         # Wilder's smoothing (EMA with alpha=1/window, adjust=True)
-        avg_gain = gain.ewm_mean(alpha=1.0 / self.window, min_samples=self.window, adjust=False).over("symbol")
-        avg_loss = loss.ewm_mean(alpha=1.0 / self.window, min_samples=self.window, adjust=False).over("symbol")
+        avg_gain = gain.ewm_mean(
+            alpha=1.0 / self.window, min_samples=self.window, adjust=False
+        ).over("symbol")
+        avg_loss = loss.ewm_mean(
+            alpha=1.0 / self.window, min_samples=self.window, adjust=False
+        ).over("symbol")
 
         return df.with_columns(
             (100.0 - 100.0 / (1.0 + avg_gain / (avg_loss + 1e-10))).alias(self.feature_name)
@@ -149,6 +158,7 @@ class RSI(BaseFeature):
 
 class RSI14(RSI):
     """14-period RSI (the standard default)."""
+
     feature_name: str = "rsi_14"
     window: int = 14
 
@@ -174,7 +184,9 @@ class ShortTermReversal(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.with_columns(
-            (-(pl.col("close") / pl.col("close").shift(self.window).over("symbol") - 1.0)).alias(self.feature_name)
+            (-(pl.col("close") / pl.col("close").shift(self.window).over("symbol") - 1.0)).alias(
+                self.feature_name
+            )
         )
 
     def update_stream(self, new_value: float) -> float | None:
