@@ -37,8 +37,5 @@ class BuildResult:
     def summary(self) -> str:
         """Single-line summary for logging."""
         if self.success:
-            return (
-                f"✅ {self.dataset_name}@{self.version} "
-                f"({self.rows} 行 × {self.symbols} 标的)"
-            )
+            return f"✅ {self.dataset_name}@{self.version} ({self.rows} 行 × {self.symbols} 标的)"
         return f"❌ {self.dataset_name}: {self.errors[0] if self.errors else 'unknown'}"

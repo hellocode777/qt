@@ -23,7 +23,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -35,20 +35,19 @@ from qp.portfolio.exposure.marketcap_exposure import MarketCapExposure
 from qp.portfolio.industry import IndustryMapper
 from qp.portfolio.models.risk_approved_candidate import RiskApprovedCandidate
 
-
 # ------------------------------------------------------------------
 # Default limits (per docs/7_Portfolio_Risk_Layer.md §第三部分)
 # ------------------------------------------------------------------
 
 DEFAULT_LIMITS: dict[str, float] = {
-    "max_single_position": 0.15,   # 单只股票 ≤ 15%
-    "max_single_sector": 0.30,     # 单行业 ≤ 30%
-    "max_single_cluster": 0.30,    # 单 Risk Cluster ≤ 30%
-    "max_top3": 0.45,              # Top 3 ≤ 45%
-    "max_small_cap": 0.20,         # 小市值 ≤ 20%
-    "max_beta": 1.2,               # 单股 Beta < 1.2
-    "max_st": 0.0,                 # ST = 0%
-    "max_suspended": 0.0,          # 停牌 = 0%
+    "max_single_position": 0.15,  # 单只股票 ≤ 15%
+    "max_single_sector": 0.30,  # 单行业 ≤ 30%
+    "max_single_cluster": 0.30,  # 单 Risk Cluster ≤ 30%
+    "max_top3": 0.45,  # Top 3 ≤ 45%
+    "max_small_cap": 0.20,  # 小市值 ≤ 20%
+    "max_beta": 1.2,  # 单股 Beta < 1.2
+    "max_st": 0.0,  # ST = 0%
+    "max_suspended": 0.0,  # 停牌 = 0%
 }
 DEFAULT_CORRELATION_THRESHOLD: float = 0.85
 DEFAULT_ANNUAL_VOL_TARGET: float = 0.15  # 15% target portfolio vol
@@ -161,9 +160,9 @@ class PortfolioRiskEngine:
         cluster_labels: dict[str, str] = {}
         if self.config.enable_clustering and len(symbols) >= 3:
             # Only cluster symbols that exist in price data
-            price_symbols = set(
-                prices["symbol"].unique().to_list()
-            ) if "symbol" in prices.columns else set()
+            price_symbols = (
+                set(prices["symbol"].unique().to_list()) if "symbol" in prices.columns else set()
+            )
             clusterable = [s for s in symbols if s in price_symbols]
             if len(clusterable) >= 3:
                 cluster_labels = self._clusterer.fit_predict(prices, clusterable)
@@ -283,32 +282,25 @@ class PortfolioRiskEngine:
             reasons: list[str] = []
 
             # ST/PT check
-            if self.config.enable_st_check:
-                if self._is_st_stock(sym):
-                    reasons.append("ST/PT stock — hard reject")
+            if self.config.enable_st_check and self._is_st_stock(sym):
+                reasons.append("ST/PT stock — hard reject")
 
             # Single position cap
             max_pos = limits["max_single_position"]
             if eq_wt > max_pos:
-                reasons.append(
-                    f"Position weight {eq_wt:.1%} > {max_pos:.0%}"
-                )
+                reasons.append(f"Position weight {eq_wt:.1%} > {max_pos:.0%}")
 
             # Sector cap
             max_sec = limits["max_single_sector"]
             sec = exp["sector"]
             if sector_wt.get(sec, 0.0) > max_sec:
-                reasons.append(
-                    f"Sector {sec} at {sector_wt[sec]:.1%} > {max_sec:.0%}"
-                )
+                reasons.append(f"Sector {sec} at {sector_wt[sec]:.1%} > {max_sec:.0%}")
 
             # Cluster cap
             max_cl = limits["max_single_cluster"]
             lbl = cluster_labels.get(sym, "")
             if lbl and cluster_wt.get(lbl, 0.0) > max_cl:
-                reasons.append(
-                    f"Cluster {lbl} at {cluster_wt[lbl]:.1%} > {max_cl:.0%}"
-                )
+                reasons.append(f"Cluster {lbl} at {cluster_wt[lbl]:.1%} > {max_cl:.0%}")
 
             # Correlation redundancy (keep higher-ranked)
             if sym in redundant:
@@ -325,13 +317,10 @@ class PortfolioRiskEngine:
             max_small = limits["max_small_cap"]
             if exp["market_cap"] == "small":
                 small_wt_total = sum(
-                    eq_wt for s2 in symbols
-                    if exposures[s2]["market_cap"] == "small"
+                    eq_wt for s2 in symbols if exposures[s2]["market_cap"] == "small"
                 )
                 if small_wt_total > max_small:
-                    reasons.append(
-                        f"Small-cap total {small_wt_total:.1%} > {max_small:.0%}"
-                    )
+                    reasons.append(f"Small-cap total {small_wt_total:.1%} > {max_small:.0%}")
 
             # Top 3 concentration
             if n >= 3:
@@ -339,9 +328,7 @@ class PortfolioRiskEngine:
                 max_top3 = limits["max_top3"]
                 if top3_wt > max_top3:
                     if i < 3:
-                        reasons.append(
-                            f"Top3 concentration {top3_wt:.1%} > {max_top3:.0%}"
-                        )
+                        reasons.append(f"Top3 concentration {top3_wt:.1%} > {max_top3:.0%}")
                     pass  # flag on individual candidates if in top 3
 
             passed = len(reasons) == 0
@@ -439,22 +426,17 @@ class PortfolioRiskEngine:
             "total_candidates": len(candidates),
             "passed": len(passed),
             "rejected": len(rejected),
-            "pass_rate": f"{len(passed)/max(len(candidates),1):.1%}",
+            "pass_rate": f"{len(passed) / max(len(candidates), 1):.1%}",
             "sectors_represented": len(sectors),
             "risk_clusters": len(clusters),
             "avg_max_weight": (
-                round(float(np.mean([c.max_weight_limit for c in passed])), 4)
-                if passed
-                else 0.0
+                round(float(np.mean([c.max_weight_limit for c in passed])), 4) if passed else 0.0
             ),
             "avg_volatility": (
-                round(float(np.mean([c.risk_volatility for c in passed])), 4)
-                if passed
-                else 0.0
+                round(float(np.mean([c.risk_volatility for c in passed])), 4) if passed else 0.0
             ),
             "rejection_reasons": [
-                {"symbol": c.symbol, "reason": c.rejection_reason}
-                for c in rejected
+                {"symbol": c.symbol, "reason": c.rejection_reason} for c in rejected
             ],
         }
 
@@ -474,6 +456,7 @@ class PortfolioRiskEngine:
             return 0.0
         # Log-scale: 1M CNY → 0.1, 100M → 0.5, 1B → 0.9
         import math
+
         score = math.log10(max(adv, 1e4)) / 10.0
         return round(max(0.0, min(1.0, score)), 3)
 
@@ -528,6 +511,6 @@ class PortfolioRiskEngine:
             if len(sym_data) == 0:
                 advs[sym] = 0.0
             else:
-                advs[sym] = round(float(sym_data.mean()), 2)
+                advs[sym] = round(float(cast("float", sym_data.mean())), 2)
 
         return advs

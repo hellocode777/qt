@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -208,7 +208,7 @@ class MonthlyRetrainPipeline(BasePipeline):
             drift_report = self._check_feature_importance_drift(
                 strategy_id, result.feature_importance, feature_names
             )
-            result.feature_importance_warning = drift_report.get("has_drift", False)
+            result.feature_importance_warning = bool(drift_report.get("has_drift", False))
 
             # Block promotion if severe feature importance drift detected
             if drift_report.get("drift_severity") == "severe" and not dry_run:
@@ -686,11 +686,11 @@ class MonthlyRetrainPipeline(BasePipeline):
             return result
 
         try:
-            from qp.research.trainer.registry import ModelRegistry
             from qp.research.importance.feature_importance import (
                 ImportanceRecord,
                 compare_importance_versions,
             )
+            from qp.research.trainer.registry import ModelRegistry
 
             registry = ModelRegistry()
             prev = registry.get_production(strategy_id)
@@ -703,7 +703,7 @@ class MonthlyRetrainPipeline(BasePipeline):
 
             prev_record = ImportanceRecord(
                 model_id=prev.model_id,
-                features=prev_fi,
+                features=cast("dict[str, float]", prev_fi),
                 method="gain",
             )
             curr_record = ImportanceRecord(
@@ -740,4 +740,4 @@ class MonthlyRetrainPipeline(BasePipeline):
         if valid.sum() < 5:
             return 0.0
         corr, _ = spearmanr(predictions[valid], targets[valid])
-        return float(corr)
+        return float(cast("float", corr))

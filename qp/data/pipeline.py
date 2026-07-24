@@ -76,8 +76,9 @@ class DataPipeline(BasePipeline):
 
             result.metrics["raw_rows"] = len(raw)
 
-            # Convert to Polars (adapters return Pandas)
-            raw_pl = pl.from_pandas(raw)
+            # Normalize to Polars. Most adapters return Pandas, but some
+            # (e.g. DemoAdapter) are already Polars-native.
+            raw_pl = raw if isinstance(raw, pl.DataFrame) else pl.from_pandas(raw)
 
             # Annotate dual timestamps (data_layer.md §1)
             raw_pl = annotate_timestamps_pl(raw_pl)

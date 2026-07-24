@@ -13,7 +13,7 @@ be deferred; WeightNormalizer handles the core clip+redistribute logic.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -154,7 +154,7 @@ class OptimizationConstraintsBuilder:
         for _, row in candidates.iterrows():
             symbol = str(row["symbol"])
             passed = row.get("pass_status", True)
-            limit = float(row.get("max_weight_limit", self._default_max_single))
+            limit = float(cast("float", row.get("max_weight_limit", self._default_max_single)))
 
             if not passed:
                 cs.blacklist.add(symbol)
@@ -168,9 +168,7 @@ class OptimizationConstraintsBuilder:
             if isinstance(sector_exposure, dict):
                 for sector, wt in sector_exposure.items():
                     # Cap each sector at min(current, default_max)
-                    cs.sector_bounds[str(sector)] = min(
-                        float(wt), self._default_max_sector
-                    )
+                    cs.sector_bounds[str(sector)] = min(float(wt), self._default_max_sector)
 
         # ── Cluster bounds from candidates ──
         if "risk_cluster" in candidates.columns:
@@ -195,7 +193,7 @@ class OptimizationConstraintsBuilder:
 
         # ── Cardinality ──
         n_passed = int(
-            candidates["pass_status"].sum()
+            cast("int", candidates["pass_status"].sum())
             if "pass_status" in candidates.columns
             else len(candidates)
         )
@@ -235,7 +233,11 @@ class OptimizationConstraintsBuilder:
         # Extract what we can from the engine result
         risk_report: dict[str, Any] = {}
         if hasattr(engine_result, "summary"):
-            risk_report = engine_result.summary() if callable(engine_result.summary) else {}
+            risk_report = (
+                cast("dict[str, Any]", engine_result.summary())
+                if callable(engine_result.summary)
+                else {}
+            )
 
         candidates_df = pd.DataFrame()
         if hasattr(engine_result, "candidates") and engine_result.candidates is not None:

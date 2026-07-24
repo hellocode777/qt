@@ -27,9 +27,9 @@ import numpy as np
 class ClipMethod(Enum):
     """Extreme value handling method."""
 
-    WINSORIZE = "winsorize"   # Clip to percentile bounds
-    SIGMA = "sigma"            # Clip to mean ± N*std
-    ABSOLUTE = "absolute"      # Hard min/max caps
+    WINSORIZE = "winsorize"  # Clip to percentile bounds
+    SIGMA = "sigma"  # Clip to mean ± N*std
+    ABSOLUTE = "absolute"  # Hard min/max caps
 
 
 @dataclass
@@ -42,11 +42,11 @@ class SignalClipper:
     """
 
     method: ClipMethod = ClipMethod.WINSORIZE
-    lower_pct: float = 0.01    # Winsorize: lower percentile
-    upper_pct: float = 0.99    # Winsorize: upper percentile
-    sigma_n: float = 3.0       # Sigma: number of std deviations
-    min_val: float = 0.0       # Absolute: hard minimum
-    max_val: float = 1.0       # Absolute: hard maximum
+    lower_pct: float = 0.01  # Winsorize: lower percentile
+    upper_pct: float = 0.99  # Winsorize: upper percentile
+    sigma_n: float = 3.0  # Sigma: number of std deviations
+    min_val: float = 0.0  # Absolute: hard minimum
+    max_val: float = 1.0  # Absolute: hard maximum
 
     # ------------------------------------------------------------------
     # Core clip
@@ -137,10 +137,10 @@ class SignalThreshold:
         passed = gate.filter(df, score_col="alpha_score")
     """
 
-    min_score: float = 0.3       # Minimum alpha_score to pass
-    max_per_day: int = 100       # Max signals per day (take top-N)
+    min_score: float = 0.3  # Minimum alpha_score to pass
+    max_per_day: int = 100  # Max signals per day (take top-N)
     min_confidence: float = 0.0  # Minimum confidence
-    keep_top_only: bool = True   # Take top-N or reject all if over max
+    keep_top_only: bool = True  # Take top-N or reject all if over max
 
     # ------------------------------------------------------------------
     # Filter

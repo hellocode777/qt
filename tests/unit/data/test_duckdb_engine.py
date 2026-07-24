@@ -21,31 +21,39 @@ def _make_ohlcv_df(n_days: int = 30) -> pl.DataFrame:
         close = 100.0 + rng.normal(0, 2, n_days).cumsum()
         for d_idx in range(n_days):
             c = close[d_idx]
-            rows.append({
-                "symbol": sym,
-                "trade_date": f"2024-01-{d_idx+1:02d}",
-                "close": c,
-                "volume": float(abs(rng.normal(1e6, 2e5))),
-            })
-    return pl.DataFrame(rows).with_columns(
-        pl.col("trade_date").str.to_date(),
-    ).sort(["symbol", "trade_date"])
+            rows.append(
+                {
+                    "symbol": sym,
+                    "trade_date": f"2024-01-{d_idx + 1:02d}",
+                    "close": c,
+                    "volume": float(abs(rng.normal(1e6, 2e5))),
+                }
+            )
+    return (
+        pl.DataFrame(rows)
+        .with_columns(
+            pl.col("trade_date").str.to_date(),
+        )
+        .sort(["symbol", "trade_date"])
+    )
 
 
 def _make_financials_df() -> pl.DataFrame:
     """Create a mini PIT financial dataset."""
-    return pl.DataFrame({
-        "symbol": ["600519", "600519", "600519", "000001", "000001"],
-        "report_date": ["2024-03-31", "2024-06-30", "2024-06-30",
-                        "2024-03-31", "2024-06-30"],
-        "publish_date": ["2024-04-25", "2024-08-15", "2025-03-10",
-                         "2024-04-28", "2024-08-20"],
-        "ROE": [8.5, 10.2, 9.8, 5.0, 6.5],
-        "EPS": [2.5, 3.1, 3.0, 1.2, 1.5],
-    }).with_columns([
-        pl.col("report_date").str.to_date(),
-        pl.col("publish_date").str.to_date(),
-    ])
+    return pl.DataFrame(
+        {
+            "symbol": ["600519", "600519", "600519", "000001", "000001"],
+            "report_date": ["2024-03-31", "2024-06-30", "2024-06-30", "2024-03-31", "2024-06-30"],
+            "publish_date": ["2024-04-25", "2024-08-15", "2025-03-10", "2024-04-28", "2024-08-20"],
+            "ROE": [8.5, 10.2, 9.8, 5.0, 6.5],
+            "EPS": [2.5, 3.1, 3.0, 1.2, 1.5],
+        }
+    ).with_columns(
+        [
+            pl.col("report_date").str.to_date(),
+            pl.col("publish_date").str.to_date(),
+        ]
+    )
 
 
 # ==================================================================
@@ -166,7 +174,8 @@ class TestPITQueries:
         result = engine.pit_query("financials", as_of="2025-06-01")
         # 600519 Q2: latest publish_date <= 2025-06-01 is 2025-03-10 (v2, ROE=9.8)
         row_519_q2 = result.filter(
-            (pl.col("symbol") == "600519") & (pl.col("report_date") == pl.lit("2024-06-30").str.to_date())
+            (pl.col("symbol") == "600519")
+            & (pl.col("report_date") == pl.lit("2024-06-30").str.to_date())
         )
         assert row_519_q2.height == 1
         assert row_519_q2["ROE"].item() == 9.8  # Restated value
@@ -179,7 +188,8 @@ class TestPITQueries:
 
         result = engine.pit_query("financials", as_of="2024-12-01")
         row_519_q2 = result.filter(
-            (pl.col("symbol") == "600519") & (pl.col("report_date") == pl.lit("2024-06-30").str.to_date())
+            (pl.col("symbol") == "600519")
+            & (pl.col("report_date") == pl.lit("2024-06-30").str.to_date())
         )
         assert row_519_q2.height == 1
         assert row_519_q2["ROE"].item() == 10.2  # Original value
@@ -292,12 +302,14 @@ class TestOfflineStoreBridge:
 
         n = 10
         syms = ["600519", "000001"] * (n // 2)  # 10 items
-        df = pl.DataFrame({
-            "symbol": syms,
-            "trade_date": [f"2024-01-{d+1:02d}" for d in range(n)],
-            "momentum_20": [0.05 + i * 0.01 for i in range(n)],
-            "rsi_14": [50.0 + i * 2 for i in range(n)],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": syms,
+                "trade_date": [f"2024-01-{d + 1:02d}" for d in range(n)],
+                "momentum_20": [0.05 + i * 0.01 for i in range(n)],
+                "rsi_14": [50.0 + i * 2 for i in range(n)],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         store.write(df, factor_group="momentum")
 
         engine = DuckDBEngine()
@@ -312,11 +324,13 @@ class TestOfflineStoreBridge:
 
     def test_query_store_date_filter(self, tmp_path):
         store = OfflineStore(tmp_path / "features")
-        df = pl.DataFrame({
-            "symbol": ["600519"] * 20,
-            "trade_date": [f"2024-01-{d+1:02d}" for d in range(20)],
-            "momentum_20": [0.01 * i for i in range(20)],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["600519"] * 20,
+                "trade_date": [f"2024-01-{d + 1:02d}" for d in range(20)],
+                "momentum_20": [0.01 * i for i in range(20)],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         store.write(df, factor_group="momentum")
 
         engine = DuckDBEngine()
@@ -332,11 +346,13 @@ class TestOfflineStoreBridge:
 
     def test_query_store_custom_sql(self, tmp_path):
         store = OfflineStore(tmp_path / "features")
-        df = pl.DataFrame({
-            "symbol": ["600519", "000001"] * 3,
-            "trade_date": ["2024-01-15"] * 6,
-            "factor_a": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["600519", "000001"] * 3,
+                "trade_date": ["2024-01-15"] * 6,
+                "factor_a": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         store.write(df, factor_group="test")
 
         engine = DuckDBEngine()
@@ -383,12 +399,14 @@ class TestDuckDBIntegration:
         """End-to-end: OfflineStore → DuckDB → PIT query → Polars."""
         # 1. Write features to OfflineStore
         store = OfflineStore(tmp_path / "features")
-        features = pl.DataFrame({
-            "symbol": ["600519", "000001"] * 10,
-            "trade_date": [f"2024-0{d//4+1}-{(d%28)+1:02d}" for d in range(20)],
-            "momentum_20": [0.01 * d for d in range(20)],
-            "rsi_14": [50.0 + d for d in range(20)],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        features = pl.DataFrame(
+            {
+                "symbol": ["600519", "000001"] * 10,
+                "trade_date": [f"2024-0{d // 4 + 1}-{(d % 28) + 1:02d}" for d in range(20)],
+                "momentum_20": [0.01 * d for d in range(20)],
+                "rsi_14": [50.0 + d for d in range(20)],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         store.write(features, factor_group="merged")
 
         # 2. Query with DuckDB

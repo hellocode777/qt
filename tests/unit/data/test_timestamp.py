@@ -91,9 +91,7 @@ class TestAnnotateTimestampsPL:
                 "close": [1500.0],
             }
         )
-        result = annotate_timestamps_pl(
-            df, ingestion_time="2024-06-01T08:30:00.123456+00:00"
-        )
+        result = annotate_timestamps_pl(df, ingestion_time="2024-06-01T08:30:00.123456+00:00")
 
         assert result["ingestion_received_time"][0] == "2024-06-01T08:30:00.123456+00:00"
         assert result["source_event_time"][0] == "2024-06-01T15:00:00+08:00"
@@ -173,9 +171,7 @@ class TestAnnotateTimestampsPD:
 
     def test_explicit_ingestion_time(self):
         df = pd.DataFrame({"trade_date": ["2024-06-01"], "symbol": ["600519"], "close": [1500.0]})
-        result = annotate_timestamps_pd(
-            df, ingestion_time="2024-06-01T08:30:00.000000+00:00"
-        )
+        result = annotate_timestamps_pd(df, ingestion_time="2024-06-01T08:30:00.000000+00:00")
 
         assert result.loc[0, "ingestion_received_time"] == "2024-06-01T08:30:00.000000+00:00"
 

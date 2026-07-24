@@ -89,9 +89,13 @@ class FullDataPipeline(BasePipeline):
             raw_pd = adapter.fetch_raw(start_d, end_d, codes=batch_codes)
             if not raw_pd.empty:
                 all_raw.append(pl.from_pandas(raw_pd))
-            logger.info("    批次 {}/{}: {} 只, {} 行",
-                        batch_i + 1, total_batches,
-                        len(batch_codes), len(raw_pd))
+            logger.info(
+                "    批次 {}/{}: {} 只, {} 行",
+                batch_i + 1,
+                total_batches,
+                len(batch_codes),
+                len(raw_pd),
+            )
 
         raw_df = pl.concat(all_raw, how="diagonal_relaxed")  # type: ignore[arg-type]
 
@@ -101,8 +105,13 @@ class FullDataPipeline(BasePipeline):
 
         raw_df.write_parquet(str(raw_path))
         raw_mb = raw_path.stat().st_size / (1024 * 1024)  # type: ignore[operator]
-        logger.info("✅ Raw:  {} 只, {} 行, {:.0f} MB → {}",
-                     raw_df["symbol"].n_unique(), raw_df.height, raw_mb, raw_path.name)
+        logger.info(
+            "✅ Raw:  {} 只, {} 行, {:.0f} MB → {}",
+            raw_df["symbol"].n_unique(),
+            raw_df.height,
+            raw_mb,
+            raw_path.name,
+        )
 
         # ═══════════════════════════════════════════
         # Tier 2: Bronze — ETL cleaned, deterministic
@@ -118,15 +127,26 @@ class FullDataPipeline(BasePipeline):
         bronze_df = repair_all(bronze_df, validate_amount=False)
 
         keep = [
-            "symbol", "trade_date", "open", "high", "low", "close", "volume",
-            "source_event_time", "ingestion_received_time",
+            "symbol",
+            "trade_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "source_event_time",
+            "ingestion_received_time",
         ]
         bronze_df = bronze_df.select([c for c in keep if c in bronze_df.columns])
         bronze_df.write_parquet(str(bronze_path))
         bronze_mb = bronze_path.stat().st_size / (1024 * 1024)  # type: ignore[operator]
-        logger.info("✅ Bronze: {} 只, {} 行, {:.0f} MB → {}",
-                     bronze_df["symbol"].n_unique(), bronze_df.height,
-                     bronze_mb, bronze_path.name)
+        logger.info(
+            "✅ Bronze: {} 只, {} 行, {:.0f} MB → {}",
+            bronze_df["symbol"].n_unique(),
+            bronze_df.height,
+            bronze_mb,
+            bronze_path.name,
+        )
 
         # ═══════════════════════════════════════════
         # Tier 3: Silver — Contract validated
@@ -148,9 +168,13 @@ class FullDataPipeline(BasePipeline):
 
         bronze_df.write_parquet(str(silver_path))  # same data, different tier
         silver_mb = silver_path.stat().st_size / (1024 * 1024)  # type: ignore[operator]
-        logger.info("✅ Silver: {} 只, {} 行, {:.0f} MB → {}",
-                     bronze_df["symbol"].n_unique(), bronze_df.height,
-                     silver_mb, silver_path.name)
+        logger.info(
+            "✅ Silver: {} 只, {} 行, {:.0f} MB → {}",
+            bronze_df["symbol"].n_unique(),
+            bronze_df.height,
+            silver_mb,
+            silver_path.name,
+        )
 
         # ═══════════════════════════════════════════
         # Tier 4: Gold — Universe + PIT, dataset-ready
@@ -163,8 +187,9 @@ class FullDataPipeline(BasePipeline):
         # Gold = tradeable + PIT filtered (universe-ready)
         if "is_tradeable" in bronze_df.columns:
             gold_df = bronze_df.filter(pl.col("is_tradeable"))
-            logger.info("Universe 过滤: {} → {} 行 (剔除不可交易)",
-                         bronze_df.height, gold_df.height)
+            logger.info(
+                "Universe 过滤: {} → {} 行 (剔除不可交易)", bronze_df.height, gold_df.height
+            )
         else:
             gold_df = bronze_df
 
@@ -187,9 +212,13 @@ class FullDataPipeline(BasePipeline):
                 "tiers": ["raw", "bronze", "silver", "gold"],
             },
         )
-        logger.info("✅ Gold:   {} 只, {} 行, {:.0f} MB → {} (已注册)",
-                     gold_df["symbol"].n_unique(), gold_df.height,
-                     gold_mb, gold_path.name)
+        logger.info(
+            "✅ Gold:   {} 只, {} 行, {:.0f} MB → {} (已注册)",
+            gold_df["symbol"].n_unique(),
+            gold_df.height,
+            gold_mb,
+            gold_path.name,
+        )
 
         # ── Summary ──
         logger.info("═" * 50)
@@ -208,8 +237,13 @@ class FullDataPipeline(BasePipeline):
         result.metrics["gold_mb"] = gold_mb
         result.metadata["version"] = version
         result.metadata["registry_key"] = f"daily_price_main@{version}"
-        result.artifacts.extend([
-            str(raw_path), str(bronze_path), str(silver_path), str(gold_path),
-        ])
+        result.artifacts.extend(
+            [
+                str(raw_path),
+                str(bronze_path),
+                str(silver_path),
+                str(gold_path),
+            ]
+        )
 
         return result

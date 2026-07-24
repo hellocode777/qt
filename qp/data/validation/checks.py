@@ -12,7 +12,7 @@ All checks are pure functions: df → CheckResult. No side effects.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 
@@ -65,16 +65,22 @@ def check_gaps(
         sym_df = df_sorted.filter(pl.col(symbol_col) == sym)
         dates = sym_df[date_col].to_list()
         for i in range(1, len(dates)):
-            delta = (dates[i] - dates[i - 1]).days if hasattr(dates[i], "days") else (
-                date.fromisoformat(str(dates[i])) - date.fromisoformat(str(dates[i - 1]))
-            ).days
+            delta = (
+                (dates[i] - dates[i - 1]).days
+                if hasattr(dates[i], "days")
+                else (
+                    date.fromisoformat(str(dates[i])) - date.fromisoformat(str(dates[i - 1]))
+                ).days
+            )
             if delta > max_allowed_gap_days:
-                gaps.append({
-                    "symbol": sym,
-                    "from": str(dates[i - 1])[:10],
-                    "to": str(dates[i])[:10],
-                    "gap_days": delta,
-                })
+                gaps.append(
+                    {
+                        "symbol": sym,
+                        "from": str(dates[i - 1])[:10],
+                        "to": str(dates[i])[:10],
+                        "gap_days": delta,
+                    }
+                )
 
     # Calendar-based: check if any trading date is completely missing
     calendar_gaps: list[str] = []
@@ -154,11 +160,13 @@ def check_monotonicity(
         # Descending detection (on original order)
         for i in range(1, len(dates_raw)):
             if dates_raw[i] < dates_raw[i - 1]:
-                violations.append({
-                    "symbol": sym,
-                    "prev": str(dates_raw[i - 1])[:10],
-                    "current": str(dates_raw[i])[:10],
-                })
+                violations.append(
+                    {
+                        "symbol": sym,
+                        "prev": str(dates_raw[i - 1])[:10],
+                        "current": str(dates_raw[i])[:10],
+                    }
+                )
 
         # Duplicate detection (order-independent — sort first)
         dates_sorted = sorted(dates_raw)
@@ -239,33 +247,33 @@ def check_ohlc_physics(
     violations: dict[str, int] = {}
 
     # High >= Low
-    hl_bad = (df[h] < df[lo]).sum()
+    hl_bad = int((df[h] < df[lo]).sum())
     if hl_bad:
         violations["high_lt_low"] = hl_bad
 
     # High >= Open
-    ho_bad = (df[h] < df[o]).sum()
+    ho_bad = int((df[h] < df[o]).sum())
     if ho_bad:
         violations["high_lt_open"] = ho_bad
 
     # High >= Close
-    hc_bad = (df[h] < df[c]).sum()
+    hc_bad = int((df[h] < df[c]).sum())
     if hc_bad:
         violations["high_lt_close"] = hc_bad
 
     # Low <= Open
-    lo_bad = (df[lo] > df[o]).sum()
+    lo_bad = int((df[lo] > df[o]).sum())
     if lo_bad:
         violations["low_gt_open"] = lo_bad
 
     # Low <= Close
-    lc_bad = (df[lo] > df[c]).sum()
+    lc_bad = int((df[lo] > df[c]).sum())
     if lc_bad:
         violations["low_gt_close"] = lc_bad
 
     # Non-negative prices
     for col in [o, h, lo, c]:
-        neg = (df[col] <= 0).sum()
+        neg = int((df[col] <= 0).sum())
         if neg:
             violations[f"{col}_non_positive"] = neg
 
@@ -380,13 +388,15 @@ def check_price_limits(
 
             ret = (closes[i] - closes[i - 1]) / closes[i - 1]
             if abs(ret) > threshold:
-                limit_violations.append({
-                    "symbol": sym,
-                    "date": str(dates[i])[:10],
-                    "return": round(ret, 4),
-                    "limit": limit,
-                    "threshold": round(threshold, 4),
-                })
+                limit_violations.append(
+                    {
+                        "symbol": sym,
+                        "date": str(dates[i])[:10],
+                        "return": round(ret, 4),
+                        "limit": limit,
+                        "threshold": round(threshold, 4),
+                    }
+                )
 
     if not limit_violations:
         return CheckResult(
@@ -439,7 +449,7 @@ def check_non_negative(
 
     violations: dict[str, int] = {}
     for col in available:
-        neg_count = (df[col] < 0).sum()
+        neg_count = int((df[col] < 0).sum())
         if neg_count:
             violations[col] = neg_count
 
@@ -597,12 +607,14 @@ def check_pit_delay(
 
         delta = (kt_date - pe_date).days
         if delta < min_delay_days:
-            violations.append({
-                "period_end": str(pe_date),
-                "knowledge_time": str(kt_date),
-                "delta_days": delta,
-                "symbol": str(row.get("symbol", row.get("code", "?"))),
-            })
+            violations.append(
+                {
+                    "period_end": str(pe_date),
+                    "knowledge_time": str(kt_date),
+                    "delta_days": delta,
+                    "symbol": str(row.get("symbol", row.get("code", "?"))),
+                }
+            )
 
     if null_dates == df.height:
         return CheckResult(
@@ -712,15 +724,17 @@ def check_financial_balance(
         if error > tolerance:
             sym = str(row.get(symbol_col, "?"))
             rpt = str(row.get(date_col, "?"))[:10]
-            violations.append({
-                "symbol": sym,
-                "report_date": rpt,
-                "assets": round(a, 2),
-                "liabilities": round(l_val, 2),
-                "equity": round(e, 2),
-                "imbalance": round(a - (l_val + e), 2),
-                "error_pct": round(error * 100, 2),
-            })
+            violations.append(
+                {
+                    "symbol": sym,
+                    "report_date": rpt,
+                    "assets": round(a, 2),
+                    "liabilities": round(l_val, 2),
+                    "equity": round(e, 2),
+                    "imbalance": round(a - (l_val + e), 2),
+                    "error_pct": round(error * 100, 2),
+                }
+            )
 
     total = df.height
     bad = len(violations)
@@ -734,15 +748,14 @@ def check_financial_balance(
         )
 
     # Severity: a few small violations are WARNING, many or large are ERROR
-    worst = max(v["error_pct"] for v in violations) if violations else 0
+    worst = max(cast("float", v["error_pct"]) for v in violations) if violations else 0
     severity = Severity.ERROR if (worst > 5.0 or bad > total * 0.1) else Severity.WARNING
 
     return CheckResult(
         check_name="financial_balance_check",
         passed=severity != Severity.ERROR,
         severity=severity,
-        detail=f"{bad}/{total} rows imbalanced (tolerance={tolerance:.1%}), "
-        f"worst={worst:.1f}%",
+        detail=f"{bad}/{total} rows imbalanced (tolerance={tolerance:.1%}), worst={worst:.1f}%",
         affected_rows=bad,
         metadata={
             "violations": violations,

@@ -74,7 +74,7 @@ class CVaRBudget:
         """
         if weights is None:
             n = len(symbols)
-            weights = {s: 1.0 / n for s in symbols}
+            weights = dict.fromkeys(symbols, 1.0 / n)
 
         # 1. Per-stock CVaR
         per_stock_cvar: dict[str, float] = {}
@@ -119,12 +119,14 @@ class CVaRBudget:
                     portfolio_cvar_pct = self._historical_cvar(port_rets)
             else:
                 # Fallback: sqrt sum of squares
-                portfolio_cvar_pct = float(np.sqrt(
-                    sum(
-                        (per_stock_cvar_pct.get(s, 0.0) * weights.get(s, 0.0)) ** 2
-                        for s in symbols
+                portfolio_cvar_pct = float(
+                    np.sqrt(
+                        sum(
+                            (per_stock_cvar_pct.get(s, 0.0) * weights.get(s, 0.0)) ** 2
+                            for s in symbols
+                        )
                     )
-                ))
+                )
         else:
             portfolio_cvar_pct = per_stock_cvar_pct.get(symbols[0], 0.0)
 
@@ -133,21 +135,22 @@ class CVaRBudget:
         # 3. CVaR contributions
         cvar_contribs: dict[str, float] = {}
         for s in symbols:
-            cvar_contribs[s] = round(
-                per_stock_cvar.get(s, 0.0) / max(portfolio_cvar, 0.01), 4
-            )
+            cvar_contribs[s] = round(per_stock_cvar.get(s, 0.0) / max(portfolio_cvar, 0.01), 4)
 
         # 4. Violations
         violations: list[tuple[str, str]] = []
         for s in symbols:
             if cvar_contribs[s] > self.max_single_cvar_pct:
-                violations.append((
-                    s,
-                    f"CVaR contribution {cvar_contribs[s]:.1%} > {self.max_single_cvar_pct:.0%}",
-                ))
+                violations.append(
+                    (
+                        s,
+                        f"CVaR contribution {cvar_contribs[s]:.1%} > {self.max_single_cvar_pct:.0%}",
+                    )
+                )
 
         # 5. CVaR/VaR ratio (tail-fatness indicator)
         from qp.portfolio.budget.var_budget import VaRBudget
+
         var_budget = VaRBudget(method=self.method, confidence=self.confidence)
         var_result = var_budget.compute_var(returns, symbols, weights, total_capital)
         var_pct = var_result.get("portfolio_var", 0.0) / total_capital if total_capital > 0 else 0.0
@@ -183,7 +186,7 @@ class CVaRBudget:
 
         if portfolio_cvar <= 0:
             n = max(len(symbols), 1)
-            return {s: total_capital / n for s in symbols}
+            return dict.fromkeys(symbols, total_capital / n)
 
         cvar_budget_per_stock = portfolio_cvar * self.max_single_cvar_pct
 
@@ -240,9 +243,7 @@ class CVaRBudget:
             return None
 
         try:
-            wide = ret_px.pivot(
-                values="ret", index="trade_date", on="symbol"
-            ).drop_nulls()
+            wide = ret_px.pivot(values="ret", index="trade_date", on="symbol").drop_nulls()
         except Exception:
             return None
 

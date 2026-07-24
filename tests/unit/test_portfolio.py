@@ -1,5 +1,7 @@
 """Tests for Portfolio Layer — cost, risk, allocation, optimization."""
 
+from typing import Any
+
 import polars as pl
 import pytest
 
@@ -423,11 +425,13 @@ class TestIndustryMapper:
         from qp.portfolio.industry import IndustryMapper
 
         mapper = IndustryMapper()
-        weights = mapper.get_sector_weights({
-            "600519.SH": 0.10,
-            "000858.SZ": 0.05,
-            "300750.SZ": 0.08,
-        })
+        weights = mapper.get_sector_weights(
+            {
+                "600519.SH": 0.10,
+                "000858.SZ": 0.05,
+                "300750.SZ": 0.08,
+            }
+        )
         assert weights.get("Consumer", 0.0) == pytest.approx(0.15)
         assert weights.get("Technology", 0.0) == pytest.approx(0.08)
 
@@ -568,11 +572,13 @@ class TestRiskClusterer:
             px = base
             for d in range(n_days):
                 px *= 1 + rng.normal(0.0005, 0.02)
-                rows.append({
-                    "trade_date": f"2026-07-{d+1:02d}",
-                    "symbol": sym,
-                    "close": px,
-                })
+                rows.append(
+                    {
+                        "trade_date": f"2026-07-{d + 1:02d}",
+                        "symbol": sym,
+                        "close": px,
+                    }
+                )
 
         return pl.DataFrame(rows)
 
@@ -630,9 +636,7 @@ class TestRiskClusterer:
         labels = {"A": "Cluster_1", "B": "Cluster_1", "C": "Cluster_2"}
         weights = {"A": 0.20, "B": 0.20, "C": 0.60}
 
-        violations = clusterer.check_cluster_concentration(
-            weights, labels, max_per_cluster=0.30
-        )
+        violations = clusterer.check_cluster_concentration(weights, labels, max_per_cluster=0.30)
         assert len(violations) >= 1
         assert any("Cluster_1" in v for v in violations)
 
@@ -643,9 +647,7 @@ class TestRiskClusterer:
         labels = {"A": "Cluster_1", "B": "Cluster_2", "C": "Cluster_3"}
         weights = {"A": 0.20, "B": 0.20, "C": 0.20}
 
-        violations = clusterer.check_cluster_concentration(
-            weights, labels, max_per_cluster=0.30
-        )
+        violations = clusterer.check_cluster_concentration(weights, labels, max_per_cluster=0.30)
         assert len(violations) == 0
 
     def test_invalid_linkage_raises(self) -> None:
@@ -665,17 +667,24 @@ class TestPortfolioRiskEngine:
         rng = np.random.default_rng(42)
         rows: list[dict] = []
         for sym in symbols:
-            base = {"600519.SH": 1800, "300750.SZ": 200, "601318.SH": 45,
-                    "000002.SZ": 15, "600276.SH": 50}.get(sym, 100)
+            base = {
+                "600519.SH": 1800,
+                "300750.SZ": 200,
+                "601318.SH": 45,
+                "000002.SZ": 15,
+                "600276.SH": 50,
+            }.get(sym, 100)
             px = float(base)
             for d in range(n_days):
                 px *= 1 + rng.normal(0.0005, 0.02)
-                rows.append({
-                    "trade_date": f"2026-07-{d+1:02d}",
-                    "symbol": sym,
-                    "close": px,
-                    "volume": float(rng.uniform(5e7, 5e8)),
-                })
+                rows.append(
+                    {
+                        "trade_date": f"2026-07-{d + 1:02d}",
+                        "symbol": sym,
+                        "close": px,
+                        "volume": float(rng.uniform(5e7, 5e8)),
+                    }
+                )
         return pl.DataFrame(rows)
 
     def test_construct_defaults(self) -> None:
@@ -698,10 +707,12 @@ class TestPortfolioRiskEngine:
         from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine
 
         engine = PortfolioRiskEngine()
-        signals = pl.DataFrame({
-            "symbol": ["600519.SH"],
-            "alpha_score": [0.95],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": ["600519.SH"],
+                "alpha_score": [0.95],
+            }
+        )
         prices = self._make_price_data(["600519.SH"])
         candidates = engine.evaluate(signals, prices)
 
@@ -716,10 +727,12 @@ class TestPortfolioRiskEngine:
 
         engine = PortfolioRiskEngine()
         symbols = ["600519.SH", "300750.SZ", "601318.SH", "000002.SZ", "600276.SH"]
-        signals = pl.DataFrame({
-            "symbol": symbols,
-            "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85],
+            }
+        )
         prices = self._make_price_data(symbols)
         candidates = engine.evaluate(signals, prices)
 
@@ -734,10 +747,12 @@ class TestPortfolioRiskEngine:
 
         engine = PortfolioRiskEngine()
         # Only 2 stocks → equal weight = 50% > 15% limit
-        signals = pl.DataFrame({
-            "symbol": ["600519.SH", "300750.SZ"],
-            "alpha_score": [0.95, 0.91],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": ["600519.SH", "300750.SZ"],
+                "alpha_score": [0.95, 0.91],
+            }
+        )
         prices = self._make_price_data(["600519.SH", "300750.SZ"])
         candidates = engine.evaluate(signals, prices)
 
@@ -748,13 +763,13 @@ class TestPortfolioRiskEngine:
         from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine
 
         engine = PortfolioRiskEngine()
-        signals = pl.DataFrame({
-            "symbol": ["*ST_BAD.SH", "600519.SH", "300750.SZ", "000002.SZ", "600276.SH"],
-            "alpha_score": [0.99, 0.95, 0.91, 0.72, 0.85],
-        })
-        prices = self._make_price_data(
-            ["600519.SH", "300750.SZ", "000002.SZ", "600276.SH"]
+        signals = pl.DataFrame(
+            {
+                "symbol": ["*ST_BAD.SH", "600519.SH", "300750.SZ", "000002.SZ", "600276.SH"],
+                "alpha_score": [0.99, 0.95, 0.91, 0.72, 0.85],
+            }
         )
+        prices = self._make_price_data(["600519.SH", "300750.SZ", "000002.SZ", "600276.SH"])
         candidates = engine.evaluate(signals, prices)
 
         st_candidate = [c for c in candidates if "ST_BAD" in c.symbol][0]
@@ -766,10 +781,12 @@ class TestPortfolioRiskEngine:
 
         engine = PortfolioRiskEngine()
         symbols = ["600519.SH", "300750.SZ", "601318.SH", "000002.SZ", "600276.SH"]
-        signals = pl.DataFrame({
-            "symbol": symbols,
-            "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85],
+            }
+        )
         prices = self._make_price_data(symbols)
         candidates = engine.evaluate(signals, prices)
         summary = engine.summary(candidates)
@@ -789,7 +806,7 @@ class TestPortfolioRiskEngine:
                 "max_single_sector": 0.50,
                 "max_single_cluster": 0.40,
                 "max_top3": 0.60,
-                "max_small_cap": 1.0,   # disable small-cap check for this test
+                "max_small_cap": 1.0,  # disable small-cap check for this test
                 "max_beta": 1.5,
                 "max_st": 0.0,
                 "max_suspended": 0.0,
@@ -803,10 +820,12 @@ class TestPortfolioRiskEngine:
 
         # With higher limits, 5 stocks at 20% should pass
         symbols = ["600519.SH", "300750.SZ", "601318.SH", "000002.SZ", "600276.SH"]
-        signals = pl.DataFrame({
-            "symbol": symbols,
-            "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85],
+            }
+        )
         prices = self._make_price_data(symbols)
         candidates = engine.evaluate(signals, prices)
 
@@ -818,10 +837,12 @@ class TestPortfolioRiskEngine:
 
         engine = PortfolioRiskEngine()
         symbols = ["600519.SH", "300750.SZ"]
-        signals = pl.DataFrame({
-            "symbol": symbols,
-            "alpha_score": [0.95, 0.91],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.91],
+            }
+        )
         prices = self._make_price_data(symbols, n_days=60)
         candidates = engine.evaluate(signals, prices)
 
@@ -846,10 +867,12 @@ class TestPortfolioRiskEngine:
 
         engine = PortfolioRiskEngine()
         symbols = ["600519.SH", "600276.SH"]
-        signals = pl.DataFrame({
-            "symbol": symbols,
-            "alpha_score": [0.95, 0.85],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.85],
+            }
+        )
         prices = self._make_price_data(symbols, n_days=60)
         candidates = engine.evaluate(signals, prices)
 
@@ -864,34 +887,37 @@ class TestPortfolioRiskEngine:
         engine = PortfolioRiskEngine()
         # Only 2 stocks in small-cap → eq_wt = 50%, small cap total 100% > 20%
         symbols = ["A.SH", "B.SH"]
-        signals = pl.DataFrame({
-            "symbol": symbols,
-            "alpha_score": [0.95, 0.85],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.85],
+            }
+        )
         prices = self._make_price_data(symbols, n_days=60)
         candidates = engine.evaluate(signals, prices)
 
         # Stocks should fail on position cap + possibly small-cap
-        assert any("Small-cap" in c.rejection_reason or "Position" in c.rejection_reason
-                   for c in candidates)
+        assert any(
+            "Small-cap" in c.rejection_reason or "Position" in c.rejection_reason
+            for c in candidates
+        )
 
     def test_top3_concentration_check(self) -> None:
         from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine
 
         engine = PortfolioRiskEngine()
         symbols = ["600519.SH", "300750.SZ", "601318.SH", "000002.SZ"]
-        signals = pl.DataFrame({
-            "symbol": symbols,
-            "alpha_score": [0.95, 0.91, 0.80, 0.72],
-        })
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.91, 0.80, 0.72],
+            }
+        )
         prices = self._make_price_data(symbols, n_days=60)
         candidates = engine.evaluate(signals, prices)
 
         # 4 stocks → eq=25% → Top3=75% > 45% limit
-        assert any(
-            "Top3" in c.rejection_reason
-            for c in candidates[:3]
-        )
+        assert any("Top3" in c.rejection_reason for c in candidates[:3])
 
 
 class TestMarketCapExposure:
@@ -901,9 +927,9 @@ class TestMarketCapExposure:
         from qp.portfolio.exposure.marketcap_exposure import MarketCapExposure
 
         exp = MarketCapExposure()
-        assert exp.classify_single(100e8) == "large"   # 100B → large
-        assert exp.classify_single(30e8) == "mid"      # 30B → mid
-        assert exp.classify_single(5e8) == "small"     # 5B → small
+        assert exp.classify_single(100e8) == "large"  # 100B → large
+        assert exp.classify_single(30e8) == "mid"  # 30B → mid
+        assert exp.classify_single(5e8) == "small"  # 5B → small
 
     def test_classify_bulk(self) -> None:
         from qp.portfolio.exposure.marketcap_exposure import MarketCapExposure
@@ -969,11 +995,13 @@ class TestFactorExposure:
             px = 100.0
             for d in range(n_days):
                 px *= 1 + rng.normal(0.0005, 0.02)
-                rows.append({
-                    "trade_date": f"2026-07-{d+1:02d}",
-                    "symbol": sym,
-                    "close": px,
-                })
+                rows.append(
+                    {
+                        "trade_date": f"2026-07-{d + 1:02d}",
+                        "symbol": sym,
+                        "close": px,
+                    }
+                )
         return pl.DataFrame(rows)
 
     def test_compute_factors(self) -> None:
@@ -1105,11 +1133,13 @@ class TestVaRBudget:
         rows = []
         for sym in symbols:
             for d in range(n_days):
-                rows.append({
-                    "trade_date": f"2026-07-{d+1:02d}",
-                    "symbol": sym,
-                    "ret": float(rng.normal(0.0005, 0.02)),
-                })
+                rows.append(
+                    {
+                        "trade_date": f"2026-07-{d + 1:02d}",
+                        "symbol": sym,
+                        "ret": float(rng.normal(0.0005, 0.02)),
+                    }
+                )
         return pl.DataFrame(rows)
 
     def test_historical_var(self) -> None:
@@ -1150,7 +1180,7 @@ class TestVaRBudget:
         limits = var.position_limits(returns, ["A", "B", "C"])
 
         assert len(limits) == 3
-        for s, lim in limits.items():
+        for _s, lim in limits.items():
             assert lim > 0
 
 
@@ -1234,7 +1264,9 @@ class TestTrimAndRefill:
         trimmer = TrimAndRefill()
         # Mix of passing and hard-rejected
         candidates = [
-            RiskApprovedCandidate(symbol="A", alpha_score=0.95, max_weight_limit=0.10, sector="Tech"),
+            RiskApprovedCandidate(
+                symbol="A", alpha_score=0.95, max_weight_limit=0.10, sector="Tech"
+            ),
             RiskApprovedCandidate.rejected("ST_BAD", "ST stock", alpha_score=0.90),
             self._make_candidate("B", 0.85, 0.10, "Finance"),
         ]
@@ -1244,7 +1276,7 @@ class TestTrimAndRefill:
         )
         # ST stock should be rejected and not refilled
         assert len(result.rejected) >= 1
-        assert not any("ST_BAD" == c.symbol for c in result.approved)
+        assert not any(c.symbol == "ST_BAD" for c in result.approved)
 
     def test_summary_produced(self) -> None:
         from qp.portfolio.constraints.trim_refill import TrimAndRefill
@@ -1275,12 +1307,14 @@ class TestLiquidityExposure:
             px = 100.0
             for d in range(n_days):
                 px *= 1 + rng.normal(0.0005, 0.02)
-                rows.append({
-                    "trade_date": f"2026-07-{d+1:02d}",
-                    "symbol": sym,
-                    "close": px,
-                    "volume": float(rng.uniform(1e5, 1e7)),
-                })
+                rows.append(
+                    {
+                        "trade_date": f"2026-07-{d + 1:02d}",
+                        "symbol": sym,
+                        "close": px,
+                        "volume": float(rng.uniform(1e5, 1e7)),
+                    }
+                )
         return pl.DataFrame(rows)
 
     def test_score_basic(self) -> None:
@@ -1384,11 +1418,13 @@ class TestCVaRBudget:
         rows = []
         for sym in symbols:
             for d in range(n_days):
-                rows.append({
-                    "trade_date": f"2026-07-{d+1:02d}",
-                    "symbol": sym,
-                    "ret": float(rng.normal(0.0005, 0.02)),
-                })
+                rows.append(
+                    {
+                        "trade_date": f"2026-07-{d + 1:02d}",
+                        "symbol": sym,
+                        "ret": float(rng.normal(0.0005, 0.02)),
+                    }
+                )
         return pl.DataFrame(rows)
 
     def test_historical_cvar(self) -> None:
@@ -1419,7 +1455,7 @@ class TestCVaRBudget:
         limits = cvar.position_limits(returns, ["A", "B", "C"])
 
         assert len(limits) == 3
-        for s, lim in limits.items():
+        for _s, lim in limits.items():
             assert lim > 0
 
 

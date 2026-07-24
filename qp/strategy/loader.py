@@ -133,11 +133,7 @@ class StrategyLoader:
             cfg = configs.get(strategy_id, configs.get(cls_name, {}))
 
             try:
-                if cfg:
-                    instance = cls(config=cfg)
-                else:
-                    # Try no-arg constructor
-                    instance = cls()
+                instance = cls(config=cfg) if cfg else cls()
 
                 registry.register(instance, lifecycle=lifecycle)
                 registered.append(instance.strategy_id)

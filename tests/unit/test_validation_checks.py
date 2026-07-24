@@ -41,23 +41,26 @@ from qp.validation import (
     ValidationResult,
 )
 
-
 # ==================================================================
 # Fixtures — test data
 # ==================================================================
 
 
-def _make_test_data(n_days: int = 60, n_stocks: int = 20, seed: int = 42) -> tuple[pl.DataFrame, pl.DataFrame]:
+def _make_test_data(
+    n_days: int = 60, n_stocks: int = 20, seed: int = 42
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Create synthetic feature + price DataFrames with known IC."""
     rng = np.random.default_rng(seed)
-    dates = [f"2024-{m:02d}-{d:02d}" for m in range(1, 3) for d in range(1, min(n_days // 2 + 1, 29))][:n_days]
+    dates = [
+        f"2024-{m:02d}-{d:02d}" for m in range(1, 3) for d in range(1, min(n_days // 2 + 1, 29))
+    ][:n_days]
     symbols = [f"STK{i:03d}" for i in range(n_stocks)]
 
     rows = []
     px_rows = []
     for di, d in enumerate(dates):
         base_price = 10.0 + di * 0.1
-        for si, s in enumerate(symbols):
+        for _si, s in enumerate(symbols):
             feat_val = rng.normal(0, 1)
             close = base_price + rng.normal(0, 2) + feat_val * 0.5  # feature has real signal
             rows.append({"trade_date": d, "symbol": s, "feature_value": feat_val})
@@ -173,20 +176,24 @@ class TestStratificationCheck:
 class TestNeutralizationCheck:
     def test_alpha_survives(self):
         check = NeutralizationCheck(min_ratio=0.5)
-        ctx = ValidationContext(metadata={
-            "pre_neutralization_ic": 0.05,
-            "post_neutralization_ic": 0.04,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "pre_neutralization_ic": 0.05,
+                "post_neutralization_ic": 0.04,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
         assert result.actual_value == 0.8
 
     def test_alpha_destroyed(self):
         check = NeutralizationCheck(min_ratio=0.5)
-        ctx = ValidationContext(metadata={
-            "pre_neutralization_ic": 0.05,
-            "post_neutralization_ic": 0.01,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "pre_neutralization_ic": 0.05,
+                "post_neutralization_ic": 0.01,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
         assert "Beta" in result.detail
@@ -198,19 +205,23 @@ class TestNeutralizationCheck:
 
     def test_zero_pre_ic(self):
         check = NeutralizationCheck()
-        ctx = ValidationContext(metadata={
-            "pre_neutralization_ic": 0.0,
-            "post_neutralization_ic": 0.01,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "pre_neutralization_ic": 0.0,
+                "post_neutralization_ic": 0.01,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
     def test_ratio_exactly_at_threshold(self):
         check = NeutralizationCheck(min_ratio=0.5)
-        ctx = ValidationContext(metadata={
-            "pre_neutralization_ic": 0.04,
-            "post_neutralization_ic": 0.02,  # exactly 0.5
-        })
+        ctx = ValidationContext(
+            metadata={
+                "pre_neutralization_ic": 0.04,
+                "post_neutralization_ic": 0.02,  # exactly 0.5
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
@@ -218,19 +229,23 @@ class TestNeutralizationCheck:
 class TestMinSamplePeriodCheck:
     def test_passes_five_years(self):
         check = MinSamplePeriodCheck(min_years=3.0)
-        ctx = ValidationContext(metadata={
-            "train_start": "2020-01-01",
-            "train_end": "2024-12-31",
-        })
+        ctx = ValidationContext(
+            metadata={
+                "train_start": "2020-01-01",
+                "train_end": "2024-12-31",
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
     def test_fails_one_year(self):
         check = MinSamplePeriodCheck(min_years=3.0)
-        ctx = ValidationContext(metadata={
-            "train_start": "2024-01-01",
-            "train_end": "2024-12-31",
-        })
+        ctx = ValidationContext(
+            metadata={
+                "train_start": "2024-01-01",
+                "train_end": "2024-12-31",
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
@@ -241,19 +256,23 @@ class TestMinSamplePeriodCheck:
 
     def test_bad_date_format(self):
         check = MinSamplePeriodCheck()
-        ctx = ValidationContext(metadata={
-            "train_start": "not-a-date",
-            "train_end": "also-not-a-date",
-        })
+        ctx = ValidationContext(
+            metadata={
+                "train_start": "not-a-date",
+                "train_end": "also-not-a-date",
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
     def test_reversed_dates(self):
         check = MinSamplePeriodCheck()
-        ctx = ValidationContext(metadata={
-            "train_start": "2024-12-31",
-            "train_end": "2020-01-01",
-        })
+        ctx = ValidationContext(
+            metadata={
+                "train_start": "2024-12-31",
+                "train_end": "2020-01-01",
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
@@ -318,19 +337,23 @@ class TestTurnoverCheck:
 class TestCostAdjustedCheck:
     def test_passes_post_cost(self):
         check = CostAdjustedCheck(min_sharpe=1.0, max_drawdown_pct=25.0)
-        ctx = ValidationContext(backtest_metrics={
-            "sharpe_ratio_net": 1.2,
-            "max_drawdown_pct_net": -18.0,
-        })
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio_net": 1.2,
+                "max_drawdown_pct_net": -18.0,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
     def test_fails_post_cost(self):
         check = CostAdjustedCheck(min_sharpe=1.0, max_drawdown_pct=25.0)
-        ctx = ValidationContext(backtest_metrics={
-            "sharpe_ratio_net": 0.6,
-            "max_drawdown_pct_net": -30.0,
-        })
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio_net": 0.6,
+                "max_drawdown_pct_net": -30.0,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
@@ -341,11 +364,13 @@ class TestCostAdjustedCheck:
 
     def test_total_cost_fallback(self):
         check = CostAdjustedCheck(min_sharpe=0.5)
-        ctx = ValidationContext(backtest_metrics={
-            "sharpe_ratio": 1.5,
-            "max_drawdown_pct": -10.0,
-            "total_cost_pct": 0.5,
-        })
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio": 1.5,
+                "max_drawdown_pct": -10.0,
+                "total_cost_pct": 0.5,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
@@ -358,20 +383,24 @@ class TestCostAdjustedCheck:
 class TestOverfitCheck:
     def test_passes(self):
         check = OverfitCheck(min_oos_ratio=0.5)
-        ctx = ValidationContext(metadata={
-            "in_sample_ic": 0.06,
-            "out_of_sample_ic": 0.04,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "in_sample_ic": 0.06,
+                "out_of_sample_ic": 0.04,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
         assert result.actual_value == pytest.approx(0.667, abs=0.01)
 
     def test_fails_oos_decay(self):
         check = OverfitCheck(min_oos_ratio=0.5)
-        ctx = ValidationContext(metadata={
-            "in_sample_ic": 0.10,
-            "out_of_sample_ic": 0.02,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "in_sample_ic": 0.10,
+                "out_of_sample_ic": 0.02,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
@@ -382,10 +411,12 @@ class TestOverfitCheck:
 
     def test_zero_is_ic(self):
         check = OverfitCheck()
-        ctx = ValidationContext(metadata={
-            "in_sample_ic": 0.0,
-            "out_of_sample_ic": 0.01,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "in_sample_ic": 0.0,
+                "out_of_sample_ic": 0.01,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
@@ -393,17 +424,15 @@ class TestOverfitCheck:
 class TestFeatureImportanceCheck:
     def test_passes_low_concentration(self):
         check = FeatureImportanceCheck(max_top1_pct=0.80)
-        ctx = ValidationContext(metadata={
-            "feature_importance": np.array([0.3, 0.25, 0.2, 0.15, 0.1])
-        })
+        ctx = ValidationContext(
+            metadata={"feature_importance": np.array([0.3, 0.25, 0.2, 0.15, 0.1])}
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
     def test_fails_high_concentration(self):
         check = FeatureImportanceCheck(max_top1_pct=0.80)
-        ctx = ValidationContext(metadata={
-            "feature_importance": np.array([0.9, 0.05, 0.03, 0.02])
-        })
+        ctx = ValidationContext(metadata={"feature_importance": np.array([0.9, 0.05, 0.03, 0.02])})
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
@@ -443,10 +472,12 @@ class TestRuleEngine:
         engine = RuleEngine()
         engine.register(SharpeCheck(min_sharpe=1.0))
         engine.register(MaxDrawdownCheck(max_drawdown_pct=25.0))
-        ctx = ValidationContext(backtest_metrics={
-            "sharpe_ratio": 0.3,
-            "max_drawdown_pct": -10.0,
-        })
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio": 0.3,
+                "max_drawdown_pct": -10.0,
+            }
+        )
         result = engine.validate(ctx)
         assert result.status == ValidationStatus.FAIL
         assert len(result.failed_rules) == 1
@@ -456,10 +487,12 @@ class TestRuleEngine:
         engine = RuleEngine()
         engine.register(SharpeCheck(min_sharpe=1.0))
         engine.register(MaxDrawdownCheck(max_drawdown_pct=25.0))
-        ctx = ValidationContext(backtest_metrics={
-            "sharpe_ratio": 1.5,
-            "max_drawdown_pct": -15.0,
-        })
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio": 1.5,
+                "max_drawdown_pct": -15.0,
+            }
+        )
         result = engine.validate(ctx)
         assert result.score > 0
         assert result.confidence == 1.0
@@ -549,7 +582,6 @@ class TestSignalCorrelationCheck:
         assert result.status == ValidationStatus.FAIL
 
     def test_identical_signals(self):
-        import numpy as np
         from qp.validation.checks.paper_trading_checks import SignalCorrelationCheck as SCC
 
         check = SCC(min_correlation=0.8)
@@ -560,10 +592,12 @@ class TestSignalCorrelationCheck:
             "2024-01-04": [0.2, 0.4, 0.6, 0.8, 1.0],
             "2024-01-05": [0.1, 0.3, 0.5, 0.7, 0.9],
         }
-        ctx = ValidationContext(metadata={
-            "paper_trading_signals": sigs,
-            "backtest_signals": sigs,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "paper_trading_signals": sigs,
+                "backtest_signals": sigs,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
         assert result.actual_value == pytest.approx(1.0, abs=0.001)
@@ -571,14 +605,12 @@ class TestSignalCorrelationCheck:
     def test_poor_correlation(self):
         check = SignalCorrelationCheck(min_correlation=0.8)
         rng = np.random.default_rng(42)
-        ctx = ValidationContext(metadata={
-            "paper_trading_signals": {
-                f"day{i}": list(rng.random(10)) for i in range(10)
-            },
-            "backtest_signals": {
-                f"day{i}": list(rng.random(10)) for i in range(10)
-            },
-        })
+        ctx = ValidationContext(
+            metadata={
+                "paper_trading_signals": {f"day{i}": list(rng.random(10)) for i in range(10)},
+                "backtest_signals": {f"day{i}": list(rng.random(10)) for i in range(10)},
+            }
+        )
         result = check.check(ctx)
         # random signals should have low correlation
         assert result.actual_value < 0.5
@@ -592,28 +624,34 @@ class TestSlippageDeviationCheck:
 
     def test_within_bounds(self):
         check = SlippageDeviationCheck(max_deviation_pct=0.50)
-        ctx = ValidationContext(metadata={
-            "actual_slippage_bps": 3.0,
-            "assumed_slippage_bps": 2.0,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "actual_slippage_bps": 3.0,
+                "assumed_slippage_bps": 2.0,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS  # 50% exactly at threshold
 
     def test_exceeds_bounds(self):
         check = SlippageDeviationCheck(max_deviation_pct=0.50)
-        ctx = ValidationContext(metadata={
-            "actual_slippage_bps": 5.0,
-            "assumed_slippage_bps": 2.0,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "actual_slippage_bps": 5.0,
+                "assumed_slippage_bps": 2.0,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL  # 150% deviation
 
     def test_zero_assumed(self):
         check = SlippageDeviationCheck()
-        ctx = ValidationContext(metadata={
-            "actual_slippage_bps": 0.0,
-            "assumed_slippage_bps": 0.0,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "actual_slippage_bps": 0.0,
+                "assumed_slippage_bps": 0.0,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
@@ -627,10 +665,12 @@ class TestSignalInterruptionCheck:
     def test_no_gaps(self):
         check = SignalInterruptionCheck()
         dates = [f"2024-01-{d:02d}" for d in range(1, 21)]
-        ctx = ValidationContext(metadata={
-            "paper_trading_expected_dates": dates,
-            "paper_trading_actual_dates": dates,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "paper_trading_expected_dates": dates,
+                "paper_trading_actual_dates": dates,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
@@ -639,19 +679,23 @@ class TestSignalInterruptionCheck:
         dates = [f"2024-01-{d:02d}" for d in range(1, 31)]
         # Missing 3 consecutive days
         actual = [d for d in dates if d not in {"2024-01-10", "2024-01-11", "2024-01-12"}]
-        ctx = ValidationContext(metadata={
-            "paper_trading_expected_dates": dates,
-            "paper_trading_actual_dates": actual,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "paper_trading_expected_dates": dates,
+                "paper_trading_actual_dates": actual,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
     def test_empty_dates(self):
         check = SignalInterruptionCheck()
-        ctx = ValidationContext(metadata={
-            "paper_trading_expected_dates": [],
-            "paper_trading_actual_dates": [],
-        })
+        ctx = ValidationContext(
+            metadata={
+                "paper_trading_expected_dates": [],
+                "paper_trading_actual_dates": [],
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS  # nothing to check
 
@@ -675,21 +719,25 @@ class TestKillSwitchHistoryCheck:
 
     def test_has_triggers(self):
         check = KillSwitchHistoryCheck()
-        ctx = ValidationContext(metadata={
-            "kill_switch_trigger_count": 2,
-            "kill_switch_triggers": ["DrawdownTrigger", "PSITrigger"],
-        })
+        ctx = ValidationContext(
+            metadata={
+                "kill_switch_trigger_count": 2,
+                "kill_switch_triggers": ["DrawdownTrigger", "PSITrigger"],
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
         assert "2 time" in result.detail
 
     def test_nested_in_paper_metrics(self):
         check = KillSwitchHistoryCheck()
-        ctx = ValidationContext(metadata={
-            "paper_trading_metrics": {
-                "kill_switch_trigger_count": 0,
+        ctx = ValidationContext(
+            metadata={
+                "paper_trading_metrics": {
+                    "kill_switch_trigger_count": 0,
+                }
             }
-        })
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
@@ -708,28 +756,34 @@ class TestHighVolSurvivalCheck:
 
     def test_survived_high_vol(self):
         check = HighVolSurvivalCheck(max_dd_during_high_vol=25.0)
-        ctx = ValidationContext(metadata={
-            "high_volatility_days": 12,
-            "high_vol_max_drawdown_pct": -10.0,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "high_volatility_days": 12,
+                "high_vol_max_drawdown_pct": -10.0,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
     def test_failed_high_vol(self):
         check = HighVolSurvivalCheck(max_dd_during_high_vol=25.0)
-        ctx = ValidationContext(metadata={
-            "high_volatility_days": 8,
-            "high_vol_max_drawdown_pct": -30.0,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "high_volatility_days": 8,
+                "high_vol_max_drawdown_pct": -30.0,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
     def test_no_dd_data_still_passes(self):
         """If high-vol days exist but no DD data, still pass (condition 2 skipped)."""
         check = HighVolSurvivalCheck()
-        ctx = ValidationContext(metadata={
-            "high_volatility_days": 5,
-        })
+        ctx = ValidationContext(
+            metadata={
+                "high_volatility_days": 5,
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
@@ -747,11 +801,13 @@ class TestCodeReviewCheck:
 
     def test_passed_via_metadata(self):
         check = CodeReviewCheck()
-        ctx = ValidationContext(metadata={
-            "code_review_passed": True,
-            "code_reviewer": "alice",
-            "code_review_date": "2026-07-22",
-        })
+        ctx = ValidationContext(
+            metadata={
+                "code_review_passed": True,
+                "code_reviewer": "alice",
+                "code_review_date": "2026-07-22",
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
         assert "alice" in result.detail
@@ -765,24 +821,28 @@ class TestExperimentRecordCheck:
 
     def test_passed_via_inline_json(self):
         check = ExperimentRecordCheck()
-        ctx = ValidationContext(metadata={
-            "experiment_json": {
-                "experiment_id": "exp_001",
-                "config": {"features": ["m1"]},
-                "metrics": {"ic_mean": 0.05},
-                "lineage": {"dataset": "dp@v1"},
-            },
-        })
+        ctx = ValidationContext(
+            metadata={
+                "experiment_json": {
+                    "experiment_id": "exp_001",
+                    "config": {"features": ["m1"]},
+                    "metrics": {"ic_mean": 0.05},
+                    "lineage": {"dataset": "dp@v1"},
+                },
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
     def test_incomplete_json(self):
         check = ExperimentRecordCheck()
-        ctx = ValidationContext(metadata={
-            "experiment_json": {
-                "experiment_id": "exp_001",
-            },
-        })
+        ctx = ValidationContext(
+            metadata={
+                "experiment_json": {
+                    "experiment_id": "exp_001",
+                },
+            }
+        )
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 

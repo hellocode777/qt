@@ -505,7 +505,7 @@ class MinSamplePeriodCheck(BaseRule):
                 ),
             )
 
-        from datetime import date, timedelta
+        from datetime import date
 
         try:
             start = date.fromisoformat(str(train_start)[:10])

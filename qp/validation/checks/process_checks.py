@@ -7,11 +7,9 @@ promotion. These are lightweight governance checks per rule.md §10.2.
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from qp.shared.types import ValidationStatus
 from qp.validation.engine import BaseRule, RuleResult, ValidationContext
-
 
 # ------------------------------------------------------------------
 # Code Review Check
@@ -158,23 +156,22 @@ class ExperimentRecordCheck(BaseRule):
                 )
 
         # Check 2: inline experiment JSON
-        if experiment_json:
-            if isinstance(experiment_json, dict):
-                required = ["experiment_id", "config", "metrics", "lineage"]
-                missing = [k for k in required if k not in experiment_json]
-                if missing:
-                    return RuleResult(
-                        rule_name=self.rule_name,
-                        status=ValidationStatus.FAIL,
-                        score=0.0,
-                        detail=f"Experiment record missing fields: {missing}",
-                    )
+        if experiment_json and isinstance(experiment_json, dict):
+            required = ["experiment_id", "config", "metrics", "lineage"]
+            missing = [k for k in required if k not in experiment_json]
+            if missing:
                 return RuleResult(
                     rule_name=self.rule_name,
-                    status=ValidationStatus.PASS,
-                    score=100.0,
-                    detail=f"Experiment '{experiment_json.get('experiment_id')}' validated inline.",
+                    status=ValidationStatus.FAIL,
+                    score=0.0,
+                    detail=f"Experiment record missing fields: {missing}",
                 )
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.PASS,
+                score=100.0,
+                detail=f"Experiment '{experiment_json.get('experiment_id')}' validated inline.",
+            )
 
         # Neither found
         return RuleResult(

@@ -14,7 +14,7 @@ LineageLayer.md §1④:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from qp.shared.protocols.base_strategy import BaseStrategy
 from qp.shared.types import RebalanceSchedule, StrategyLifecycle
@@ -24,11 +24,13 @@ if TYPE_CHECKING:
 
 
 # Lifecycle states that require complete lineage before promotion
-_LINEAGE_REQUIRED_STATES: frozenset[StrategyLifecycle] = frozenset({
-    StrategyLifecycle.PAPER_TRADING,
-    StrategyLifecycle.SHADOW_PRODUCTION,
-    StrategyLifecycle.PRODUCTION,
-})
+_LINEAGE_REQUIRED_STATES: frozenset[StrategyLifecycle] = frozenset(
+    {
+        StrategyLifecycle.PAPER_TRADING,
+        StrategyLifecycle.SHADOW_PRODUCTION,
+        StrategyLifecycle.PRODUCTION,
+    }
+)
 
 
 @dataclass
@@ -88,12 +90,12 @@ class StrategyMeta:
             strategy_version=str(data.get("strategy_version", "1.0.0")),
             model_version=str(data.get("model_version", "")),
             feature_version=str(data.get("feature_version", "")),
-            feature_set=list(data.get("feature_set", [])),
+            feature_set=list(cast("list[str]", data.get("feature_set", []))),
             rebalance_frequency=freq,
-            rebalance_day=int(data.get("rebalance_day", 0)),
+            rebalance_day=int(cast("int", data.get("rebalance_day", 0))),
             owner=str(data.get("owner", "")),
             description=str(data.get("description", "")),
-            tags=list(data.get("tags", [])),
+            tags=list(cast("list[str]", data.get("tags", []))),
         )
 
 
@@ -293,8 +295,7 @@ class StrategyRegistry:
             validation = self.validate_lineage(strategy_id)
             if not validation["valid"]:
                 raise ValueError(
-                    f"Cannot promote '{strategy_id}' to '{state.value}': "
-                    f"{validation['message']}"
+                    f"Cannot promote '{strategy_id}' to '{state.value}': {validation['message']}"
                 )
 
         self._lifecycles[strategy_id] = state

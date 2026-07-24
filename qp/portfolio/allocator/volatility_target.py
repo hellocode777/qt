@@ -19,9 +19,8 @@ then scales the entire portfolio up/down to hit the volatility target.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
-import numpy as np
 import pandas as pd
 import polars as pl
 
@@ -85,9 +84,7 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
             DataFrame with [symbol, target_weight, target_capital, vol_scale].
         """
         if candidates.empty:
-            return pd.DataFrame(
-                columns=["symbol", "target_weight", "target_capital", "vol_scale"]
-            )
+            return pd.DataFrame(columns=["symbol", "target_weight", "target_capital", "vol_scale"])
 
         n = len(candidates)
         base_weight = 1.0 / n  # Equal weight as baseline
@@ -95,7 +92,7 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
         # Estimate current portfolio volatility
         if "risk_volatility" in candidates.columns:
             vols = candidates["risk_volatility"].clip(lower=0.001)
-            avg_vol = float(vols.mean())
+            avg_vol = float(cast("float", vols.mean()))
         else:
             avg_vol = 0.20  # Default: assume 20% vol
 
@@ -110,7 +107,7 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
 
             # Per-position cap from Layer 7
             if "max_weight_limit" in candidates.columns:
-                limit = float(row.get("max_weight_limit", 1.0))
+                limit = float(cast("float", row.get("max_weight_limit", 1.0)))
                 wt = min(wt, limit)
 
             rows.append(
@@ -161,8 +158,6 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
         avg_vol = self._estimate_portfolio_vol(prices, symbols)
         scale = self._compute_scale(avg_vol)
 
-        investable = total_capital * scale * (1.0 - self._cash_buffer)
-
         rows = []
         for s in symbols:
             wt = base_weight * scale * (1.0 - self._cash_buffer)
@@ -200,18 +195,16 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
             return 0.20
 
         px = px.sort(["symbol", "trade_date"])
-        px = px.with_columns(
-            (pl.col("close").log().diff().over("symbol")).alias("log_return")
-        )
+        px = px.with_columns((pl.col("close").log().diff().over("symbol")).alias("log_return"))
         px = px.drop_nulls(subset=["log_return"])
         px = px.group_by("symbol").tail(self._vol_lookback)
 
         # Pivot to wide: each column = one stock's returns
         try:
             wide = px.pivot(
-                values="log_return",
+                on="symbol",
                 index="trade_date",
-                columns="symbol",
+                values="log_return",
             ).drop_nulls()
         except Exception:
             return 0.20
@@ -224,7 +217,6 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
         if not return_cols:
             return 0.20
 
-        n_cols = len(return_cols)
         # Mean across stocks per day
         portfolio_returns = wide.select(
             pl.mean_horizontal([pl.col(c) for c in return_cols]).alias("port_ret")

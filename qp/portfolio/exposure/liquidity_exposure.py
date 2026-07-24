@@ -21,9 +21,8 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-import numpy as np
 import polars as pl
 
 
@@ -41,10 +40,10 @@ class LiquidityExposure:
     """
 
     adv_lookback: int = 20
-    illiquid_threshold: float = 50e6   # 50M CNY/day
+    illiquid_threshold: float = 50e6  # 50M CNY/day
     low_liquid_threshold: float = 200e6  # 200M CNY/day
-    participation_rate: float = 0.05    # 5% max participation
-    max_illiquid_weight: float = 0.05   # 5% in illiquid
+    participation_rate: float = 0.05  # 5% max participation
+    max_illiquid_weight: float = 0.05  # 5% in illiquid
     max_low_liquid_weight: float = 0.20  # 20% in low-liquidity
 
     # ------------------------------------------------------------------
@@ -180,7 +179,7 @@ class LiquidityExposure:
             if len(sym_data) == 0:
                 advs[sym] = 0.0
             else:
-                advs[sym] = round(float(sym_data.mean()), 2)
+                advs[sym] = round(float(cast("float", sym_data.mean())), 2)
 
         return advs
 
@@ -192,5 +191,6 @@ class LiquidityExposure:
         if adv <= 0:
             return 0.0
         import math
+
         score = math.log10(max(adv, 1e4)) / 10.0
         return round(max(0.0, min(1.0, score)), 4)

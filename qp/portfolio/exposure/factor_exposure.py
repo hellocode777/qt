@@ -86,7 +86,7 @@ class FactorExposureAnalyzer:
 
             # Volatility: annualized daily vol
             if len(close) >= max(self.volatility_lookback, 20):
-                log_ret = np.diff(np.log(close[-self.volatility_lookback:]))
+                log_ret = np.diff(np.log(close[-self.volatility_lookback :]))
                 vol = float(np.std(log_ret) * np.sqrt(252))
             else:
                 vol = 0.30
@@ -121,9 +121,7 @@ class FactorExposureAnalyzer:
             std = float(vals.std(ddof=1))
             if std > 1e-12:
                 for s in syms:
-                    exposures[s][factor] = round(
-                        (exposures[s][factor] - mu) / std, 4
-                    )
+                    exposures[s][factor] = round((exposures[s][factor] - mu) / std, 4)
             else:
                 for s in syms:
                     exposures[s][factor] = 0.0
@@ -184,10 +182,7 @@ class FactorExposureAnalyzer:
                 "summary": str,
             }
         """
-        biased = [
-            f for f, z in portfolio_exposures.items()
-            if abs(z) > threshold
-        ]
+        biased = [f for f, z in portfolio_exposures.items() if abs(z) > threshold]
 
         summary_parts = []
         for f, z in sorted(portfolio_exposures.items(), key=lambda x: -abs(x[1])):

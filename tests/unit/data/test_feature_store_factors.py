@@ -49,19 +49,25 @@ def _make_ohlcv_df(
             month = 1 + d_idx // 22
             day = (d_idx % 22) + 1
             c = close[d_idx]
-            rows.append({
-                "symbol": sym,
-                "trade_date": f"2024-{month:02d}-{day:02d}",
-                "open": c + rng.normal(0, 0.5),
-                "high": c + abs(rng.normal(0, 1.5)),
-                "low": c - abs(rng.normal(0, 1.5)),
-                "close": c,
-                "volume": float(abs(rng.normal(1e6, 2e5))),
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "trade_date": f"2024-{month:02d}-{day:02d}",
+                    "open": c + rng.normal(0, 0.5),
+                    "high": c + abs(rng.normal(0, 1.5)),
+                    "low": c - abs(rng.normal(0, 1.5)),
+                    "close": c,
+                    "volume": float(abs(rng.normal(1e6, 2e5))),
+                }
+            )
 
-    return pl.DataFrame(rows).with_columns(
-        pl.col("trade_date").str.to_date(),
-    ).sort(["symbol", "trade_date"])
+    return (
+        pl.DataFrame(rows)
+        .with_columns(
+            pl.col("trade_date").str.to_date(),
+        )
+        .sort(["symbol", "trade_date"])
+    )
 
 
 # ==================================================================
@@ -318,9 +324,16 @@ class TestFactorIntegration:
         # (MACD also produces macd_line/macd_signal, but those are
         #  auxiliary outputs accessed via direct transform_batch())
         expected_cols = {
-            "momentum_5", "momentum_20", "rsi_14", "volatility_20",
-            "atr_14", "volume_ratio_5", "turnover_rate",
-            "sma_cross_5_20", "price_position_20", "macd_hist",
+            "momentum_5",
+            "momentum_20",
+            "rsi_14",
+            "volatility_20",
+            "atr_14",
+            "volume_ratio_5",
+            "turnover_rate",
+            "sma_cross_5_20",
+            "price_position_20",
+            "macd_hist",
         }
         for col in expected_cols:
             assert col in result.columns, f"Missing column: {col}"

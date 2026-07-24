@@ -427,9 +427,7 @@ class DuckDBEngine:
         """
         self.register("_compute_src", df)
 
-        feature_sql = ", ".join(
-            f"{expr} AS {name}" for name, expr in expressions.items()
-        )
+        feature_sql = ", ".join(f"{expr} AS {name}" for name, expr in expressions.items())
 
         sql = f"""
             SELECT *,

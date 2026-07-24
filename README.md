@@ -3,7 +3,8 @@
 A personal quantitative research & investment decision operating system.
 
 > **Status**: Phase 0-6 Complete — 10-layer architecture fully implemented.  
-> **Tests**: 109 passed | **CLI**: 20+ commands | **Quality**: ruff=0, pyright=0
+> **Tests**: 1049 passed | **CLI**: 20+ commands | **Quality**: ruff=0, pyright=0
+> **Python**: 3.12 (pinned via `.python-version`)
 
 ## Quick Start
 
@@ -52,7 +53,7 @@ qp retrain [strategy]     # Monthly model retrain
 uv run ruff format        # Auto-format
 uv run ruff check         # Lint (0 errors)
 uv run pyright            # Type-check (0 errors)
-uv run pytest             # Run tests (109 passed)
+uv run pytest             # Run tests (1049 passed)
 ```
 
 ## Design Decisions

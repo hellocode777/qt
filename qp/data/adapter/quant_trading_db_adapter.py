@@ -145,7 +145,10 @@ class QuantTradingDBAdapter(BaseDataSource):
         result = pd.concat(all_frames, ignore_index=True)
         logger.info(
             "QuantTradingDB: {} 只 × {}→{} = {} 行",
-            len(codes), start_str, end_str, len(result),
+            len(codes),
+            start_str,
+            end_str,
+            len(result),
         )
         return result
 
@@ -204,15 +207,17 @@ class QuantTradingDBAdapter(BaseDataSource):
                 if cf > 0:
                     px_mult = cf
 
-            data.append({
-                "symbol": code,
-                "trade_date": td,
-                "open": round(float(o or 0) * px_mult, 2),
-                "high": round(float(h or 0) * px_mult, 2),
-                "low": round(float(lo or 0) * px_mult, 2),
-                "close": round(float(c or 0) * px_mult, 2),
-                "volume": float(v or 0),
-            })
+            data.append(
+                {
+                    "symbol": code,
+                    "trade_date": td,
+                    "open": round(float(o or 0) * px_mult, 2),
+                    "high": round(float(h or 0) * px_mult, 2),
+                    "low": round(float(lo or 0) * px_mult, 2),
+                    "close": round(float(c or 0) * px_mult, 2),
+                    "volume": float(v or 0),
+                }
+            )
 
         return pd.DataFrame(data)
 

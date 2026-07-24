@@ -26,31 +26,38 @@ from loguru import logger
 
 # 10 因子（与 momentum_vol_full 对齐）
 FEATURES = [
-    "Momentum_3M", "Volatility_20D", "PE_TTM", "PB",
-    "Volume_Trend_10D", "Price_Volume_Corr",
-    "Volume_Price_Trend", "Implied_Net_Flow", "Amplitude_5D", "Volume_Concentration",
+    "Momentum_3M",
+    "Volatility_20D",
+    "PE_TTM",
+    "PB",
+    "Volume_Trend_10D",
+    "Price_Volume_Corr",
+    "Volume_Price_Trend",
+    "Implied_Net_Flow",
+    "Amplitude_5D",
+    "Volume_Concentration",
 ]
 
 # Walk-forward 参数
-TRAIN_WINDOW_DAYS = 252      # 最小训练窗口（1 年；生产建议 500=2年 per rule.md §7.9.3）
-GAP_DAYS = 25                # 禁运期
-FORWARD_DAYS = 20            # 标签窗口
-PURGE_DAYS = 20              # Purge 天数
-EMBARGO_DAYS = 5             # Embargo 天数
-CV_FOLDS = 5                 # PurgedKFold 折数
+TRAIN_WINDOW_DAYS = 252  # 最小训练窗口（1 年；生产建议 500=2年 per rule.md §7.9.3）
+GAP_DAYS = 25  # 禁运期
+FORWARD_DAYS = 20  # 标签窗口
+PURGE_DAYS = 20  # Purge 天数
+EMBARGO_DAYS = 5  # Embargo 天数
+CV_FOLDS = 5  # PurgedKFold 折数
 
 # ── 因子经济方向（rule.md §7.9.5 单调约束）─
 # +1 = 因子值越高得分越高, -1 = 因子值越高得分越低, 0 = 无约束
 FACTOR_DIRECTIONS: dict[str, int] = {
-    "Momentum_3M": +1,          # 动量效应
-    "Volatility_20D": -1,       # 低波异象
-    "PE_TTM": -1,               # 低估值偏好
-    "PB": -1,                   # 低市净率偏好
-    "Volume_Trend_10D": +1,     # 量增价涨
-    "Price_Volume_Corr": -1,    # 高量价相关 → 可能见顶
-    "Volume_Price_Trend": +1,   # 量价趋势一致
-    "Implied_Net_Flow": +1,     # 资金净流入
-    "Amplitude_5D": -1,         # 高振幅 → 不稳定
+    "Momentum_3M": +1,  # 动量效应
+    "Volatility_20D": -1,  # 低波异象
+    "PE_TTM": -1,  # 低估值偏好
+    "PB": -1,  # 低市净率偏好
+    "Volume_Trend_10D": +1,  # 量增价涨
+    "Price_Volume_Corr": -1,  # 高量价相关 → 可能见顶
+    "Volume_Price_Trend": +1,  # 量价趋势一致
+    "Implied_Net_Flow": +1,  # 资金净流入
+    "Amplitude_5D": -1,  # 高振幅 → 不稳定
     "Volume_Concentration": -1,  # 成交集中 → 主力控盘
 }
 
@@ -113,12 +120,16 @@ class WalkForwardScorer:
         if n_dates > 0:
             logger.info(
                 "🤖 ML 数据: {} 天 ({} → {}), {} 训练窗口要求",
-                n_dates, sorted_dates[0], sorted_dates[-1], self.train_window_days,
+                n_dates,
+                sorted_dates[0],
+                sorted_dates[-1],
+                self.train_window_days,
             )
         if n_dates < self.train_window_days:
             logger.warning(
                 "ML: 数据不足 ({} 天 < {} 天训练窗口), 回退线性加权",
-                n_dates, self.train_window_days,
+                n_dates,
+                self.train_window_days,
             )
             return {}
 
@@ -189,8 +200,12 @@ class WalkForwardScorer:
 
             # 3. 内层 PurgedKFold CV 检查过拟合
             model = self._train_with_cv_check(
-                X_train, y_train, group_sizes, monotone_constraints,
-                active_features, train_df,
+                X_train,
+                y_train,
+                group_sizes,
+                monotone_constraints,
+                active_features,
+                train_df,
             )
 
             if model is None:
@@ -203,8 +218,7 @@ class WalkForwardScorer:
             # 5. 构建 symbol → prob
             symbols = pred_df["symbol"].tolist()
             scores[str(pred_date)] = {
-                str(s): float(p)
-                for s, p in zip(symbols, pred_scores, strict=True)
+                str(s): float(p) for s, p in zip(symbols, pred_scores, strict=True)
             }
 
             # 6. 记录特征重要性（G-008 稳定性检查）
@@ -318,12 +332,17 @@ class WalkForwardScorer:
             if mean_is > 0 and mean_cv / mean_is < 0.30:
                 logger.warning(
                     "⚠️ 过拟合警告: OOS IC {:.4f} < 30% 样本内 IC {:.4f}",
-                    mean_cv, mean_is,
+                    mean_cv,
+                    mean_is,
                 )
 
         # 全量训练
         return self._train_single(
-            X, y, group_sizes, monotone_constraints, active_features,
+            X,
+            y,
+            group_sizes,
+            monotone_constraints,
+            active_features,
         )
 
     def _train_single(
@@ -389,18 +408,22 @@ class WalkForwardScorer:
         # 标签: 截面内 forward return → 10 级整数分位 (0~9)
         # LambdaRank 要求标签为整数，且值越大表示越相关
         # rank ascending: 最差=1, 最好=N → 用该 rank 分 10 档, 最好→标签9
-        df = df.with_columns([
-            pl.when(pl.col("forward_return").is_null())
-            .then(None)
-            .otherwise(
-                # ascending rank: worst=1, best=N → bin 0~9 where 9=best
-                ((pl.col("forward_return").rank("ordinal") - 1)
-                 * 10 // pl.col("forward_return").count())
-                .cast(pl.Int32)
-            )
-            .over("date")
-            .alias("label"),
-        ])
+        df = df.with_columns(
+            [
+                pl.when(pl.col("forward_return").is_null())
+                .then(None)
+                .otherwise(
+                    # ascending rank: worst=1, best=N → bin 0~9 where 9=best
+                    (
+                        (pl.col("forward_return").rank("ordinal") - 1)
+                        * 10
+                        // pl.col("forward_return").count()
+                    ).cast(pl.Int32)
+                )
+                .over("date")
+                .alias("label"),
+            ]
+        )
 
         # 丢弃无标签行
         df = df.filter(pl.col("label").is_not_null())
@@ -461,6 +484,7 @@ class WalkForwardScorer:
 
         valid_scores = raw_scores[valid_mask]
         from scipy.stats import rankdata
+
         ranks = rankdata(valid_scores, method="average")
         result[valid_mask] = (ranks - 1) / (len(ranks) - 1) if len(ranks) > 1 else 0.5
         return result
@@ -512,9 +536,7 @@ class WalkForwardScorer:
                     drift.departed,
                 )
                 if drift.drift_severity == "severe":
-                    logger.warning(
-                        "!!! 建议人工复核后再上线新模型版本 (rule.md §7.9.7)"
-                    )
+                    logger.warning("!!! 建议人工复核后再上线新模型版本 (rule.md §7.9.7)")
         except Exception:
             pass  # 非关键路径，静默失败
 

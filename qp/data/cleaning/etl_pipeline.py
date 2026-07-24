@@ -343,8 +343,11 @@ def stage4_adjustment(
                     best_ex = str(ex_dates[j])
                 else:
                     break
-            if best_cf > 0:
-                cf = best_cf
+            # 前复权: normalize by the latest cumulative factor so the most
+            # recent price is unadjusted and historical prices are scaled down.
+            latest_cf = cum_factors[-1] if cum_factors else 1.0
+            if best_cf > 0 and latest_cf > 0:
+                cf = best_cf / latest_cf
             if best_ex == str(dt):
                 is_ex = True
 

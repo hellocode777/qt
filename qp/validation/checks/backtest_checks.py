@@ -215,13 +215,9 @@ class CostAdjustedCheck(BaseRule):
 
         failures = []
         if not sharpe_pass:
-            failures.append(
-                f"Net Sharpe {net_sharpe:.2f} < {self._min_sharpe}"
-            )
+            failures.append(f"Net Sharpe {net_sharpe:.2f} < {self._min_sharpe}")
         if not dd_pass:
-            failures.append(
-                f"Net MaxDD {net_dd:.1f}% > {self._max_drawdown}%"
-            )
+            failures.append(f"Net MaxDD {net_dd:.1f}% > {self._max_drawdown}%")
 
         # Score: average of Sharpe score and DD score
         sharpe_score = min(100.0, (net_sharpe / 2.0) * 100.0)

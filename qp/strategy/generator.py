@@ -146,44 +146,48 @@ class SignalGenerator:
 
         # Normalize
         norm = self.config.normalizer
-        scores = norm.normalize_polars(scores, score_col=actual_col, output_col="alpha_score")
+        if norm is None:
+            norm = SignalNormalizer(method=NormMethod.RANK)
+        out: pl.DataFrame = norm.normalize_polars(
+            scores, score_col=actual_col, output_col="alpha_score"
+        )
 
         # Clip
         if self.config.clipper:
-            scores = self.config.clipper.clip_polars(
-                scores, score_col="alpha_score", output_col="alpha_score"
+            out = self.config.clipper.clip_polars(
+                out, score_col="alpha_score", output_col="alpha_score"
             )
 
         # Smooth (per symbol across time if date column exists)
-        if self.config.smoother and "date" in scores.columns:
-            scores = self.config.smoother.smooth_polars(
-                scores, score_col="alpha_score", output_col="alpha_score"
+        if self.config.smoother and "date" in out.columns:
+            out = self.config.smoother.smooth_polars(
+                out, score_col="alpha_score", output_col="alpha_score"
             )
 
         # Threshold
         if self.config.threshold:
-            scores = self.config.threshold.filter(scores, score_col="alpha_score")
+            out = self.config.threshold.filter(out, score_col="alpha_score")
 
         # Confidence
         if self.config.confidence_scorer:
-            scores = self.config.confidence_scorer.score_polars(
-                scores, score_col="alpha_score", output_col="confidence"
+            out = self.config.confidence_scorer.score_polars(
+                out, score_col="alpha_score", output_col="confidence"
             )
 
         # Rank and sort
-        if not scores.is_empty():
-            scores = scores.sort("alpha_score", descending=True)
-            scores = scores.with_columns(
+        if not out.is_empty():
+            out = out.sort("alpha_score", descending=True)
+            out = out.with_columns(
                 pl.col("alpha_score").rank(descending=True).cast(pl.Int64).alias("rank")
             )
             if self.config.top_n > 0:
-                scores = scores.head(self.config.top_n)
+                out = out.head(self.config.top_n)
 
         # Min score filter
-        if self.config.min_score > 0 and not scores.is_empty():
-            scores = scores.filter(pl.col("alpha_score") >= self.config.min_score)
+        if self.config.min_score > 0 and not out.is_empty():
+            out = out.filter(pl.col("alpha_score") >= self.config.min_score)
 
-        return scores
+        return out
 
     # ------------------------------------------------------------------
     # Generate with raw array
@@ -214,10 +218,12 @@ class SignalGenerator:
 
         date_str = as_of_date.isoformat() if as_of_date else ""
 
-        df = pl.DataFrame({
-            "symbol": symbols,
-            self.config.score_col: raw_scores,
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": symbols,
+                self.config.score_col: raw_scores,
+            }
+        )
         if date_str:
             df = df.with_columns(pl.lit(date_str).alias("date"))
 
@@ -235,28 +241,34 @@ class SignalGenerator:
         """
         model = self.config.model
 
-        if model is not None:
-            # Delegate to model
-            if hasattr(model, "predict"):
-                raw = model.predict(features)
-                if isinstance(raw, np.ndarray):
-                    feat_cols = [c for c in features.columns if c != "symbol"]
-                    symbol_col = "symbol" if "symbol" in features.columns else feat_cols[0]
-                    return pl.DataFrame({
+        # Delegate to model when available
+        if model is not None and hasattr(model, "predict"):
+            raw = model.predict(features)
+            if isinstance(raw, np.ndarray):
+                feat_cols = [c for c in features.columns if c != "symbol"]
+                symbol_col = "symbol" if "symbol" in features.columns else feat_cols[0]
+                return pl.DataFrame(
+                    {
                         "symbol": features[symbol_col].to_list(),
                         self.config.score_col: raw.tolist(),
-                    })
+                    }
+                )
 
         # No model — use last numeric column as score
         numeric_cols = [
-            c for c in features.columns
+            c
+            for c in features.columns
             if c != "symbol" and features[c].dtype in (pl.Float64, pl.Float32, pl.Int64)
         ]
         if numeric_cols:
             score_col = numeric_cols[-1]
-            return features.select([
-                pl.col("symbol") if "symbol" in features.columns else pl.lit("").alias("symbol"),
-                pl.col(score_col).alias(self.config.score_col),
-            ])
+            return features.select(
+                [
+                    pl.col("symbol")
+                    if "symbol" in features.columns
+                    else pl.lit("").alias("symbol"),
+                    pl.col(score_col).alias(self.config.score_col),
+                ]
+            )
 
         return features

@@ -13,7 +13,6 @@ from __future__ import annotations
 from qp.shared.types import ValidationStatus
 from qp.validation.engine import BaseRule, RuleResult, ValidationContext
 
-
 # ------------------------------------------------------------------
 # Kill Switch History Check
 # ------------------------------------------------------------------

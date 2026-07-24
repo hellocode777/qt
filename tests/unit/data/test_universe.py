@@ -81,11 +81,13 @@ class TestListingDateRegistry:
 
 class TestLiquidity:
     def test_compute_median_volume(self):
-        df = pl.DataFrame({
-            "symbol": ["000001", "000001", "000002", "000002"],
-            "trade_date": ["2024-01-15", "2024-01-16", "2024-01-15", "2024-01-16"],
-            "volume": [1000000.0, 1200000.0, 500000.0, 300000.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000001", "000002", "000002"],
+                "trade_date": ["2024-01-15", "2024-01-16", "2024-01-15", "2024-01-16"],
+                "volume": [1000000.0, 1200000.0, 500000.0, 300000.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         result = compute_median_volume(df)
         assert result.height == 2
         syms = result["symbol"].to_list()
@@ -93,32 +95,38 @@ class TestLiquidity:
         assert "000002" in syms
 
     def test_filter_by_liquidity_absolute(self):
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C"],
-            "trade_date": ["2024-01-15"] * 3,
-            "volume": [1000000.0, 500000.0, 100000.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "trade_date": ["2024-01-15"] * 3,
+                "volume": [1000000.0, 500000.0, 100000.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         result = filter_by_liquidity(df, min_volume=200000.0)
         assert "A" in result
         assert "B" in result
         assert "C" not in result
 
     def test_filter_by_percentile(self):
-        df = pl.DataFrame({
-            "symbol": [f"S{i:03d}" for i in range(20)],
-            "trade_date": ["2024-01-15"] * 20,
-            "volume": [float(i * 100000 + 100000) for i in range(20)],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": [f"S{i:03d}" for i in range(20)],
+                "trade_date": ["2024-01-15"] * 20,
+                "volume": [float(i * 100000 + 100000) for i in range(20)],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         result = filter_by_percentile(df, min_percentile=50.0)
         # Bottom 50% excluded → keeps ~10
         assert 8 <= len(result) <= 12
 
     def test_get_liquidity_stats(self):
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C"],
-            "trade_date": ["2024-01-15"] * 3,
-            "volume": [1e6, 5e5, 1e5],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "trade_date": ["2024-01-15"] * 3,
+                "volume": [1e6, 5e5, 1e5],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         stats = get_liquidity_stats(df)
         assert stats["count"] == 3
         assert stats["median"] > 0
@@ -141,12 +149,14 @@ class TestLiquidity:
 class TestRestatementTracker:
     def test_single_version(self):
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "publish_date": ["2024-10-25"],
-            "ROE": [15.5],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "publish_date": ["2024-10-25"],
+                "ROE": [15.5],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -158,12 +168,14 @@ class TestRestatementTracker:
     def test_restatement_detection(self):
         """Two versions of same report → second is a restatement."""
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001", "000001"],
-            "report_date": ["2024-09-30", "2024-09-30"],
-            "publish_date": ["2024-10-25", "2025-03-15"],
-            "ROE": [15.5, 14.2],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000001"],
+                "report_date": ["2024-09-30", "2024-09-30"],
+                "publish_date": ["2024-10-25", "2025-03-15"],
+                "ROE": [15.5, 14.2],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -174,12 +186,14 @@ class TestRestatementTracker:
     def test_pit_visibility(self):
         """Version visible depends on as_of_date."""
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001", "000001"],
-            "report_date": ["2024-09-30", "2024-09-30"],
-            "publish_date": ["2024-10-25", "2025-03-15"],
-            "ROE": [15.5, 14.2],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000001"],
+                "report_date": ["2024-09-30", "2024-09-30"],
+                "publish_date": ["2024-10-25", "2025-03-15"],
+                "ROE": [15.5, 14.2],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -199,12 +213,14 @@ class TestRestatementTracker:
 
     def test_no_visible_before_first_publish(self):
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "publish_date": ["2024-10-25"],
-            "ROE": [15.5],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "publish_date": ["2024-10-25"],
+                "ROE": [15.5],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -214,12 +230,14 @@ class TestRestatementTracker:
 
     def test_version_history(self):
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001", "000001", "000001"],
-            "report_date": ["2024-09-30", "2024-09-30", "2024-09-30"],
-            "publish_date": ["2024-10-25", "2025-03-15", "2025-05-01"],
-            "ROE": [15.5, 14.2, 13.8],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000001", "000001"],
+                "report_date": ["2024-09-30", "2024-09-30", "2024-09-30"],
+                "publish_date": ["2024-10-25", "2025-03-15", "2025-05-01"],
+                "ROE": [15.5, 14.2, 13.8],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -230,12 +248,14 @@ class TestRestatementTracker:
 
     def test_get_restated_reports(self):
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001", "000001", "000002"],
-            "report_date": ["2024-09-30", "2024-09-30", "2024-06-30"],
-            "publish_date": ["2024-10-25", "2025-03-15", "2024-08-15"],
-            "ROE": [15.5, 14.2, 10.0],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000001", "000002"],
+                "report_date": ["2024-09-30", "2024-09-30", "2024-06-30"],
+                "publish_date": ["2024-10-25", "2025-03-15", "2024-08-15"],
+                "ROE": [15.5, 14.2, 10.0],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -246,12 +266,14 @@ class TestRestatementTracker:
     def test_idempotent_ingest(self):
         """Ingesting the same data twice shouldn't create duplicates."""
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "publish_date": ["2024-10-25"],
-            "ROE": [15.5],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "publish_date": ["2024-10-25"],
+                "ROE": [15.5],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -263,12 +285,14 @@ class TestRestatementTracker:
 
     def test_multiple_symbols(self):
         tracker = RestatementTracker()
-        df = pl.DataFrame({
-            "symbol": ["000001", "000002"],
-            "report_date": ["2024-09-30", "2024-09-30"],
-            "publish_date": ["2024-10-25", "2024-10-28"],
-            "ROE": [15.5, 10.0],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001", "000002"],
+                "report_date": ["2024-09-30", "2024-09-30"],
+                "publish_date": ["2024-10-25", "2024-10-28"],
+                "ROE": [15.5, 10.0],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -389,26 +413,32 @@ class TestUniverseBuilder:
         """All filters together on realistic data — all pass with high volume."""
         config = UniverseConfig()
         builder = UniverseBuilder(config)
-        df = pl.DataFrame({
-            "symbol": ["600519", "000001", "688981"],
-            "trade_date": ["2024-06-15"] * 3,
-            "open": [100.0, 10.0, 50.0],
-            "high": [101.0, 11.0, 51.0],
-            "low": [99.0, 9.8, 49.8],
-            "close": [100.5, 10.2, 50.2],
-            "volume": [2e6, 1e6, 8e5],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["600519", "000001", "688981"],
+                "trade_date": ["2024-06-15"] * 3,
+                "open": [100.0, 10.0, 50.0],
+                "high": [101.0, 11.0, 51.0],
+                "low": [99.0, 9.8, 49.8],
+                "close": [100.5, 10.2, 50.2],
+                "volume": [2e6, 1e6, 8e5],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         result = builder.build(df, as_of_date="2024-06-15")
         assert len(result.symbols) == 3
         assert result.stats["input"] == 3
         assert result.stats["output"] == 3
 
     def test_get_universe(self):
-        builder = UniverseBuilder(UniverseConfig(
-            enable_ipo_filter=False, enable_st_filter=False,
-            enable_suspension_filter=False, enable_delisting_filter=False,
-            enable_liquidity_filter=False,
-        ))
+        builder = UniverseBuilder(
+            UniverseConfig(
+                enable_ipo_filter=False,
+                enable_st_filter=False,
+                enable_suspension_filter=False,
+                enable_delisting_filter=False,
+                enable_liquidity_filter=False,
+            )
+        )
         df = self._make_df(["A", "B", "C"])
         syms = builder.get_universe(df)
         assert sorted(syms) == ["A", "B", "C"]
@@ -420,11 +450,15 @@ class TestUniverseBuilder:
         assert result.symbols == []
 
     def test_extra_exclude(self):
-        builder = UniverseBuilder(UniverseConfig(
-            enable_ipo_filter=False, enable_st_filter=False,
-            enable_suspension_filter=False, enable_delisting_filter=False,
-            enable_liquidity_filter=False,
-        ))
+        builder = UniverseBuilder(
+            UniverseConfig(
+                enable_ipo_filter=False,
+                enable_st_filter=False,
+                enable_suspension_filter=False,
+                enable_delisting_filter=False,
+                enable_liquidity_filter=False,
+            )
+        )
         df = self._make_df(["A", "B", "C"])
         result = builder.build(df, extra_exclude=["B"])
         assert sorted(result.symbols) == ["A", "C"]

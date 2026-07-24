@@ -5,7 +5,14 @@ All operations go through this single entry point (ADR-002).
 
 from __future__ import annotations
 
+import contextlib
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import polars as pl
+
+    from qp.decision.decision_package import DecisionPackage
 
 
 def _cmd_version() -> int:
@@ -182,8 +189,11 @@ def _cmd_validate() -> int:
             i += 1
 
     valid_stages = {
-        "research", "backtest_passed", "paper_trading",
-        "shadow_production", "production",
+        "research",
+        "backtest_passed",
+        "paper_trading",
+        "shadow_production",
+        "production",
     }
     if stage not in valid_stages:
         print(f"Invalid stage: '{stage}'. Valid: {', '.join(sorted(valid_stages))}")
@@ -220,7 +230,11 @@ def _cmd_validate() -> int:
 
     # Build a context carrying all validation data
     class _CLIValidationCtx:
-        pass
+        feature_df: pl.DataFrame | None
+        price_df: pl.DataFrame
+        signal_df: pl.DataFrame | None
+        backtest_metrics: dict[str, float]
+        metadata: dict[str, str | float]
 
     ctx = _CLIValidationCtx()
     ctx.feature_df = feature_df
@@ -609,7 +623,10 @@ def _cmd_experiment_run() -> int:
         print("qp experiment run <name> [options]", file=sys.stderr)
         print("  Available: multifactor", file=sys.stderr)
         print("  Options:", file=sys.stderr)
-        print("    --strategy momentum_vol_full  Strategy config name (default: default)", file=sys.stderr)
+        print(
+            "    --strategy momentum_vol_full  Strategy config name (default: default)",
+            file=sys.stderr,
+        )
         print("    --symbols 000001,000002,...   Stock codes", file=sys.stderr)
         print("    --start 2024-01-01           Start date", file=sys.stderr)
         print("    --end 2026-07-20             End date", file=sys.stderr)
@@ -618,7 +635,9 @@ def _cmd_experiment_run() -> int:
         print("    --industry-neutral           Enable industry neutralization", file=sys.stderr)
         print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
         print("    --dataset daily_price_main   Gold dataset name", file=sys.stderr)
-        print("    --score-band 60-80          Score percentile band (Q4 sweet spot)", file=sys.stderr)
+        print(
+            "    --score-band 60-80          Score percentile band (Q4 sweet spot)", file=sys.stderr
+        )
         return 1
 
     pipeline_name = sys.argv[3]
@@ -718,8 +737,8 @@ def _cmd_experiment_validate() -> int:
     # Check if gate_result was already stored
     gate_dict = record.gate_result
     if gate_dict:
-        from qp.validation.result import GateDecision, GateResult, RuleResult
         from qp.shared.types import ValidationStatus
+        from qp.validation.result import GateDecision, GateResult, RuleResult
 
         # Reconstruct GateResult from stored dict
         rules = [
@@ -755,7 +774,7 @@ def _cmd_experiment_validate() -> int:
     # No pre-computed gate_result — build one from experiment metrics
     print(f"  Loading experiment: {experiment_id}")
     print(f"  Status: {record.status.value}")
-    print(f"  Gate result not pre-computed — running validation from metrics...")
+    print("  Gate result not pre-computed — running validation from metrics...")
     print()
 
     # Build GateResult from experiment metrics
@@ -772,41 +791,64 @@ def _cmd_experiment_validate() -> int:
     sharpe = m.sharpe_ratio
     max_dd = abs(m.max_drawdown_pct)
 
-    rules.append(RuleResult(
-        "rank_ic", ValidationStatus.PASS if abs(ic_mean) >= 0.02 else ValidationStatus.FAIL,
-        80, threshold=0.02, actual_value=abs(ic_mean),
-        detail=f"|IC|={abs(ic_mean):.4f}",
-    ))
-    rules.append(RuleResult(
-        "ic_ir", ValidationStatus.PASS if ic_ir >= 0.3 else ValidationStatus.FAIL,
-        80, threshold=0.3, actual_value=ic_ir,
-        detail=f"IC_IR={ic_ir:.2f}",
-    ))
-    rules.append(RuleResult(
-        "sharpe", ValidationStatus.PASS if sharpe >= 0.5 else ValidationStatus.FAIL,
-        80 if sharpe >= 0.5 else 30, threshold=0.5, actual_value=sharpe,
-        detail=f"Sharpe={sharpe:.2f}",
-    ))
-    rules.append(RuleResult(
-        "max_drawdown", ValidationStatus.PASS if max_dd <= 30 else ValidationStatus.FAIL,
-        80 if max_dd <= 30 else 30, threshold=30, actual_value=max_dd,
-        detail=f"MaxDD={max_dd:.1f}%",
-    ))
+    rules.append(
+        RuleResult(
+            "rank_ic",
+            ValidationStatus.PASS if abs(ic_mean) >= 0.02 else ValidationStatus.FAIL,
+            80,
+            threshold=0.02,
+            actual_value=abs(ic_mean),
+            detail=f"|IC|={abs(ic_mean):.4f}",
+        )
+    )
+    rules.append(
+        RuleResult(
+            "ic_ir",
+            ValidationStatus.PASS if ic_ir >= 0.3 else ValidationStatus.FAIL,
+            80,
+            threshold=0.3,
+            actual_value=ic_ir,
+            detail=f"IC_IR={ic_ir:.2f}",
+        )
+    )
+    rules.append(
+        RuleResult(
+            "sharpe",
+            ValidationStatus.PASS if sharpe >= 0.5 else ValidationStatus.FAIL,
+            80 if sharpe >= 0.5 else 30,
+            threshold=0.5,
+            actual_value=sharpe,
+            detail=f"Sharpe={sharpe:.2f}",
+        )
+    )
+    rules.append(
+        RuleResult(
+            "max_drawdown",
+            ValidationStatus.PASS if max_dd <= 30 else ValidationStatus.FAIL,
+            80 if max_dd <= 30 else 30,
+            threshold=30,
+            actual_value=max_dd,
+            detail=f"MaxDD={max_dd:.1f}%",
+        )
+    )
 
     gate = GateResult(
-        strategy_id=record.config.strategy_id if hasattr(record.config, 'strategy_id') else experiment_id,
+        strategy_id=experiment_id,
         stage="backtest_passed",
-        decision=GateDecision.PASSED if ic_pass and sharpe >= 0.5 and max_dd <= 30
-            else GateDecision.BLOCKED,
+        decision=GateDecision.PASSED
+        if ic_pass and sharpe >= 0.5 and max_dd <= 30
+        else GateDecision.BLOCKED,
         score=sum(r.score for r in rules) / len(rules) if rules else 0,
-        confidence=sum(1 for r in rules if r.status == ValidationStatus.PASS) / len(rules) if rules else 0,
+        confidence=sum(1 for r in rules if r.status == ValidationStatus.PASS) / len(rules)
+        if rules
+        else 0,
         data_integrity="PASS",
         factor_validity="PASS" if ic_pass else "FAIL",
         portfolio_conversion="PASS" if sharpe >= 0.5 and max_dd <= 30 else "FAIL",
         rules=rules,
-        recommendation=(
-            f"实验 {experiment_id} 指标通过，可推进到下一阶段。"
-        ) if ic_pass and sharpe >= 0.5 and max_dd <= 30 else (
+        recommendation=(f"实验 {experiment_id} 指标通过，可推进到下一阶段。")
+        if ic_pass and sharpe >= 0.5 and max_dd <= 30
+        else (
             f"实验 {experiment_id} 指标不达标（IC={ic_mean:+.4f}, Sharpe={sharpe:.2f}）。建议归档或修复后重试。"
         ),
     )
@@ -954,11 +996,11 @@ def _backtest_config_strategy(
         return 1
 
     import importlib
+
     mod = importlib.import_module(module_path)
     run_func = getattr(mod, f"run_{strategy_id}", None)
     if run_func is None:
         # Try snake_case to function name conversion
-        import re
         func_name = "run_" + strategy_id
         run_func = getattr(mod, func_name, None)
     if run_func is None:
@@ -988,6 +1030,7 @@ def _backtest_config_strategy(
     except Exception as exc:
         print(f"❌ 策略执行失败: {exc}")
         import traceback
+
         traceback.print_exc()
         return 1
 
@@ -1001,7 +1044,7 @@ def _backtest_config_strategy(
     print(f"  信号总数 / Signals:    {n_signals}")
     print(f"  涉及标的 / Symbols:     {len(symbols)}")
     if diagnostics:
-        print(f"  诊断 / Diagnostics:")
+        print("  诊断 / Diagnostics:")
         for k, v in diagnostics.items():
             if isinstance(v, (int, float, str)):
                 print(f"    {k}: {v}")
@@ -1011,7 +1054,11 @@ def _backtest_config_strategy(
     initial_capital = 1_000_000
     broker = SimulatedBroker(initial_cash=initial_capital, slippage_model="fixed")
 
-    dates = sorted(signals["trade_date"].unique().to_list() if "trade_date" in signals.columns else prices["trade_date"].unique().to_list())
+    dates = sorted(
+        signals["trade_date"].unique().to_list()
+        if "trade_date" in signals.columns
+        else prices["trade_date"].unique().to_list()
+    )
     if not dates:
         print("❌ 无交易日数据。")
         return 1
@@ -1022,7 +1069,11 @@ def _backtest_config_strategy(
 
     current_holdings: dict[str, int] = {}
     for i, d in enumerate(dates):
-        day_signals = signals.filter(pl.col("trade_date") == d) if "trade_date" in signals.columns else signals
+        day_signals = (
+            signals.filter(pl.col("trade_date") == d)
+            if "trade_date" in signals.columns
+            else signals
+        )
         day_prices = price_lookup.filter(pl.col("trade_date") == d)
 
         price_map: dict[str, float] = {}
@@ -1042,12 +1093,14 @@ def _backtest_config_strategy(
             # Sell everything we hold
             for sym, qty in list(current_holdings.items()):
                 if qty > 0:
-                    broker.submit_order({
-                        "symbol": sym,
-                        "side": "SELL",
-                        "quantity": qty,
-                        "order_type": "market",
-                    })
+                    broker.submit_order(
+                        {
+                            "symbol": sym,
+                            "side": "SELL",
+                            "quantity": qty,
+                            "order_type": "market",
+                        }
+                    )
             current_holdings.clear()
 
             # Buy new top-N
@@ -1058,12 +1111,14 @@ def _backtest_config_strategy(
                 px = price_map.get(sym, 10.0)
                 qty = int(per_stock // px // 100 * 100)
                 if qty > 0:
-                    broker.submit_order({
-                        "symbol": sym,
-                        "side": "BUY",
-                        "quantity": qty,
-                        "order_type": "market",
-                    })
+                    broker.submit_order(
+                        {
+                            "symbol": sym,
+                            "side": "BUY",
+                            "quantity": qty,
+                            "order_type": "market",
+                        }
+                    )
                     current_holdings[sym] = qty
 
         broker.execute_pending()
@@ -1156,10 +1211,12 @@ def _build_index_df_from_prices(price_data: dict[str, pl.DataFrame]) -> pl.DataF
 
     close_cols = [c for c in merged.columns if c.startswith("close_")]
     date_col = merged.columns[0]
-    return merged.select([
-        pl.col(date_col).alias("date"),
-        (pl.sum_horizontal([pl.col(c) for c in close_cols]) / len(close_cols)).alias("close"),
-    ])
+    return merged.select(
+        [
+            pl.col(date_col).alias("date"),
+            (pl.sum_horizontal([pl.col(c) for c in close_cols]) / len(close_cols)).alias("close"),
+        ]
+    )
 
 
 def _cmd_backtest_run() -> int:
@@ -1175,11 +1232,9 @@ def _cmd_backtest_run() -> int:
 
     from qp.simulation.broker import SimulatedBroker
     from qp.simulation.result import SimulationResult
-    from qp.strategy.config import get_strategy_config, list_strategy_configs
-    from qp.strategy.loader import StrategyLoader
+    from qp.strategy.config import list_strategy_configs
     from qp.strategy.registry import StrategyRegistry
     from qp.strategy.simple_rank import SimpleRankStrategy
-    from qp.shared.types import StrategyLifecycle
 
     today = date.today()
     strategy_id = "simple_rank_v1.0"
@@ -1195,7 +1250,9 @@ def _cmd_backtest_run() -> int:
     except FileNotFoundError:
         # Try the main dataset
         try:
-            prices = pl.read_parquet("data/dataset/daily_price_main_" + today.isoformat() + ".parquet")
+            prices = pl.read_parquet(
+                "data/dataset/daily_price_main_" + today.isoformat() + ".parquet"
+            )
         except FileNotFoundError:
             print("❌ 未找到数据文件。请先运行 qp run daily")
             return 1
@@ -1211,9 +1268,7 @@ def _cmd_backtest_run() -> int:
     # ── Try config-based strategies first ──
     available_configs = list_strategy_configs()
     if strategy_id in available_configs:
-        return _backtest_config_strategy(
-            strategy_id, price_data, prices, today
-        )
+        return _backtest_config_strategy(strategy_id, price_data, prices, today)
 
     # ── Try SimpleRankStrategy (legacy) ──
     registry = StrategyRegistry()
@@ -1222,7 +1277,7 @@ def _cmd_backtest_run() -> int:
         strategy = registry.get(strategy_id)
     except KeyError:
         print(f"❌ 策略 '{strategy_id}' 未找到。")
-        print(f"   可用 SimpleRank: simple_rank_v1.0")
+        print("   可用 SimpleRank: simple_rank_v1.0")
         print(f"   可用 Config: {', '.join(available_configs)}")
         return 1
 
@@ -1738,7 +1793,9 @@ def _cmd_decide() -> int:
         regime_result = engine.classify(prices)
         regime_str = regime_result.summary
         print(f"  市场状态 / Regime: {regime_result.regime.value}")
-        print(f"  趋势/波动: ADX={regime_result.trend_strength:.1f} | Vol={regime_result.annualized_vol:.1%}")
+        print(
+            f"  趋势/波动: ADX={regime_result.trend_strength:.1f} | Vol={regime_result.annualized_vol:.1%}"
+        )
     except Exception:
         pass
     print()
@@ -1765,7 +1822,9 @@ def _cmd_decide() -> int:
     # Risk check
     risk_manager = PortfolioRiskManager()
     filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(signals, prices)
-    print(f"  风控过滤 / Risk Filter: {risk_report.candidates_out}/{risk_report.candidates_in} 通过")
+    print(
+        f"  风控过滤 / Risk Filter: {risk_report.candidates_out}/{risk_report.candidates_in} 通过"
+    )
     if risk_report.violations:
         for v in risk_report.violations:
             print(f"    ⚠ {v}")
@@ -1781,7 +1840,9 @@ def _cmd_decide() -> int:
         if trade_val > 0:
             cost = cost_model.estimate_trade(sym, trade_val, "BUY")
             total_est_cost += cost.total_cost
-    print(f"  预估总成本 / Est. Cost: ¥{total_est_cost:,.0f} ({total_est_cost / total_capital * 100:.2f}%)")
+    print(
+        f"  预估总成本 / Est. Cost: ¥{total_est_cost:,.0f} ({total_est_cost / total_capital * 100:.2f}%)"
+    )
     print()
 
     # Generate recommendations via DecisionEngine
@@ -1804,10 +1865,8 @@ def _cmd_decide() -> int:
 # ------------------------------------------------------------------
 
 
-def _print_decision_package_summary(pkg: object) -> None:
+def _print_decision_package_summary(pkg: DecisionPackage) -> None:
     """Print a DecisionPackage summary for terminal display."""
-
-    pkg = pkg  # type: DecisionPackage
 
     print("═══ QP 决策包 / Decision Package ═══")
     print(f"  编号 / ID:       {pkg.package_id}")
@@ -1836,7 +1895,9 @@ def _print_decision_package_summary(pkg: object) -> None:
         print("  ── 验证状态 / Validation ──")
         for sid, v in pkg.validation.items():
             icon = "✅" if v.get("passed") else "❌"
-            print(f"  {icon} {sid}: {v.get('score', 0)}/100 ({v.get('rules_failed', 0)}/{v.get('rules_total', 0)} failed)")
+            print(
+                f"  {icon} {sid}: {v.get('score', 0)}/100 ({v.get('rules_failed', 0)}/{v.get('rules_total', 0)} failed)"
+            )
         print()
 
     # Risk audit
@@ -1857,7 +1918,9 @@ def _print_decision_package_summary(pkg: object) -> None:
         print("  ── 建议交易 / Top Picks ──")
         for i, rec in enumerate(report.recommendations[:5], 1):
             warnings = " ⚠" if rec.risk_warnings else ""
-            print(f"  {i}. {rec.symbol} {rec.action} ¥{rec.estimated_price:.2f} x {rec.quantity_shares} ({rec.target_weight_pct:.1f}%){warnings}")
+            print(
+                f"  {i}. {rec.symbol} {rec.action} ¥{rec.estimated_price:.2f} x {rec.quantity_shares} ({rec.target_weight_pct:.1f}%){warnings}"
+            )
         print(f"  ... 共 {report.n_buys} 条建议")
         print(f"  预估总成本: {pkg.estimated_cost_pct:.2f}%")
     print()
@@ -1886,7 +1949,9 @@ def _cmd_decide_history() -> int:
         print("(empty) — 暂无决策记录。运行 qp run daily 生成第一条。")
         return 0
 
-    print(f"{'Package ID':<32s} {'Date':<12s} {'Regime':<14s} {'Recs':>5s} {'Cost%':>7s} {'Risk':>6s} {'Reviewed':>9s}")
+    print(
+        f"{'Package ID':<32s} {'Date':<12s} {'Regime':<14s} {'Recs':>5s} {'Cost%':>7s} {'Risk':>6s} {'Reviewed':>9s}"
+    )
     print("-" * 95)
     for e in entries:
         risk_icon = "✅" if e.get("risk_passed") else "⚠️"
@@ -2157,11 +2222,13 @@ def _cmd_scheduler_start() -> int:
         status = result.status.value
         print(f"[scheduler] data_fetch: {status}")
 
-    scheduler.add_job(Job(
-        name="data_fetch",
-        task=_job_data_fetch,
-        trigger=CronTrigger(day="1-5", hour="8", minute="3"),
-    ))
+    scheduler.add_job(
+        Job(
+            name="data_fetch",
+            task=_job_data_fetch,
+            trigger=CronTrigger(day="1-5", hour="8", minute="3"),
+        )
+    )
 
     # ── Job 2: daily monitor check (09:00 on weekdays) ──
     def _job_monitor_check() -> None:
@@ -2170,17 +2237,20 @@ def _cmd_scheduler_start() -> int:
 
         result = subprocess.run(
             [sys.executable, "-m", "qp.platform.cli.main", "monitor", "check"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         print(result.stdout)
         if result.returncode != 0:
             print(f"[scheduler] monitor_check FAILED: {result.stderr}")
 
-    scheduler.add_job(Job(
-        name="monitor_check",
-        task=_job_monitor_check,
-        trigger=CronTrigger(day="1-5", hour="9", minute="7"),
-    ))
+    scheduler.add_job(
+        Job(
+            name="monitor_check",
+            task=_job_monitor_check,
+            trigger=CronTrigger(day="1-5", hour="9", minute="7"),
+        )
+    )
 
     # ── Job 3: daily decision pipeline (17:30 on weekdays) ──
     def _job_daily_pipeline() -> None:
@@ -2194,11 +2264,13 @@ def _cmd_scheduler_start() -> int:
         package_id = result.metadata.get("decision_package_id", "?")
         print(f"[scheduler] daily_pipeline: {status} → {package_id}")
 
-    scheduler.add_job(Job(
-        name="daily_pipeline",
-        task=_job_daily_pipeline,
-        trigger=CronTrigger(day="1-5", hour="17", minute="57"),
-    ))
+    scheduler.add_job(
+        Job(
+            name="daily_pipeline",
+            task=_job_daily_pipeline,
+            trigger=CronTrigger(day="1-5", hour="17", minute="57"),
+        )
+    )
 
     # ── Graceful shutdown ──
     _shutdown_flag = {"done": False}
@@ -2208,18 +2280,16 @@ def _cmd_scheduler_start() -> int:
             return
         _shutdown_flag["done"] = True
         print("\n[scheduler] Shutting down...")
-        try:
+        with contextlib.suppress(Exception):
             scheduler.stop()
-        except Exception:
-            pass
         print("[scheduler] Stopped.")
 
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
 
     print("═══ QP Scheduler ═══")
-    print(f"  时区 / Timezone: Asia/Shanghai")
-    print(f"  已注册任务 / Jobs:")
+    print("  时区 / Timezone: Asia/Shanghai")
+    print("  已注册任务 / Jobs:")
     for name in scheduler.list_jobs():
         print(f"    - {name}")
     print()
@@ -2236,10 +2306,8 @@ def _cmd_scheduler_start() -> int:
         pass
     finally:
         if not _shutdown_flag["done"]:
-            try:
+            with contextlib.suppress(Exception):
                 scheduler.stop()
-            except Exception:
-                pass
     return 0
 
 
@@ -2374,7 +2442,10 @@ def main() -> int:
             return _cmd_experiment_run()
         if sub == "validate":
             return _cmd_experiment_validate()
-        print(f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run, validate", file=sys.stderr)
+        print(
+            f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run, validate",
+            file=sys.stderr,
+        )
         return 1
 
     if command == "model":

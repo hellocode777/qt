@@ -44,19 +44,23 @@ class TestDailyPriceSchema:
         assert result.passed is True
 
     def test_missing_column_fails(self):
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "trade_date": ["2024-01-15"],
-            "open": [10.0],
-            "high": [10.5],
-            "close": [10.2],
-            "volume": [1000000.0],
-            # low is missing
-        }).with_columns(pl.col("trade_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "trade_date": ["2024-01-15"],
+                "open": [10.0],
+                "high": [10.5],
+                "close": [10.2],
+                "volume": [1000000.0],
+                # low is missing
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         result = PanderaValidator.validate(df, DailyPriceSchema)
         assert result.passed is False
         assert result.severity == Severity.ERROR
-        assert "low" in result.detail.lower() or any("low" in e for e in result.metadata.get("errors", []))
+        assert "low" in result.detail.lower() or any(
+            "low" in e for e in result.metadata.get("errors", [])
+        )
 
     def test_negative_price_fails(self):
         df = _ohlc_df(open=[-1.0, 20.0])
@@ -88,11 +92,17 @@ class TestDailyPriceSchema:
         assert result.passed is True
 
     def test_empty_dataframe(self):
-        df = pl.DataFrame(schema={
-            "symbol": pl.Utf8, "trade_date": pl.Date,
-            "open": pl.Float64, "high": pl.Float64, "low": pl.Float64,
-            "close": pl.Float64, "volume": pl.Float64,
-        })
+        df = pl.DataFrame(
+            schema={
+                "symbol": pl.Utf8,
+                "trade_date": pl.Date,
+                "open": pl.Float64,
+                "high": pl.Float64,
+                "low": pl.Float64,
+                "close": pl.Float64,
+                "volume": pl.Float64,
+            }
+        )
         result = PanderaValidator.validate(df, DailyPriceSchema)
         assert result.passed is True
 
@@ -105,12 +115,14 @@ class TestDailyPriceSchema:
 class TestDailyPriceExtendedSchema:
     def test_valid_extended_data_passes(self):
         df = _ohlc_df()
-        df = df.with_columns([
-            pl.lit("2024-01-15T15:00:00+08:00").alias("source_event_time"),
-            pl.lit("2024-01-15T10:00:00Z").alias("ingestion_received_time"),
-            pl.lit(False).alias("is_suspended"),
-            pl.lit(True).alias("is_tradeable"),
-        ])
+        df = df.with_columns(
+            [
+                pl.lit("2024-01-15T15:00:00+08:00").alias("source_event_time"),
+                pl.lit("2024-01-15T10:00:00Z").alias("ingestion_received_time"),
+                pl.lit(False).alias("is_suspended"),
+                pl.lit(True).alias("is_tradeable"),
+            ]
+        )
         result = PanderaValidator.validate(df, DailyPriceExtendedSchema)
         assert result.passed is True
 
@@ -136,24 +148,28 @@ class TestDailyPriceExtendedSchema:
 
 class TestBalanceSheetSchema:
     def test_valid_balance_sheet_passes(self):
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "total_assets": [1000000.0],
-            "total_liabilities": [600000.0],
-            "total_equity": [400000.0],
-        }).with_columns(pl.col("report_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "total_assets": [1000000.0],
+                "total_liabilities": [600000.0],
+                "total_equity": [400000.0],
+            }
+        ).with_columns(pl.col("report_date").str.to_date())
         result = PanderaValidator.validate(df, BalanceSheetSchema)
         assert result.passed is True
 
     def test_negative_equity_fails(self):
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "total_assets": [1000000.0],
-            "total_liabilities": [600000.0],
-            "total_equity": [-100000.0],
-        }).with_columns(pl.col("report_date").str.to_date())
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "total_assets": [1000000.0],
+                "total_liabilities": [600000.0],
+                "total_equity": [-100000.0],
+            }
+        ).with_columns(pl.col("report_date").str.to_date())
         result = PanderaValidator.validate(df, BalanceSheetSchema)
         assert result.passed is False
 
@@ -165,19 +181,21 @@ class TestBalanceSheetSchema:
 
 class TestFundamentalIndicatorSchema:
     def test_valid_indicators_pass(self):
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "publish_date": ["2024-10-25"],
-            "ROE": [15.5],
-            "revenue_growth": [12.3],
-            "gross_margin": [45.0],
-            "net_margin": [18.2],
-            "debt_ratio": [40.0],
-            "EPS": [2.5],
-            "NAV": [15.0],
-            "cashflow_per_share": [1.8],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "publish_date": ["2024-10-25"],
+                "ROE": [15.5],
+                "revenue_growth": [12.3],
+                "gross_margin": [45.0],
+                "net_margin": [18.2],
+                "debt_ratio": [40.0],
+                "EPS": [2.5],
+                "NAV": [15.0],
+                "cashflow_per_share": [1.8],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -185,11 +203,13 @@ class TestFundamentalIndicatorSchema:
         assert result.passed is True
 
     def test_optional_fields_can_be_missing(self):
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "publish_date": ["2024-10-25"],
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "publish_date": ["2024-10-25"],
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )
@@ -197,12 +217,14 @@ class TestFundamentalIndicatorSchema:
         assert result.passed is True
 
     def test_debt_ratio_out_of_range_fails(self):
-        df = pl.DataFrame({
-            "symbol": ["000001"],
-            "report_date": ["2024-09-30"],
-            "publish_date": ["2024-10-25"],
-            "debt_ratio": [150.0],  # > 100
-        }).with_columns(
+        df = pl.DataFrame(
+            {
+                "symbol": ["000001"],
+                "report_date": ["2024-09-30"],
+                "publish_date": ["2024-10-25"],
+                "debt_ratio": [150.0],  # > 100
+            }
+        ).with_columns(
             pl.col("report_date").str.to_date(),
             pl.col("publish_date").str.to_date(),
         )

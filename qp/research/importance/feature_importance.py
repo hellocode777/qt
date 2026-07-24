@@ -44,9 +44,7 @@ class ImportanceRecord:
     @property
     def top_features(self) -> list[tuple[str, float]]:
         """Return sorted list of (feature, importance) top_n pairs."""
-        sorted_items = sorted(
-            self.features.items(), key=lambda x: x[1], reverse=True
-        )
+        sorted_items = sorted(self.features.items(), key=lambda x: x[1], reverse=True)
         return sorted_items[: self.top_n]
 
     @property
@@ -120,19 +118,13 @@ def compute_shap_importance(
     features = dict.fromkeys(list(X.columns), 0.0)
 
     # Downsample if needed
-    if len(X) > max_samples:
-        X_sample = X.sample(n=max_samples, random_state=42)
-    else:
-        X_sample = X
+    X_sample = X.sample(n=max_samples, random_state=42) if len(X) > max_samples else X
 
     try:
         import shap  # type: ignore[import-untyped]
 
         # Try to get the underlying booster
-        if hasattr(model, "_model"):
-            booster = model._model
-        else:
-            booster = model
+        booster = model._model if hasattr(model, "_model") else model
 
         if booster is None:
             raise ValueError("Model not fitted")
@@ -141,11 +133,8 @@ def compute_shap_importance(
         shap_values = explainer.shap_values(X_sample)
 
         # Aggregate SHAP importance: mean(|shap|) per feature
-        if isinstance(shap_values, list):
-            # Multi-class output
-            shap_arr = np.abs(shap_values[0])
-        else:
-            shap_arr = np.abs(shap_values)
+        # Multi-class output → take first class
+        shap_arr = np.abs(shap_values[0]) if isinstance(shap_values, list) else np.abs(shap_values)
 
         for i, col in enumerate(X.columns):
             if i < shap_arr.shape[1]:
@@ -189,9 +178,7 @@ def compute_gain_importance(
                     method="gain",
                     top_n=top_n,
                 )
-            features = dict(
-                zip(fi_df["feature"], fi_df["gain"], strict=True)
-            )
+            features = dict(zip(fi_df["feature"], fi_df["gain"], strict=True))
             return ImportanceRecord(
                 model_id=getattr(model, "name", "unknown"),
                 features=features,
@@ -265,9 +252,7 @@ def compare_importance_versions(
         change = abs(curr_rel - prev_rel)
         if change > surge_threshold and curr_val > 0:
             direction = "↑" if curr_rel > prev_rel else "↓"
-            surge_alerts.append(
-                f"{f}: {prev_rel:.3f}→{curr_rel:.3f} ({direction}{change:.1%})"
-            )
+            surge_alerts.append(f"{f}: {prev_rel:.3f}→{curr_rel:.3f} ({direction}{change:.1%})")
 
     # Determine drift severity
     overlap_count = len(overlap)

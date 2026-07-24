@@ -63,36 +63,54 @@ class TestBoardType:
 
 class TestRepairOHLC:
     def test_normal_data_passes_through(self):
-        df = pl.DataFrame({
-            "open": [10.0, 10.5], "high": [11.0, 10.8],
-            "low": [9.5, 10.0], "close": [10.5, 10.3],
-        })
+        df = pl.DataFrame(
+            {
+                "open": [10.0, 10.5],
+                "high": [11.0, 10.8],
+                "low": [9.5, 10.0],
+                "close": [10.5, 10.3],
+            }
+        )
         result = repair_ohlc_boundaries(df)
         assert result["open"].to_list() == [10.0, 10.5]
         assert result["high"].to_list() == [11.0, 10.8]
         assert "_repaired" in result.columns
 
     def test_zero_price_to_nan_then_filled(self):
-        df = pl.DataFrame({
-            "open": [0.0, 10.5], "high": [11.0, 10.8],
-            "low": [9.5, 10.0], "close": [10.5, 10.3],
-        })
+        df = pl.DataFrame(
+            {
+                "open": [0.0, 10.5],
+                "high": [11.0, 10.8],
+                "low": [9.5, 10.0],
+                "close": [10.5, 10.3],
+            }
+        )
         result = repair_ohlc_boundaries(df)
         # Zero → NaN → ffill (no prior) → bfill to 10.5
         assert result["open"][0] == 10.5  # bfilled from next row
 
     def test_high_low_swapped(self):
-        df = pl.DataFrame({
-            "open": [10.0], "high": [9.0], "low": [11.0], "close": [10.5],
-        })
+        df = pl.DataFrame(
+            {
+                "open": [10.0],
+                "high": [9.0],
+                "low": [11.0],
+                "close": [10.5],
+            }
+        )
         result = repair_ohlc_boundaries(df)
         assert result["high"][0] == 11.0
         assert result["low"][0] == 9.0
 
     def test_open_close_clipped_to_range(self):
-        df = pl.DataFrame({
-            "open": [15.0], "high": [11.0], "low": [9.0], "close": [5.0],
-        })
+        df = pl.DataFrame(
+            {
+                "open": [15.0],
+                "high": [11.0],
+                "low": [9.0],
+                "close": [5.0],
+            }
+        )
         result = repair_ohlc_boundaries(df)
         assert result["open"][0] == 11.0  # clipped to high
         assert result["close"][0] == 9.0  # clipped to low
@@ -103,10 +121,14 @@ class TestRepairOHLC:
         assert "_repaired" in result.columns
 
     def test_negative_price_handled(self):
-        df = pl.DataFrame({
-            "open": [-5.0, 10.5], "high": [11.0, 10.8],
-            "low": [9.5, 10.0], "close": [10.5, 10.3],
-        })
+        df = pl.DataFrame(
+            {
+                "open": [-5.0, 10.5],
+                "high": [11.0, 10.8],
+                "low": [9.5, 10.0],
+                "close": [10.5, 10.3],
+            }
+        )
         result = repair_ohlc_boundaries(df)
         # Negative → NaN → bfill
         assert result["open"][0] == 10.5
@@ -119,18 +141,30 @@ class TestRepairOHLC:
 
 class TestValidateAmount:
     def test_correct_amount_passes(self):
-        df = pl.DataFrame({
-            "open": [10.0], "high": [11.0], "low": [9.5], "close": [10.5],
-            "volume": [1000.0], "amount": [10250.0],  # 1000 * 10.25 = 10250
-        })
+        df = pl.DataFrame(
+            {
+                "open": [10.0],
+                "high": [11.0],
+                "low": [9.5],
+                "close": [10.5],
+                "volume": [1000.0],
+                "amount": [10250.0],  # 1000 * 10.25 = 10250
+            }
+        )
         result = validate_and_fix_amount(df)
         assert not result["_amount_fixed"][0]
 
     def test_wrong_amount_fixed(self):
-        df = pl.DataFrame({
-            "open": [10.0], "high": [11.0], "low": [9.5], "close": [10.5],
-            "volume": [1000.0], "amount": [500.0],  # way off from ~10250
-        })
+        df = pl.DataFrame(
+            {
+                "open": [10.0],
+                "high": [11.0],
+                "low": [9.5],
+                "close": [10.5],
+                "volume": [1000.0],
+                "amount": [500.0],  # way off from ~10250
+            }
+        )
         result = validate_and_fix_amount(df)
         assert result["_amount_fixed"][0]
 
@@ -147,24 +181,32 @@ class TestValidateAmount:
 
 class TestFillMissingDates:
     def test_no_missing_dates(self):
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "open": [10.0, 10.5], "high": [11.0, 11.0],
-            "low": [9.5, 10.0], "close": [10.5, 10.3],
-            "volume": [1000000.0, 800000.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "open": [10.0, 10.5],
+                "high": [11.0, 11.0],
+                "low": [9.5, 10.0],
+                "close": [10.5, 10.3],
+                "volume": [1000000.0, 800000.0],
+            }
+        )
         result = fill_missing_trading_dates(df, ["2024-01-15", "2024-01-16"])
         assert "_inserted" in result.columns
         assert result["_inserted"].sum() == 0
         assert result.height == 2
 
     def test_missing_date_inserted(self):
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-17"],
-            "open": [10.0, 10.5], "high": [11.0, 11.0],
-            "low": [9.5, 10.0], "close": [10.5, 10.3],
-            "volume": [1000000.0, 800000.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-17"],
+                "open": [10.0, 10.5],
+                "high": [11.0, 11.0],
+                "low": [9.5, 10.0],
+                "close": [10.5, 10.3],
+                "volume": [1000000.0, 800000.0],
+            }
+        )
         result = fill_missing_trading_dates(df, ["2024-01-15", "2024-01-16", "2024-01-17"])
         assert result.height == 3
         # The middle row should be inserted
@@ -175,10 +217,16 @@ class TestFillMissingDates:
         assert inserted[0, "close"] == 10.5  # ffill from previous
 
     def test_empty_trading_dates(self):
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15"], "open": [10.0], "high": [11.0],
-            "low": [9.5], "close": [10.5], "volume": [1000000.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15"],
+                "open": [10.0],
+                "high": [11.0],
+                "low": [9.5],
+                "close": [10.5],
+                "volume": [1000000.0],
+            }
+        )
         result = fill_missing_trading_dates(df, [])
         assert "_inserted" in result.columns
 
@@ -190,29 +238,35 @@ class TestFillMissingDates:
 
 class TestClassifySuspension:
     def test_normal_volume(self):
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "volume": [1000000.0, 800000.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "volume": [1000000.0, 800000.0],
+            }
+        )
         result = classify_suspension_type(df)
         assert result["_halt_type"].to_list() == ["normal", "normal"]
 
     def test_short_halt_is_limit(self):
         """1-2 days of zero volume preceded by normal = limit."""
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "volume": [1000000.0, 0.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "volume": [1000000.0, 0.0],
+            }
+        )
         result = classify_suspension_type(df)
         assert result[0, "_halt_type"] == "normal"
         assert result[1, "_halt_type"] == "limit"
 
     def test_long_halt_is_suspension(self):
         """3+ days of zero volume = suspension."""
-        df = pl.DataFrame({
-            "trade_date": [f"2024-01-{d:02d}" for d in range(15, 19)],
-            "volume": [1000000.0, 0.0, 0.0, 0.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": [f"2024-01-{d:02d}" for d in range(15, 19)],
+                "volume": [1000000.0, 0.0, 0.0, 0.0],
+            }
+        )
         result = classify_suspension_type(df)
         types = result["_halt_type"].to_list()
         assert types[0] == "normal"
@@ -228,19 +282,23 @@ class TestClassifySuspension:
 
 class TestDetectPriceLimits:
     def test_normal_returns(self):
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "close": [10.0, 10.05],  # +0.5%
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "close": [10.0, 10.05],  # +0.5%
+            }
+        )
         result = detect_price_limit_anomalies(df, code="600001")
         assert result["_limit_flag"].to_list() == ["normal", "normal"]
 
     def test_extreme_return_flag(self):
         """A 50% daily return on main board is flagged."""
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "close": [10.0, 15.0],  # +50%
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "close": [10.0, 15.0],  # +50%
+            }
+        )
         result = detect_price_limit_anomalies(df, code="600001")
         assert result[1, "_limit_flag"] in ("ex_limit", "adj_jump")
 
@@ -252,15 +310,17 @@ class TestDetectPriceLimits:
 
 class TestRepairAll:
     def test_all_stages_run(self):
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-16", "2024-01-17"],
-            "open": [10.0, 10.5, 0.0],
-            "high": [11.0, 10.8, 11.5],
-            "low": [9.5, 10.0, 9.0],
-            "close": [10.5, 10.3, 10.8],
-            "volume": [1000000.0, 800000.0, 500000.0],
-            "amount": [10500000.0, 8200000.0, 5400000.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-16", "2024-01-17"],
+                "open": [10.0, 10.5, 0.0],
+                "high": [11.0, 10.8, 11.5],
+                "low": [9.5, 10.0, 9.0],
+                "close": [10.5, 10.3, 10.8],
+                "volume": [1000000.0, 800000.0, 500000.0],
+                "amount": [10500000.0, 8200000.0, 5400000.0],
+            }
+        )
         result = repair_all(df, code="600001")
         assert "_repaired" in result.columns
         assert "_amount_fixed" in result.columns
@@ -269,23 +329,31 @@ class TestRepairAll:
         assert "_limit_flag" in result.columns
 
     def test_empty_df(self):
-        df = pl.DataFrame(schema={
-            "trade_date": pl.Utf8, "open": pl.Float64, "high": pl.Float64,
-            "low": pl.Float64, "close": pl.Float64, "volume": pl.Float64,
-        }).clear()
+        df = pl.DataFrame(
+            schema={
+                "trade_date": pl.Utf8,
+                "open": pl.Float64,
+                "high": pl.Float64,
+                "low": pl.Float64,
+                "close": pl.Float64,
+                "volume": pl.Float64,
+            }
+        ).clear()
         result = repair_all(df)
         assert result.is_empty()
 
     def test_repair_metadata_present(self):
         """Zero price should be fixed to non-zero via ffill/bfill."""
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-15", "2024-01-16"],
-            "open": [10.0, 0.0],  # second row has bad open
-            "high": [11.0, 11.5],
-            "low": [9.5, 9.0],
-            "close": [10.5, 10.8],
-            "volume": [1000000.0, 500000.0],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15", "2024-01-16"],
+                "open": [10.0, 0.0],  # second row has bad open
+                "high": [11.0, 11.5],
+                "low": [9.5, 9.0],
+                "close": [10.5, 10.8],
+                "volume": [1000000.0, 500000.0],
+            }
+        )
         result = repair_all(df, code="600001", validate_amount=False)
         # Zero open on row 1 should be repaired (ffill from row 0)
         assert result["open"][1] == 10.0  # ffill from previous

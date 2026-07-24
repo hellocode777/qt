@@ -13,7 +13,7 @@ Two detection methods:
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 from loguru import logger
@@ -24,8 +24,8 @@ from qp.data.validation.result import CheckResult, Severity
 # PSI thresholds (industry standard)
 # ------------------------------------------------------------------
 
-PSI_NO_DRIFT = 0.10       # PSI < 0.10 → no significant drift
-PSI_MODERATE = 0.20       # 0.10 <= PSI < 0.20 → moderate drift (warning)
+PSI_NO_DRIFT = 0.10  # PSI < 0.10 → no significant drift
+PSI_MODERATE = 0.20  # 0.10 <= PSI < 0.20 → moderate drift (warning)
 # PSI >= 0.20 → significant drift (error)
 
 
@@ -66,8 +66,8 @@ def compute_psi(
         return {"psi": 0.0, "error": "Not enough data for binning", "bins_detail": []}
 
     # Determine bin edges from expected distribution (equal-width)
-    e_min = expected.min()
-    e_max = expected.max()
+    e_min = cast("float", expected.min())
+    e_max = cast("float", expected.max())
 
     if e_min == e_max:
         return {"psi": 0.0, "error": "No variance in expected distribution", "bins_detail": []}
@@ -116,12 +116,14 @@ def compute_psi(
         a_prop = (a_counts[i] + epsilon) / (a_total + epsilon * bins)
         bin_psi = (a_prop - e_prop) * math.log(a_prop / e_prop)
         psi += bin_psi
-        bins_detail.append({
-            "bin": i,
-            "range": f"{edges[i]:.4f}-{edges[i+1]:.4f}",
-            "expected_pct": round(e_counts[i] / e_total * 100, 2),
-            "actual_pct": round(a_counts[i] / a_total * 100, 2),
-        })
+        bins_detail.append(
+            {
+                "bin": i,
+                "range": f"{edges[i]:.4f}-{edges[i + 1]:.4f}",
+                "expected_pct": round(e_counts[i] / e_total * 100, 2),
+                "actual_pct": round(a_counts[i] / a_total * 100, 2),
+            }
+        )
 
     return {"psi": round(psi, 6), "bins_detail": bins_detail, "threshold": PSI_MODERATE}
 
@@ -255,17 +257,19 @@ def check_summary_stat_drift(
     stats_detail: dict[str, dict[str, float]] = {}
 
     for col in available:
-        cur_mean = df[col].drop_nulls().mean()
-        base_mean = baseline[col].drop_nulls().mean()
-        cur_std = df[col].drop_nulls().std()
-        base_std = baseline[col].drop_nulls().std()
+        cur_mean = cast("float | None", df[col].drop_nulls().mean())
+        base_mean = cast("float | None", baseline[col].drop_nulls().mean())
+        cur_std = cast("float | None", df[col].drop_nulls().std())
+        base_std = cast("float | None", baseline[col].drop_nulls().std())
 
         if cur_mean is None or base_mean is None:
             continue
         if base_mean == 0:
             continue
 
-        mean_ratio = max(cur_mean / base_mean, base_mean / cur_mean) if base_mean != 0 else float("inf")
+        mean_ratio = (
+            max(cur_mean / base_mean, base_mean / cur_mean) if base_mean != 0 else float("inf")
+        )
         std_ratio = (
             max(cur_std / base_std, base_std / cur_std)
             if base_std and base_std > 0 and cur_std and cur_std > 0
@@ -282,22 +286,26 @@ def check_summary_stat_drift(
         }
 
         if mean_ratio > jump_ratio:
-            jumps.append({
-                "column": col,
-                "cur_mean": round(cur_mean, 2),
-                "base_mean": round(base_mean, 2),
-                "ratio": round(mean_ratio, 2),
-                "metric": "mean",
-            })
+            jumps.append(
+                {
+                    "column": col,
+                    "cur_mean": round(cur_mean, 2),
+                    "base_mean": round(base_mean, 2),
+                    "ratio": round(mean_ratio, 2),
+                    "metric": "mean",
+                }
+            )
 
         if std_ratio > jump_ratio:
-            jumps.append({
-                "column": col,
-                "cur_std": round(cur_std, 6) if cur_std else 0,
-                "base_std": round(base_std, 6) if base_std else 0,
-                "ratio": round(std_ratio, 2),
-                "metric": "std",
-            })
+            jumps.append(
+                {
+                    "column": col,
+                    "cur_std": round(cur_std, 6) if cur_std else 0,
+                    "base_std": round(base_std, 6) if base_std else 0,
+                    "ratio": round(std_ratio, 2),
+                    "metric": "std",
+                }
+            )
 
     if not jumps:
         return CheckResult(

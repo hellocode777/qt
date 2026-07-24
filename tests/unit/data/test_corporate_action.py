@@ -14,10 +14,12 @@ from qp.data.corporate_action.engine import (
 
 @pytest.fixture
 def portfolio() -> pd.DataFrame:
-    return pd.DataFrame([
-        {"symbol": "600519", "shares": 1000, "avg_cost": 1500.0, "cash": 50000.0},
-        {"symbol": "000858", "shares": 500, "avg_cost": 120.0, "cash": 50000.0},
-    ])
+    return pd.DataFrame(
+        [
+            {"symbol": "600519", "shares": 1000, "avg_cost": 1500.0, "cash": 50000.0},
+            {"symbol": "000858", "shares": 500, "avg_cost": 120.0, "cash": 50000.0},
+        ]
+    )
 
 
 @pytest.fixture
@@ -36,18 +38,32 @@ class TestActionType:
 
 class TestEmptyInput:
     def test_empty_actions(self, engine, portfolio):
-        actions = pd.DataFrame(columns=[
-            "symbol", "ex_date", "action_type", "dividend_per_share",
-            "split_ratio", "rights_ratio", "rights_price", "bonus_ratio",
-        ])
+        actions = pd.DataFrame(
+            columns=[
+                "symbol",
+                "ex_date",
+                "action_type",
+                "dividend_per_share",
+                "split_ratio",
+                "rights_ratio",
+                "rights_price",
+                "bonus_ratio",
+            ]
+        )
         result = engine.adjust_portfolio(portfolio, actions)
         pd.testing.assert_frame_equal(result, portfolio)
 
     def test_empty_portfolio(self, engine):
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-01",
-            "action_type": "cash_dividend", "dividend_per_share": 10.0,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-01",
+                    "action_type": "cash_dividend",
+                    "dividend_per_share": 10.0,
+                }
+            ]
+        )
         empty_pf = pd.DataFrame(columns=["symbol", "shares", "avg_cost", "cash"])
         result = engine.adjust_portfolio(empty_pf, actions)
         assert result.empty
@@ -55,10 +71,16 @@ class TestEmptyInput:
 
 class TestCashDividend:
     def test_cash_dividend_increases_cash(self, engine, portfolio):
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "cash_dividend", "dividend_per_share": 25.91,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "cash_dividend",
+                    "dividend_per_share": 25.91,
+                }
+            ]
+        )
         result = engine.adjust_portfolio(portfolio.copy(), actions)
         row = result[result["symbol"] == "600519"].iloc[0]
         expected_dividend = 1000 * 25.91  # 25910
@@ -67,10 +89,16 @@ class TestCashDividend:
         assert row["avg_cost"] == 1500.0  # unchanged
 
     def test_cash_dividend_only_affects_target(self, engine, portfolio):
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "cash_dividend", "dividend_per_share": 25.91,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "cash_dividend",
+                    "dividend_per_share": 25.91,
+                }
+            ]
+        )
         result = engine.adjust_portfolio(portfolio.copy(), actions)
         other = result[result["symbol"] == "000858"].iloc[0]
         assert other["cash"] == 50000.0  # unchanged
@@ -80,20 +108,32 @@ class TestCashDividend:
 class TestSplit:
     def test_split_doubles_shares(self, engine, portfolio):
         """1拆2: shares ×2, cost /2."""
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "split", "split_ratio": 2.0,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "split",
+                    "split_ratio": 2.0,
+                }
+            ]
+        )
         result = engine.adjust_portfolio(portfolio.copy(), actions)
         row = result[result["symbol"] == "600519"].iloc[0]
         assert row["shares"] == 2000
         assert row["avg_cost"] == pytest.approx(750.0)
 
     def test_split_zero_ratio_noop(self, engine, portfolio):
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "split", "split_ratio": 0.0,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "split",
+                    "split_ratio": 0.0,
+                }
+            ]
+        )
         result = engine.adjust_portfolio(portfolio.copy(), actions)
         row = result[result["symbol"] == "600519"].iloc[0]
         assert row["shares"] == 1000
@@ -102,10 +142,16 @@ class TestSplit:
 class TestStockDividend:
     def test_stock_dividend_10_送_3(self, engine, portfolio):
         """10送3: shares ×1.3, cost /1.3."""
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "stock_dividend", "split_ratio": 0.3,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "stock_dividend",
+                    "split_ratio": 0.3,
+                }
+            ]
+        )
         result = engine.adjust_portfolio(portfolio.copy(), actions)
         row = result[result["symbol"] == "600519"].iloc[0]
         assert row["shares"] == 1300
@@ -115,12 +161,17 @@ class TestStockDividend:
 class TestRightsIssue:
     def test_rights_issue_with_sufficient_cash(self, engine, portfolio):
         """配股: subscribe at rights price."""
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "rights_issue",
-            "rights_ratio": 0.1,  # 10%
-            "rights_price": 1000.0,  # below market price
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "rights_issue",
+                    "rights_ratio": 0.1,  # 10%
+                    "rights_price": 1000.0,  # below market price
+                }
+            ]
+        )
         pf = portfolio.copy()
         pf.loc[pf["symbol"] == "600519", "cash"] = 200000.0  # ample cash
         result = engine.adjust_portfolio(pf, actions)
@@ -131,12 +182,17 @@ class TestRightsIssue:
 
     def test_rights_issue_insufficient_cash(self, engine, portfolio):
         """Partial subscription when cash is tight."""
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "rights_issue",
-            "rights_ratio": 0.1,
-            "rights_price": 1000.0,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "rights_issue",
+                    "rights_ratio": 0.1,
+                    "rights_price": 1000.0,
+                }
+            ]
+        )
         pf = portfolio.copy()
         pf.loc[pf["symbol"] == "600519", "cash"] = 500.0  # can only buy 0 shares
         result = engine.adjust_portfolio(pf, actions)
@@ -146,10 +202,16 @@ class TestRightsIssue:
 
 class TestBonusIssue:
     def test_bonus_issue(self, engine, portfolio):
-        actions = pd.DataFrame([{
-            "symbol": "600519", "ex_date": "2024-06-19",
-            "action_type": "bonus_issue", "bonus_ratio": 0.5,
-        }])
+        actions = pd.DataFrame(
+            [
+                {
+                    "symbol": "600519",
+                    "ex_date": "2024-06-19",
+                    "action_type": "bonus_issue",
+                    "bonus_ratio": 0.5,
+                }
+            ]
+        )
         result = engine.adjust_portfolio(portfolio.copy(), actions)
         row = result[result["symbol"] == "600519"].iloc[0]
         assert row["shares"] == 1500

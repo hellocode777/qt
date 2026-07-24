@@ -32,10 +32,7 @@ def build_forward_returns(
     df = price_df.sort(["symbol", "trade_date"])
     return (
         df.with_columns(
-            (
-                (pl.col(price_col).shift(-forward_days) - pl.col(price_col))
-                / pl.col(price_col)
-            )
+            ((pl.col(price_col).shift(-forward_days) - pl.col(price_col)) / pl.col(price_col))
             .over("symbol")
             .alias("label")
         )
@@ -77,16 +74,13 @@ def build_industry_neutral_labels(
 
     # Step 2: map symbols to industries
     labels = labels.with_columns(
-        pl.col("symbol")
-        .replace_strict(industry_map, default="其他")
-        .alias("_industry")
+        pl.col("symbol").replace_strict(industry_map, default="其他").alias("_industry")
     )
 
     # Step 3: rank-normalize within (trade_date, industry)
-    n_dates = labels["trade_date"].n_unique()
     result_parts: list[pl.DataFrame] = []
 
-    for (d,), day_group in labels.group_by("trade_date"):
+    for (_d,), day_group in labels.group_by("trade_date"):
         industries = day_group["_industry"].unique().to_list()
         day_parts: list[pl.DataFrame] = []
         for industry in industries:
@@ -99,16 +93,12 @@ def build_industry_neutral_labels(
                     ind_df = ind_df.with_columns(pl.lit(0.5).alias("label"))
                 else:
                     ranks = ind_df["label"].rank(method="average")
-                    ind_df = ind_df.with_columns(
-                        ((ranks - 1.0) / (n - 1.0)).alias("label")
-                    )
+                    ind_df = ind_df.with_columns(((ranks - 1.0) / (n - 1.0)).alias("label"))
             else:
                 # Rank normalize returns within industry
                 n = ind_df.height
                 ranks = ind_df["label"].rank(method="average")
-                ind_df = ind_df.with_columns(
-                    ((ranks - 1.0) / (n - 1.0)).alias("label")
-                )
+                ind_df = ind_df.with_columns(((ranks - 1.0) / (n - 1.0)).alias("label"))
             day_parts.append(ind_df)
         result_parts.append(pl.concat(day_parts))
 
@@ -141,7 +131,5 @@ def build_labels(
     if method == "industry_neutral":
         if industry_map is None:
             raise ValueError("industry_map is required for industry_neutral labels")
-        return build_industry_neutral_labels(
-            price_df, industry_map, forward_days, price_col
-        )
+        return build_industry_neutral_labels(price_df, industry_map, forward_days, price_col)
     return build_forward_returns(price_df, forward_days, price_col)

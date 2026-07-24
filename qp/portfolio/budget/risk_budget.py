@@ -134,17 +134,14 @@ class VolatilityBudget(RiskBudget):
             return RiskBudgetResult()
 
         # 1. Inverse volatility weights
-        inv_vols = np.array([
-            1.0 / max(volatilities.get(s, 0.30), 0.01)
-            for s in symbols
-        ])
+        inv_vols = np.array([1.0 / max(volatilities.get(s, 0.30), 0.01) for s in symbols])
         raw_weights = inv_vols / inv_vols.sum()
 
         # 2. Scale to target vol
         # Portfolio vol ≈ sqrt(sum(w_i^2 * σ_i^2)) assuming zero correlation
         # Scale so portfolio vol = target_vol
         vols_arr = np.array([volatilities.get(s, 0.30) for s in symbols])
-        est_port_vol = float(np.sqrt(np.sum((raw_weights ** 2) * (vols_arr ** 2))))
+        est_port_vol = float(np.sqrt(np.sum((raw_weights**2) * (vols_arr**2))))
 
         if est_port_vol > 0:
             scale = self.target_vol / est_port_vol
@@ -152,7 +149,7 @@ class VolatilityBudget(RiskBudget):
             # Re-normalize
             raw_weights /= raw_weights.sum()
 
-        est_port_vol = float(np.sqrt(np.sum((raw_weights ** 2) * (vols_arr ** 2))))
+        est_port_vol = float(np.sqrt(np.sum((raw_weights**2) * (vols_arr**2))))
 
         # 3. Apply per-position caps and floors
         weight_caps: dict[str, float] = {}

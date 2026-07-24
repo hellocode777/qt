@@ -21,7 +21,7 @@ Usage::
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 from loguru import logger
@@ -216,9 +216,9 @@ def get_liquidity_stats(
     vals = vol_df["median_volume"]
     return {
         "count": vals.len(),
-        "mean": round(vals.mean() or 0, 0),
-        "median": round(vals.median() or 0, 0),
-        "std": round(vals.std() or 0, 0),
+        "mean": round(cast("float", vals.mean() or 0), 0),
+        "median": round(cast("float", vals.median() or 0), 0),
+        "std": round(cast("float", vals.std() or 0), 0),
         "p10": round(vals.quantile(0.10) or 0, 0),
         "p25": round(vals.quantile(0.25) or 0, 0),
         "p75": round(vals.quantile(0.75) or 0, 0),

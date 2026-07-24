@@ -29,19 +29,25 @@ class TestComputePsi:
     def test_similar_distributions_low_psi(self):
         """Slightly shifted data → PSI should be small."""
         import random
+
         random.seed(42)
         base = [random.gauss(100, 10) for _ in range(1000)]
         shifted = [random.gauss(102, 11) for _ in range(1000)]
-        result = compute_psi(pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64))
+        result = compute_psi(
+            pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64)
+        )
         assert result["psi"] < PSI_NO_DRIFT
 
     def test_very_different_distributions_high_psi(self):
         """Shifted by 5 std → PSI should be large."""
         import random
+
         random.seed(42)
         base = [random.gauss(100, 10) for _ in range(1000)]
         shifted = [random.gauss(200, 10) for _ in range(1000)]
-        result = compute_psi(pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64))
+        result = compute_psi(
+            pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64)
+        )
         assert result["psi"] > PSI_NO_DRIFT
 
     def test_small_sample_returns_zero(self):
@@ -68,7 +74,9 @@ class TestComputePsi:
         """Bins with zero counts in one distribution shouldn't NaN."""
         base = [1.0] * 500 + [9.0] * 500
         shifted = [2.0] * 500 + [8.0] * 500
-        result = compute_psi(pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64))
+        result = compute_psi(
+            pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64)
+        )
         assert result["psi"] >= 0
         assert result["psi"] == result["psi"]  # Not NaN
 
@@ -81,30 +89,40 @@ class TestComputePsi:
 class TestCheckPsiDrift:
     def test_no_drift_on_similar_data(self):
         import random
+
         random.seed(42)
-        base = pl.DataFrame({
-            "close": [random.gauss(100, 10) for _ in range(500)],
-            "volume": [random.gauss(1000000, 100000) for _ in range(500)],
-        })
-        cur = pl.DataFrame({
-            "close": [random.gauss(101, 11) for _ in range(500)],
-            "volume": [random.gauss(1000000, 100000) for _ in range(500)],
-        })
+        base = pl.DataFrame(
+            {
+                "close": [random.gauss(100, 10) for _ in range(500)],
+                "volume": [random.gauss(1000000, 100000) for _ in range(500)],
+            }
+        )
+        cur = pl.DataFrame(
+            {
+                "close": [random.gauss(101, 11) for _ in range(500)],
+                "volume": [random.gauss(1000000, 100000) for _ in range(500)],
+            }
+        )
         result = check_psi_drift(cur, base)
         # With large samples and close means, PSI should be reasonable
         assert result.passed is True or result.severity == Severity.WARNING
 
     def test_large_drift_detected(self):
         import random
+
         random.seed(42)
-        base = pl.DataFrame({
-            "close": [random.gauss(100, 10) for _ in range(200)],
-            "volume": [random.gauss(1000000, 100000) for _ in range(200)],
-        })
-        cur = pl.DataFrame({
-            "close": [random.gauss(300, 50) for _ in range(200)],
-            "volume": [random.gauss(1000000, 100000) for _ in range(200)],
-        })
+        base = pl.DataFrame(
+            {
+                "close": [random.gauss(100, 10) for _ in range(200)],
+                "volume": [random.gauss(1000000, 100000) for _ in range(200)],
+            }
+        )
+        cur = pl.DataFrame(
+            {
+                "close": [random.gauss(300, 50) for _ in range(200)],
+                "volume": [random.gauss(1000000, 100000) for _ in range(200)],
+            }
+        )
         result = check_psi_drift(cur, base)
         assert result.passed is False
         assert result.severity == Severity.ERROR
@@ -118,6 +136,7 @@ class TestCheckPsiDrift:
 
     def test_metadata_includes_psi_scores(self):
         import random
+
         random.seed(42)
         base = pl.DataFrame({"close": [random.gauss(100, 10) for _ in range(100)]})
         cur = pl.DataFrame({"close": [random.gauss(100, 10) for _ in range(100)]})
@@ -134,6 +153,7 @@ class TestCheckPsiDrift:
 class TestCheckSummaryStatDrift:
     def test_no_jump_on_similar_data(self):
         import random
+
         random.seed(42)
         base = pl.DataFrame({"close": [random.gauss(100, 10) for _ in range(500)]})
         cur = pl.DataFrame({"close": [random.gauss(101, 10) for _ in range(500)]})
@@ -179,6 +199,7 @@ class TestCheckSummaryStatDrift:
 class TestCheckAllDrift:
     def test_returns_two_results(self):
         import random
+
         random.seed(42)
         base = pl.DataFrame({"close": [random.gauss(100, 10) for _ in range(200)]})
         cur = pl.DataFrame({"close": [random.gauss(100, 10) for _ in range(200)]})

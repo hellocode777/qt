@@ -751,6 +751,8 @@ def factor_pipeline(
     ols_min_stocks_per_industry: int = 3,
     ols_min_samples: int = 30,
     return_diagnostics: Literal[False] = False,
+    model_mode: bool = False,
+    price_data: dict | None = None,
 ) -> pl.DataFrame: ...
 
 
@@ -770,7 +772,29 @@ def factor_pipeline(
     ols_min_samples: int = 30,
     *,
     return_diagnostics: Literal[True],
+    model_mode: bool = False,
+    price_data: dict | None = None,
 ) -> tuple[pl.DataFrame, dict[str, Any]]: ...
+
+
+@overload
+def factor_pipeline(
+    all_factors: dict[str, dict[str, dict[str, float]]],
+    weights: dict[str, float],
+    normalize_method: str = "rank",
+    winsorize_method: str = "mad",
+    industry_map: dict[str, str] | None = None,
+    market_cap_map: dict[str, float] | None = None,
+    neutralize_method: str | None = "median",
+    orthogonalize: bool = False,
+    vif_threshold: float = 10.0,
+    industry_neutral_strength: float = 1.0,
+    ols_min_stocks_per_industry: int = 3,
+    ols_min_samples: int = 30,
+    return_diagnostics: bool = False,
+    model_mode: bool = False,
+    price_data: dict | None = None,
+) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]: ...
 
 
 def factor_pipeline(
@@ -841,15 +865,19 @@ def factor_pipeline(
         if ml_scores:
             for date_str, sym_probs in ml_scores.items():
                 for symbol, prob in sym_probs.items():
-                    all_rows.append({
-                        "trade_date": date_str,
-                        "symbol": symbol,
-                        "score": prob,
-                    })
+                    all_rows.append(
+                        {
+                            "trade_date": date_str,
+                            "symbol": symbol,
+                            "score": prob,
+                        }
+                    )
 
             if all_rows:
                 scores_df = pl.DataFrame(all_rows).sort(["trade_date", "symbol"])
-                logger.info("✅ ML 完成: {} 日 × {} 只", len(ml_scores), scores_df["symbol"].n_unique())
+                logger.info(
+                    "✅ ML 完成: {} 日 × {} 只", len(ml_scores), scores_df["symbol"].n_unique()
+                )
                 if return_diagnostics:
                     diagnostics["model_mode"] = "lambdarank"
                     return scores_df, diagnostics

@@ -93,7 +93,9 @@ def load_valuation_data(
     if total > 0:
         logger.info(
             "📊 估值数据: {}/{} 只 ({:.0f}%)",
-            n_with_val, total, n_with_val / total * 100,
+            n_with_val,
+            total,
+            n_with_val / total * 100,
         )
 
     return result
@@ -137,9 +139,7 @@ def _load_fund_per_share(
     # Pivot: (code, report_date) → {EPS, NAV, cashflow_per_share}
     from collections import defaultdict
 
-    pivot: dict[str, dict[str, dict[str, float | str]]] = defaultdict(
-        lambda: defaultdict(dict)
-    )
+    pivot: dict[str, dict[str, dict[str, float | str]]] = defaultdict(lambda: defaultdict(dict))
     for code, report_date, publish_date, field_name, field_value in rows:
         rd = str(report_date)
         pivot[code][rd][field_name] = float(field_value)
@@ -251,10 +251,7 @@ def _load_from_cache(symbol: str) -> pl.DataFrame | None:
         return None
 
     # 7-day TTL
-    age = (
-        datetime.now(tz=UTC)
-        - datetime.fromtimestamp(cache_file.stat().st_mtime, tz=UTC)
-    ).days
+    age = (datetime.now(tz=UTC) - datetime.fromtimestamp(cache_file.stat().st_mtime, tz=UTC)).days
     if age > 7:
         return None
 

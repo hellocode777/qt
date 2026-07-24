@@ -25,10 +25,11 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import contextlib
+from dataclasses import dataclass
 from typing import Any
 
-from qp.monitoring.model_decay import DecayStage, DecayStatus, ModelDecayDetector
+from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
 from qp.shared.types import StrategyLifecycle
 
 # Strategy lifecycle downgrade map when decay is detected
@@ -152,9 +153,7 @@ class ModelDecayLifecycle:
         """
         # Detect decay
         if daily_ic_series:
-            decay_status = self._detector.check_series(
-                daily_ic_series, consecutive_decay_days
-            )
+            decay_status = self._detector.check_series(daily_ic_series, consecutive_decay_days)
         elif force:
             decay_status = self._detector.check(rolling_ic)
         else:
@@ -180,20 +179,23 @@ class ModelDecayLifecycle:
         )
 
         # Perform lifecycle change if needed
-        if new_lifecycle is not None and old_lifecycle in self._DOWNGRADEABLE_STATES:
-            if new_lifecycle != old_lifecycle:
-                self._apply_lifecycle(strategy_id, new_lifecycle)
-                action.downgraded = True
-                action.reason = (
-                    f"Model {decay_status.stage.value}: rolling IC "
-                    f"{decay_status.rolling_ic:.4f} / training IC "
-                    f"{decay_status.training_ic_mean:.4f} = "
-                    f"{decay_status.ic_ratio:.0%}. "
-                    f"Downgraded {old_lifecycle.value} → {new_lifecycle.value}."
-                )
+        if (
+            new_lifecycle is not None
+            and old_lifecycle in self._DOWNGRADEABLE_STATES
+            and new_lifecycle != old_lifecycle
+        ):
+            self._apply_lifecycle(strategy_id, new_lifecycle)
+            action.downgraded = True
+            action.reason = (
+                f"Model {decay_status.stage.value}: rolling IC "
+                f"{decay_status.rolling_ic:.4f} / training IC "
+                f"{decay_status.training_ic_mean:.4f} = "
+                f"{decay_status.ic_ratio:.0%}. "
+                f"Downgraded {old_lifecycle.value} → {new_lifecycle.value}."
+            )
 
-                # Send alert
-                self._send_alert(action)
+            # Send alert
+            self._send_alert(action)
 
         return action
 
@@ -217,17 +219,13 @@ class ModelDecayLifecycle:
     ) -> None:
         """Apply a lifecycle state change to the strategy registry."""
         if self._registry is not None:
-            try:
+            with contextlib.suppress(KeyError, AttributeError):
                 self._registry.set_lifecycle(strategy_id, new_lifecycle)
-            except (KeyError, AttributeError):
-                pass
 
     def _send_alert(self, action: LifecycleAction) -> None:
         """Send alert notification on lifecycle change."""
         if self._alert_manager is None:
             return
-
-        from qp.monitoring.alerts import AlertSeverity
 
         if action.new_lifecycle == StrategyLifecycle.KILL_SWITCH:
             self._alert_manager.critical(

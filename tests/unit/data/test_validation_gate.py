@@ -22,15 +22,17 @@ def _clean_df() -> pl.DataFrame:
     rows = []
     for sym in ["000001", "000002", "000003"]:
         for day in range(15, 20):
-            rows.append({
-                "trade_date": f"2024-01-{day:02d}",
-                "symbol": sym,
-                "open": 10.0 + (day - 15) * 0.1,
-                "high": 10.8 + (day - 15) * 0.1,
-                "low": 9.8 + (day - 15) * 0.1,
-                "close": 10.5 + (day - 15) * 0.1,
-                "volume": 1000000.0,
-            })
+            rows.append(
+                {
+                    "trade_date": f"2024-01-{day:02d}",
+                    "symbol": sym,
+                    "open": 10.0 + (day - 15) * 0.1,
+                    "high": 10.8 + (day - 15) * 0.1,
+                    "low": 9.8 + (day - 15) * 0.1,
+                    "close": 10.5 + (day - 15) * 0.1,
+                    "volume": 1000000.0,
+                }
+            )
     return pl.DataFrame(rows).with_columns(pl.col("trade_date").str.to_date())
 
 
@@ -41,37 +43,45 @@ def _clean_df() -> pl.DataFrame:
 
 class TestValidationReport:
     def test_all_pass(self):
-        report = ValidationReport(checks=[
-            CheckResult("a", True, Severity.ERROR, "ok"),
-            CheckResult("b", True, Severity.WARNING, "ok"),
-        ])
+        report = ValidationReport(
+            checks=[
+                CheckResult("a", True, Severity.ERROR, "ok"),
+                CheckResult("b", True, Severity.WARNING, "ok"),
+            ]
+        )
         assert report.passed is True
         assert report.passed_checks == 2
         assert report.failed_checks == 0
 
     def test_one_error_fails_report(self):
-        report = ValidationReport(checks=[
-            CheckResult("a", True, Severity.ERROR, "ok"),
-            CheckResult("b", False, Severity.ERROR, "bad"),
-        ])
+        report = ValidationReport(
+            checks=[
+                CheckResult("a", True, Severity.ERROR, "ok"),
+                CheckResult("b", False, Severity.ERROR, "bad"),
+            ]
+        )
         assert report.passed is False
         assert report.passed_checks == 1
         assert report.failed_checks == 1
 
     def test_warning_only_does_not_fail_report(self):
         """WARNING severity alone doesn't cause report.passed=False."""
-        report = ValidationReport(checks=[
-            CheckResult("a", True, Severity.ERROR, "ok"),
-            CheckResult("b", False, Severity.WARNING, "heads up"),
-        ])
+        report = ValidationReport(
+            checks=[
+                CheckResult("a", True, Severity.ERROR, "ok"),
+                CheckResult("b", False, Severity.WARNING, "heads up"),
+            ]
+        )
         assert report.passed is True  # No ERROR failures
         assert report.passed_checks == 1
 
     def test_summary_format(self):
-        report = ValidationReport(checks=[
-            CheckResult("a", True, Severity.ERROR, "ok"),
-            CheckResult("b", False, Severity.ERROR, "bad"),
-        ])
+        report = ValidationReport(
+            checks=[
+                CheckResult("a", True, Severity.ERROR, "ok"),
+                CheckResult("b", False, Severity.ERROR, "bad"),
+            ]
+        )
         assert "1/2" in report.summary
         assert "1 errors" in report.summary
 
@@ -194,14 +204,17 @@ class TestCircuitBreaker:
         assert breaker._trip_count == 1  # Reset clears count
 
     def test_auto_reset(self):
-        breaker = CircuitBreaker(BreakerConfig(
-            max_critical_failures=0,
-            auto_reset_after_seconds=0.001,  # ~1ms, immediate
-        ))
+        breaker = CircuitBreaker(
+            BreakerConfig(
+                max_critical_failures=0,
+                auto_reset_after_seconds=0.001,  # ~1ms, immediate
+            )
+        )
         breaker.evaluate([CheckResult("a", False, Severity.ERROR, "bad")])
         assert breaker.state == BreakerState.OPEN
         # Auto-reset should trigger after the configured time
         import time
+
         time.sleep(0.01)
         assert breaker.state == BreakerState.CLOSED
 
@@ -262,15 +275,17 @@ class TestValidationGate:
     def test_bad_data_fails_gate(self):
         """Insert a High<Low violation to trigger gate failure."""
         gate = ValidationGate(GateConfig())
-        bad_df = pl.DataFrame({
-            "trade_date": ["2024-01-15"],
-            "symbol": ["000001"],
-            "open": [10.0],
-            "high": [9.0],   # high < low
-            "low": [11.0],
-            "close": [10.2],
-            "volume": [1000000.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        bad_df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15"],
+                "symbol": ["000001"],
+                "open": [10.0],
+                "high": [9.0],  # high < low
+                "low": [11.0],
+                "close": [10.2],
+                "volume": [1000000.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         report = gate.validate(bad_df)
         assert report.passed is False
         assert any(c.check_name == "ohlc_physics_check" and not c.passed for c in report.checks)
@@ -279,15 +294,17 @@ class TestValidationGate:
         """Gate with zero-tolerance breaker trips on any error."""
         config = GateConfig(breaker_config=BreakerConfig(max_critical_failures=0))
         gate = ValidationGate(config)
-        bad_df = pl.DataFrame({
-            "trade_date": ["2024-01-15"],
-            "symbol": ["000001"],
-            "open": [10.0],
-            "high": [9.0],
-            "low": [11.0],
-            "close": [10.2],
-            "volume": [1000000.0],
-        }).with_columns(pl.col("trade_date").str.to_date())
+        bad_df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-15"],
+                "symbol": ["000001"],
+                "open": [10.0],
+                "high": [9.0],
+                "low": [11.0],
+                "close": [10.2],
+                "volume": [1000000.0],
+            }
+        ).with_columns(pl.col("trade_date").str.to_date())
         report = gate.validate(bad_df)
         assert report.circuit_triggered is True
 
@@ -326,7 +343,14 @@ class TestValidationGate:
     def test_with_calendar(self):
         gate = ValidationGate(GateConfig())
         # Include dates NOT in the data to trigger calendar gap detection
-        calendar = ["2024-01-15", "2024-01-16", "2024-01-17", "2024-01-18", "2024-01-19", "2024-01-20"]
+        calendar = [
+            "2024-01-15",
+            "2024-01-16",
+            "2024-01-17",
+            "2024-01-18",
+            "2024-01-19",
+            "2024-01-20",
+        ]
         report = gate.validate(_clean_df(), calendar=calendar)
         gaps_check = next(c for c in report.checks if c.check_name == "gaps_check")
         # 2024-01-20 is not in the data

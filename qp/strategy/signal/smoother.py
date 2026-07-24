@@ -28,10 +28,10 @@ import numpy as np
 class SmoothMethod(Enum):
     """Temporal smoothing method."""
 
-    EMA = "ema"            # Exponential moving average
+    EMA = "ema"  # Exponential moving average
     ROLLING_MEAN = "rolling_mean"  # Simple rolling average
-    DECAY = "decay"        # Linear decay blend
-    KALMAN = "kalman"      # Kalman filter (placeholder)
+    DECAY = "decay"  # Linear decay blend
+    KALMAN = "kalman"  # Kalman filter (placeholder)
 
 
 @dataclass

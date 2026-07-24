@@ -139,9 +139,7 @@ class BaseFeature:
             return df
 
         shifted_col = f"{col}_shifted"
-        return df.with_columns(
-            pl.col(col).shift(1).over("symbol").alias(shifted_col)
-        )
+        return df.with_columns(pl.col(col).shift(1).over("symbol").alias(shifted_col))
 
     # ── Streaming helpers ──
 
@@ -172,7 +170,5 @@ class BaseFeature:
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}("
-            f"feature_name='{self.feature_name}', "
-            f"window={self.window})"
+            f"{self.__class__.__name__}(feature_name='{self.feature_name}', window={self.window})"
         )

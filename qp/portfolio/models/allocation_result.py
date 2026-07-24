@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import cast
 
 import pandas as pd
 
 from qp.portfolio.models.target_portfolio import TargetPortfolio
+
+_Number = float | int | str
 
 
 @dataclass
@@ -96,18 +99,22 @@ class AllocationResult:
     def from_dict(cls, data: dict[str, object]) -> AllocationResult:
         """Deserialize from a dictionary."""
         tp_dict = data.get("target_portfolio")
-        tp = TargetPortfolio.from_dict(tp_dict) if isinstance(tp_dict, dict) else None
+        tp = (
+            TargetPortfolio.from_dict(cast("dict[str, object]", tp_dict))
+            if isinstance(tp_dict, dict)
+            else None
+        )
         return cls(
             allocator_used=str(data.get("allocator_used", "")),
             target_portfolio=tp,
-            n_candidates_in=int(data.get("n_candidates_in", 0)),
-            n_positions_out=int(data.get("n_positions_out", 0)),
-            cash_reserve=float(data.get("cash_reserve", 0)),
-            total_capital=float(data.get("total_capital", 0)),
-            elapsed_ms=float(data.get("elapsed_ms", 0)),
-            warnings=list(data.get("warnings", [])),
+            n_candidates_in=int(cast("_Number", data.get("n_candidates_in", 0))),
+            n_positions_out=int(cast("_Number", data.get("n_positions_out", 0))),
+            cash_reserve=float(cast("_Number", data.get("cash_reserve", 0))),
+            total_capital=float(cast("_Number", data.get("total_capital", 0))),
+            elapsed_ms=float(cast("_Number", data.get("elapsed_ms", 0))),
+            warnings=list(cast("list[str]", data.get("warnings", []))),
             generated_at=str(data.get("generated_at", "")),
-            metadata=dict(data.get("metadata", {})),
+            metadata=dict(cast("dict[str, str]", data.get("metadata", {}))),
         )
 
     # ------------------------------------------------------------------
@@ -133,6 +140,13 @@ class AllocationResult:
         """Return target portfolio as a DataFrame (delegates to TargetPortfolio)."""
         if self.target_portfolio is None:
             return pd.DataFrame(
-                columns=["date", "symbol", "target_weight", "target_capital", "allocator_used", "cash_reserve"]
+                columns=[
+                    "date",
+                    "symbol",
+                    "target_weight",
+                    "target_capital",
+                    "allocator_used",
+                    "cash_reserve",
+                ]
             )
         return self.target_portfolio.to_dataframe()

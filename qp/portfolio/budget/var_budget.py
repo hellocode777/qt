@@ -18,7 +18,7 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -75,7 +75,7 @@ class VaRBudget:
         """
         if weights is None:
             n = len(symbols)
-            weights = {s: 1.0 / n for s in symbols}
+            weights = dict.fromkeys(symbols, 1.0 / n)
 
         # 1. Compute per-stock VaR
         per_stock_var: dict[str, float] = {}
@@ -106,32 +106,31 @@ class VaRBudget:
             per_stock_var_pct[sym] = round(var_pct, 4)
 
         # 2. Portfolio VaR
-        portfolio_values = np.array([
-            total_capital * weights.get(s, 0.0) for s in symbols
-        ])
-        portfolio_var = float(np.sqrt(
-            sum(
-                (per_stock_var_pct[s] * portfolio_values[i]) ** 2
-                for i, s in enumerate(symbols)
+        portfolio_values = np.array([total_capital * weights.get(s, 0.0) for s in symbols])
+        portfolio_var = float(
+            np.sqrt(
+                sum(
+                    (per_stock_var_pct[s] * portfolio_values[i]) ** 2 for i, s in enumerate(symbols)
+                )
             )
-        ))
+        )
         portfolio_var_pct = portfolio_var / total_capital if total_capital > 0 else 0.0
 
         # 3. VaR contributions
         var_contribs: dict[str, float] = {}
         for s in symbols:
-            var_contribs[s] = round(
-                per_stock_var[s] / max(portfolio_var, 0.01), 4
-            )
+            var_contribs[s] = round(per_stock_var[s] / max(portfolio_var, 0.01), 4)
 
         # 4. Check violations
         violations: list[tuple[str, str]] = []
         for s in symbols:
             if var_contribs[s] > self.max_single_var_pct:
-                violations.append((
-                    s,
-                    f"VaR contribution {var_contribs[s]:.1%} > {self.max_single_var_pct:.0%}",
-                ))
+                violations.append(
+                    (
+                        s,
+                        f"VaR contribution {var_contribs[s]:.1%} > {self.max_single_var_pct:.0%}",
+                    )
+                )
 
         return {
             "portfolio_var": round(portfolio_var, 2),
@@ -166,7 +165,7 @@ class VaRBudget:
         if portfolio_var <= 0:
             # Fallback: equal division
             n = max(len(symbols), 1)
-            return {s: total_capital / n for s in symbols}
+            return dict.fromkeys(symbols, total_capital / n)
 
         var_budget_per_stock = portfolio_var * self.max_single_var_pct
 

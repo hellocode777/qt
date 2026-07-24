@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import numpy as np
+import pandas as pd
 import polars as pl
 
 from qp.shared.protocols.base_data_source import BaseDataSource
@@ -103,7 +104,7 @@ class DemoAdapter(BaseDataSource):
 
         return pl.DataFrame(rows)
 
-    def validate_schema(self, df: pl.DataFrame) -> bool:
+    def validate_schema(self, df: pd.DataFrame | pl.DataFrame) -> bool:
         """Check that the DataFrame contains expected columns."""
         required_cols = {"日期", "开盘", "收盘", "最高", "最低", "成交量", "symbol"}
         return required_cols.issubset(set(df.columns))

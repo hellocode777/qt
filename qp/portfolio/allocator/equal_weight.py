@@ -9,7 +9,7 @@ Implements the standard allocate() interface for Layer 8.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -60,7 +60,7 @@ class EqualWeightAllocator(BaseCapitalAllocator):
         result["target_weight"] = weight * (1.0 - self._cash_buffer)
         result["target_capital"] = investable * weight
 
-        return result.reset_index(drop=True)
+        return cast("pd.DataFrame", result.reset_index(drop=True))
 
     # ------------------------------------------------------------------
     # Legacy interface

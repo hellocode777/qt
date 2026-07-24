@@ -15,7 +15,6 @@ See research_layer.md §1 and ADR-013.
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -115,9 +114,7 @@ class ResearchDataset:
         n_dates = len(dates)
 
         if n_dates < min_train_days * 2:
-            raise ValueError(
-                f"Need at least {min_train_days * 2} dates, got {n_dates}"
-            )
+            raise ValueError(f"Need at least {min_train_days * 2} dates, got {n_dates}")
 
         split_idx = int(n_dates * (1 - test_ratio))
         train_dates = set(dates[:split_idx])
@@ -191,8 +188,7 @@ class ResearchDataset:
 
         train = df.filter(pl.col(self._date_col) <= train_end)
         test = df.filter(
-            (pl.col(self._date_col) >= test_start)
-            & (pl.col(self._date_col) <= test_end)
+            (pl.col(self._date_col) >= test_start) & (pl.col(self._date_col) <= test_end)
         )
 
         return train, test
@@ -224,9 +220,7 @@ class ResearchDataset:
             issues.append(f"Missing columns: {missing}")
 
         # Duplicates
-        dup_count = df.filter(
-            df.select([self._date_col, self._symbol_col]).is_duplicated()
-        ).height
+        dup_count = df.filter(df.select([self._date_col, self._symbol_col]).is_duplicated()).height
         if dup_count > 0:
             issues.append(f"{dup_count} duplicate (date, symbol) pairs")
 
@@ -247,9 +241,7 @@ class ResearchDataset:
             df_sorted = df.sort([self._symbol_col, self._date_col])
             pct_chg = (
                 df_sorted.with_columns(
-                    (pl.col("close").pct_change().over(self._symbol_col).abs()).alias(
-                        "_pct_chg"
-                    )
+                    (pl.col("close").pct_change().over(self._symbol_col).abs()).alias("_pct_chg")
                 )
                 .filter(pl.col("_pct_chg") > 0.5)
                 .height

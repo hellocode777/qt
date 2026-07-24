@@ -26,7 +26,8 @@ class TestDemoAdapter:
     def test_fetch_raw_custom_symbols(self):
         adapter = DemoAdapter()
         df = adapter.fetch_raw(
-            date(2024, 1, 15), date(2024, 1, 16),
+            date(2024, 1, 15),
+            date(2024, 1, 16),
             symbols=["600519", "000858"],
         )
         symbols = df["symbol"].unique().to_list()

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from datetime import date
 
 import pandas as pd
+import polars as pl
 
 
 class BaseDataSource(ABC):
@@ -23,7 +24,7 @@ class BaseDataSource(ABC):
         ...
 
     @abstractmethod
-    def fetch_raw(self, start_date: date, end_date: date, **kwargs) -> pd.DataFrame:
+    def fetch_raw(self, start_date: date, end_date: date, **kwargs) -> pd.DataFrame | pl.DataFrame:
         """Pull raw data from the external API or database.
 
         Args:

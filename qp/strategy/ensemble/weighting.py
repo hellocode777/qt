@@ -25,9 +25,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
-
-import numpy as np
 
 
 class WeightMethod(Enum):
@@ -41,7 +38,7 @@ class WeightMethod(Enum):
 
 
 # Default regime → strategy weights (bull favors momentum, bear favors defensive)
-DEFAULT_REGIME_WEIGHTS: dict[str, dict[str, dict[str, float]]] = {
+DEFAULT_REGIME_WEIGHTS: dict[str, dict[str, float]] = {
     "bull": {
         "momentum": 0.50,
         "quality": 0.30,
@@ -161,7 +158,7 @@ class WeightEngine:
 
     def _equal(self, ids: list[str]) -> dict[str, float]:
         n = len(ids)
-        return {sid: 1.0 / n for sid in ids}
+        return dict.fromkeys(ids, 1.0 / n)
 
     def _fixed(self, ids: list[str]) -> dict[str, float]:
         result: dict[str, float] = {}
@@ -225,7 +222,7 @@ class WeightEngine:
         if total < 1e-12:
             # All-zero — fall back to equal
             n = len(weights)
-            return {k: 1.0 / n for k in weights}
+            return dict.fromkeys(weights, 1.0 / n)
         return {k: v / total for k, v in weights.items()}
 
     def _apply_floor(self, weights: dict[str, float]) -> dict[str, float]:

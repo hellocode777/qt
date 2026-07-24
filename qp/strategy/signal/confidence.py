@@ -78,9 +78,9 @@ class ConfidenceScorer:
         # 3. Coverage quality (same for all)
         coverage_ratio = n / max(self.ideal_coverage, 1)
         if coverage_ratio < 0.05:
-            coverage = 0.1   # Too few stocks
+            coverage = 0.1  # Too few stocks
         elif coverage_ratio > 5.0:
-            coverage = 0.7   # Very large universe — diluted
+            coverage = 0.7  # Very large universe — diluted
         else:
             # Bell-shaped: optimal around 1.0
             coverage = max(0.3, 1.0 - abs(coverage_ratio - 1.0) * 0.5)

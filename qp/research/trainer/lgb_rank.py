@@ -176,7 +176,7 @@ class LightGBMRankModel(BaseModel):
         eval_group = kwargs.get("eval_group")
 
         # Monotone constraints (rule.md §7.9.5)
-        monotone_constraints = kwargs.get("monotone_constraints", None)
+        monotone_constraints = kwargs.get("monotone_constraints")
         if monotone_constraints is not None:
             self._monotone_constraints = monotone_constraints
             if isinstance(monotone_constraints, list):

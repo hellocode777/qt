@@ -42,10 +42,12 @@ class VolumeRatio(BaseFeature):
         super().__init__(apply_shift=apply_shift)
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
-        avg_vol = pl.col("volume").rolling_mean(window_size=self.window, min_samples=self.window // 2).over("symbol")
-        return df.with_columns(
-            (pl.col("volume") / (avg_vol + 1e-10)).alias(self.feature_name)
+        avg_vol = (
+            pl.col("volume")
+            .rolling_mean(window_size=self.window, min_samples=self.window // 2)
+            .over("symbol")
         )
+        return df.with_columns((pl.col("volume") / (avg_vol + 1e-10)).alias(self.feature_name))
 
     def update_stream(self, new_value: float) -> float | None:
         if self._buffer is None:
@@ -59,6 +61,7 @@ class VolumeRatio(BaseFeature):
 
 class VolumeRatio5(VolumeRatio):
     """5-day volume ratio (1 week)."""
+
     feature_name: str = "volume_ratio_5"
     window: int = 5
 
@@ -68,6 +71,7 @@ class VolumeRatio5(VolumeRatio):
 
 class VolumeRatio20(VolumeRatio):
     """20-day volume ratio (~1 month)."""
+
     feature_name: str = "volume_ratio_20"
     window: int = 20
 
@@ -109,9 +113,7 @@ class TurnoverRate(BaseFeature):
             )
         else:
             # Fallback: raw volume as liquidity proxy
-            return df.with_columns(
-                pl.col("volume").alias(self.feature_name)
-            )
+            return df.with_columns(pl.col("volume").alias(self.feature_name))
 
     def update_stream(self, new_value: float) -> float | None:
         return new_value  # Simple pass-through for streaming
@@ -134,8 +136,10 @@ class AvgVolume(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.with_columns(
-            pl.col("volume").rolling_mean(window_size=self.window, min_samples=self.window // 2)
-            .over("symbol").alias(self.feature_name)
+            pl.col("volume")
+            .rolling_mean(window_size=self.window, min_samples=self.window // 2)
+            .over("symbol")
+            .alias(self.feature_name)
         )
 
     def update_stream(self, new_value: float) -> float | None:

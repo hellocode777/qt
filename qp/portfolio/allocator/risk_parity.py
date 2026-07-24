@@ -10,7 +10,7 @@ Lower-volatility stocks get higher weights, equalizing risk contribution.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 import polars as pl
@@ -68,12 +68,13 @@ class RiskParityAllocator(BaseCapitalAllocator):
             return pd.DataFrame(columns=["symbol", "target_weight", "target_capital"])
 
         n = len(candidates)
-        investable = total_capital * (1.0 - self._cash_buffer)
 
         # Use risk_volatility from Layer 7 if available
         has_vol = "risk_volatility" in candidates.columns
         has_limits = "max_weight_limit" in candidates.columns
 
+        inv_vols: pd.Series = pd.Series(dtype=float)
+        total_inv: float = 0.0
         if has_vol:
             vols = candidates["risk_volatility"].copy()
             # Replace zero or negative vols with a small epsilon
@@ -88,7 +89,7 @@ class RiskParityAllocator(BaseCapitalAllocator):
             symbol = str(row["symbol"])
 
             if has_vol and total_inv > 0:
-                raw_wt = float(inv_vols.iloc[i]) / float(total_inv)
+                raw_wt = float(cast("float", inv_vols.iloc[i])) / float(total_inv)
             else:
                 raw_wt = 1.0 / n
 
@@ -96,7 +97,7 @@ class RiskParityAllocator(BaseCapitalAllocator):
 
             # Cap at max_weight_limit from Layer 7
             if has_limits:
-                limit = float(row.get("max_weight_limit", 1.0))
+                limit = float(cast("float", row.get("max_weight_limit", 1.0)))
                 target_wt = min(target_wt, limit)
 
             rows.append(
