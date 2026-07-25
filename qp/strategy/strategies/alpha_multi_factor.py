@@ -302,6 +302,9 @@ def run_alpha_multi_factor_v1(
     if isinstance(mf_result, tuple):
         signals, diagnostics = mf_result
         scores = diagnostics.get("scores") if diagnostics else None
+        # Cache fundamental factors for downstream reuse (IC attribution)
+        if extra_factors is not None and diagnostics is not None:
+            diagnostics["extra_factors"] = extra_factors
     else:
         signals = mf_result
         scores = None

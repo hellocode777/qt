@@ -199,8 +199,9 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Stage 2: Factor computation / Strategy execution ──
         signals: pl.DataFrame = pl.DataFrame()
+        extra_factors: dict | None = None
         if use_full_strategy:
-            signals, scores, fundamental_data, valuation_data, index_df = self._run_full_strategy(
+            signals, scores, fundamental_data, valuation_data, index_df, extra_factors = self._run_full_strategy(
                 price_data=price_data,
                 top_n=top_n,
                 rebalance_freq=rebalance_freq,
@@ -299,6 +300,7 @@ class MultiFactorPipeline(BasePipeline):
             factor_weights=factor_weights,
             price_flat=price_flat,
             index_df=index_df,
+            extra_factors=extra_factors,
         )
         if factor_ic_table:
             _log_factor_ic_table(factor_ic_table, factor_weights)
@@ -665,7 +667,7 @@ class MultiFactorPipeline(BasePipeline):
         model_mode: bool = False,
         config_override: StrategyConfig | None = None,
         score_band: str | None = None,
-    ) -> tuple[pl.DataFrame, pl.DataFrame, dict, dict, pl.DataFrame]:
+    ) -> tuple[pl.DataFrame, pl.DataFrame, dict, dict, pl.DataFrame, dict | None]:
         """Run the momentum_vol_full strategy through the strategy layer.
 
         Args:
@@ -756,14 +758,16 @@ class MultiFactorPipeline(BasePipeline):
         if isinstance(strategy_result, tuple):
             signals, extra = strategy_result
             scores = extra.get("scores") if isinstance(extra, dict) else None  # type: ignore[union-attr]
+            extra_factors = extra.get("extra_factors") if isinstance(extra, dict) else None
         else:
             signals = strategy_result  # type: ignore[assignment]
             scores = None
+            extra_factors = None
 
         if scores is None:
             logger.warning("策略未返回截面得分，IC 分析将跳过")
 
-        return signals, scores, fundamental_data, valuation_data, index_df  # type: ignore[return-value]
+        return signals, scores, fundamental_data, valuation_data, index_df, extra_factors  # type: ignore[return-value]
 
     @staticmethod
     def _load_fundamental_data() -> dict[str, pl.DataFrame]:
@@ -1344,6 +1348,7 @@ def _compute_factor_ic_attribution(
     factor_weights: dict[str, float],
     price_flat: pl.DataFrame,
     index_df: pl.DataFrame | None = None,
+    extra_factors: dict[str, dict[str, dict[str, float]]] | None = None,
 ) -> list[dict]:
     """Compute individual factor ICs from raw factor scores.
 
@@ -1370,6 +1375,7 @@ def _compute_factor_ic_attribution(
             industry_neutral=False,  # raw — no transformations
             orthogonalize=False,
             return_diagnostics=True,
+            extra_factors=extra_factors,  # reuse from strategy run
         )
     except Exception as e:
         logger.warning("   因子归因跳过: 无法计算原始因子得分 ({})", e)
@@ -1502,13 +1508,16 @@ def _optimize_weights_from_ic(
 
     Algorithm:
       1. Drop factors with |IC| < min_ic_threshold (noise, breaks monotonicity)
-      2. Direction = sign(IC) — no economic prior overrides
+      2. Effective direction = sign(IC) × sign(builtin_direction)
+         — corrects for MOMENTUM_DIRECTIONS/VOLATILITY_DIRECTIONS built-in flip
       3. Weight magnitude ∝ |IC|
       4. Normalize so sum of absolute weights = 1.0
 
     This replaces the old 18-stock-tuned weights with data-driven weights
     computed on the full 3039-stock universe.
     """
+    from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS as _AFD
+
     ic_map = {e["factor"]: e["ic_mean"] for e in factor_ic_table}
     optimized: dict[str, float] = {}
     dropped: list[str] = []
@@ -1516,8 +1525,12 @@ def _optimize_weights_from_ic(
     for fname in current_weights:
         ic = ic_map.get(fname, 0.0)
         if abs(ic) >= min_ic_threshold:
-            # IC-driven: direction from IC sign, magnitude from |IC|
-            optimized[fname] = ic  # weight = IC directly
+            # Compensate for built-in direction flip in combine_factors:
+            #   effective_contribution = norm * builtin_dir * weight
+            # We want effective sign = sign(IC), so:
+            #   sign(weight) = sign(IC * builtin_dir)
+            builtin_dir = _AFD.get(fname, 1)  # default +1 for fundamental factors
+            optimized[fname] = ic * builtin_dir
         else:
             dropped.append(fname)
 
