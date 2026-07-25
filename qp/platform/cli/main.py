@@ -561,7 +561,6 @@ def _cmd_experiment_compare() -> int:
         try:
             data = json.loads(f.read_text())
             cfg = data.get("config", {})
-            model_params = cfg.get("model_params", {})
             metrics = data.get("metrics", {})
 
             experiments.append(
@@ -711,7 +710,7 @@ def _cmd_experiment_run() -> int:
         print(
             "    --score-band 60-80          Score percentile band (Q4 sweet spot)",
             "    --score-band auto            Auto-search all bands and compare",
-            file=sys.stderr
+            file=sys.stderr,
         )
         return 1
 
@@ -1096,6 +1095,7 @@ def _backtest_config_strategy(
         # Fallback: use run_momentum_vol_full for config-based variants
         try:
             from qp.strategy.strategies.momentum_vol_full import run_momentum_vol_full
+
             run_func = run_momentum_vol_full
         except ImportError:
             pass

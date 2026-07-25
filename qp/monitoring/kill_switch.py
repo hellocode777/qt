@@ -11,9 +11,25 @@ See rule.md §10.1–§10.3.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
+
+
+class KillSwitchLevel(StrEnum):
+    """Kill switch escalation levels per docs/11_12.md design.
+
+    NORMAL     — 正常运行，不做限制
+    WARNING    — 警告：限制新建仓，降低杠杆/仓位上限，强制人工复核
+    HALT_BUY   — 暂停买入：允许卖出/止损，禁止新增 Buy Order
+    FULL_STOP  — 紧急熔断：全盘清仓，锁定交易接口
+    """
+
+    NORMAL = "NORMAL"
+    WARNING = "WARNING"
+    HALT_BUY = "HALT_BUY"
+    FULL_STOP = "FULL_STOP"
 
 
 @dataclass
@@ -23,12 +39,14 @@ class KillSwitchResult:
     Attributes:
         triggered: True if any trigger condition is met.
         triggers: List of trigger descriptions that fired.
-        recommendation: Action recommendation (PAUSE / STOP / OK).
+        level: Kill switch escalation level.
+        recommendation: Action recommendation (derived from level).
         details: Per-trigger detail dict.
     """
 
     triggered: bool = False
     triggers: list[str] = field(default_factory=list)
+    level: KillSwitchLevel = KillSwitchLevel.NORMAL
     recommendation: str = "OK"
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -62,8 +80,14 @@ class KillSwitch:
 
         Keyword arguments are metric name → value pairs.  Each trigger
         reads the metrics it needs from this dict.
+
+        Uses KillSwitchLevel escalation:
+          - FULL_STOP triggers take priority over everything
+          - HALT_BUY triggers next
+          - WARNING triggers are lowest escalation
         """
         result = KillSwitchResult()
+        max_level = KillSwitchLevel.NORMAL
 
         for trigger in self._triggers:
             detail = trigger.evaluate(metrics)
@@ -72,12 +96,24 @@ class KillSwitch:
                 result.triggers.append(detail["message"])
                 result.details[trigger.name] = detail
 
-        if result.triggered:
-            result.recommendation = "PAUSE"
-        else:
-            result.recommendation = "OK"
+                # Track the highest severity level
+                trigger_level = detail.get("kill_level", KillSwitchLevel.WARNING)
+                if self._level_rank(trigger_level) > self._level_rank(max_level):
+                    max_level = trigger_level
 
+        result.level = max_level
+        result.recommendation = max_level.value
         return result
+
+    @staticmethod
+    def _level_rank(level: KillSwitchLevel) -> int:
+        """Severity rank for escalation: higher = more severe."""
+        return {
+            KillSwitchLevel.NORMAL: 0,
+            KillSwitchLevel.WARNING: 1,
+            KillSwitchLevel.HALT_BUY: 2,
+            KillSwitchLevel.FULL_STOP: 3,
+        }[level]
 
 
 # ------------------------------------------------------------------
@@ -119,6 +155,7 @@ class DrawdownTrigger(_BaseTrigger):
 
         return {
             "fired": fired,
+            "kill_level": KillSwitchLevel.HALT_BUY if fired else KillSwitchLevel.NORMAL,
             "current_dd": current_dd,
             "threshold": self._threshold,
             "message": (
@@ -155,6 +192,9 @@ class PortfolioDrawdownTrigger(_BaseTrigger):
         rolling_fired = rolling_60d_dd >= self._rolling_60d_limit
         fired = monthly_fired or rolling_fired
 
+        # Monthly DD > 10% → HALT_BUY; rolling 60d DD > 20% → HALT_BUY
+        kill_level = KillSwitchLevel.HALT_BUY if fired else KillSwitchLevel.NORMAL
+
         messages = []
         if monthly_fired:
             messages.append(f"Monthly return {monthly_ret:.1%} ≤ -{self._monthly_limit:.0%}")
@@ -163,6 +203,7 @@ class PortfolioDrawdownTrigger(_BaseTrigger):
 
         return {
             "fired": fired,
+            "kill_level": kill_level,
             "monthly_return": monthly_ret,
             "rolling_60d_drawdown": rolling_60d_dd,
             "message": " | ".join(messages) if fired else "",
@@ -189,6 +230,7 @@ class PSITrigger(_BaseTrigger):
 
         return {
             "fired": fired,
+            "kill_level": KillSwitchLevel.WARNING if fired else KillSwitchLevel.NORMAL,
             "psi": psi,
             "threshold": self._threshold,
             "message": (f"PSI {psi:.3f} ≥ threshold {self._threshold}") if fired else "",
@@ -292,6 +334,7 @@ class ModelDecayTrigger(_BaseTrigger):
         if rolling_ic < self._absolute_min_ic:
             fired = True
             level = "STALE"
+            kill_level = KillSwitchLevel.HALT_BUY
             message = (
                 f"Model STALE: rolling IC {rolling_ic:.4f} < absolute minimum "
                 f"{self._absolute_min_ic}. Retire model, retrain required."
@@ -299,6 +342,7 @@ class ModelDecayTrigger(_BaseTrigger):
         elif ratio < self._decay_ratio:
             fired = True
             level = "DECAYING"
+            kill_level = KillSwitchLevel.WARNING
             message = (
                 f"Model DECAYING: rolling IC {rolling_ic:.4f} = {ratio:.0%} of "
                 f"training IC {training_ic:.4f}. Downgraded to Shadow."
@@ -306,6 +350,7 @@ class ModelDecayTrigger(_BaseTrigger):
         elif ratio < self._warning_ratio:
             fired = False  # Warning only — don't trigger Kill Switch
             level = "WARNING"
+            kill_level = KillSwitchLevel.NORMAL
             message = (
                 f"Model WARNING: rolling IC {rolling_ic:.4f} = {ratio:.0%} of "
                 f"training IC. Monitor closely."
@@ -313,14 +358,139 @@ class ModelDecayTrigger(_BaseTrigger):
         else:
             fired = False
             level = "HEALTHY"
+            kill_level = KillSwitchLevel.NORMAL
             message = ""
 
         return {
             "fired": fired,
+            "kill_level": kill_level,
             "level": level,
             "ic_ratio": ratio,
             "rolling_ic": rolling_ic,
             "training_ic": training_ic,
             "rolling_window_days": self._rolling_window,
             "message": message,
+        }
+
+
+# ------------------------------------------------------------------
+# P0 safety triggers (docs/11_12.md)
+# ------------------------------------------------------------------
+
+
+class WeeklyDrawdownTrigger(_BaseTrigger):
+    """Fires when weekly drawdown exceeds threshold.
+
+    Per docs/11_12.md: 周回撤 > 5% → HALT_BUY.
+
+    Uses a rolling 5-trading-day window to measure weekly drawdown.
+    Fires at HALT_BUY level — stop new positions, allow sells.
+    """
+
+    def __init__(self, weekly_limit: float = 0.05) -> None:
+        self._weekly_limit = weekly_limit
+
+    def evaluate(self, metrics: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate weekly drawdown.
+
+        Expects metrics dict to contain:
+          - weekly_drawdown: Current 5-day rolling drawdown (positive float, e.g. 0.06 = 6%)
+        """
+        weekly_dd = abs(float(metrics.get("weekly_drawdown", 0.0)))
+        fired = weekly_dd > self._weekly_limit
+
+        return {
+            "fired": fired,
+            "kill_level": KillSwitchLevel.HALT_BUY if fired else KillSwitchLevel.NORMAL,
+            "weekly_drawdown": weekly_dd,
+            "threshold": self._weekly_limit,
+            "message": (f"Weekly drawdown {weekly_dd:.1%} > threshold {self._weekly_limit:.0%}")
+            if fired
+            else "",
+        }
+
+
+class ConsecutiveLossTrigger(_BaseTrigger):
+    """Fires after N consecutive daily PnL losses.
+
+    Per docs/11_12.md: 连续 5 个交易日日度 PnL 为负 → WARNING + 强制人工复核.
+
+    WARNING is informational — does not halt trading, but flags for
+    human review to verify strategy logic isn't broken.
+    """
+
+    def __init__(self, consecutive_days: int = 5) -> None:
+        self._consecutive_days = consecutive_days
+
+    @property
+    def name(self) -> str:
+        return "ConsecutiveLossTrigger"
+
+    def evaluate(self, metrics: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate consecutive daily losses.
+
+        Expects metrics dict to contain:
+          - consecutive_loss_days: Number of consecutive negative-PnL trading days.
+        """
+        consecutive = int(metrics.get("consecutive_loss_days", 0))
+        fired = consecutive >= self._consecutive_days
+
+        return {
+            "fired": fired,
+            "kill_level": KillSwitchLevel.WARNING if fired else KillSwitchLevel.NORMAL,
+            "consecutive_loss_days": consecutive,
+            "threshold_days": self._consecutive_days,
+            "message": (
+                f"Consecutive losses: {consecutive} days ≥ "
+                f"threshold {self._consecutive_days} — manual review required"
+            )
+            if fired
+            else "",
+        }
+
+
+class AbnormalTurnoverTrigger(_BaseTrigger):
+    """Fires when single-day turnover exceeds safety threshold.
+
+    Per docs/11_12.md: 单日产生的 Trade Recommendations 超过总持仓数的 80%
+    → FULL_STOP（防代码 Bug 导致的疯狂换手）.
+
+    This is the highest-severity trigger — execute FULL_STOP immediately
+    to prevent a code bug from liquidating the portfolio.
+    """
+
+    def __init__(self, turnover_ratio: float = 0.80) -> None:
+        self._turnover_ratio = turnover_ratio
+
+    @property
+    def name(self) -> str:
+        return "AbnormalTurnoverTrigger"
+
+    def evaluate(self, metrics: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate abnormal turnover.
+
+        Expects metrics dict to contain:
+          - daily_trade_count: Number of trade recommendations generated today.
+          - total_holdings: Total number of current positions.
+        """
+        daily_trades = int(metrics.get("daily_trade_count", 0))
+        total_holdings = int(metrics.get("total_holdings", 1))
+
+        ratio = daily_trades / total_holdings if total_holdings > 0 else 0.0
+        fired = ratio > self._turnover_ratio
+
+        return {
+            "fired": fired,
+            "kill_level": KillSwitchLevel.FULL_STOP if fired else KillSwitchLevel.NORMAL,
+            "daily_trade_count": daily_trades,
+            "total_holdings": total_holdings,
+            "turnover_ratio": ratio,
+            "threshold": self._turnover_ratio,
+            "message": (
+                f"ABNORMAL TURNOVER: {daily_trades} trades / {total_holdings} "
+                f"holdings = {ratio:.0%} > threshold {self._turnover_ratio:.0%} "
+                f"— possible code bug, FULL_STOP triggered"
+            )
+            if fired
+            else "",
         }

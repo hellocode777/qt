@@ -201,14 +201,16 @@ class MultiFactorPipeline(BasePipeline):
         signals: pl.DataFrame = pl.DataFrame()
         extra_factors: dict | None = None
         if use_full_strategy:
-            signals, scores, fundamental_data, valuation_data, index_df, extra_factors = self._run_full_strategy(
-                price_data=price_data,
-                top_n=top_n,
-                rebalance_freq=rebalance_freq,
-                sell_buffer=sell_buffer,
-                strategy_name=strategy_name,
-                model_mode=model_mode,
-                score_band=score_band,
+            signals, scores, fundamental_data, valuation_data, index_df, extra_factors = (
+                self._run_full_strategy(
+                    price_data=price_data,
+                    top_n=top_n,
+                    rebalance_freq=rebalance_freq,
+                    sell_buffer=sell_buffer,
+                    strategy_name=strategy_name,
+                    model_mode=model_mode,
+                    score_band=score_band,
+                )
             )
             from qp.strategy.config import get_strategy_config
 
@@ -689,11 +691,13 @@ class MultiFactorPipeline(BasePipeline):
                 from qp.strategy.strategies.alpha_multi_factor import (
                     run_alpha_multi_factor_v1,
                 )
+
                 return run_alpha_multi_factor_v1
             if name == "alpha_multi_factor_v2":
                 from qp.strategy.strategies.alpha_multi_factor import (
                     run_alpha_multi_factor_v2,
                 )
+
                 return run_alpha_multi_factor_v2
             return run_momentum_vol_full
 
@@ -939,8 +943,7 @@ class MultiFactorPipeline(BasePipeline):
                     break
             else:
                 logger.error(
-                    "Gold 数据集未找到。请先运行 qp data fetch "
-                    "(glob pattern: {})",
+                    "Gold 数据集未找到。请先运行 qp data fetch (glob pattern: {})",
                     pattern,
                 )
                 return {}

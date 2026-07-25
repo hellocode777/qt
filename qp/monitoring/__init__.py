@@ -28,13 +28,21 @@ from qp.monitoring.drift import (
     DriftResult,
     DriftSeverity,
 )
+from qp.monitoring.health_logger import (
+    HealthRecord,
+    SystemHealthLogger,
+)
 from qp.monitoring.kill_switch import (
+    AbnormalTurnoverTrigger,
+    ConsecutiveLossTrigger,
     DrawdownTrigger,
     KillSwitch,
+    KillSwitchLevel,
     KillSwitchResult,
     ModelDecayTrigger,
     PortfolioDrawdownTrigger,
     PSITrigger,
+    WeeklyDrawdownTrigger,
 )
 from qp.monitoring.kill_switch_pipeline import (
     KillSwitchPipeline,
@@ -54,6 +62,13 @@ from qp.monitoring.regime import (
     MarketRegimeEngine,
     Regime,
     RegimeResult,
+)
+from qp.monitoring.retrain_signal import (
+    RetrainAction,
+    RetrainSignal,
+    RetrainSignalLogger,
+    RetrainTrigger,
+    evaluate_retrain_need,
 )
 from qp.monitoring.strategy_monitor import (
     HealthLevel,
@@ -75,7 +90,10 @@ __all__ = [
     "TerminalAlert",
     "WeComAlert",
     # Kill switch
+    "AbnormalTurnoverTrigger",
+    "ConsecutiveLossTrigger",
     "KillSwitch",
+    "KillSwitchLevel",
     "KillSwitchPipeline",
     "KillSwitchResult",
     "DrawdownTrigger",
@@ -84,6 +102,7 @@ __all__ = [
     "MonitorReport",
     "PortfolioDrawdownTrigger",
     "PSITrigger",
+    "WeeklyDrawdownTrigger",
     # Drift
     "DriftMonitor",
     "DriftReport",
@@ -99,6 +118,15 @@ __all__ = [
     "MarketRegimeEngine",
     "Regime",
     "RegimeResult",
+    # Health logger
+    "HealthRecord",
+    "SystemHealthLogger",
+    # Retrain signal
+    "RetrainAction",
+    "RetrainSignal",
+    "RetrainSignalLogger",
+    "RetrainTrigger",
+    "evaluate_retrain_need",
     # Strategy monitor
     "HealthLevel",
     "SignalRecord",

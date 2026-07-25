@@ -138,6 +138,7 @@ class KillSwitchPipeline(BasePipeline):
             ks_result = self._check_kill_switch(context)
             report.kill_switch_triggered = ks_result.get("triggered", False)
             report.kill_switch_triggers = ks_result.get("triggers", [])
+            report._ks_result = ks_result  # type: ignore[attr-defined]
 
             # Determine action
             report.action = self._determine_action(report)
@@ -149,6 +150,15 @@ class KillSwitchPipeline(BasePipeline):
             # Send alerts if needed
             if report.action != MonitorAction.OK:
                 self._send_alert(report, logger)
+
+            # Persist to system health log (T1 table per docs/11_12.md)
+            self._log_health(report)
+
+            # Auto-archive non-OK events to Knowledge layer (C1 per docs/11_12.md)
+            self._archive_to_knowledge(report)
+
+            # Emit retrain/weight-adjustment signal (P3 per docs/11_12.md)
+            self._emit_retrain_signal(report)
 
             if logger:
                 logger.info(f"KillSwitchPipeline complete: {report.summary}")
@@ -214,20 +224,31 @@ class KillSwitchPipeline(BasePipeline):
         return monitor.health_check()
 
     def _check_kill_switch(self, context: Any) -> dict[str, Any]:
-        """Evaluate all Kill Switch triggers."""
-        from qp.monitoring.kill_switch import KillSwitch
-
-        ks = KillSwitch()
+        """Evaluate all Kill Switch triggers including P0 safety triggers."""
         from qp.monitoring.kill_switch import (
+            AbnormalTurnoverTrigger,
+            ConsecutiveLossTrigger,
             DrawdownTrigger,
+            KillSwitch,
             ModelDecayTrigger,
             PortfolioDrawdownTrigger,
             PSITrigger,
+            WeeklyDrawdownTrigger,
         )
 
+        ks = KillSwitch()
         ks.add_trigger(DrawdownTrigger())
         ks.add_trigger(PortfolioDrawdownTrigger())
         ks.add_trigger(PSITrigger())
+
+        # P0 safety: weekly drawdown trigger
+        ks.add_trigger(WeeklyDrawdownTrigger(weekly_limit=0.05))
+
+        # P0 safety: consecutive loss trigger
+        ks.add_trigger(ConsecutiveLossTrigger(consecutive_days=5))
+
+        # P0 safety: abnormal turnover trigger (code bug protection)
+        ks.add_trigger(AbnormalTurnoverTrigger(turnover_ratio=0.80))
 
         # Model Decay trigger — links monitoring to kill switch
         training_ic = getattr(context, "training_ic_mean", 0.035)
@@ -247,6 +268,11 @@ class KillSwitchPipeline(BasePipeline):
             "psi": getattr(context, "psi_value", 0.0),
             "rolling_ic": getattr(context, "rolling_ic", 0.0),
             "training_ic_mean": training_ic,
+            # P0 safety metrics
+            "weekly_drawdown": getattr(context, "weekly_drawdown", 0.0),
+            "consecutive_loss_days": getattr(context, "consecutive_loss_days", 0),
+            "daily_trade_count": getattr(context, "daily_trade_count", 0),
+            "total_holdings": getattr(context, "total_holdings", 1),
         }
 
         result = ks.check(**metrics)
@@ -254,6 +280,7 @@ class KillSwitchPipeline(BasePipeline):
             "triggered": result.triggered,
             "triggers": result.triggers,
             "recommendation": result.recommendation,
+            "level": result.level,
         }
 
     # ------------------------------------------------------------------
@@ -263,9 +290,28 @@ class KillSwitchPipeline(BasePipeline):
     def _determine_action(self, report: MonitorReport) -> MonitorAction:
         """Determine the escalation level from all checks.
 
-        Priority: Kill Switch > Model Decay > Strategy Health > Regime.
+        Priority: Kill Switch (FULL_STOP > HALT_BUY > WARNING) > Model Decay > Strategy Health > Regime.
+
+        Maps KillSwitchLevel to MonitorAction:
+          FULL_STOP → STOP
+          HALT_BUY  → PAUSE_BUY
+          WARNING   → WATCH
+          NORMAL    → (continue to next check)
         """
-        # 1. Kill Switch is highest priority
+        # 1. Kill Switch escalation (highest priority)
+        ks_result = getattr(report, "_ks_result", None)
+        if ks_result is not None:
+            from qp.monitoring.kill_switch import KillSwitchLevel
+
+            ks_level = ks_result.get("level", KillSwitchLevel.NORMAL)
+            if ks_level == KillSwitchLevel.FULL_STOP:
+                return MonitorAction.STOP
+            if ks_level == KillSwitchLevel.HALT_BUY:
+                return MonitorAction.PAUSE_BUY
+            if ks_level == KillSwitchLevel.WARNING:
+                return MonitorAction.WATCH
+
+        # 1b. Legacy: Kill Switch triggered
         if report.kill_switch_triggered:
             return MonitorAction.PAUSE_BUY
         if report.psi_value >= 0.25:
@@ -285,9 +331,14 @@ class KillSwitchPipeline(BasePipeline):
                 return MonitorAction.PAUSE_BUY
             return MonitorAction.WATCH
 
-        # 4. High vol regime
-        if report.regime and report.regime.regime == Regime.HIGH_VOL:
-            return MonitorAction.WATCH
+        # 4. Crisis regime states (LIQUIDITY_CRUNCH / STYLE_REVERSAL)
+        if report.regime:
+            if report.regime.regime == Regime.LIQUIDITY_CRUNCH:
+                return MonitorAction.PAUSE_BUY  # Freeze new positions
+            if report.regime.regime == Regime.STYLE_REVERSAL:
+                return MonitorAction.WATCH  # Pause ranking-driven decisions
+            if report.regime.regime == Regime.HIGH_VOL:
+                return MonitorAction.WATCH
 
         return MonitorAction.OK
 
@@ -324,6 +375,104 @@ class KillSwitchPipeline(BasePipeline):
             parts.append(f"Health={report.strategy_health.health_score:.0f}")
 
         return " | ".join(parts)
+
+    def _log_health(self, report: MonitorReport) -> None:
+        """Persist daily health snapshot to system_health_log (Parquet)."""
+        try:
+            from qp.monitoring.health_logger import SystemHealthLogger
+
+            health_logger = SystemHealthLogger()
+            health_logger.log_from_report(report)
+        except Exception:
+            pass  # Health logging is best-effort, never blocks the pipeline
+
+    def _archive_to_knowledge(self, report: MonitorReport) -> None:
+        """Auto-archive non-OK events to KnowledgeArchive (C1 per docs/11_12.md).
+
+        Creates failure_analysis entries when Kill Switch fires or
+        model decay is detected. This feeds the closed-loop:
+          Monitoring → Knowledge → future strategy improvements.
+        """
+        if report.action == MonitorAction.OK:
+            return
+
+        try:
+            from qp.knowledge.archive import KnowledgeArchive
+
+            archive = KnowledgeArchive()
+
+            # Build event summary from report
+            regime_str = report.regime.regime.value if report.regime else "UNKNOWN"
+            triggers_str = (
+                ", ".join(report.kill_switch_triggers) if report.kill_switch_triggers else "none"
+            )
+
+            event_summary = (
+                f"**Action**: {report.action.value}\n"
+                f"**Regime**: {regime_str}\n"
+                f"**Kill Switch Triggers**: {triggers_str}\n"
+                f"**Model Decay Stage**: {report.model_decay_stage}\n"
+                f"**PSI**: {report.psi_value:.3f}\n"
+                f"**Health Score**: {report.strategy_health.health_score:.0f}"
+                if report.strategy_health
+                else "N/A"
+            )
+
+            root_cause = (
+                f"Monitoring pipeline detected escalation to {report.action.value}. "
+                f"Market regime was {regime_str}. "
+                + (f"Triggers: {triggers_str}." if triggers_str != "none" else "No KS triggers.")
+            )
+
+            severity = "4" if report.action in (MonitorAction.STOP, MonitorAction.REDUCE) else "2"
+
+            archive.create_failure_analysis(
+                title=f"KillSwitch: {report.action.value} on {report.timestamp[:10]}",
+                event_summary=event_summary,
+                root_cause=root_cause,
+                impact=f"Action taken: {report.action.value}. See system_health_log for full context.",
+                category="Market Regime"
+                if report.regime and report.regime.is_crisis
+                else "Implementation",
+                severity=severity,
+                tags=[
+                    "auto-archived",
+                    "kill-switch",
+                    report.action.value.lower(),
+                    regime_str.lower(),
+                ],
+            )
+        except Exception:
+            pass  # Archive is best-effort, never blocks the pipeline
+
+    def _emit_retrain_signal(self, report: MonitorReport) -> None:
+        """Emit retrain/weight-adjustment signal based on monitoring state.
+
+        Evaluates PSI drift, IC decay, and model decay stage to determine
+        if retraining or weight reduction is needed (L11-1.5, L11-1.7).
+        """
+        try:
+            from qp.monitoring.retrain_signal import (
+                RetrainSignalLogger,
+                evaluate_retrain_need,
+            )
+
+            regime_str = report.regime.regime.value if report.regime else "UNKNOWN"
+
+            signal = evaluate_retrain_need(
+                strategy_name=getattr(report, "strategy_name", ""),
+                psi_value=report.psi_value,
+                rolling_ic=getattr(report, "rolling_ic", 0.0),
+                training_ic=0.035,
+                current_regime=regime_str,
+                model_decay_stage=str(report.model_decay_stage),
+            )
+
+            if signal.is_actionable():
+                logger = RetrainSignalLogger()
+                logger.log(signal)
+        except Exception:
+            pass  # Best-effort
 
     def _send_alert(self, report: MonitorReport, logger: object | None) -> None:
         """Route alerts through the AlertManager."""

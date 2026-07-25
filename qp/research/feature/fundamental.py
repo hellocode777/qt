@@ -186,9 +186,7 @@ def compute_all_fundamental_factors(
     cash_q = compute_cash_quality(fundamental_data)
 
     # ── Build {date: {symbol: {factor: value}}} ──
-    all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(
-        lambda: defaultdict(dict)
-    )
+    all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
 
     # Collect all dates from price data
     all_dates: set[str] = set()

@@ -195,7 +195,9 @@ def compute_momentum_factors(df: pl.DataFrame) -> pl.DataFrame:
 
     # Trend confirmation: price deviation from 120-day MA (positive = uptrend)
     ma120 = pl.col("close").rolling_mean(120)
-    df = df.with_columns(((pl.col("close") - ma120) / ma120.replace(0.0, None)).alias("Trend_MA120"))
+    df = df.with_columns(
+        ((pl.col("close") - ma120) / ma120.replace(0.0, None)).alias("Trend_MA120")
+    )
 
     factor_names = list(_MOMENTUM_PERIODS.keys()) + ["Momentum_3M_vol_adj", "Trend_MA120"]
 

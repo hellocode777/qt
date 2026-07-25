@@ -31,13 +31,22 @@ if TYPE_CHECKING:
 
 
 class Regime(StrEnum):
-    """Market regime classifications."""
+    """Market regime classifications.
 
-    TREND_UP = "TREND_UP"  # Strong uptrend
+    Aligned with docs/11_12.md design:
+      BULL_TREND — strong uptrend, normal Alpha conditions
+      HIGH_VOLATILITY — elevated uncertainty, reduce exposure
+      LIQUIDITY_CRUNCH — extreme illiquidity, freeze new positions
+      STYLE_REVERSAL — rapid sector/style rotation, pause ranking
+    """
+
+    TREND_UP = "TREND_UP"  # Strong uptrend (BULL_TREND)
     TREND_DOWN = "TREND_DOWN"  # Strong downtrend
     RANGING = "RANGING"  # Sideways / mean-reverting
-    HIGH_VOL = "HIGH_VOL"  # Elevated volatility (any direction)
+    HIGH_VOL = "HIGH_VOL"  # Elevated volatility (HIGH_VOLATILITY)
     LOW_VOL = "LOW_VOL"  # Subdued, quiet market
+    LIQUIDITY_CRUNCH = "LIQUIDITY_CRUNCH"  # Extreme illiquidity / limit-down cascade
+    STYLE_REVERSAL = "STYLE_REVERSAL"  # Rapid sector/style rotation
     UNKNOWN = "UNKNOWN"  # Insufficient data
 
 
@@ -52,6 +61,8 @@ class RegimeResult:
         trend_direction: +1 uptrend, -1 downtrend, 0 neutral.
         volatility_percentile: Current vol vs historical (0-100).
         annualized_vol: Current annualized volatility.
+        limit_up_down_ratio: Limit-up count / (limit-up + limit-down), 0-1.
+        sector_rotation_speed: Cross-sectional std of sector returns (annualized).
         details: Dict of raw indicator values.
         summary: Human-readable summary.
     """
@@ -62,6 +73,8 @@ class RegimeResult:
     trend_direction: int = 0  # +1, -1, 0
     volatility_percentile: float = 50.0
     annualized_vol: float = 0.0
+    limit_up_down_ratio: float = 0.5  # 0.5 = balanced
+    sector_rotation_speed: float = 0.0
     details: dict[str, float] = field(default_factory=dict)
     summary: str = ""
 
@@ -74,6 +87,11 @@ class RegimeResult:
     def is_high_vol(self) -> bool:
         """True if volatility is elevated."""
         return self.regime == Regime.HIGH_VOL
+
+    @property
+    def is_crisis(self) -> bool:
+        """True if market is in crisis mode (liquidity crunch or style reversal)."""
+        return self.regime in (Regime.LIQUIDITY_CRUNCH, Regime.STYLE_REVERSAL)
 
 
 class MarketRegimeEngine:
@@ -118,12 +136,20 @@ class MarketRegimeEngine:
     def classify(
         self,
         prices: pl.DataFrame,
+        limit_up_down_ratio: float | None = None,
+        sector_rotation_speed: float | None = None,
     ) -> RegimeResult:
         """Classify current market regime.
 
         Args:
             prices: Daily price data with [trade_date, close].
                 Optionally [open, high, low] for ATR/ADX.
+            limit_up_down_ratio: Pre-computed limit-up ratio (0-1).
+                0 = all limit-down, 0.5 = balanced, 1 = all limit-up.
+                Values < 0.2 or > 0.8 indicate extreme imbalance.
+            sector_rotation_speed: Pre-computed sector rotation speed
+                (annualized cross-sectional std of sector returns).
+                Values > 0.50 suggest rapid style rotation.
 
         Returns:
             RegimeResult with classification and indicators.
@@ -157,8 +183,19 @@ class MarketRegimeEngine:
         else:
             vol_percentile = 50.0
 
-        # 3. Classify
-        regime, confidence = self._classify(adx, trend_dir, ann_vol, vol_percentile)
+        # 3. Compute liquidity / style indicators
+        lud_ratio = limit_up_down_ratio if limit_up_down_ratio is not None else 0.5
+        sector_rot = sector_rotation_speed if sector_rotation_speed is not None else 0.0
+
+        # 4. Classify
+        regime, confidence = self._classify(
+            adx,
+            trend_dir,
+            ann_vol,
+            vol_percentile,
+            lud_ratio,
+            sector_rot,
+        )
 
         details = {
             "adx": float(adx),
@@ -171,6 +208,8 @@ class MarketRegimeEngine:
             "annualized_vol": ann_vol,
             "vol_percentile": vol_percentile,
             "close": float(closes[-1]),
+            "limit_up_down_ratio": lud_ratio,
+            "sector_rotation_speed": sector_rot,
         }
 
         # Generate summary
@@ -184,6 +223,8 @@ class MarketRegimeEngine:
             f"ADX={adx:.1f} | "
             f"方向={direction_name.get(trend_dir, 'N/A')} | "
             f"年化波动={ann_vol:.1%} | "
+            f"涨跌停比={lud_ratio:.2f} | "
+            f"行业轮动={sector_rot:.2f} | "
             f"置信度={confidence:.0%}"
         )
 
@@ -194,6 +235,8 @@ class MarketRegimeEngine:
             trend_direction=trend_dir,
             volatility_percentile=vol_percentile,
             annualized_vol=ann_vol,
+            limit_up_down_ratio=lud_ratio,
+            sector_rotation_speed=sector_rot,
             details=details,
             summary=summary,
         )
@@ -322,24 +365,46 @@ class MarketRegimeEngine:
         trend_dir: int,
         ann_vol: float,
         vol_percentile: float,
+        limit_up_down_ratio: float = 0.5,
+        sector_rotation_speed: float = 0.0,
     ) -> tuple[Regime, float]:
         """Classify regime from indicators.
 
-        Decision logic:
-          1. If vol_percentile >= 80 → HIGH_VOL
-          2. If vol_percentile <= 20 → LOW_VOL
-          3. If ADX >= 25 and trend_dir != 0 → TREND_UP/DOWN
-          4. Otherwise → RANGING
+        Decision logic (priority order per docs/11_12.md):
+          1. LIQUIDITY_CRUNCH: limit_up_down_ratio < 0.15 (mass limit-down)
+             or limit_up_down_ratio > 0.85 (mass limit-up frenzy)
+          2. STYLE_REVERSAL: sector_rotation_speed > 0.50 (rapid rotation)
+          3. HIGH_VOL: vol_percentile >= 80
+          4. LOW_VOL: vol_percentile <= 20
+          5. TREND_UP/DOWN: ADX >= 25 and trend_dir != 0
+          6. Otherwise → RANGING
 
         Args:
             adx: ADX value (0-100).
             trend_dir: +1, -1, 0.
             ann_vol: Annualized volatility.
             vol_percentile: 0-100 percentile.
+            limit_up_down_ratio: 0-1, extreme values = liquidity stress.
+            sector_rotation_speed: Annualized std of sector returns.
 
         Returns:
             (Regime, confidence 0-1).
         """
+        # Priority 1: Liquidity crunch — mass limit-down/up cascade
+        if limit_up_down_ratio < 0.15:
+            conf = min(1.0 - limit_up_down_ratio / 0.15, 0.95)
+            return Regime.LIQUIDITY_CRUNCH, max(conf, 0.7)
+        if limit_up_down_ratio > 0.85:
+            # Mass limit-up — also a liquidity event (can't buy)
+            conf = min((limit_up_down_ratio - 0.85) / 0.15, 0.95)
+            return Regime.LIQUIDITY_CRUNCH, max(conf, 0.6)
+
+        # Priority 2: Style reversal — rapid sector rotation
+        if sector_rotation_speed > 0.50:
+            conf = min(sector_rotation_speed / 1.0, 0.90)
+            return Regime.STYLE_REVERSAL, max(conf, 0.5)
+
+        # Priority 3-6: Standard classification
         if vol_percentile >= self._vol_high_pct:
             return Regime.HIGH_VOL, min(vol_percentile / 100, 0.95)
 
@@ -357,6 +422,103 @@ class MarketRegimeEngine:
         # Ranging — confidence is inverse of ADX
         conf = max(1.0 - adx / 50, 0.3)
         return Regime.RANGING, conf
+
+    # ------------------------------------------------------------------
+    # Static helpers for LIQUIDITY_CRUNCH / STYLE_REVERSAL inputs
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def compute_limit_up_down_ratio(
+        daily_returns: pl.DataFrame,
+        limit_up_pct: float = 0.098,
+        limit_down_pct: float = -0.098,
+    ) -> float:
+        """Compute limit-up/down ratio from cross-sectional daily returns.
+
+        Ratio = n_limit_up / (n_limit_up + n_limit_down), range 0-1.
+        0 = all limit-down (panic), 0.5 = balanced, 1 = all limit-up (frenzy).
+        Values < 0.15 or > 0.85 → potential LIQUIDITY_CRUNCH.
+
+        For A-shares, ±10% (±9.8% for most stocks, ±19.6% for STAR/ChiNext).
+
+        Args:
+            daily_returns: DataFrame with a 'return' or 'pct_change' column,
+                one row per stock for a single trading day.
+            limit_up_pct: Upper bound for limit-up (e.g., 0.098 = 9.8%).
+            limit_down_pct: Lower bound for limit-down (e.g., -0.098 = -9.8%).
+
+        Returns:
+            Ratio 0-1, or 0.5 if insufficient data.
+        """
+        if daily_returns.is_empty():
+            return 0.5
+
+        ret_col = "return" if "return" in daily_returns.columns else "pct_change"
+        if ret_col not in daily_returns.columns:
+            return 0.5
+
+        returns = daily_returns[ret_col].drop_nulls()
+        if len(returns) < 5:
+            return 0.5
+
+        # Convert to Python list for reliable summation
+        ret_list = returns.to_list()
+        n_up = sum(1 for r in ret_list if r >= limit_up_pct)
+        n_down = sum(1 for r in ret_list if r <= limit_down_pct)
+        total = n_up + n_down
+
+        if total == 0:
+            return 0.5
+
+        return float(n_up / total)
+
+    @staticmethod
+    def compute_sector_rotation_speed(
+        sector_returns: pl.DataFrame,
+        window: int = 20,
+        trading_days: int = 252,
+    ) -> float:
+        """Compute sector rotation speed from sector-level daily returns.
+
+        Measures cross-sectional dispersion of sector returns over a rolling
+        window. High values = rapid style/sector rotation (STYLE_REVERSAL).
+
+        Formula: std(cross-sectional sector returns) over window, annualized.
+        Threshold: > 0.50 suggests rapid rotation.
+
+        Args:
+            sector_returns: DataFrame with [trade_date, sector, return] columns.
+            window: Rolling window for computing dispersion.
+            trading_days: Days per year for annualization.
+
+        Returns:
+            Annualized sector rotation speed.
+        """
+        if sector_returns.is_empty():
+            return 0.0
+
+        required_cols = {"trade_date", "return"}
+        if not required_cols.issubset(sector_returns.columns):
+            return 0.0
+
+        import polars as pl  # noqa: F811
+
+        # Compute cross-sectional std per day
+        daily_dispersion = (
+            sector_returns.group_by("trade_date")
+            .agg(pl.col("return").std().alias("cs_std"))
+            .sort("trade_date")
+        )
+
+        if daily_dispersion.is_empty():
+            return 0.0
+
+        cs_std = daily_dispersion["cs_std"].tail(window).drop_nulls()
+        if len(cs_std) < 5:
+            return 0.0
+
+        mean_cs_std = float(cs_std.mean())  # type: ignore[arg-type]
+        return mean_cs_std * (trading_days**0.5)
 
     # ------------------------------------------------------------------
     # Regime transition detection

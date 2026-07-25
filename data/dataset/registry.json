@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-25T01:43:27.880236+00:00",
+  "updated_at": "2026-07-25T02:44:59.384441+00:00",
   "base_dir": "data/dataset",
   "entries": {
     "daily_price_main@2026-07-23": {
@@ -96,7 +96,7 @@
         "validation_rules": [],
         "version": "2026-07-25"
       },
-      "registered_at": "2026-07-25T01:43:27.880224+00:00"
+      "registered_at": "2026-07-25T02:44:59.384428+00:00"
     }
   }
 }

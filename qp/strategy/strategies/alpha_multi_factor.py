@@ -172,12 +172,12 @@ ALPHA_MULTI_FACTOR_CONFIG = register_config(
         use_market_filter=True,
         # Market regime adaptive positions (effective for A-share):
         regime_positions={
-            "bull": 15,       # concentrate in strong trends
+            "bull": 15,  # concentrate in strong trends
             "sideways_up": 20,
             "neutral": 20,
             "sideways_down": 25,  # diversify when uncertain
             "bear": 30,
-            "crisis": 35,     # maximum diversification
+            "crisis": 35,  # maximum diversification
         },
         regime_freq={
             "bull": 15,

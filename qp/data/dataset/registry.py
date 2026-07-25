@@ -91,10 +91,7 @@ class DatasetRegistry:
                 path = Path(str(entry["path"]))
                 full_path = path if path.is_absolute() else self._base_dir / path
                 if not full_path.exists():
-                    raise KeyError(
-                        f"Dataset file not found: {full_path} "
-                        f"(registry entry: {key})"
-                    )
+                    raise KeyError(f"Dataset file not found: {full_path} (registry entry: {key})")
             return entry
 
         # Find latest version (with optional file existence check)
