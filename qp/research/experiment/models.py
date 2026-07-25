@@ -58,6 +58,8 @@ class ExperimentConfig:
     experiment_id: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     description: str = ""
+    strategy_name: str = ""
+    model_mode: bool = False
     dataset_version: str = ""
     features: list[str] = field(default_factory=list)
     model_params: dict[str, Any] = field(default_factory=dict)
@@ -76,6 +78,8 @@ class ExperimentConfig:
             "experiment_id": self.experiment_id,
             "created_at": self.created_at.isoformat(),
             "description": self.description,
+            "strategy_name": self.strategy_name,
+            "model_mode": self.model_mode,
             "dataset_version": self.dataset_version,
             "features": self.features,
             "model_params": self.model_params,
@@ -103,6 +107,7 @@ class ExperimentMetrics:
     ic_t_stat: float = 0.0
     sharpe_ratio: float = 0.0
     max_drawdown_pct: float = 0.0
+    excess_return_pct: float = 0.0
     annual_return_pct: float = 0.0
     annual_volatility_pct: float = 0.0
     total_return_pct: float = 0.0
@@ -121,6 +126,7 @@ class ExperimentMetrics:
             "ic_t_stat": self.ic_t_stat,
             "sharpe_ratio": self.sharpe_ratio,
             "max_drawdown_pct": self.max_drawdown_pct,
+            "excess_return_pct": self.excess_return_pct,
             "annual_return_pct": self.annual_return_pct,
             "annual_volatility_pct": self.annual_volatility_pct,
             "total_return_pct": self.total_return_pct,

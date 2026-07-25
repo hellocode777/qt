@@ -159,6 +159,7 @@ MOMENTUM_DIRECTIONS: dict[str, int] = {
     "Momentum_3M": -1,  # A-share: momentum reverses
     "Momentum_6M": -1,  # A-share: momentum reverses
     "Momentum_3M_vol_adj": -1,  # A-share: momentum reverses
+    "Trend_MA120": +1,  # Price > MA120 = trend confirmation
 }
 
 MOMENTUM_DESCRIPTIONS: dict[str, str] = {
@@ -167,6 +168,7 @@ MOMENTUM_DESCRIPTIONS: dict[str, str] = {
     "Momentum_3M": "60-day momentum (~3 months)",
     "Momentum_6M": "120-day momentum (~6 months)",
     "Momentum_3M_vol_adj": "Volatility-adjusted 3-month momentum",
+    "Trend_MA120": "Price deviation from 120-day MA (trend confirmation)",
 }
 
 
@@ -191,7 +193,11 @@ def compute_momentum_factors(df: pl.DataFrame) -> pl.DataFrame:
     )
     df = df.drop("_vol_60d")
 
-    factor_names = list(_MOMENTUM_PERIODS.keys()) + ["Momentum_3M_vol_adj"]
+    # Trend confirmation: price deviation from 120-day MA (positive = uptrend)
+    ma120 = pl.col("close").rolling_mean(120)
+    df = df.with_columns(((pl.col("close") - ma120) / ma120.replace(0.0, None)).alias("Trend_MA120"))
+
+    factor_names = list(_MOMENTUM_PERIODS.keys()) + ["Momentum_3M_vol_adj", "Trend_MA120"]
 
     # shift(1): prevent future information leakage — each factor uses only data ≤ T-1
     for name in factor_names:

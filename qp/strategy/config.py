@@ -51,6 +51,10 @@ class StrategyConfig:
     chase_lookback: int = 5  # 防追高回溯天数
     use_market_filter: bool = True  # 大盘双均线过滤（MA20>MA60 + 连续3日站稳）
 
+    # ── Score Band 选股（Inverted-U Alpha 最优区域选择） ──
+    score_percentile_min: float | None = None  # 选股百分位下限 (None=Top-N 默认)
+    score_percentile_max: float | None = None  # 选股百分位上限 (None=Top-N 默认)
+
     # ── 市场过滤器强度（按市场状态分级） ──
     regime_filter_strictness: dict[str, dict[str, int]] = field(
         default_factory=lambda: {

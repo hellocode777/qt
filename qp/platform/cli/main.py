@@ -545,6 +545,74 @@ def _cmd_portfolio_risk() -> int:
 # ------------------------------------------------------------------
 
 
+def _cmd_experiment_compare() -> int:
+    """Compare recent experiments side-by-side."""
+    import json
+    from pathlib import Path
+
+    exp_dir = Path("data/experiments")
+    if not exp_dir.exists():
+        print("无实验目录")
+        return 1
+
+    # Collect experiment metrics from JSON files
+    experiments = []
+    for f in sorted(exp_dir.glob("multifactor_*.json"), reverse=True):
+        try:
+            data = json.loads(f.read_text())
+            cfg = data.get("config", {})
+            model_params = cfg.get("model_params", {})
+            metrics = data.get("metrics", {})
+
+            experiments.append(
+                {
+                    "id": data.get("experiment_id", f.stem),
+                    "strategy": cfg.get("strategy_name", "?"),
+                    "n_factors": len(cfg.get("features", [])),
+                    "model": "ML" if cfg.get("model_mode") else "线性",
+                    "ic_mean": metrics.get("ic_mean", float("nan")),
+                    "ic_ir": metrics.get("ic_ir", float("nan")),
+                    "sharpe": metrics.get("sharpe_ratio", float("nan")),
+                    "total_return": metrics.get("total_return_pct", float("nan")),
+                    "max_dd": metrics.get("max_drawdown_pct", float("nan")),
+                    "excess_return": metrics.get("excess_return_pct", float("nan")),
+                    "status": data.get("status", "?"),
+                }
+            )
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    if not experiments:
+        print("无实验记录")
+        return 0
+
+    # Print comparison table
+    import math
+
+    def _fmt(val: float, suffix: str = "", width: int = 7) -> str:
+        if val is None or (isinstance(val, float) and math.isnan(val)):
+            return "N/A".rjust(width)
+        return f"{val:+{width}.2f}{suffix}"
+
+    header = (
+        f"{'实验ID':<30s} {'策略':>16s} {'因子':>4s} {'模型':>4s} "
+        f"{'IC':>7s} {'IC_IR':>6s} {'收益':>8s} {'夏普':>6s} {'回撤':>7s} {'超额':>8s}"
+    )
+    print(header)
+    print("-" * len(header))
+    for e in experiments[:20]:  # last 20
+        print(
+            f"{e['id']:<30s} {e['strategy']:>16s} {e['n_factors']:>4d} {e['model']:>4s} "
+            f"{_fmt(e['ic_mean'])} {_fmt(e['ic_ir'], width=6)} {_fmt(e['total_return'], '%', 8)} "
+            f"{_fmt(e['sharpe'], width=6)} {_fmt(e['max_dd'], '%', 7)} {_fmt(e['excess_return'], '%', 8)}"
+        )
+
+    print()
+    print(f"共 {len(experiments)} 个实验, 显示最近 20 个")
+    print("  ? = 旧格式实验 (缺少 strategy_name/excess_return)")
+    return 0
+
+
 def _cmd_experiment_list() -> int:
     """List all tracked experiments."""
     from qp.research.experiment import ExperimentTracker
@@ -641,7 +709,9 @@ def _cmd_experiment_run() -> int:
         print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
         print("    --dataset daily_price_main   Gold dataset name", file=sys.stderr)
         print(
-            "    --score-band 60-80          Score percentile band (Q4 sweet spot)", file=sys.stderr
+            "    --score-band 60-80          Score percentile band (Q4 sweet spot)",
+            "    --score-band auto            Auto-search all bands and compare",
+            file=sys.stderr
         )
         return 1
 
@@ -1005,6 +1075,8 @@ def _backtest_config_strategy(
     # Import the strategy's run function dynamically
     strategy_module_map = {
         "momentum_vol_full": "qp.strategy.strategies.momentum_vol_full",
+        "alpha_multi_factor_v1": "qp.strategy.strategies.alpha_multi_factor",
+        "alpha_multi_factor_v2": "qp.strategy.strategies.alpha_multi_factor",
     }
 
     module_path = strategy_module_map.get(strategy_id)
@@ -1020,6 +1092,13 @@ def _backtest_config_strategy(
         # Try snake_case to function name conversion
         func_name = "run_" + strategy_id
         run_func = getattr(mod, func_name, None)
+    if run_func is None:
+        # Fallback: use run_momentum_vol_full for config-based variants
+        try:
+            from qp.strategy.strategies.momentum_vol_full import run_momentum_vol_full
+            run_func = run_momentum_vol_full
+        except ImportError:
+            pass
     if run_func is None:
         print(f"❌ 策略 '{strategy_id}' 模块加载失败。")
         return 1
@@ -2457,10 +2536,12 @@ def main() -> int:
             return _cmd_experiment_show()
         if sub == "run":
             return _cmd_experiment_run()
+        if sub == "compare":
+            return _cmd_experiment_compare()
         if sub == "validate":
             return _cmd_experiment_validate()
         print(
-            f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run, validate",
+            f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run, compare, validate",
             file=sys.stderr,
         )
         return 1

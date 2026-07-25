@@ -132,6 +132,8 @@ class MultiFactorPipeline(BasePipeline):
             "lvr_vol_only",
             "lvr_vol_mom",
             "lvr_vol_all_rev",
+            "alpha_multi_factor_v1",
+            "alpha_multi_factor_v2",
         )
 
         result = PipelineResult(
@@ -142,7 +144,14 @@ class MultiFactorPipeline(BasePipeline):
 
         logger.info("=" * 70)
         if use_full_strategy:
-            logger.info("多因子策略实验 — momentum_vol_full (完整版)")
+            from qp.strategy.config import get_strategy_config as _get_cfg
+
+            try:
+                _cfg = _get_cfg(strategy_name)
+                _label = _cfg.display_name or strategy_name
+            except KeyError:
+                _label = strategy_name
+            logger.info("多因子策略实验 — {} ({})", _label, strategy_name)
         else:
             logger.info("多因子策略实验 — A股真实数据")
         logger.info("=" * 70)
@@ -186,6 +195,7 @@ class MultiFactorPipeline(BasePipeline):
         logger.info("   {} 只股票, {} 行日线数据", len(price_data), total_rows)
         result.metrics["n_stocks"] = float(len(price_data))
         result.metrics["n_rows"] = float(total_rows)
+        result.metrics["model_mode"] = float(model_mode)
 
         # ── Stage 2: Factor computation / Strategy execution ──
         signals: pl.DataFrame = pl.DataFrame()
@@ -303,41 +313,66 @@ class MultiFactorPipeline(BasePipeline):
             optimized_weights = _optimize_weights_from_ic(factor_ic_table, factor_weights)
             _log_weight_optimization(factor_weights, optimized_weights)
 
-            # Re-run strategy with optimized weights
-            if use_full_strategy:
-                logger.info("   以优化权重重新运行策略...")
+            # Re-run strategy with optimized weights (skip if unchanged or ML mode)
+            _weights_changed = any(
+                abs(optimized_weights.get(k, 0) - factor_weights.get(k, 0)) > 0.01
+                for k in set(list(optimized_weights) + list(factor_weights))
+            )
+            if use_full_strategy and (_weights_changed or not model_mode):
+                if model_mode:
+                    logger.info("   以优化权重重新运行策略 (ML 模式跳过 — 模型自学习权重)")
+                else:
+                    logger.info("   以优化权重重新运行策略...")
                 optimized_config = _build_optimized_config(strategy_name, optimized_weights)
                 if optimized_config:
-                    sig2, scores2, *_rest = self._run_full_strategy(
-                        price_data=price_data,
-                        top_n=top_n,
-                        rebalance_freq=rebalance_freq,
-                        sell_buffer=sell_buffer,
-                        strategy_name=strategy_name,
-                        model_mode=model_mode,
-                        config_override=optimized_config,
-                        score_band=score_band,
-                    )
-                    ic2 = evaluate_factor_ic(
-                        scores2 if not scores2.is_empty() else scores,
-                        price_flat,
-                        forward_days=5,
-                        min_stocks_per_day=10,
-                    )
-                    logger.info(
-                        "   优化后复合 IC: {:+.4f} | IR: {:.2f} | IC>0: {:.0f}% (之前 IC={:+.4f})",
-                        ic2.ic_mean,
-                        ic2.ic_ir,
-                        ic2.ic_positive_pct,
-                        ic_record.ic_mean,
-                    )
-                    result.metrics["ic_mean_optimized"] = ic2.ic_mean
-                    result.metrics["ic_ir_optimized"] = ic2.ic_ir
-                    result.metadata["optimized_weights"] = ",".join(
-                        f"{k}={v:+.3f}" for k, v in sorted(optimized_weights.items())
-                    )
-                    scores = scores2 if not scores2.is_empty() else scores
-                    weights = optimized_weights
+                    # For ML mode: skip the full re-run, just re-evaluate IC from existing scores
+                    if model_mode:
+                        ic2 = evaluate_factor_ic(
+                            scores,
+                            price_flat,
+                            forward_days=5,
+                            min_stocks_per_day=10,
+                        )
+                        logger.info(
+                            "   优化后复合 IC: {:+.4f} | IR: {:.2f} | IC>0: {:.0f}% (ML 复用原始评分)",
+                            ic2.ic_mean,
+                            ic2.ic_ir,
+                            ic2.ic_positive_pct,
+                        )
+                        result.metrics["ic_mean_optimized"] = ic2.ic_mean
+                        result.metrics["ic_ir_optimized"] = ic2.ic_ir
+                        result.metadata["optimized_weights"] = "ml_skip"
+                    else:
+                        sig2, scores2, *_rest = self._run_full_strategy(
+                            price_data=price_data,
+                            top_n=top_n,
+                            rebalance_freq=rebalance_freq,
+                            sell_buffer=sell_buffer,
+                            strategy_name=strategy_name,
+                            model_mode=model_mode,
+                            config_override=optimized_config,
+                            score_band=score_band,
+                        )
+                        ic2 = evaluate_factor_ic(
+                            scores2 if not scores2.is_empty() else scores,
+                            price_flat,
+                            forward_days=5,
+                            min_stocks_per_day=10,
+                        )
+                        logger.info(
+                            "   优化后复合 IC: {:+.4f} | IR: {:.2f} | IC>0: {:.0f}% (之前 IC={:+.4f})",
+                            ic2.ic_mean,
+                            ic2.ic_ir,
+                            ic2.ic_positive_pct,
+                            ic_record.ic_mean,
+                        )
+                        result.metrics["ic_mean_optimized"] = ic2.ic_mean
+                        result.metrics["ic_ir_optimized"] = ic2.ic_ir
+                        result.metadata["optimized_weights"] = ",".join(
+                            f"{k}={v:+.3f}" for k, v in sorted(optimized_weights.items())
+                        )
+                        scores = scores2 if not scores2.is_empty() else scores
+                        weights = optimized_weights
             logger.info("")
 
         # Layered test for monotonicity validation
@@ -588,6 +623,12 @@ class MultiFactorPipeline(BasePipeline):
         logger.info("   超额收益:    {:+.2f}%", excess)
         result.metrics["excess_return_pct"] = excess
 
+        # ── Score Band auto-search (when --score-band auto) ──
+        if score_band == "auto" and use_full_strategy and not scores.is_empty():
+            from qp.strategy.config import get_strategy_config as _get_scfg
+
+            _auto_search_score_band(scores, price_flat, _get_scfg(strategy_name))
+
         logger.info("=" * 70)
         status_text = "策略跑赢基准 ✅" if excess > 0 else "策略跑输基准 ❌"
         logger.info("实验完成 — {} (超额: {:+.2f}%)", status_text, excess)
@@ -599,6 +640,7 @@ class MultiFactorPipeline(BasePipeline):
             start_date=start_date_str,
             end_date=end_date_str,
             dataset=dataset,
+            strategy_name=strategy_name,
             features=features,
             weights=weights,
             top_n=top_n,
@@ -634,6 +676,26 @@ class MultiFactorPipeline(BasePipeline):
         """
         from qp.strategy.config import get_strategy_config
         from qp.strategy.strategies.momentum_vol_full import run_momentum_vol_full
+
+        # Strategy → run function dispatch
+        _STRATEGY_RUNNERS: dict[str, Any] = {
+            "alpha_multi_factor_v1": None,  # lazy import below
+        }
+
+        def _get_runner(name: str):
+            if name == "alpha_multi_factor_v1":
+                from qp.strategy.strategies.alpha_multi_factor import (
+                    run_alpha_multi_factor_v1,
+                )
+                return run_alpha_multi_factor_v1
+            if name == "alpha_multi_factor_v2":
+                from qp.strategy.strategies.alpha_multi_factor import (
+                    run_alpha_multi_factor_v2,
+                )
+                return run_alpha_multi_factor_v2
+            return run_momentum_vol_full
+
+        run_func = _get_runner(strategy_name)
 
         if config_override is not None:
             config = config_override
@@ -682,7 +744,7 @@ class MultiFactorPipeline(BasePipeline):
                     float(parts[1]),
                     float(parts[0]) / 20 + 1,
                 )
-        strategy_result = run_momentum_vol_full(
+        strategy_result = run_func(
             price_data=price_data,
             config=config,
             index_df=index_df,
@@ -1167,23 +1229,31 @@ class MultiFactorPipeline(BasePipeline):
         start_date: str,
         end_date: str,
         dataset: str,
-        features: list[str],
-        weights: dict[str, float],
-        top_n: int,
-        rebalance_freq: int,
-        industry_neutral: bool,
-        orthogonalize: bool,
+        strategy_name: str = "",
+        features: list[str] | None = None,
+        weights: dict[str, float] | None = None,
+        top_n: int = 10,
+        rebalance_freq: int = 20,
+        industry_neutral: bool = False,
+        orthogonalize: bool = False,
     ) -> None:
         """Persist experiment to ExperimentTracker (Rule 6: Everything is Experiment)."""
         from datetime import UTC, datetime
 
         from qp.research.experiment.tracker import ExperimentTracker
 
+        if features is None:
+            features = []
+        if weights is None:
+            weights = {}
+
         tracker = ExperimentTracker()
         experiment_id = f"multifactor_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
         tracker.log_experiment(
             experiment_id=experiment_id,
             config={
+                "strategy_name": strategy_name,
+                "model_mode": result.metrics.get("model_mode", False),
                 "description": (
                     f"Multi-factor experiment: {len(features)} factors, "
                     f"Top-{top_n}, rebalance={rebalance_freq}d"
@@ -1203,6 +1273,7 @@ class MultiFactorPipeline(BasePipeline):
                 "sharpe_ratio": float(result.metrics.get("sharpe", 0.0)),
                 "max_drawdown_pct": float(result.metrics.get("max_dd_pct", 0.0)),
                 "total_return_pct": float(result.metrics.get("total_return_pct", 0.0)),
+                "excess_return_pct": float(result.metrics.get("excess_return_pct", 0.0)),
                 "annual_return_pct": 0.0,
                 "annual_volatility_pct": 0.0,
             },
@@ -1387,14 +1458,26 @@ def _log_factor_ic_table(
             f"   {direction} {fname:25s} {ic_val:>+9.4f} {ic_ir:>7.2f} {ic_pct:>7.0f}% {wt:>+7.3f} ({contrib_pct:.0f}%)"
         )
 
-    # Summary
+    # ── Factor direction-aware mismatch check ──
+    # Price/volume factors have built-in direction in ALL_FACTOR_DIRECTIONS
+    # (e.g. Momentum_1M direction=-1 means raw return is flipped to reversal).
+    # The effective contribution to composite score is: norm * direction * weight.
+    # We check: effective_sign vs IC_sign.
+    from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS as _AFD
+
     positive = [e for e in factor_ic_table if e["ic_mean"] > 0]
     negative = [e for e in factor_ic_table if e["ic_mean"] < 0]
-    weight_mismatch = [
-        e
-        for e in factor_ic_table
-        if (e["ic_mean"] > 0 and e["weight"] < 0) or (e["ic_mean"] < 0 and e["weight"] > 0)
-    ]
+    weight_mismatch = []
+    for e in factor_ic_table:
+        fname = e["factor"]
+        wt = e["weight"]
+        ic = e["ic_mean"]
+        if ic == 0 or wt == 0:
+            continue
+        builtin_dir = _AFD.get(fname, 1)  # default +1 for fundamental/valuation factors
+        effective = builtin_dir * wt
+        if (ic > 0 and effective < 0) or (ic < 0 and effective > 0):
+            weight_mismatch.append(e)
 
     logger.info("   " + "-" * 70)
     logger.info(
@@ -1406,7 +1489,7 @@ def _log_factor_ic_table(
 
     if weight_mismatch:
         names = [e["factor"] for e in weight_mismatch]
-        logger.warning("   ⚠ 权重方向与 IC 符号相反: {}", ", ".join(names))
+        logger.warning("   ⚠ 有效权重方向与 IC 符号相反: {}", ", ".join(names))
         logger.warning("      建议翻转权重符号或降低这些因子的权重")
 
 
@@ -1484,6 +1567,94 @@ def _build_optimized_config(
         return replace(base, factors=dict(optimized_weights))
     except Exception:
         return None
+
+
+# ── Score Band Auto-Search ───────────────────────────────────────
+
+AUTO_SCORE_BANDS: list[tuple[str, float, float]] = [
+    ("Top5 (Q5)", 80, 100),
+    ("Q4", 60, 80),
+    ("Q3-Q4", 40, 80),
+    ("Q2-Q4", 20, 80),
+    ("Full (0-100)", 0, 100),
+]
+
+
+def _auto_search_score_band(
+    scores: pl.DataFrame,
+    price_flat: pl.DataFrame,
+    config: Any,
+) -> list[dict]:
+    """Enumerate score bands and compare layered return metrics.
+
+    Uses compute_layered_returns for fast signal-quality evaluation
+    without full broker simulation.
+
+    Returns list of {band, top_bottom_spread, monotonicity_t_stat, n_days}, sorted by t_stat.
+    """
+    from qp.research.evaluation.layered_test import compute_layered_returns
+
+    results = []
+    for label, pct_min, pct_max in AUTO_SCORE_BANDS:
+        try:
+            # Filter scores to band
+            if pct_min > 0 or pct_max < 100:
+                band_scores = scores.with_columns(
+                    pl.col("score").rank("ordinal", descending=True).alias("_rank"),
+                )
+                n_total = band_scores.height
+                rank_lo = int(n_total * pct_min / 100)
+                rank_hi = int(n_total * pct_max / 100)
+                band_scores = band_scores.filter(
+                    (pl.col("_rank") > rank_lo) & (pl.col("_rank") <= rank_hi)
+                ).drop("_rank")
+            else:
+                band_scores = scores
+
+            if band_scores.is_empty():
+                results.append({"band": label, "error": "empty"})
+                continue
+
+            # Layered return analysis (fast, no broker)
+            layered = compute_layered_returns(band_scores, price_flat, n_quantiles=5)
+            results.append(
+                {
+                    "band": label,
+                    "pct_min": pct_min,
+                    "pct_max": pct_max,
+                    "top_bottom_spread": layered.top_bottom_spread,
+                    "monotonicity_t_stat": layered.monotonicity_t_stat,
+                    "n_days": layered.n_days,
+                }
+            )
+        except Exception as e:
+            results.append({"band": label, "error": str(e)[:40]})
+
+    # Log comparison table
+    logger.info("")
+    logger.info("   🔍 Score Band 自动搜索:")
+    logger.info("   {:16s} {:>8s} {:>10s} {:>10s}".format("Band", "Spread", "t_mono", "N Days"))
+    logger.info("   " + "-" * 48)
+    for r in results:
+        if "error" in r:
+            logger.info("   {:16s} ❌ {}", r["band"], r["error"])
+            continue
+        t_mono = r["monotonicity_t_stat"]
+        marker = "✅" if t_mono >= 2.0 else ("⚠" if t_mono >= 1.0 else "❌")
+        logger.info(
+            "   {:16s} {} {:+.4f} {:>9.2f} {:>9d}",
+            r["band"],
+            marker,
+            r["top_bottom_spread"],
+            t_mono,
+            r["n_days"],
+        )
+
+    return sorted(
+        [r for r in results if "error" not in r],
+        key=lambda r: r["monotonicity_t_stat"],
+        reverse=True,
+    )
 
 
 def _archive_research_debt(

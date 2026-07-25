@@ -151,6 +151,8 @@ VOLUME_DIRECTIONS: dict[str, int] = {
     "Volume_Trend_10D": -1,
     "Price_Volume_Corr": -1,
     "Volume_Price_Trend": -1,
+    "Volume_Expansion_20_120": +1,  # Volume expansion = institutional interest
+    "Amount_Momentum_20_120": +1,  # Amount trend = money flow confirmation
 }
 
 VOLUME_DESCRIPTIONS: dict[str, str] = {
@@ -158,6 +160,8 @@ VOLUME_DESCRIPTIONS: dict[str, str] = {
     "Volume_Trend_10D": "5-day MA volume / 20-day MA volume (volume trend)",
     "Price_Volume_Corr": "20-day correlation between return and volume",
     "Volume_Price_Trend": "Sign consistency of price & volume slope",
+    "Volume_Expansion_20_120": "20-day MA volume / 120-day MA volume (medium-term expansion)",
+    "Amount_Momentum_20_120": "20-day MA amount / 120-day MA amount (money flow trend)",
 }
 
 
@@ -201,6 +205,19 @@ def compute_volume_factors(df: pl.DataFrame) -> pl.DataFrame:
         "Price_Volume_Corr",
         "Volume_Price_Trend",
     ]
+
+    # Volume expansion: 20-day MA / 120-day MA (medium-term expansion)
+    ma20_v = pl.col("volume").rolling_mean(20)
+    ma120_v = pl.col("volume").rolling_mean(120)
+    df = df.with_columns((ma20_v / ma120_v.replace(0.0, None)).alias("Volume_Expansion_20_120"))
+    factor_names.append("Volume_Expansion_20_120")
+
+    # Amount momentum: 20-day MA amount / 120-day MA amount
+    amount = pl.col("amount") if "amount" in df.columns else (pl.col("close") * pl.col("volume"))
+    ma20_a = amount.rolling_mean(20)
+    ma120_a = amount.rolling_mean(120)
+    df = df.with_columns((ma20_a / ma120_a.replace(0.0, None)).alias("Amount_Momentum_20_120"))
+    factor_names.append("Amount_Momentum_20_120")
 
     # shift(1): prevent future information leakage — each factor uses only data ≤ T-1
     for name in factor_names:

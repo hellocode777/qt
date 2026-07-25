@@ -1,0 +1,59 @@
+{
+  "strategy_id": "alpha_multi_factor_v1",
+  "stage": "backtest_passed",
+  "decision": "blocked",
+  "score": 50.0,
+  "confidence": 0.4,
+  "timestamp": "2026-07-24T13:50:36.059995+00:00",
+  "data_integrity": "PASS",
+  "factor_validity": "FAIL",
+  "portfolio_conversion": "FAIL",
+  "robustness": "NOT_RUN",
+  "cost_capacity": "NOT_RUN",
+  "rules": [
+    {
+      "rule_name": "rank_ic",
+      "status": "pass",
+      "score": 80,
+      "threshold": 0.02,
+      "actual_value": 0.0283,
+      "detail": "|IC|=0.0283"
+    },
+    {
+      "rule_name": "ic_ir",
+      "status": "fail",
+      "score": 30,
+      "threshold": 0.3,
+      "actual_value": 0.2,
+      "detail": "IC_IR=0.20"
+    },
+    {
+      "rule_name": "ic_t_stat",
+      "status": "pass",
+      "score": 80,
+      "threshold": 2.0,
+      "actual_value": 4.93,
+      "detail": "t=4.93"
+    },
+    {
+      "rule_name": "monotonicity",
+      "status": "fail",
+      "score": 30,
+      "threshold": 2.0,
+      "actual_value": 0.13,
+      "detail": "monotonicity t=0.13"
+    },
+    {
+      "rule_name": "spread",
+      "status": "fail",
+      "score": 30,
+      "threshold": 2.0,
+      "actual_value": 0.53,
+      "detail": "Q5-Q1 spread t=0.53"
+    }
+  ],
+  "recommendation": "策略 alpha_multi_factor_v1 因子检验未通过。建议: 检查因子计算、数据源、或缩减因子数量。",
+  "artifacts": [
+    "data/knowledge/research_debt/20260724-135036-alpha-multi-factor-v1-gate-failure-portfolio-conve.md"
+  ]
+}

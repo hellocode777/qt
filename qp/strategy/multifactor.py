@@ -65,6 +65,7 @@ def compute_cross_sectional_scores(
     live_lookback_dates: int = 60,
     return_diagnostics: bool = False,
     model_mode: bool = False,
+    extra_factors: dict[str, dict[str, dict[str, float]]] | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Compute daily cross-sectional multi-factor scores for all stocks.
 
@@ -224,6 +225,16 @@ def compute_cross_sectional_scores(
                     all_raw[date_str][code] = {}
                 if fname not in all_raw[date_str][code]:
                     all_raw[date_str][code][fname] = median_val
+
+    # ── Merge extra factors (pre-computed fundamental/alternative) ──
+    if extra_factors:
+        for date_str, sym_factors in extra_factors.items():
+            for symbol, factors in sym_factors.items():
+                for fname, fval in factors.items():
+                    if fval is not None and fval == fval:  # not NaN
+                        all_raw[date_str][symbol][fname] = float(fval)
+        # Re-sort dates after merge
+        all_dates = sorted(all_raw.keys())
 
     # ── Live mode: keep only last N days ──
     if live_mode and len(all_dates) > live_lookback_dates:
@@ -464,6 +475,7 @@ def run_multifactor_strategy(
     model_mode: bool = False,
     score_percentile_min: float | None = None,
     score_percentile_max: float | None = None,
+    extra_factors: dict[str, dict[str, dict[str, float]]] | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Run the complete multi-factor stock selection strategy.
 
@@ -547,6 +559,7 @@ def run_multifactor_strategy(
         live_lookback_dates=rebalance_freq * 3,
         return_diagnostics=return_diagnostics,
         model_mode=model_mode,
+        extra_factors=extra_factors,
     )
 
     diagnostics = None

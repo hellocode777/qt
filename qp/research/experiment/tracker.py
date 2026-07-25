@@ -69,6 +69,8 @@ class ExperimentTracker(BaseExperimentTracker):
         exp_config = ExperimentConfig(
             experiment_id=experiment_id,
             description=config.get("description", ""),
+            strategy_name=config.get("strategy_name", ""),
+            model_mode=config.get("model_mode", False),
             dataset_version=config.get("dataset_version", ""),
             features=config.get("features", []),
             model_params=config.get("model_params", {}),
@@ -92,6 +94,7 @@ class ExperimentTracker(BaseExperimentTracker):
             out_of_sample_ic=metrics.get("out_of_sample_ic", 0.0),
             sharpe_ratio=metrics.get("sharpe_ratio", 0.0),
             max_drawdown_pct=metrics.get("max_drawdown_pct", 0.0),
+            excess_return_pct=metrics.get("excess_return_pct", 0.0),
             annual_return_pct=metrics.get("annual_return_pct", 0.0),
             annual_volatility_pct=metrics.get("annual_volatility_pct", 0.0),
             total_return_pct=metrics.get("total_return_pct", 0.0),
