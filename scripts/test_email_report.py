@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Test: send today's DecisionPackage as email."""
 import json
-import os
 from pathlib import Path
 
-from qp.platform.cli.main import _format_decision_email
 from qp.monitoring.alerts import Alert, AlertManager, AlertSeverity, EmailAlert
+from qp.platform.cli.main import _format_decision_email
 
 # Find latest DecisionPackage
 decisions_dir = Path("data/decisions")

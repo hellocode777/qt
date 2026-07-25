@@ -1,5 +1,49 @@
 [
   {
+    "package_id": "dp-2026-07-25-c1ce0173",
+    "date": "2026-07-25",
+    "generated_at": "2026-07-25T05:28:27.945345+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 10,
+    "estimated_cost_pct": 0.1356,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-25-0df911fb",
+    "date": "2026-07-25",
+    "generated_at": "2026-07-25T05:28:37.910266+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 10,
+    "estimated_cost_pct": 0.1356,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-25-abb79f0c",
+    "date": "2026-07-25",
+    "generated_at": "2026-07-25T05:29:14.592330+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 9,
+    "estimated_cost_pct": 0.136,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-25-6226b115",
+    "date": "2026-07-25",
+    "generated_at": "2026-07-25T05:29:24.817200+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 9,
+    "estimated_cost_pct": 0.136,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
     "package_id": "dp-2026-07-24-8f309549",
     "date": "2026-07-24",
     "generated_at": "2026-07-24T09:59:06.284688+00:00",
