@@ -27,7 +27,7 @@ from typing import Any
 
 from qp.monitoring.alerts import AlertManager, AlertSeverity
 from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
-from qp.monitoring.regime import MarketRegimeEngine, Regime, RegimeResult
+from qp.monitoring.regime import MarketRegimeEngine, RegimeResult
 from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
@@ -98,6 +98,10 @@ class KillSwitchPipeline(BasePipeline):
         self._model_decay = model_decay_detector
         self._regime_engine = regime_engine or MarketRegimeEngine()
 
+    @property
+    def name(self) -> str:
+        return "kill_switch_pipeline"
+
     # ------------------------------------------------------------------
     # Pipeline interface
     # ------------------------------------------------------------------
@@ -160,6 +164,9 @@ class KillSwitchPipeline(BasePipeline):
             # Emit retrain/weight-adjustment signal (P3 per docs/11_12.md)
             self._emit_retrain_signal(report)
 
+            # Update system state machine (#15 fix)
+            self._update_system_state(report)
+
             if logger:
                 logger.info(f"KillSwitchPipeline complete: {report.summary}")
 
@@ -195,12 +202,24 @@ class KillSwitchPipeline(BasePipeline):
         return self._regime_engine.classify(prices)
 
     def _check_drift(self, context: Any) -> tuple[float, list[str]]:
-        """Check for feature/prediction distribution drift."""
+        """Check for feature/prediction distribution drift.
+
+        PSI compares recent window vs reference window (#5 fix).
+        Reference must be explicitly set — defaults to training period.
+
+        Reference window context (from context attributes):
+          - psi_reference_window: description of reference period
+            e.g. "training_2024_Q1" or "last_90_days"
+        """
         alerts: list[str] = []
 
         psi = getattr(context, "psi_value", 0.0)
+        ref_window = getattr(context, "psi_reference_window", "training_period")
+
         if psi >= 0.25:
-            alerts.append(f"PSI {psi:.3f} ≥ 0.25 — significant feature drift")
+            alerts.append(
+                f"PSI {psi:.3f} ≥ 0.25 vs {ref_window} — significant feature drift"
+            )
 
         return psi, alerts
 
@@ -331,14 +350,10 @@ class KillSwitchPipeline(BasePipeline):
                 return MonitorAction.PAUSE_BUY
             return MonitorAction.WATCH
 
-        # 4. Crisis regime states (LIQUIDITY_CRUNCH / STYLE_REVERSAL)
-        if report.regime:
-            if report.regime.regime == Regime.LIQUIDITY_CRUNCH:
-                return MonitorAction.PAUSE_BUY  # Freeze new positions
-            if report.regime.regime == Regime.STYLE_REVERSAL:
-                return MonitorAction.WATCH  # Pause ranking-driven decisions
-            if report.regime.regime == Regime.HIGH_VOL:
-                return MonitorAction.WATCH
+        # 4. Regime context — logged but does NOT trigger kill switch (#4 fix)
+        #    Market regime is information, not a risk event.
+        #    LIQUIDITY_CRUNCH and STYLE_REVERSAL are noted in the summary
+        #    but do not automatically halt trading.
 
         return MonitorAction.OK
 
@@ -387,14 +402,14 @@ class KillSwitchPipeline(BasePipeline):
             pass  # Health logging is best-effort, never blocks the pipeline
 
     def _archive_to_knowledge(self, report: MonitorReport) -> None:
-        """Auto-archive non-OK events to KnowledgeArchive (C1 per docs/11_12.md).
+        """Auto-archive significant events to KnowledgeArchive (#14 fix).
 
-        Creates failure_analysis entries when Kill Switch fires or
-        model decay is detected. This feeds the closed-loop:
-          Monitoring → Knowledge → future strategy improvements.
+        Only archives on PAUSE_BUY, REDUCE, or STOP — WATCH is informational
+        and should not generate noise. Creates failure_analysis entries when
+        Kill Switch fires at actionable levels.
         """
-        if report.action == MonitorAction.OK:
-            return
+        if report.action in (MonitorAction.OK, MonitorAction.WATCH):
+            return  # Don't archive routine or watch-only events
 
         try:
             from qp.knowledge.archive import KnowledgeArchive
@@ -444,6 +459,35 @@ class KillSwitchPipeline(BasePipeline):
             )
         except Exception:
             pass  # Archive is best-effort, never blocks the pipeline
+
+    def _update_system_state(self, report: MonitorReport) -> None:
+        """Update cross-pipeline system state (#15 fix).
+
+        After each KillSwitchPipeline run, transition the SystemState
+        based on the determined action. Downstream pipelines (DailyPipeline)
+        read this state before executing.
+        """
+        try:
+            from qp.monitoring.system_state import SystemStateManager
+
+            mgr = SystemStateManager()
+            regime_str = report.regime.regime.value if report.regime else "UNKNOWN"
+            reason = (
+                f"KillSwitchPipeline: action={report.action.value} "
+                f"regime={regime_str} psi={report.psi_value:.3f}"
+            )
+            details = ""
+            if report.kill_switch_triggers:
+                details = "triggers: " + ", ".join(report.kill_switch_triggers[:3])
+
+            mgr.auto_transition(
+                monitor_action=report.action.value,
+                reason=reason,
+                source="KillSwitchPipeline",
+                details=details,
+            )
+        except Exception:
+            pass  # Best-effort — state machine failure should not block pipeline
 
     def _emit_retrain_signal(self, report: MonitorReport) -> None:
         """Emit retrain/weight-adjustment signal based on monitoring state.

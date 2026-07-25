@@ -652,7 +652,10 @@ class TestRegimeStaticHelpers:
         assert speed == 0.0
 
     def test_kill_switch_pipeline_handles_crisis_regime(self) -> None:
-        """KillSwitchPipeline should PAUSE_BUY on LIQUIDITY_CRUNCH."""
+        """KillSwitchPipeline should stay OK on LIQUIDITY_CRUNCH alone (#4 fix).
+
+        Regime is context, not a trigger — only KillSwitch triggers cause action.
+        """
         from qp.monitoring.kill_switch_pipeline import (
             KillSwitchPipeline,
             MonitorAction,
@@ -667,14 +670,17 @@ class TestRegimeStaticHelpers:
 
         pipeline = _TestKSP()
 
-        # Simulate a crisis regime report
+        # Crisis regime alone should NOT pause trading
         crisis_regime = RegimeResult(regime=Regime.LIQUIDITY_CRUNCH, confidence=0.85)
         report = MonitorReport(regime=crisis_regime)
         action = pipeline._determine_action(report)
-        assert action == MonitorAction.PAUSE_BUY
+        assert action == MonitorAction.OK  # Regime alone does not trigger action
 
     def test_kill_switch_pipeline_handles_style_reversal(self) -> None:
-        """KillSwitchPipeline should WATCH on STYLE_REVERSAL."""
+        """KillSwitchPipeline should stay OK on STYLE_REVERSAL alone (#4 fix).
+
+        Regime is context, not a trigger.
+        """
         from qp.monitoring.kill_switch_pipeline import (
             KillSwitchPipeline,
             MonitorAction,
@@ -692,7 +698,7 @@ class TestRegimeStaticHelpers:
         reversal_regime = RegimeResult(regime=Regime.STYLE_REVERSAL, confidence=0.70)
         report = MonitorReport(regime=reversal_regime)
         action = pipeline._determine_action(report)
-        assert action == MonitorAction.WATCH
+        assert action == MonitorAction.OK  # Regime alone does not trigger action
 
 
 class TestSystemHealthLogger:

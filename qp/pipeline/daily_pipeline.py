@@ -243,6 +243,33 @@ class DailyPipeline(BasePipeline):
             run_id_short = context.run_id[:8] if context.run_id else "unknown"
 
             # ================================================================
+            # Step 0: System state check (#8 fix)
+            # ================================================================
+            try:
+                from qp.monitoring.system_state import SystemStateManager
+
+                state_mgr = SystemStateManager()
+                current_state = state_mgr.current()
+
+                result.metadata["system_state"] = current_state.to_state.name
+                result.metadata["system_state_reason"] = current_state.reason
+
+                if not current_state.to_state.can_open_positions():
+                    logger.warning(
+                        "⛔ 系统状态 {} — 跳过策略执行 / System {} — skipping strategies",
+                        current_state.to_state.label(),
+                        current_state.to_state.name,
+                    )
+                    result.status = PipelineStatus.SUCCESS
+                    result.metadata["skip_reason"] = (
+                        f"System state {current_state.to_state.name}: "
+                        f"{current_state.reason}"
+                    )
+                    return result
+            except Exception:
+                pass  # State check is advisory — don't block if unavailable
+
+            # ================================================================
             # Step 1: Data ingestion
             # ================================================================
             data_pipeline = DataPipeline()

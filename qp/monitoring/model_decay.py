@@ -50,6 +50,7 @@ class DecayStatus:
     rolling_ic: float = 0.0
     ic_ratio: float = 1.0
     rolling_window_days: int = 20
+    model_version: str = ""
     recommended_action: str = ""
     summary: str = ""
 
@@ -68,11 +69,18 @@ class ModelDecayDetector:
       - IC ratio ≥ 0.50 → HEALTHY
       - Rolling IC < absolute_min_ic → STALE (retirement candidate)
 
+    Model version binding (#6 fix): training_ic_mean is tied to a specific
+    model_version + feature_version + universe_version. Comparing rolling IC
+    from a different model is meaningless — always verify version match.
+
     Usage:
-        detector = ModelDecayDetector(training_ic_mean=0.035)
+        detector = ModelDecayDetector(
+            training_ic_mean=0.035,
+            model_version="lgb_v2.1",
+            feature_version="2026-06-01",
+        )
         status = detector.check(rolling_ic=0.012)
         print(status.summary)
-        # "Model DECAYING: OOS IC 0.012 = 34% of training IC 0.035 — downgrading"
     """
 
     def __init__(
@@ -83,6 +91,9 @@ class ModelDecayDetector:
         warning_ratio: float = 0.50,
         absolute_min_ic: float = 0.005,
         rolling_window_days: int = 20,
+        model_version: str = "",
+        feature_version: str = "",
+        universe_version: str = "",
     ) -> None:
         self._train_ic = abs(training_ic_mean)
         self._train_ic_std = training_ic_std
@@ -90,6 +101,9 @@ class ModelDecayDetector:
         self._warning_ratio = warning_ratio
         self._absolute_min_ic = absolute_min_ic
         self._rolling_window = rolling_window_days
+        self._model_version = model_version
+        self._feature_version = feature_version
+        self._universe_version = universe_version
 
     # ------------------------------------------------------------------
     # Public API
@@ -136,6 +150,7 @@ class ModelDecayDetector:
             rolling_ic=abs_ic,
             ic_ratio=ratio,
             rolling_window_days=self._rolling_window,
+            model_version=self._model_version,
             recommended_action=action,
             summary=(
                 f"Model {stage.value.upper()}: OOS IC {abs_ic:.4f} = "

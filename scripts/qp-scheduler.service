@@ -1,0 +1,22 @@
+[Unit]
+Description=QP Quant Platform Daily Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shuai
+WorkingDirectory=/home/shuai/workspace/qt
+Environment="SMTP_HOST=smtp.163.com"
+Environment="SMTP_PORT=465"
+Environment="SMTP_SENDER=zhang_shuai777@163.com"
+Environment="SMTP_PASSWORD=REjmVVGvbCSdiatG"
+Environment="SMTP_RECEIVER=zhang_shuai777@163.com"
+ExecStart=/home/shuai/workspace/qt/.venv/bin/python -m qp.platform.cli.main scheduler start
+Restart=always
+RestartSec=30
+StandardOutput=append:/home/shuai/workspace/qt/logs/scheduler.log
+StandardError=append:/home/shuai/workspace/qt/logs/scheduler.log
+
+[Install]
+WantedBy=default.target

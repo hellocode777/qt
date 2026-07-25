@@ -122,7 +122,14 @@ class KillSwitch:
 
 
 class _BaseTrigger:
-    """Abstract trigger — override evaluate() to implement a check."""
+    """Abstract trigger — override evaluate() to implement a check.
+
+    Attributes:
+        priority: Tiebreaker when multiple triggers fire simultaneously.
+                  Lower number = higher priority. 1 = highest.
+    """
+
+    priority: int = 100  # Default: lowest priority
 
     @property
     def name(self) -> str:
@@ -134,6 +141,14 @@ class _BaseTrigger:
 
 # ------------------------------------------------------------------
 # Built-in triggers
+# Priority scheme (#7 fix):
+#   10 = AbnormalTurnover (possible code bug, highest urgency)
+#   15 = WeeklyDrawdown (rapid loss, urgent)
+#   20 = Drawdown (direct financial risk)
+#   25 = PortfolioDrawdown (portfolio-level)
+#   30 = ConsecutiveLoss (persistent decline)
+#   40 = ModelDecay (needs retrain, not halt)
+#   50 = PSI (data quality, not immediate risk)
 # ------------------------------------------------------------------
 
 
@@ -143,6 +158,8 @@ class DrawdownTrigger(_BaseTrigger):
     Threshold: current_dd > historical_max_dd × ratio (default 1.5).
     See rule.md §10.1.
     """
+
+    priority: int = 20
 
     def __init__(self, historical_max_dd: float = 0.15, ratio: float = 1.5) -> None:
         self._historical_max_dd = abs(historical_max_dd)
@@ -175,6 +192,8 @@ class PortfolioDrawdownTrigger(_BaseTrigger):
       - Rolling 60-day drawdown ≥ rolling_60d_limit (default 20%).
     See rule.md §10.2.
     """
+
+    priority: int = 25
 
     def __init__(
         self,
@@ -220,6 +239,8 @@ class PSITrigger(_BaseTrigger):
 
     PSI = Σ[(actual% − expected%) × ln(actual% / expected%)]
     """
+
+    priority: int = 50
 
     def __init__(self, threshold: float = 0.25) -> None:
         self._threshold = threshold
@@ -295,6 +316,8 @@ class ModelDecayTrigger(_BaseTrigger):
       - absolute_min_ic (0.005): absolute floor for IC
     """
 
+    priority: int = 40
+
     def __init__(
         self,
         training_ic_mean: float = 0.0,
@@ -324,6 +347,19 @@ class ModelDecayTrigger(_BaseTrigger):
         """
         rolling_ic = abs(float(metrics.get("rolling_ic", 0.0)))
         training_ic = abs(float(metrics.get("training_ic_mean", self._train_ic)))
+
+        # No real IC data → don't fire (prevent false positive on default 0.0)
+        if rolling_ic == 0.0:
+            return {
+                "fired": False,
+                "kill_level": KillSwitchLevel.NORMAL,
+                "level": "NO_DATA",
+                "ic_ratio": 1.0,
+                "rolling_ic": 0.0,
+                "training_ic": training_ic,
+                "rolling_window_days": self._rolling_window,
+                "message": "",
+            }
 
         if training_ic <= 0:
             training_ic = self._train_ic
@@ -387,6 +423,8 @@ class WeeklyDrawdownTrigger(_BaseTrigger):
     Fires at HALT_BUY level — stop new positions, allow sells.
     """
 
+    priority: int = 15
+
     def __init__(self, weekly_limit: float = 0.05) -> None:
         self._weekly_limit = weekly_limit
 
@@ -418,6 +456,8 @@ class ConsecutiveLossTrigger(_BaseTrigger):
     WARNING is informational — does not halt trading, but flags for
     human review to verify strategy logic isn't broken.
     """
+
+    priority: int = 30
 
     def __init__(self, consecutive_days: int = 5) -> None:
         self._consecutive_days = consecutive_days
@@ -458,6 +498,8 @@ class AbnormalTurnoverTrigger(_BaseTrigger):
     This is the highest-severity trigger — execute FULL_STOP immediately
     to prevent a code bug from liquidating the portfolio.
     """
+
+    priority: int = 10
 
     def __init__(self, turnover_ratio: float = 0.80) -> None:
         self._turnover_ratio = turnover_ratio

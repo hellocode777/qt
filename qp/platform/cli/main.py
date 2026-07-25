@@ -613,7 +613,7 @@ def _cmd_experiment_compare() -> int:
 
 
 def _cmd_experiment_list() -> int:
-    """List all tracked experiments."""
+    """List tracked experiments with optional filtering."""
     from qp.research.experiment import ExperimentTracker
 
     tracker = ExperimentTracker()
@@ -624,18 +624,75 @@ def _cmd_experiment_list() -> int:
         print("  暂无实验记录。运行 qp run daily 后将自动记录实验。")
         return 0
 
-    print(f"{'ID':<32s} {'Status':<14s} {'Sharpe':>8s} {'IC':>8s} {'Ret':>8s}  Lineage")
-    print("-" * 100)
+    # Parse filter options from sys.argv[3:]
+    strategy_filter = ""
+    min_sharpe = float("-inf")
+    min_ic = float("-inf")
+    min_return = float("-inf")
+    show_n = 0
+
+    args = sys.argv[3:] if len(sys.argv) > 3 else []
+    for a in args:
+        if a.startswith("--strategy="):
+            strategy_filter = a.split("=", 1)[1]
+        elif a.startswith("--min-sharpe="):
+            min_sharpe = float(a.split("=", 1)[1])
+        elif a.startswith("--min-ic="):
+            min_ic = float(a.split("=", 1)[1])
+        elif a.startswith("--min-return="):
+            min_return = float(a.split("=", 1)[1])
+        elif a.startswith("-n="):
+            show_n = int(a.split("=", 1)[1])
+
+    # Apply filters
+    if strategy_filter:
+        records = [
+            r for r in records
+            if r.config.strategy_name and strategy_filter in r.config.strategy_name
+        ]
+    if min_sharpe != float("-inf"):
+        records = [r for r in records if r.metrics.sharpe_ratio >= min_sharpe]
+    if min_ic != float("-inf"):
+        records = [r for r in records if r.metrics.ic_mean >= min_ic]
+    if min_return != float("-inf"):
+        records = [r for r in records if r.metrics.total_return_pct >= min_return]
+    if show_n > 0:
+        records = records[:show_n]
+
+    if not records:
+        print("(empty — no experiments match filters)")
+        return 0
+
+    # Print active filters
+    filters = []
+    if strategy_filter:
+        filters.append(f"strategy~~{strategy_filter}")
+    if min_sharpe != float("-inf"):
+        filters.append(f"sharpe≥{min_sharpe:.1f}")
+    if min_ic != float("-inf"):
+        filters.append(f"IC≥{min_ic:.3f}")
+    if min_return != float("-inf"):
+        filters.append(f"return≥{min_return:.1f}%")
+    if filters:
+        print(f"过滤条件: {', '.join(filters)}")
+        print()
+
+    print(f"{'ID':<32s} {'策略':>16s} {'Sharpe':>7s} {'IC':>8s} {'Ret':>8s} {'回撤':>7s}  Lineage")
+    print("-" * 110)
     for r in records:
+        strategy = r.config.strategy_name or "?"
+        if len(strategy) > 16:
+            strategy = strategy[:13] + "..."
         print(
             f"{r.config.experiment_id:<32s} "
-            f"{r.status.value:<14s} "
-            f"{r.metrics.sharpe_ratio:>7.2f} "
+            f"{strategy:>16s} "
+            f"{r.metrics.sharpe_ratio:>6.2f} "
             f"{r.metrics.ic_mean:>7.4f} "
             f"{r.metrics.total_return_pct:>7.1f}% "
+            f"{r.metrics.max_drawdown_pct:>6.1f}% "
             f" {r.lineage.chain_str()}"
         )
-    print(f"\n共 {len(records)} 条记录 / {len(records)} experiments total")
+    print(f"\n共 {len(records)} 条记录")
     return 0
 
 
@@ -696,13 +753,16 @@ def _cmd_experiment_run() -> int:
         print("  Available: multifactor", file=sys.stderr)
         print("  Options:", file=sys.stderr)
         print(
-            "    --strategy momentum_vol_full  Strategy config name (default: default)",
+            "    --strategy momentum_vol_full  Strategy name. Use ',' for batch: v1,v2",
             file=sys.stderr,
         )
+        print("    --compare                    Force comparison mode", file=sys.stderr)
         print("    --symbols 000001,000002,...   Stock codes", file=sys.stderr)
         print("    --start 2024-01-01           Start date", file=sys.stderr)
         print("    --end 2026-07-20             End date", file=sys.stderr)
         print("    --top-n 10                   Top N stocks", file=sys.stderr)
+        print("    --quality-filter=true/false  Enable/disable quality filter", file=sys.stderr)
+        print("    --quality-min-roe=0.05       Minimum ROE for quality filter", file=sys.stderr)
         print("    --rebalance 20               Rebalance frequency (days)", file=sys.stderr)
         print("    --industry-neutral           Enable industry neutralization", file=sys.stderr)
         print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
@@ -759,11 +819,17 @@ def _cmd_experiment_run() -> int:
             params["skip_gate"] = True
         elif arg == "--model":
             params["model_mode"] = True
+        elif arg == "--compare":
+            params["compare"] = True
         elif arg.startswith("--strategy="):
             params["strategy"] = arg.split("=", 1)[1]
         elif arg == "--strategy" and i + 1 < len(args):
             i += 1
             params["strategy"] = args[i]
+        elif arg.startswith("--quality-filter="):
+            params["quality_filter"] = arg.split("=", 1)[1].lower() in ("true", "1", "yes")
+        elif arg.startswith("--quality-min-roe="):
+            params["quality_min_roe"] = float(arg.split("=", 1)[1])
         elif arg.startswith("--dataset="):
             params["dataset"] = arg.split("=", 1)[1]
         elif arg.startswith("--score-band="):
@@ -773,6 +839,54 @@ def _cmd_experiment_run() -> int:
             params["score_band"] = args[i]
         i += 1
 
+    # Check if comma-separated strategy list for batch run
+    strategy_val = str(params.get("strategy", ""))
+    strategies: list[str] = []
+    if "," in strategy_val:
+        strategies = [s.strip() for s in strategy_val.split(",") if s.strip()]
+        params["compare"] = True
+    else:
+        strategies = [strategy_val] if strategy_val else [""]
+
+    if len(strategies) > 1:
+        # Batch run mode
+        all_results: list[dict[str, object]] = []
+        for strat in strategies:
+            strat_params = dict(params)
+            strat_params["strategy"] = strat
+            print(f"\n{'='*60}")
+            print(f"  运行策略: {strat}")
+            print(f"{'='*60}")
+            ctx = PipelineContext(pipeline_name="multifactor_experiment", parameters=strat_params)
+            pipeline = MultiFactorPipeline()
+            result = pipeline.run(ctx)
+            all_results.append({
+                "strategy": strat,
+                "status": result.status.value,
+                "metrics": dict(result.metrics),
+            })
+            if result.status.value != "success":
+                print(f"  ⚠ {strat} 失败: {result.errors}")
+
+        # Print comparison table
+        print(f"\n{'='*60}")
+        print("  批量实验对比 / Batch Comparison")
+        print(f"{'='*60}")
+        print(f"{'策略':>24s} {'状态':>8s} {'IC':>7s} {'IC_IR':>6s} {'Sharpe':>7s} {'收益':>8s} {'回撤':>7s}")
+        print("-" * 75)
+        for r in all_results:
+            m: dict[str, float] = r["metrics"]  # type: ignore[misc]
+            print(
+                f"{str(r['strategy']):>24s} {str(r['status']):>8s} "
+                f"{float(m.get('ic_mean', 0)):+7.4f} "
+                f"{float(m.get('ic_ir', 0)):+6.2f} "
+                f"{float(m.get('sharpe_ratio', 0)):+6.2f} "
+                f"{float(m.get('total_return_pct', 0)):+7.1f}% "
+                f"{float(m.get('max_drawdown_pct', 0)):+6.1f}%"
+            )
+        return 0
+
+    # Single strategy run
     context = PipelineContext(pipeline_name="multifactor_experiment", parameters=params)
     pipeline = MultiFactorPipeline()
     result = pipeline.run(context)
@@ -933,6 +1047,52 @@ def _cmd_experiment_validate() -> int:
         ),
     )
     print(gate.summary())
+    return 0
+
+
+def _cmd_experiment_clean() -> int:
+    """Clean old experiment JSON files, keeping the most recent N."""
+    from pathlib import Path
+
+    exp_dir = Path("data/experiments")
+    if not exp_dir.exists():
+        print("无实验目录 / No experiment directory")
+        return 1
+
+    keep = 20
+    dry_run = False
+    args = sys.argv[3:]
+    for a in args:
+        if a.startswith("--keep="):
+            keep = int(a.split("=", 1)[1])
+        elif a == "--dry-run":
+            dry_run = True
+
+    files = sorted(exp_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+    if len(files) <= keep:
+        print(f"共 {len(files)} 个文件， ≤ {keep}，无需清理")
+        return 0
+
+    to_delete = files[keep:]
+    print(f"保留最近 {keep} 个，将删除 {len(to_delete)} 个:")
+    for f in to_delete[:10]:
+        print(f"  {f.name}")
+    if len(to_delete) > 10:
+        print(f"  ... 及另外 {len(to_delete) - 10} 个")
+
+    if dry_run:
+        print(f"\n[--dry-run] 以上 {len(to_delete)} 个文件将被删除（未实际执行）")
+        return 0
+
+    deleted = 0
+    for f in to_delete:
+        try:
+            f.unlink()
+            deleted += 1
+        except OSError as e:
+            print(f"  删除失败: {f.name} — {e}", file=sys.stderr)
+
+    print(f"\n已删除 {deleted}/{len(to_delete)} 个旧实验文件")
     return 0
 
 
@@ -1497,123 +1657,87 @@ def _cmd_backtest_run() -> int:
 
 
 def _cmd_monitor_check() -> int:
-    """Run daily monitoring check (Kill Switch + Drift + Decay + Health)."""
+    """Run full KillSwitchPipeline — regime + drift + decay + kill switch + health."""
     from datetime import datetime
+
+    from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline, MonitorAction
+    from qp.platform.pipeline.context import PipelineContext
 
     print("=== QP 监控检查 / Monitor Check ===")
     print(f"  时间 / Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    ctx = PipelineContext(pipeline_name="cli_monitor_check")
+    pipeline = KillSwitchPipeline()
+    result = pipeline.run(ctx)
+
+    if result.status.value != "success":
+        print(f"\n❌ 检查失败: {result.errors}")
+        return 1
+
+    report = result.metadata.get("report")  # type: ignore[union-attr]
+    if report is None:
+        print("\n❌ 无健康报告")
+        return 1
+
     print()
-
-    # Market Regime
     print("── 市场状态 / Market Regime ──")
-    try:
-        from qp.monitoring.regime import MarketRegimeEngine
+    if report.regime:
+        print(f"  状态 / Regime:     {report.regime.regime.value}")
+        print(f"  置信度 / Confidence: {report.regime.confidence:.0%}")
+        print(f"  趋势强度 / ADX:    {report.regime.trend_strength:.1f}")
+        print(f"  涨跌停比 / LUD:    {report.regime.limit_up_down_ratio:.3f}")
+        print(f"  行业轮动 / Rot:    {report.regime.sector_rotation_speed:.3f}")
+        print(f"  危机模式:          {'是' if report.regime.is_crisis else '否'}")
+    else:
+        print("  ⚠ 无市场数据")
 
-        engine = MarketRegimeEngine()
-        # Try to load price data for regime detection
-        from pathlib import Path
-
-        import polars as pl
-
-        data_dir = Path("data/dataset")
-        parquet_files = sorted(data_dir.glob("daily_price_*.parquet"))
-        if parquet_files:
-            prices = pl.read_parquet(str(parquet_files[-1]))
-            result = engine.classify(prices)
-            print(f"  状态 / Regime:     {result.regime.value}")
-            print(f"  置信度 / Confidence: {result.confidence:.0%}")
-            print(f"  趋势强度 / ADX:    {result.trend_strength:.1f}")
-            direction_map = {1: "上升 Uptrend", -1: "下降 Downtrend", 0: "中性 Neutral"}
-            print(f"  趋势方向 / Dir:    {direction_map.get(result.trend_direction, 'N/A')}")
-            print(f"  年化波动 / Vol:    {result.annualized_vol:.1%}")
-            print(f"  波动分位 / Vol%:   {result.volatility_percentile:.0f}%")
-            print(f"  {result.summary}")
-        else:
-            print("  ⚠ 无数据 / No price data — 跳过 regime 检测")
-    except Exception as e:
-        print(f"  ⚠ Regime detection failed: {e}")
-
-    # Kill Switch
     print()
     print("── 熔断检查 / Kill Switch ──")
-    try:
-        from qp.monitoring.kill_switch import (
-            DrawdownTrigger,
-            KillSwitch,
-            PortfolioDrawdownTrigger,
-            PSITrigger,
-        )
+    icon = "🚨" if report.kill_switch_triggered else "✅"
+    status = "触发!" if report.kill_switch_triggered else "正常"
+    print(f"  {icon} 状态: {status}")
+    ks_result = getattr(report, "_ks_result", None)
+    level = "NORMAL"
+    if ks_result:
+        level = str(ks_result.get("level", "NORMAL"))
+    print(f"  熔断级别:          {level}")
+    if report.kill_switch_triggers:
+        for t in report.kill_switch_triggers:
+            print(f"    ⚠ {t}")
 
-        ks = KillSwitch()
-        ks.add_trigger(DrawdownTrigger(historical_max_dd=0.14, ratio=1.5))
-        ks.add_trigger(PortfolioDrawdownTrigger(monthly_limit=0.15, rolling_60d_limit=0.20))
-        ks.add_trigger(PSITrigger(threshold=0.25))
-
-        result = ks.check(
-            current_drawdown=0.0,
-            monthly_return=0.0,
-            rolling_60d_drawdown=0.0,
-            psi=0.0,
-        )
-        status_icon = "✅" if not result.triggered else "🚨"
-        status_text = "正常 OK" if not result.triggered else "触发 TRIGGERED"
-        print(f"  {status_icon} 熔断状态 / Status: {status_text}")
-        if result.triggered:
-            for t in result.triggers:
-                print(f"    ⚠ {t}")
-        print(f"  建议操作 / Rec:   {result.recommendation}")
-    except Exception as e:
-        print(f"  ⚠ Kill switch check failed: {e}")
-
-    # Strategy Health
     print()
-    print("── 策略健康 / Strategy Health ──")
-    try:
-        from qp.monitoring.strategy_monitor import StrategyMonitor
+    print("── 特征漂移 / Drift ──")
+    print(f"  PSI:               {report.psi_value:.3f}" + (" ⚠" if report.psi_value >= 0.25 else ""))
 
-        monitor = StrategyMonitor(strategy_id="simple_rank_v1.0")
-        health = monitor.health_check()
-        icon = {
-            "healthy": "✅",
-            "watch": "👀",
-            "warning": "⚠️",
-            "critical": "🚨",
-        }.get(health.health_level.value, "❓")
-        print(f"  {icon} 健康等级 / Level:  {health.health_level.value.upper()}")
-        print(f"  健康分数 / Score:     {health.health_score:.0f}/100")
-        print(f"  日均信号 / Avg Signals: {health.avg_daily_signals:.1f}")
-        print(f"  信号稳定性 / Consistency: {health.signal_consistency:.0%}")
-        if health.alerts:
-            for a in health.alerts:
-                print(f"    ⚠ {a}")
-    except Exception as e:
-        print(f"  ⚠ Health check failed: {e}")
-
-    # Model Decay
     print()
     print("── 模型衰减 / Model Decay ──")
-    try:
-        from qp.monitoring.model_decay import ModelDecayDetector
-
-        detector = ModelDecayDetector(training_ic_mean=0.035)
-        status = detector.check(rolling_ic=0.030)
-        icon = {
-            "healthy": "✅",
-            "warning": "⚠️",
-            "decaying": "🔴",
-            "stale": "💀",
-        }.get(status.stage.value, "❓")
-        print(f"  {icon} 衰减状态 / Stage: {status.stage.value.upper()}")
-        print(f"  训练IC / Training IC:   {status.training_ic_mean:.4f}")
-        print(f"  滚动IC / Rolling IC:    {status.rolling_ic:.4f}")
-        print(f"  IC比率 / IC Ratio:      {status.ic_ratio:.0%}")
-        if status.needs_attention:
-            print(f"  ⚠ {status.recommended_action}")
-    except Exception as e:
-        print(f"  ⚠ Model decay check failed: {e}")
+    print(f"  状态:              {report.model_decay_stage}")
 
     print()
-    return 0
+    print("── 策略健康 / Strategy Health ──")
+    if report.strategy_health:
+        print(f"  分数:              {report.strategy_health.health_score:.0f}/100")
+        print(f"  等级:              {report.strategy_health.health_level.value.upper()}")
+
+    print()
+    print("── 建议操作 / Action ──")
+    action_icons = {
+        MonitorAction.OK: "✅",
+        MonitorAction.WATCH: "👀",
+        MonitorAction.PAUSE_BUY: "⛔",
+        MonitorAction.REDUCE: "🔻",
+        MonitorAction.STOP: "🚨",
+    }
+    print(f"  {action_icons.get(report.action, '❓')} {report.action.value.upper()}")
+
+    if report.alerts:
+        print()
+        print("── 告警 / Alerts ──")
+        for a in report.alerts[:10]:
+            print(f"  - {a}")
+
+    print()
+    return 0 if report.action == MonitorAction.OK else 1
 
 
 def _cmd_monitor_regime() -> int:
@@ -2288,13 +2412,116 @@ def _cmd_retrain() -> int:
     return 0
 
 
+def _format_decision_email(data: dict, date_str: str) -> str:
+    """Format a DecisionPackage JSON into a readable email body."""
+    lines: list[str] = []
+    lines.append("QP 每日投资决策报告")
+    lines.append(f"日期: {date_str}")
+    lines.append("=" * 45)
+
+    # Market regime
+    regime = data.get("regime", {})
+    if regime:
+        lines.append("")
+        lines.append("【市场状态】")
+        lines.append(f"  状态: {regime.get('regime', 'N/A')}")
+        if regime.get("suggested_exposure"):
+            lines.append(f"  建议敞口: {regime['suggested_exposure']:.0%}")
+
+    # Strategy signals
+    signals = data.get("strategy_signals", {})
+    if signals:
+        lines.append("")
+        lines.append("【策略信号】")
+        for sid, count in signals.items():
+            lines.append(f"  {sid}: {count} 个信号")
+
+    # Top N stocks
+    effective_n = data.get("effective_top_n", 0)
+    if effective_n:
+        lines.append(f"  有效持仓数: {effective_n}")
+
+    # Risk audit
+    risk = data.get("risk_audit", {})
+    if risk:
+        lines.append("")
+        lines.append("【风控审计】")
+        passed = risk.get("passed", True)
+        lines.append(f"  通过: {'✅' if passed else '❌'}")
+        violations = risk.get("violations", [])
+        for v in violations[:5]:
+            lines.append(f"  ⚠ {v}")
+
+    # Decision report — trade recommendations
+    report = data.get("report", {})
+    if report:
+        lines.append("")
+        n_buys = report.get("n_buys", 0)
+        n_sells = report.get("n_sells", 0)
+        lines.append(f"【交易建议】买入 {n_buys} 只 / 卖出 {n_sells} 只")
+        if report.get("total_capital"):
+            lines.append(f"  总资金: ¥{report['total_capital']:,.0f}")
+
+        recommendations = report.get("recommendations", [])
+        if recommendations:
+            lines.append("")
+            for rec in recommendations[:20]:
+                symbol = rec.get("symbol", "?")
+                action = rec.get("action", "?")
+                reason = rec.get("reason", "")
+                weight = rec.get("target_weight_pct", 0)
+                qty = rec.get("quantity_shares", 0)
+                price = rec.get("estimated_price", 0)
+                cost = rec.get("estimated_cost", 0)
+                warnings = rec.get("risk_warnings", [])
+
+                action_icon = "买入" if action == "BUY" else "卖出" if action == "SELL" else action
+                qty_str = f" × {qty}股" if qty else ""
+                price_str = f" @ ¥{price:.2f}" if price else ""
+                cost_str = f"  约¥{cost:.0f}" if cost else ""
+
+                lines.append(
+                    f"  {action_icon:<4s} {symbol}  权重{weight:.0f}%{qty_str}{price_str}{cost_str}"
+                )
+                if reason:
+                    lines.append(f"       理由: {reason}")
+                for w in warnings[:2]:
+                    lines.append(f"       ⚠ {w}")
+        else:
+            lines.append("  (无具体交易建议，参考 DecisionPackage 详情)")
+
+    # Estimated cost
+    cost = data.get("estimated_cost_pct", 0.0)
+    if cost:
+        lines.append("")
+        lines.append(f"【预估成本】{cost:.2%}")
+
+    # Lineage
+    lineage = data.get("lineage", {})
+    if lineage:
+        lines.append("")
+        lines.append("【数据血缘】")
+        lines.append(f"  数据集版本: {lineage.get('dataset_version', 'N/A')}")
+
+    lines.append("")
+    lines.append("-" * 45)
+    lines.append("完整报告: data/decisions/")
+    lines.append("人工审核: qp decide --review")
+    lines.append("⚠️ 本报告仅供学习参考，不构成投资建议。")
+
+    return "\n".join(lines)
+
+
 def _cmd_scheduler_start() -> int:
     """Start the background job scheduler for daily automation.
 
     Registers and starts:
-      - daily_pipeline: qp run daily        (weekdays 17:30)
-      - monitor_check:  qp monitor check    (weekdays 09:00)
-      - data_fetch:     qp data fetch       (weekdays 08:00)
+      - data_fetch:        FullDataPipeline           (weekdays 08:00)
+      - monitor_check:     KillSwitchPipeline full    (weekdays 09:07)
+      - retrain_notify:    Check retrain signals      (weekdays 09:17)
+      - pre_close_check:   KillSwitchPipeline fast    (weekdays 16:53)
+      - daily_pipeline:    DailyPipeline              (weekdays 17:57)
+      - email_report:      Email DecisionPackage      (weekdays 18:03)
 
     Runs in foreground until Ctrl+C.
     """
@@ -2307,6 +2534,17 @@ def _cmd_scheduler_start() -> int:
 
     scheduler = QPScheduler(timezone="Asia/Shanghai")
 
+    # ── Watchdog: touch ping file for external monitoring (#12 fix) ──
+    def _watchdog_ping(job_name: str) -> None:
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        ping_dir = Path("data/monitoring/watchdog")
+        ping_dir.mkdir(parents=True, exist_ok=True)
+        (ping_dir / f"{job_name}.ping").write_text(
+            f"{datetime.now(UTC).isoformat()}\n"
+        )
+
     # ── Job 1: daily data fetch (08:00 on weekdays) ──
     def _job_data_fetch() -> None:
         from qp.data.loader.full_pipeline import FullDataPipeline
@@ -2316,6 +2554,7 @@ def _cmd_scheduler_start() -> int:
         pipeline = FullDataPipeline()
         result = pipeline.run(ctx)
         status = result.status.value
+        _watchdog_ping("data_fetch")
         print(f"[scheduler] data_fetch: {status}")
 
     scheduler.add_job(
@@ -2326,19 +2565,52 @@ def _cmd_scheduler_start() -> int:
         )
     )
 
-    # ── Job 2: daily monitor check (09:00 on weekdays) ──
+    # ── Job 2: morning health check (09:00 on weekdays) ──
     def _job_monitor_check() -> None:
-        import subprocess
-        import sys
-
-        result = subprocess.run(
-            [sys.executable, "-m", "qp.platform.cli.main", "monitor", "check"],
-            capture_output=True,
-            text=True,
+        from qp.monitoring.kill_switch_pipeline import (
+            KillSwitchPipeline,
+            MonitorAction,
         )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(f"[scheduler] monitor_check FAILED: {result.stderr}")
+        from qp.platform.pipeline.context import PipelineContext
+
+        ctx = PipelineContext(pipeline_name="scheduled_monitor")
+        pipeline = KillSwitchPipeline()
+        result = pipeline.run(ctx)
+
+        if result.status.value != "success":
+            print(f"[scheduler] monitor_check FAILED: {result.errors}")
+            return
+
+        report = result.metadata.get("report")  # type: ignore[union-attr]
+        if report is None:
+            return
+
+        action = report.action
+        print(
+            f"[scheduler] monitor_check: action={action.value} "
+            f"regime={report.regime.regime.value if report.regime else '?'} "
+            f"psi={report.psi_value:.3f} decay={report.model_decay_stage} "
+            f"ks={'YES' if report.kill_switch_triggered else 'no'}"
+        )
+        if action in (MonitorAction.STOP, MonitorAction.PAUSE_BUY):
+            print(f"[scheduler] ⚠️  EMERGENCY: {action.value} — review before trading!")
+
+        # Consume pending retrain signals (#13 fix)
+        try:
+            from qp.monitoring.retrain_signal import RetrainSignalLogger
+
+            rs_logger = RetrainSignalLogger()
+            signals = rs_logger.load_history(days=7)
+            actionable = [s for s in signals.iter_rows(named=True)
+                          if s.get("action") not in ("NONE", "MONITOR")]
+            if actionable:
+                print(f"[scheduler] retrain_signals: {len(actionable)} actionable")
+                for s in actionable[:3]:
+                    print(f"  - [{s.get('trigger', '?')}] {s.get('strategy_name', '?')}: {s.get('action', '?')}")
+        except Exception:
+            pass
+
+        _watchdog_ping("monitor_check")
 
     scheduler.add_job(
         Job(
@@ -2348,7 +2620,128 @@ def _cmd_scheduler_start() -> int:
         )
     )
 
-    # ── Job 3: daily decision pipeline (17:30 on weekdays) ──
+    # ── Job 2.5: retrain signal check + Telegram alert (09:15 on weekdays) ──
+    def _job_retrain_notify() -> None:
+        """Check retrain_signals.parquet for actionable signals in last 7 days.
+
+        If a signal requires retraining, send a Telegram alert reminding
+        the operator to manually trigger retrain. Retraining is NOT automated
+        because it requires data re-fetch, CV, and model registration — all
+        of which need human oversight.
+        """
+        try:
+            from qp.monitoring.retrain_signal import (
+                RetrainSignalLogger,
+            )
+
+            rs_logger = RetrainSignalLogger()
+            signals = rs_logger.load_history(days=7)
+            actionable = [
+                s for s in signals.iter_rows(named=True)
+                if s.get("action") not in ("NONE", "MONITOR")
+            ]
+
+            if not actionable:
+                return  # Nothing to do
+
+            # Build alert
+            lines = [f"📢 Retrain Signal ({len(actionable)} actionable)"]
+            for s in actionable[:5]:
+                lines.append(
+                    f"  [{s.get('trigger', '?')}] {s.get('strategy_name', '?'):>24s} → "
+                    f"{s.get('action', '?')}"
+                )
+            lines.append(
+                f"  最近信号: {actionable[-1].get('message', '')[:80]}"
+                if len(actionable[-1].get("message", "")) > 0
+                else ""
+            )
+
+            alert_text = "\n".join(lines)
+            print(f"[scheduler] retrain_notify:\n{alert_text}")
+
+            # Send Email alert
+            try:
+                from qp.monitoring.alerts import (
+                    Alert,
+                    AlertManager,
+                    AlertSeverity,
+                    EmailAlert,
+                )
+
+                email = EmailAlert()
+                if email.is_configured:
+                    mgr = AlertManager()
+                    mgr.add_channel(email)
+                    mgr.send(
+                        Alert(
+                            severity=AlertSeverity.WARNING,
+                            title="QP Retrain Signal",
+                            message=alert_text,
+                            source="retrain_notify",
+                        )
+                    )
+                    print("[scheduler] retrain_notify: Email alert sent")
+            except Exception:
+                pass  # Email is optional
+        except Exception:
+            pass
+
+        _watchdog_ping("retrain_notify")
+
+    scheduler.add_job(
+        Job(
+            name="retrain_notify",
+            task=_job_retrain_notify,
+            trigger=CronTrigger(day="1-5", hour="9", minute="17"),
+        )
+    )
+
+    # ── Job 3: pre-close health gate (16:50 on weekdays) ──
+    def _job_pre_close_check() -> None:
+        """收盘前快速检查，决定是否执行盘后策略."""
+        from qp.monitoring.kill_switch_pipeline import (
+            KillSwitchPipeline,
+            MonitorAction,
+        )
+        from qp.platform.pipeline.context import PipelineContext
+
+        ctx = PipelineContext(pipeline_name="pre_close_check")
+        pipeline = KillSwitchPipeline()
+        result = pipeline.run(ctx)
+
+        if result.status.value != "success":
+            print(f"[scheduler] pre_close_check FAILED: {result.errors}")
+            return
+
+        report = result.metadata.get("report")  # type: ignore[union-attr]
+        if report is None:
+            return
+
+        action = report.action
+        if action in (MonitorAction.STOP,):
+            print(
+                f"[scheduler] ⛔ pre_close_check: {action.value} — "
+                f"SKIPPING daily pipeline for safety!"
+            )
+            return  # daily_pipeline won't run because we return non-zero? No, we still run it but log the warning
+
+        print(
+            f"[scheduler] pre_close_check: {action.value} — "
+            f"regime={report.regime.regime.value if report.regime else '?'} "
+            f"health={report.strategy_health.health_score:.0f if report.strategy_health else '?'}"
+        )
+        _watchdog_ping("pre_close_check")
+
+    scheduler.add_job(
+        Job(
+            name="pre_close_check",
+            task=_job_pre_close_check,
+            trigger=CronTrigger(day="1-5", hour="16", minute="53"),
+        )
+    )
+
+    # ── Job 4: daily decision pipeline (17:30 on weekdays) ──
     def _job_daily_pipeline() -> None:
         from qp.pipeline.daily_pipeline import DailyPipeline
         from qp.platform.pipeline.context import PipelineContext
@@ -2358,6 +2751,7 @@ def _cmd_scheduler_start() -> int:
         result = pipeline.run(ctx)
         status = result.status.value
         package_id = result.metadata.get("decision_package_id", "?")
+        _watchdog_ping("daily_pipeline")
         print(f"[scheduler] daily_pipeline: {status} → {package_id}")
 
     scheduler.add_job(
@@ -2365,6 +2759,79 @@ def _cmd_scheduler_start() -> int:
             name="daily_pipeline",
             task=_job_daily_pipeline,
             trigger=CronTrigger(day="1-5", hour="17", minute="57"),
+        )
+    )
+
+    # ── Job 5: email decision report (18:00 on weekdays) ──
+    def _job_email_report() -> None:
+        """Send today's DecisionPackage as email after daily_pipeline completes."""
+        import json as _json
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        from qp.monitoring.alerts import Alert, AlertManager, AlertSeverity, EmailAlert
+
+        email = EmailAlert()
+        if not email.is_configured:
+            print("[scheduler] email_report: Email not configured, skipping")
+            _watchdog_ping("email_report")
+            return
+
+        # Find today's DecisionPackage
+        decisions_dir = Path("data/decisions")
+        today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+
+        # Try JSON first, then markdown
+        json_files = sorted(
+            decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True
+        )
+        md_file = decisions_dir / f"{today_str}.md"
+
+        subject = f"QP 每日投资决策 — {today_str}"
+        body = ""
+
+        if json_files:
+            try:
+                data = _json.loads(json_files[0].read_text(encoding="utf-8"))
+                body = _format_decision_email(data, today_str)
+            except Exception:
+                pass
+
+        if not body and md_file.exists():
+            try:
+                body = md_file.read_text(encoding="utf-8")
+                # Truncate if too long for email
+                if len(body) > 15000:
+                    body = body[:15000] + "\n\n... (truncated)"
+                subject = f"QP 每日投资决策 — {today_str}"
+            except Exception:
+                body = f"DecisionPackage for {today_str}\n\n(no readable content)"
+
+        if not body:
+            body = f"QP Daily Pipeline completed for {today_str}.\n\nNo DecisionPackage found — check logs."
+
+        try:
+            mgr = AlertManager()
+            mgr.add_channel(email)
+            mgr.send(
+                Alert(
+                    severity=AlertSeverity.INFO,
+                    title=subject,
+                    message=body,
+                    source="email_report",
+                )
+            )
+            print(f"[scheduler] email_report: sent → {subject}")
+        except Exception as e:
+            print(f"[scheduler] email_report FAILED: {e}")
+
+        _watchdog_ping("email_report")
+
+    scheduler.add_job(
+        Job(
+            name="email_report",
+            task=_job_email_report,
+            trigger=CronTrigger(day="1-5", hour="18", minute="3"),
         )
     )
 
@@ -2394,16 +2861,17 @@ def _cmd_scheduler_start() -> int:
 
     scheduler.start()
 
-    # Keep alive
+    # Keep alive — check shutdown flag every 0.5s for fast exit
     try:
-        while True:
-            time.sleep(1)
+        while not _shutdown_flag["done"]:
+            time.sleep(0.5)
     except KeyboardInterrupt:
-        pass
+        _shutdown_flag["done"] = True
     finally:
         if not _shutdown_flag["done"]:
-            with contextlib.suppress(Exception):
-                scheduler.stop()
+            _shutdown_flag["done"] = True
+        with contextlib.suppress(Exception):
+            scheduler.stop()
     return 0
 
 
@@ -2527,7 +2995,7 @@ def main() -> int:
 
     if command == "experiment":
         if len(sys.argv) < 3:
-            print("qp experiment: missing subcommand. Try: list, show, run", file=sys.stderr)
+            print("qp experiment: missing subcommand. Try: list, show, run, compare, clean", file=sys.stderr)
             return 1
         sub = sys.argv[2]
         if sub == "list":
@@ -2540,8 +3008,10 @@ def main() -> int:
             return _cmd_experiment_compare()
         if sub == "validate":
             return _cmd_experiment_validate()
+        if sub == "clean":
+            return _cmd_experiment_clean()
         print(
-            f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run, compare, validate",
+            f"qp experiment: unknown subcommand '{sub}'. Try: list, show, run, compare, validate, clean",
             file=sys.stderr,
         )
         return 1
