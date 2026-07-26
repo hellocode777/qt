@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page_title | default("QP Decision Center") }}</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+
+  <link rel="stylesheet" href="/static/css/cockpit.css">
+</head>
+<body x-data="cockpitState" class="bg-gray-950 text-gray-100 font-mono min-h-screen">
+
+  <!-- Navigation -->
+  <nav class="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-14">
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-3 no-underline">
+          <span class="text-amber-500 font-bold text-lg tracking-tight">◈ QP</span>
+          <span class="text-gray-400 text-sm hidden sm:inline">Decision Center</span>
+        </a>
+
+        <!-- Nav links -->
+        <div class="flex items-center gap-1">
+          <a href="/"
+             class="nav-link {% if request.url.path == '/' %}active{% endif %}"
+             hx-boost="true">
+            Cockpit
+          </a>
+          <a href="/decisions"
+             class="nav-link {% if request.url.path.startswith('/decisions') %}active{% endif %}"
+             hx-boost="true">
+            Decisions
+          </a>
+          <a href="/health"
+             class="nav-link {% if request.url.path == '/health' %}active{% endif %}"
+             hx-boost="true">
+            Health
+          </a>
+        </div>
+
+        <!-- Status indicator -->
+        <div class="flex items-center gap-2 text-xs text-gray-500">
+          <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          <span class="hidden sm:inline">{{ system_state.label if system_state else "NORMAL" }}</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-gray-800 mt-12 py-4 text-center text-xs text-gray-600">
+    QP Decision Center v0.1.0 — Human-in-the-loop Decision Support System
+    &nbsp;|&nbsp;
+    <span class="text-gray-500">Read-only. All investment decisions are your responsibility.</span>
+  </footer>
+
+  <script src="/static/js/cockpit.js"></script>
+</body>
+</html>

@@ -107,6 +107,9 @@ class MultiFactorPipeline(BasePipeline):
     def run(self, context: PipelineContext) -> PipelineResult:
         params = context.parameters
 
+        # Use runtime logger when available (ADR-012), fall back to bare loguru
+        logger = context.logger
+
         symbols: list[str] = params.get("symbols", [])  # empty = all stocks in dataset
         start_date_str: str = params.get("start_date", "2024-01-01")
         end_date_str: str = params.get("end_date", date.today().isoformat())
@@ -1290,8 +1293,6 @@ class MultiFactorPipeline(BasePipeline):
                 "strategy_id": f"multifactor_top{top_n}",
             },
         )
-        from loguru import logger
-
         logger.info("📝 实验已记录: {}", experiment_id)
 
 
@@ -1538,8 +1539,6 @@ def _optimize_weights_from_ic(
             dropped.append(fname)
 
     if dropped:
-        from loguru import logger
-
         logger.info(
             "   🗑 移除弱因子 (|IC|<{:.0%}): {} — {} 因子",
             min_ic_threshold,

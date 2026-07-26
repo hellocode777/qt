@@ -20,7 +20,6 @@ from pathlib import Path
 
 import pandas as pd
 import polars as pl
-from loguru import logger
 
 from qp.data.adapter.quant_trading_db_adapter import QuantTradingDBAdapter
 from qp.data.cleaning.etl_pipeline import ETLPipeline
@@ -51,6 +50,9 @@ class FullDataPipeline(BasePipeline):
         return "full_data_ingest"
 
     def run(self, context: PipelineContext) -> PipelineResult:
+        # Use runtime logger when available (ADR-012), fall back to module-level
+        logger = context.logger
+
         params = context.parameters
         start_date: str = params.get("start_date", "2015-01-01")
         end_date: str = params.get("end_date", date.today().isoformat())

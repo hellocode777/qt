@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% if detail is none %}
+<!-- Not Found -->
+<div class="flex flex-col items-center justify-center py-24 text-center">
+  <div class="text-6xl mb-4">🔍</div>
+  <h1 class="text-xl font-bold text-gray-300 mb-2">Decision Not Found</h1>
+  <p class="text-gray-500 mb-4">Package <code class="text-amber-400 bg-gray-800 px-2 py-1 rounded text-sm">{{ package_id }}</code> does not exist.</p>
+  <a href="/decisions" class="text-blue-400 hover:text-blue-300 text-sm">← Back to Decision History</a>
+</div>
+{% else %}
+<!-- Decision Detail -->
+<div class="mb-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-lg font-bold text-gray-100">
+        Decision Package: <span class="text-amber-400 font-mono">{{ detail.package_id }}</span>
+      </h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Date: {{ detail.date }} | Generated: {{ detail.generated_at_short }}
+      </p>
+    </div>
+    <a href="/decisions" class="text-sm text-blue-400 hover:text-blue-300">← Back to History</a>
+  </div>
+</div>
+
+<!-- Regime + Strategy Health row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+  {% include "components/regime_card.html" %}
+  <div class="card">
+    <div class="card-header"><span>📊 Strategy Signals</span></div>
+    <div class="card-body">
+      <div class="space-y-2">
+        {% for sig in detail.strategy_signals %}
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-gray-400">{{ sig.strategy_id }}</span>
+          <span class="font-mono text-gray-300">{{ sig.count }} signals</span>
+        </div>
+        {% endfor %}
+        <div class="text-xs text-gray-500 mt-2">
+          Ensemble: {{ detail.ensemble_method }} | Effective Top-N: {{ detail.effective_top_n }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recommendations -->
+<div class="card mb-4">
+  <div class="card-header">
+    <span>📋 Recommendations</span>
+    <span class="text-xs text-gray-500">{{ detail.report.n_buys }} BUY / {{ detail.report.n_sells }} SELL</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="overflow-x-auto">
+      <table class="data-table w-full">
+        <thead>
+          <tr>
+            <th>#</th><th>Symbol</th><th>Action</th><th>Weight</th>
+            <th>Qty</th><th>Price</th><th>Cost</th>
+            <th>Reason</th><th>Conf</th><th>Strategy</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rec in detail.buys %}
+          <tr>
+            <td class="text-gray-500 text-xs">{{ loop.index }}</td>
+            <td class="font-mono font-bold text-gray-200">{{ rec.symbol }}</td>
+            <td><span class="badge badge-green text-xs">BUY</span></td>
+            <td class="font-mono text-gray-300">{{ "%.1f"|format(rec.target_weight_pct) }}%</td>
+            <td class="font-mono text-gray-400 text-xs">{{ rec.quantity_shares }}</td>
+            <td class="font-mono text-gray-400 text-xs">{{ "%.2f"|format(rec.estimated_price) }}</td>
+            <td class="font-mono text-gray-500 text-xs">{{ "%.2f"|format(rec.estimated_cost) }}</td>
+            <td class="text-xs text-gray-400">{{ rec.reason }}</td>
+            <td class="font-mono text-xs text-gray-400">{{ rec.confidence_pct }}%</td>
+            <td class="text-xs text-gray-500">{{ rec.strategy[:20] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Risk Audit Summary -->
+<div class="card mb-4">
+  <div class="card-header"><span>⚠️ Risk Audit</span></div>
+  <div class="card-body">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      <div class="stat-tile">
+        <div class="stat-label">Candidates</div>
+        <div class="stat-value">{{ detail.risk_audit.candidates_in }} → {{ detail.risk_audit.candidates_out }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Risk Check</div>
+        <div class="stat-value">{% if detail.risk_audit.passed %}✅{% else %}⚠️{% endif %}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Dropped</div>
+        <div class="stat-value text-red-400">{{ detail.risk_audit.dropped_symbols | length }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Est. Cost</div>
+        <div class="stat-value text-amber-400">{{ "%.3f"|format(detail.estimated_cost_pct) }}%</div>
+      </div>
+    </div>
+    {% if detail.risk_audit.entries %}
+    <div class="text-xs text-gray-500 space-y-1">
+      {% for entry in detail.risk_audit.entries %}
+      <div class="p-1.5 bg-gray-800/50 rounded">{{ entry.detail }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Human Review -->
+<div class="card">
+  <div class="card-header"><span>✍️ Human Review</span></div>
+  <div class="card-body">
+    <div class="flex items-center gap-4 text-sm">
+      <div>
+        <span class="text-gray-500">Reviewed: </span>
+        {% if detail.human_review.reviewed %}
+        <span class="text-green-400">✅ Yes</span>
+        {% else %}
+        <span class="text-red-400">❌ Pending</span>
+        {% endif %}
+      </div>
+      <div>
+        <span class="text-gray-500">Executed: </span>
+        {% if detail.human_review.executed %}
+        <span class="text-green-400">✅ Yes</span>
+        {% else %}
+        <span class="text-gray-600">❌ Not yet</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if detail.human_review.notes %}
+    <div class="mt-2 text-xs text-gray-400">{{ detail.human_review.notes }}</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}

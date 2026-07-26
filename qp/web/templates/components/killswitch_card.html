@@ -1,0 +1,63 @@
+<!-- Kill Switch Status Card -->
+<div class="card mt-4">
+  <div class="card-header">
+    <span>🛡️ Kill Switch Status</span>
+    <span class="text-xs text-gray-500">
+      {% if health %}
+      Action: <span class="text-amber-400">{{ health.action | default("ok") | upper }}</span>
+      {% endif %}
+    </span>
+  </div>
+
+  <div class="card-body">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Kill Switch Level -->
+      <div class="flex items-center gap-4">
+        <div class="text-3xl">
+          {% if health and health.kill_switch_level == "NORMAL" %}🟢
+          {% elif health and health.kill_switch_level == "WARNING" %}🟡
+          {% elif health and health.kill_switch_level == "HALT_BUY" %}🟠
+          {% elif health and health.kill_switch_level == "FULL_STOP" %}🔴
+          {% else %}🟢{% endif %}
+        </div>
+        <div>
+          <div class="text-sm text-gray-500">Kill Switch Level</div>
+          <div class="text-lg font-bold {{ 'text-green-400' if not health or health.kill_switch_level == 'NORMAL' else 'text-yellow-400' if health.kill_switch_level == 'WARNING' else 'text-orange-400' if health.kill_switch_level == 'HALT_BUY' else 'text-red-400' }}">
+            {{ health.kill_level_label if health else "正常 / NORMAL" }}
+          </div>
+          <div class="text-xs text-gray-500 mt-1">
+            Triggered: <span class="{{ 'text-red-400' if health and health.kill_switch_triggered else 'text-green-400' }}">
+              {{ "YES" if health and health.kill_switch_triggered else "NO" }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- System State -->
+      <div class="flex items-center gap-4">
+        <div class="text-3xl">{{ system_state.icon }}</div>
+        <div>
+          <div class="text-sm text-gray-500">System State</div>
+          <div class="text-lg font-bold {{ 'text-green-400' if system_state.state == 'NORMAL' else 'text-yellow-400' if system_state.state == 'WARNING' else 'text-orange-400' if system_state.state in ('PAUSED', 'RECOVERY') else 'text-red-400' }}">
+            {{ system_state.label }}
+          </div>
+          <div class="text-xs text-gray-500 mt-1">
+            New positions: <span class="{{ 'text-green-400' if system_state.can_open_positions else 'text-red-400' }}">
+              {{ "ALLOWED" if system_state.can_open_positions else "BLOCKED" }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reason -->
+    {% if system_state.reason %}
+    <div class="mt-3 p-2 bg-gray-800/50 border border-gray-700 rounded text-xs text-gray-400">
+      <span class="text-gray-500">Reason: </span>{{ system_state.reason }}
+      {% if system_state.source %}
+      <span class="text-gray-600 ml-2">(source: {{ system_state.source }})</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>

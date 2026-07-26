@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from qp.monitoring.alerts import Alert, AlertManager, AlertSeverity, EmailAlert
-from qp.platform.cli.main import _format_decision_email
+from qp.platform.cli.commands.scheduler import format_decision_email
 
 # Find latest DecisionPackage
 decisions_dir = Path("data/decisions")
@@ -18,7 +18,7 @@ dp_path = json_files[0]
 print(f"Loading: {dp_path.name}")
 
 dp = json.loads(dp_path.read_text(encoding="utf-8"))
-body = _format_decision_email(dp, dp_path.stem)
+body = format_decision_email(dp, dp_path.stem)
 
 print("=== Email Preview ===")
 print(body)

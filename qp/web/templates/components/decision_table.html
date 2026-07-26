@@ -1,0 +1,129 @@
+<!-- Today's Decisions Table -->
+<div class="card mt-4">
+  <div class="card-header">
+    <span>📋 Today's Decisions</span>
+    <span class="text-xs text-gray-500">
+      {{ decision.report.n_buys }} BUY / {{ decision.report.n_sells }} SELL
+      &nbsp;|&nbsp;
+      {{ decision.report.cost_summary }}
+    </span>
+  </div>
+
+  <div class="card-body p-0">
+    <!-- Tab switcher: BUY / SELL -->
+    <div class="flex border-b border-gray-800" x-data="{ tab: 'BUY' }">
+      <button @click="tab = 'BUY'"
+              :class="tab === 'BUY' ? 'border-amber-500 text-amber-400' : 'border-transparent text-gray-500 hover:text-gray-300'"
+              class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">
+        🟢 BUY ({{ decision.buys | length }})
+      </button>
+      <button @click="tab = 'SELL'"
+              :class="tab === 'SELL' ? 'border-red-500 text-red-400' : 'border-transparent text-gray-500 hover:text-gray-300'"
+              class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">
+        🔴 SELL ({{ decision.sells | length }})
+      </button>
+
+      <!-- BUY Table -->
+      <div class="w-full">
+        <div x-show="tab === 'BUY'" class="overflow-x-auto">
+          <table class="data-table w-full">
+            <thead>
+              <tr>
+                <th class="w-8">#</th>
+                <th>Symbol</th>
+                <th>Weight</th>
+                <th>Price</th>
+                <th>Qty</th>
+                <th>Cost</th>
+                <th>Reason</th>
+                <th>Conf</th>
+                <th>Strategy</th>
+                <th class="w-8">⚠</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rec in decision.buys %}
+              <tr class="hover:bg-gray-800/50 transition-colors">
+                <td class="text-gray-500 text-xs">{{ loop.index }}</td>
+                <td class="font-mono font-bold text-gray-200">{{ rec.symbol }}</td>
+                <td class="font-mono text-gray-300">{{ "%.1f"|format(rec.target_weight_pct) }}%</td>
+                <td class="font-mono text-gray-400 text-xs">{{ "%.2f"|format(rec.estimated_price) }}</td>
+                <td class="font-mono text-gray-400 text-xs">{{ rec.quantity_shares }}</td>
+                <td class="font-mono text-gray-500 text-xs">{{ "%.2f"|format(rec.estimated_cost) }}</td>
+                <td class="text-xs text-gray-400 max-w-48 truncate" title="{{ rec.reason }}">{{ rec.reason }}</td>
+                <td>
+                  <div class="flex items-center gap-1">
+                    <div class="w-12 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div class="h-full rounded-full {{ 'bg-green-500' if rec.confidence_pct >= 80 else 'bg-yellow-500' if rec.confidence_pct >= 60 else 'bg-orange-500' }}"
+                           style="width: {{ rec.confidence_pct }}%"></div>
+                    </div>
+                    <span class="text-xs font-mono text-gray-500">{{ rec.confidence_pct }}%</span>
+                  </div>
+                </td>
+                <td class="text-xs text-gray-500">{{ rec.strategy[:20] }}</td>
+                <td>
+                  {% if rec.risk_warnings %}
+                  <span class="text-yellow-500 cursor-help text-xs" title="{{ rec.risk_warnings | join('; ') }}">⚠</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- SELL Table -->
+        <div x-show="tab === 'SELL'" class="overflow-x-auto">
+          {% if decision.sells %}
+          <table class="data-table w-full">
+            <thead>
+              <tr>
+                <th class="w-8">#</th>
+                <th>Symbol</th>
+                <th>Cur Weight</th>
+                <th>Price</th>
+                <th>Qty</th>
+                <th>Cost</th>
+                <th>Reason</th>
+                <th>Conf</th>
+                <th>Strategy</th>
+                <th class="w-8">⚠</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rec in decision.sells %}
+              <tr class="hover:bg-gray-800/50 transition-colors">
+                <td class="text-gray-500 text-xs">{{ loop.index }}</td>
+                <td class="font-mono font-bold text-red-300">{{ rec.symbol }}</td>
+                <td class="font-mono text-gray-300">{{ "%.1f"|format(rec.current_weight_pct) }}%</td>
+                <td class="font-mono text-gray-400 text-xs">{{ "%.2f"|format(rec.estimated_price) }}</td>
+                <td class="font-mono text-gray-400 text-xs">{{ rec.quantity_shares }}</td>
+                <td class="font-mono text-gray-500 text-xs">{{ "%.2f"|format(rec.estimated_cost) }}</td>
+                <td class="text-xs text-red-400 max-w-48 truncate" title="{{ rec.reason }}">{{ rec.reason }}</td>
+                <td>
+                  <div class="flex items-center gap-1">
+                    <div class="w-12 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div class="h-full rounded-full bg-red-500"
+                           style="width: {{ rec.confidence_pct }}%"></div>
+                    </div>
+                    <span class="text-xs font-mono text-gray-500">{{ rec.confidence_pct }}%</span>
+                  </div>
+                </td>
+                <td class="text-xs text-gray-500">{{ rec.strategy[:20] }}</td>
+                <td>
+                  {% if rec.risk_warnings %}
+                  <span class="text-yellow-500 cursor-help text-xs" title="{{ rec.risk_warnings | join('; ') }}">⚠</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <div class="p-8 text-center text-gray-500 text-sm">No SELL recommendations today.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

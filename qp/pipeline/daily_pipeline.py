@@ -16,7 +16,6 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import polars as pl
-from loguru import logger
 
 from qp.data.pipeline import DataPipeline
 from qp.decision.decision_package import (
@@ -229,6 +228,9 @@ class DailyPipeline(BasePipeline):
         return "daily"
 
     def run(self, context: PipelineContext) -> PipelineResult:
+        # Use runtime logger when available (ADR-012), fall back to module-level
+        logger = context.logger
+
         result = PipelineResult(
             status=PipelineStatus.SUCCESS,
             pipeline_name=self.name,

@@ -1,0 +1,61 @@
+<!-- Strategy Health Card -->
+<div class="card" x-data="{ score: {{ health.strategy_health_score | default(100) | int }} }">
+  <div class="card-header">
+    <span>💚 Strategy Health</span>
+    <span class="text-xs text-gray-500">{{ health.model_decay_stage | default("HEALTHY") }}</span>
+  </div>
+
+  <div class="card-body space-y-4">
+    <!-- Health Score Gauge -->
+    <div class="flex items-center justify-center">
+      <div class="relative w-32 h-32">
+        <canvas id="healthGauge" width="128" height="128"></canvas>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <span class="text-2xl font-bold font-mono"
+                :class="score >= 80 ? 'text-green-400' : score >= 60 ? 'text-yellow-400' : score >= 40 ? 'text-orange-400' : 'text-red-400'"
+                x-text="score"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Health Level Badge -->
+    <div class="text-center">
+      <span class="badge {{ health.health_badge }} text-sm font-bold">
+        {{ health.health_label }}
+      </span>
+    </div>
+
+    <!-- Key Metrics Grid -->
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div>
+        <span class="text-gray-500">Rolling IC</span>
+        <div class="font-mono {{ 'text-green-400' if health.rolling_ic > 0.02 else 'text-yellow-400' if health.rolling_ic > 0 else 'text-red-400' }}">
+          {{ "%.4f" | format(health.rolling_ic | default(0)) }}
+        </div>
+      </div>
+      <div>
+        <span class="text-gray-500">PSI Value</span>
+        <div class="font-mono {{ 'text-green-400' if health.psi_value < 0.1 else 'text-yellow-400' if health.psi_value < 0.25 else 'text-red-400' }}">
+          {{ "%.3f" | format(health.psi_value | default(0)) }}
+        </div>
+      </div>
+      <div>
+        <span class="text-gray-500">Model Decay</span>
+        <div class="font-mono text-gray-300">{{ health.model_decay_stage | default("HEALTHY") }}</div>
+      </div>
+      <div>
+        <span class="text-gray-500">Kill Switch</span>
+        <div class="font-mono">
+          <span class="badge {{ health.kill_level_badge }} text-xs">{{ health.kill_level_label }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    {% if health.alerts_summary %}
+    <div class="p-2 bg-yellow-900/20 border border-yellow-900/50 rounded text-xs text-yellow-400">
+      ⚠ {{ health.alerts_summary }}
+    </div>
+    {% endif %}
+  </div>
+</div>

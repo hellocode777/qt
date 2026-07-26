@@ -1,0 +1,54 @@
+<!-- Market Regime Card -->
+<div class="card">
+  <div class="card-header">
+    <span>🌍 Market Regime</span>
+    <span class="text-xs text-gray-500">{{ decision.regime.summary[:60] if decision.regime.summary else "" }}</span>
+  </div>
+
+  <div class="card-body space-y-4">
+    <!-- Regime Badge -->
+    <div class="flex items-center justify-between">
+      <span class="text-xs text-gray-500 uppercase tracking-wider">Regime State</span>
+      <span class="badge {{ decision.regime.badge_class }} text-sm font-bold">
+        {{ decision.regime.label }}
+      </span>
+    </div>
+
+    <!-- Confidence -->
+    <div>
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="text-gray-500">Confidence</span>
+        <span class="font-mono {{ 'text-green-400' if decision.regime.is_high_confidence else 'text-yellow-400' }}">
+          {{ decision.regime.confidence_pct }}%
+        </span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill {{ 'green' if decision.regime.is_high_confidence else 'yellow' }}"
+             style="width: {{ decision.regime.confidence_pct }}%"></div>
+      </div>
+    </div>
+
+    <!-- Suggested Exposure -->
+    <div>
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="text-gray-500">Position Target</span>
+        <span class="font-mono text-gray-300">{{ decision.regime.suggested_exposure_pct }}%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill blue" style="width: {{ decision.regime.suggested_exposure_pct }}%"></div>
+      </div>
+    </div>
+
+    <!-- Detail Grid -->
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div>
+        <span class="text-gray-500">Trend Strength</span>
+        <div class="font-mono text-gray-300">{{ "%.2f" | format(decision.regime.trend_strength) }}</div>
+      </div>
+      <div>
+        <span class="text-gray-500">Annualized Vol</span>
+        <div class="font-mono text-gray-300">{{ decision.regime.annualized_vol_pct }}%</div>
+      </div>
+    </div>
+  </div>
+</div>

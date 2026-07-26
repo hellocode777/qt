@@ -1,0 +1,353 @@
+{
+  "package_id": "dp-2026-07-26-f18ab09c",
+  "date": "2026-07-26",
+  "generated_at": "2026-07-26T09:20:53.304203+00:00",
+  "lineage": {
+    "dataset_name": "daily_price_main",
+    "dataset_version": "2026-07-26",
+    "dataset_rows": 11142,
+    "dataset_symbols": 18,
+    "feature_versions": {
+      "momentum_20d": "2026-07-26",
+      "volatility_20d": "2026-07-26"
+    },
+    "strategy_versions": {}
+  },
+  "regime": {
+    "regime": "sideways_up",
+    "confidence": 0.4,
+    "suggested_exposure": 0.7,
+    "trend_strength": 0.0,
+    "annualized_vol": 0.0,
+    "summary": "趋势=空头(-0.22) | 波动=正常(0.60) | 宽度=普涨(0.61, 18只)"
+  },
+  "strategy": {
+    "signals": {
+      "momentum_v1.0": 7,
+      "value_v1.0": 7,
+      "multifactor_v1.0": 7
+    },
+    "ensemble_method": "equal_weight",
+    "effective_top_n": 7
+  },
+  "risk_audit": {
+    "candidates_in": 15,
+    "candidates_out": 10,
+    "entries": [
+      {
+        "symbol": "",
+        "violation_type": "risk_limit",
+        "detail": "Sector cap: Financials at 33.3% > 25%",
+        "threshold": "",
+        "actual": "",
+        "action": "warning"
+      },
+      {
+        "symbol": "",
+        "violation_type": "risk_limit",
+        "detail": "Sector cap: Consumer at 33.3% > 25%",
+        "threshold": "",
+        "actual": "",
+        "action": "warning"
+      },
+      {
+        "symbol": "",
+        "violation_type": "risk_limit",
+        "detail": "Correlation: 8 pair(s) > 70%, 5 symbol(s) dropped",
+        "threshold": "",
+        "actual": "",
+        "action": "warning"
+      },
+      {
+        "symbol": "601166/000001",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.830)",
+        "threshold": "0.70",
+        "actual": "0.830",
+        "action": "warning"
+      },
+      {
+        "symbol": "601166/600036",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.824)",
+        "threshold": "0.70",
+        "actual": "0.824",
+        "action": "warning"
+      },
+      {
+        "symbol": "000858/601888",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.801)",
+        "threshold": "0.70",
+        "actual": "0.801",
+        "action": "warning"
+      },
+      {
+        "symbol": "601166/600000",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.798)",
+        "threshold": "0.70",
+        "actual": "0.798",
+        "action": "warning"
+      },
+      {
+        "symbol": "600519/000858",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.789)",
+        "threshold": "0.70",
+        "actual": "0.789",
+        "action": "warning"
+      },
+      {
+        "symbol": "600036/000001",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.788)",
+        "threshold": "0.70",
+        "actual": "0.788",
+        "action": "warning"
+      },
+      {
+        "symbol": "600000/000001",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.748)",
+        "threshold": "0.70",
+        "actual": "0.748",
+        "action": "warning"
+      },
+      {
+        "symbol": "601166/600519",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.741)",
+        "threshold": "0.70",
+        "actual": "0.741",
+        "action": "warning"
+      }
+    ],
+    "dropped_symbols": [
+      "000001",
+      "600000",
+      "600519",
+      "601166",
+      "601888"
+    ],
+    "sector_exposure": {
+      "Financials": 0.2,
+      "RealEstate": 0.1,
+      "Technology": 0.2,
+      "Consumer": 0.30000000000000004,
+      "Healthcare": 0.1,
+      "Energy": 0.1
+    },
+    "passed": false
+  },
+  "estimated_cost_pct": 0.135,
+  "validation": {
+    "momentum_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    },
+    "quality_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    },
+    "value_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    },
+    "multifactor_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    }
+  },
+  "report": {
+    "report_id": "dr-2031a4be",
+    "strategy_id": "multi_strategy_ensemble",
+    "total_capital": 100000,
+    "risk_summary": "风控告警 / Risk Warning (3项) | 持仓 10/15 | 最大行业: Consumer 30%",
+    "market_regime": "sideways_up",
+    "cost_summary": "预估总成本: ¥87 (0.12%) | 交易额: ¥69,344 | 含印花税+佣金+滑点",
+    "n_buys": 10,
+    "n_sells": 0,
+    "total_estimated_cost": 86.68,
+    "recommendations": [
+      {
+        "symbol": "600036",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 200,
+        "estimated_price": 39.2,
+        "estimated_cost": 9.8,
+        "reason": "动量排名 #1 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 1.0,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "000002",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 3200,
+        "estimated_price": 3.07,
+        "estimated_cost": 12.28,
+        "reason": "动量排名 #2 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.95,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "002415",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 200,
+        "estimated_price": 35.49,
+        "estimated_cost": 8.8725,
+        "reason": "动量排名 #3 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.9,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "000858",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 100,
+        "estimated_price": 73.57,
+        "estimated_cost": 9.19625,
+        "reason": "动量排名 #4 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.85,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "600276",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 100,
+        "estimated_price": 53.45,
+        "estimated_cost": 6.6812499999999995,
+        "reason": "动量排名 #5 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.8,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "000651",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 200,
+        "estimated_price": 40.46,
+        "estimated_cost": 10.115,
+        "reason": "动量排名 #6 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.75,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "601318",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 100,
+        "estimated_price": 54.02,
+        "estimated_cost": 6.7525,
+        "reason": "动量排名 #7 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.7,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "300750",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 0,
+        "estimated_price": 383.01,
+        "estimated_cost": 0.0,
+        "reason": "动量排名 #8 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限",
+          "建议股数 0 不足1手(100股)"
+        ],
+        "confidence": 0.65,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "000333",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 100,
+        "estimated_price": 84.5,
+        "estimated_cost": 10.5625,
+        "reason": "动量排名 #9 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.6,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "601012",
+        "action": "BUY",
+        "target_weight_pct": 10.0,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 800,
+        "estimated_price": 12.42,
+        "estimated_cost": 12.42,
+        "reason": "动量排名 #10 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 10.0% 接近 8% 上限"
+        ],
+        "confidence": 0.55,
+        "strategy": "multi_strategy_ensemble"
+      }
+    ]
+  },
+  "human_review": {
+    "reviewed": false,
+    "reviewer": "",
+    "notes": "",
+    "executed": false,
+    "execution_time": ""
+  },
+  "metadata": {
+    "pipeline_run_id": "f18ab09c91dd",
+    "allocator_used": "EqualWeightAllocator"
+  }
+}

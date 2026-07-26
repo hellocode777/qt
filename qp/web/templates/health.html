@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="mb-6">
+  <h1 class="text-lg font-bold text-gray-100">System Health</h1>
+  <p class="text-sm text-gray-500 mt-1">Monitoring overview — Kill Switch, data freshness, model decay.</p>
+</div>
+
+<!-- System State -->
+<div class="card mb-4">
+  <div class="card-header"><span>🏥 System State</span></div>
+  <div class="card-body">
+    <div class="flex items-center gap-4 mb-4">
+      <div class="text-4xl">{{ system_state.icon }}</div>
+      <div>
+        <div class="text-lg font-bold text-gray-200">{{ system_state.label }}</div>
+        <div class="text-xs text-gray-500">
+          New positions: <span class="{{ 'text-green-400' if system_state.can_open_positions else 'text-red-400' }} font-mono">{{ "ALLOWED" if system_state.can_open_positions else "BLOCKED" }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div><span class="text-gray-500">Reason: </span><span class="text-gray-400">{{ system_state.reason }}</span></div>
+      <div><span class="text-gray-500">Source: </span><span class="text-gray-400">{{ system_state.source }}</span></div>
+      <div><span class="text-gray-500">Transitions: </span><span class="font-mono text-gray-400">{{ system_state.n_transitions }}</span></div>
+      <div><span class="text-gray-500">Last Source: </span><span class="text-gray-400">{{ system_state.last_source }}</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Latest Health Check -->
+{% if latest_health %}
+<div class="card mb-4">
+  <div class="card-header">
+    <span>📊 Latest Health Check</span>
+    <span class="text-xs text-gray-500">{{ latest_health.date }}</span>
+  </div>
+  <div class="card-body">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="stat-tile">
+        <div class="stat-label">Health Score</div>
+        <div class="stat-value {{ 'text-green-400' if latest_health.strategy_health_score >= 80 else 'text-yellow-400' if latest_health.strategy_health_score >= 60 else 'text-red-400' }}">
+          {{ latest_health.health_score_pct }}/100
+        </div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Kill Switch</div>
+        <div class="stat-value">
+          <span class="badge {{ latest_health.kill_level_badge }} text-xs">{{ latest_health.kill_level_label }}</span>
+        </div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Rolling IC</div>
+        <div class="stat-value font-mono text-gray-300">{{ "%.4f"|format(latest_health.rolling_ic) }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">PSI</div>
+        <div class="stat-value font-mono text-gray-300">{{ "%.3f"|format(latest_health.psi_value) }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Model Decay</div>
+        <div class="stat-value text-gray-300">{{ latest_health.model_decay_stage }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Regime</div>
+        <div class="stat-value text-gray-300">{{ latest_health.regime }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Action</div>
+        <div class="stat-value text-amber-400">{{ latest_health.action | upper }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Alerts</div>
+        <div class="stat-value {{ 'text-yellow-400' if latest_health.n_alerts > 0 else 'text-green-400' }}">{{ latest_health.n_alerts }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mb-4">
+  <div class="card-body text-center py-12">
+    <div class="text-3xl mb-3">📭</div>
+    <p class="text-gray-500">No health log data available yet.</p>
+    <p class="text-gray-600 text-xs mt-1">Run <code class="text-amber-400 bg-gray-800 px-1 rounded">qp monitor check</code> to generate.</p>
+  </div>
+</div>
+{% endif %}
+
+<!-- Health History -->
+{% if has_history %}
+<div class="card">
+  <div class="card-header"><span>📜 Health History</span></div>
+  <div class="card-body p-0">
+    <div class="overflow-x-auto">
+      <table class="data-table w-full">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Health Score</th>
+            <th>Kill Switch</th>
+            <th>Rolling IC</th>
+            <th>PSI</th>
+            <th>Regime</th>
+            <th>Action</th>
+            <th>Alerts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in history %}
+          <tr>
+            <td class="font-mono text-xs text-gray-400">{{ row.date }}</td>
+            <td class="font-mono {{ 'text-green-400' if row.strategy_health_score >= 80 else 'text-yellow-400' if row.strategy_health_score >= 60 else 'text-red-400' }}">
+              {{ row.health_score_pct }}
+            </td>
+            <td><span class="badge {{ row.kill_level_badge }} text-xs">{{ row.kill_level_label }}</span></td>
+            <td class="font-mono text-xs text-gray-400">{{ "%.4f"|format(row.rolling_ic) }}</td>
+            <td class="font-mono text-xs text-gray-400">{{ "%.3f"|format(row.psi_value) }}</td>
+            <td class="text-xs text-gray-400">{{ row.regime }}</td>
+            <td class="text-xs text-amber-400">{{ row.action | upper }}</td>
+            <td class="font-mono text-xs {{ 'text-yellow-400' if row.n_alerts > 0 else 'text-gray-500' }}">{{ row.n_alerts }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
