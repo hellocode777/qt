@@ -340,11 +340,11 @@
     ]
   },
   "human_review": {
-    "reviewed": false,
-    "reviewer": "",
+    "reviewed": true,
+    "reviewer": "webui",
     "notes": "",
-    "executed": false,
-    "execution_time": ""
+    "executed": true,
+    "execution_time": "2026-07-26T14:32:27.148744+00:00"
   },
   "metadata": {
     "pipeline_run_id": "fa6e39651447",

@@ -1,0 +1,76 @@
+<!-- Human Review Panel — HTMX-powered interactive review/execute controls -->
+<div id="human-review-panel" class="card mt-4">
+  <div class="card-header">
+    <span>&#9997; 人工审核 Human Review</span>
+    <span class="c-muted" style="font-size: 12px;">
+      Package: <code>{{ decision.package_id }}</code>
+    </span>
+  </div>
+  <div class="card-body">
+    {% if decision.human_review.reviewed %}
+    <!-- REVIEWED state -->
+    <p style="margin-bottom: 12px; color: var(--green); font-weight: 600;">
+      &#9989; 已审核 — 我理解并同意以上所有交易建议
+    </p>
+    {% else %}
+    <!-- NOT REVIEWED — show review button -->
+    <div style="margin-bottom: 12px; padding: 16px; background: #e3f2fd; border-left: 4px solid var(--blue); border-radius: 0 8px 8px 0;">
+      <p style="font-size: 14px; margin-bottom: 10px;">
+        &#128073; <strong>请逐条检查以上交易建议</strong>，确认无误后点击审核通过。
+      </p>
+      <form hx-post="/review/{{ decision.package_id }}"
+            hx-target="#human-review-panel"
+            hx-swap="outerHTML"
+            style="display: flex; gap: 8px; align-items: flex-end;">
+        <input type="text" name="notes" placeholder="审核备注（可选）"
+               style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;">
+        <button type="submit"
+                style="padding: 8px 20px; background: var(--blue); color: #fff; border: none; border-radius: 6px;
+                       font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+          &#9989; 审核通过 Approve
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if decision.human_review.reviewed and not decision.human_review.executed %}
+    <!-- REVIEWED but NOT EXECUTED — show execute button -->
+    <div style="padding: 16px; background: #fff8e1; border-left: 4px solid var(--amber); border-radius: 0 8px 8px 0;">
+      <p style="font-size: 14px; margin-bottom: 10px;">
+        &#128073; 审核已通过。请在券商平台完成实际交易后，点击「确认已执行」。
+        <br><span class="c-muted" style="font-size: 12px;">
+          QP 不直接下单 — 你需要在自己的券商账户中手动执行交易。
+        </span>
+      </p>
+      <form hx-post="/execute/{{ decision.package_id }}"
+            hx-target="#human-review-panel"
+            hx-swap="outerHTML">
+        <button type="submit"
+                style="padding: 8px 20px; background: var(--amber); color: #fff; border: none; border-radius: 6px;
+                       font-size: 13px; font-weight: 600; cursor: pointer;">
+          &#9989; 确认已执行 Confirm Executed
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if decision.human_review.reviewed and decision.human_review.executed %}
+    <!-- DONE — both reviewed and executed -->
+    <p style="color: var(--green); font-weight: 600;">
+      &#9989; 已审核 & 已执行 — 决策闭环完成
+    </p>
+    {% if decision.human_review.execution_time %}
+    <p class="c-muted" style="font-size: 12px; margin-top: 4px;">
+      执行时间: {{ decision.human_review.execution_time[:19] }}
+    </p>
+    {% endif %}
+    {% endif %}
+
+    <!-- Notes display -->
+    {% if decision.human_review.notes %}
+    <div class="reason-bar" style="margin-top: 8px;">
+      <strong>备注:</strong> {{ decision.human_review.notes }}
+    </div>
+    {% endif %}
+  </div>
+</div>

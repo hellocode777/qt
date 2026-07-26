@@ -6,13 +6,17 @@ GET "/" — The main Decision Cockpit showing:
   - Today's BUY/SELL candidates
   - Risk audit summary
   - Kill switch status
+  - Human review panel
+
+POST "/review/{package_id}" — Mark decision as human-reviewed
+POST "/execute/{package_id}" — Mark decision as executed
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from loguru import logger
 
 from qp.web.routers._templates import templates
@@ -34,18 +38,13 @@ def _get_service(request: Request, name: str, cls: type) -> Any:
 
 @router.get("/")
 async def dashboard(request: Request) -> Any:
-    """Decision Cockpit homepage.
-
-    Answers the 5 key questions an investor asks each day.
-    """
+    """Decision Cockpit homepage."""
     decision_svc = _get_service(request, "decision_service", DecisionService)
     health_svc = _get_service(request, "health_service", HealthService)
 
-    # Load data
     decision = decision_svc.latest()
     system_state = health_svc.system_state()
     health = health_svc.latest_health()
-
     has_data = decision is not None
 
     if has_data:
@@ -56,8 +55,6 @@ async def dashboard(request: Request) -> Any:
             len(decision.get("buys", [])),
             len(decision.get("sells", [])),
         )
-    else:
-        logger.warning("Dashboard loaded with no decision data")
 
     return templates.TemplateResponse(
         request=request,
@@ -69,4 +66,42 @@ async def dashboard(request: Request) -> Any:
             "has_data": has_data,
             "page_title": "QP Decision Center",
         },
+    )
+
+
+@router.post("/review/{package_id}")
+async def mark_reviewed(request: Request, package_id: str, notes: str = Form("")) -> Any:
+    """Mark a decision package as reviewed by human."""
+    decision_svc = _get_service(request, "decision_service", DecisionService)
+    result = decision_svc.mark_reviewed(package_id, notes=notes)
+    if result is None:
+        return templates.TemplateResponse(
+            request=request,
+            name="components/human_review_panel.html",
+            context={"decision": None, "error": "Decision package not found"},
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="components/human_review_panel.html",
+        context={"decision": result},
+    )
+
+
+@router.post("/execute/{package_id}")
+async def mark_executed(request: Request, package_id: str) -> Any:
+    """Mark a decision package as executed (trades placed)."""
+    decision_svc = _get_service(request, "decision_service", DecisionService)
+    result = decision_svc.mark_executed(package_id)
+    if result is None:
+        return templates.TemplateResponse(
+            request=request,
+            name="components/human_review_panel.html",
+            context={"decision": None, "error": "Decision package not found"},
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="components/human_review_panel.html",
+        context={"decision": result},
     )

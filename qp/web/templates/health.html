@@ -2,128 +2,134 @@
 
 {% block content %}
 
-<div class="mb-6">
-  <h1 class="text-lg font-bold text-gray-100">System Health</h1>
-  <p class="text-sm text-gray-500 mt-1">Monitoring overview — Kill Switch, data freshness, model decay.</p>
+<div class="page-header">
+  <div>
+    <h1>系统健康 System Health</h1>
+    <div class="meta">监控概览 — 熔断开关、数据新鲜度、模型衰减</div>
+  </div>
 </div>
 
 <!-- System State -->
-<div class="card mb-4">
-  <div class="card-header"><span>🏥 System State</span></div>
+<div class="card">
+  <div class="card-header"><span>&#127973; 系统状态 System State</span></div>
   <div class="card-body">
-    <div class="flex items-center gap-4 mb-4">
-      <div class="text-4xl">{{ system_state.icon }}</div>
+    <div class="ks-indicator" style="margin-bottom: 16px;">
+      <div class="ks-icon">{{ system_state.icon }}</div>
       <div>
-        <div class="text-lg font-bold text-gray-200">{{ system_state.label }}</div>
-        <div class="text-xs text-gray-500">
-          New positions: <span class="{{ 'text-green-400' if system_state.can_open_positions else 'text-red-400' }} font-mono">{{ "ALLOWED" if system_state.can_open_positions else "BLOCKED" }}</span>
+        <div class="ks-level {% if system_state.state == 'NORMAL' %}c-green{% elif system_state.state == 'WARNING' %}c-yellow{% elif system_state.state in ('PAUSED', 'RECOVERY') %}c-orange{% else %}c-red{% endif %}">
+          {{ system_state.label }}
+        </div>
+        <div class="ks-detail">
+          新开仓: <strong class="{% if system_state.can_open_positions %}c-green{% else %}c-red{% endif %}">
+            {{ "允许" if system_state.can_open_positions else "禁止" }}
+          </strong>
         </div>
       </div>
     </div>
-    <div class="grid grid-cols-2 gap-2 text-xs">
-      <div><span class="text-gray-500">Reason: </span><span class="text-gray-400">{{ system_state.reason }}</span></div>
-      <div><span class="text-gray-500">Source: </span><span class="text-gray-400">{{ system_state.source }}</span></div>
-      <div><span class="text-gray-500">Transitions: </span><span class="font-mono text-gray-400">{{ system_state.n_transitions }}</span></div>
-      <div><span class="text-gray-500">Last Source: </span><span class="text-gray-400">{{ system_state.last_source }}</span></div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+      <div><span class="c-muted">原因: </span>{{ system_state.reason }}</div>
+      <div><span class="c-muted">来源: </span>{{ system_state.source }}</div>
+      <div><span class="c-muted">状态转换次数: </span><span class="font-mono">{{ system_state.n_transitions }}</span></div>
+      <div><span class="c-muted">最近来源: </span>{{ system_state.last_source }}</div>
     </div>
   </div>
 </div>
 
 <!-- Latest Health Check -->
 {% if latest_health %}
-<div class="card mb-4">
+<div class="card mt-4">
   <div class="card-header">
-    <span>📊 Latest Health Check</span>
-    <span class="text-xs text-gray-500">{{ latest_health.date }}</span>
+    <span>&#128202; 最新健康检查</span>
+    <span class="c-muted" style="font-size: 13px;">{{ latest_health.date }}</span>
   </div>
   <div class="card-body">
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div class="stat-row">
       <div class="stat-tile">
-        <div class="stat-label">Health Score</div>
-        <div class="stat-value {{ 'text-green-400' if latest_health.strategy_health_score >= 80 else 'text-yellow-400' if latest_health.strategy_health_score >= 60 else 'text-red-400' }}">
+        <div class="stat-label">健康评分</div>
+        <div class="stat-value {% if latest_health.strategy_health_score >= 80 %}c-green{% elif latest_health.strategy_health_score >= 60 %}c-yellow{% else %}c-red{% endif %}">
           {{ latest_health.health_score_pct }}/100
         </div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Kill Switch</div>
-        <div class="stat-value">
-          <span class="badge {{ latest_health.kill_level_badge }} text-xs">{{ latest_health.kill_level_label }}</span>
-        </div>
+        <div class="stat-label">熔断开关</div>
+        <div class="stat-value"><span class="badge {{ latest_health.kill_level_badge }}" style="font-size: 12px;">{{ latest_health.kill_level_label }}</span></div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Rolling IC</div>
-        <div class="stat-value font-mono text-gray-300">{{ "%.4f"|format(latest_health.rolling_ic) }}</div>
+        <div class="stat-label">滚动 IC</div>
+        <div class="stat-value font-mono">{{ "%.4f" | format(latest_health.rolling_ic) }}</div>
       </div>
       <div class="stat-tile">
         <div class="stat-label">PSI</div>
-        <div class="stat-value font-mono text-gray-300">{{ "%.3f"|format(latest_health.psi_value) }}</div>
+        <div class="stat-value font-mono">{{ "%.3f" | format(latest_health.psi_value) }}</div>
+      </div>
+    </div>
+    <div class="stat-row" style="margin-top: 12px;">
+      <div class="stat-tile">
+        <div class="stat-label">模型衰减</div>
+        <div class="stat-value" style="font-size: 16px;">{{ latest_health.model_decay_stage }}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Model Decay</div>
-        <div class="stat-value text-gray-300">{{ latest_health.model_decay_stage }}</div>
+        <div class="stat-label">市场状态</div>
+        <div class="stat-value" style="font-size: 16px;">{{ latest_health.regime }}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Regime</div>
-        <div class="stat-value text-gray-300">{{ latest_health.regime }}</div>
+        <div class="stat-label">建议操作</div>
+        <div class="stat-value c-amber" style="font-size: 16px;">{{ latest_health.action | upper }}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Action</div>
-        <div class="stat-value text-amber-400">{{ latest_health.action | upper }}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Alerts</div>
-        <div class="stat-value {{ 'text-yellow-400' if latest_health.n_alerts > 0 else 'text-green-400' }}">{{ latest_health.n_alerts }}</div>
+        <div class="stat-label">告警数</div>
+        <div class="stat-value {% if latest_health.n_alerts > 0 %}c-yellow{% else %}c-green{% endif %}">{{ latest_health.n_alerts }}</div>
       </div>
     </div>
   </div>
 </div>
 {% else %}
-<div class="card mb-4">
-  <div class="card-body text-center py-12">
-    <div class="text-3xl mb-3">📭</div>
-    <p class="text-gray-500">No health log data available yet.</p>
-    <p class="text-gray-600 text-xs mt-1">Run <code class="text-amber-400 bg-gray-800 px-1 rounded">qp monitor check</code> to generate.</p>
+<div class="card mt-4">
+  <div class="card-body">
+    <div class="empty-state">
+      <div class="icon">&#128232;</div>
+      <h2>暂无健康检查数据</h2>
+      <p>运行 <code>qp monitor check</code> 来生成健康检查数据</p>
+    </div>
   </div>
 </div>
 {% endif %}
 
 <!-- Health History -->
 {% if has_history %}
-<div class="card">
-  <div class="card-header"><span>📜 Health History</span></div>
-  <div class="card-body p-0">
-    <div class="overflow-x-auto">
-      <table class="data-table w-full">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Health Score</th>
-            <th>Kill Switch</th>
-            <th>Rolling IC</th>
-            <th>PSI</th>
-            <th>Regime</th>
-            <th>Action</th>
-            <th>Alerts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in history %}
-          <tr>
-            <td class="font-mono text-xs text-gray-400">{{ row.date }}</td>
-            <td class="font-mono {{ 'text-green-400' if row.strategy_health_score >= 80 else 'text-yellow-400' if row.strategy_health_score >= 60 else 'text-red-400' }}">
-              {{ row.health_score_pct }}
-            </td>
-            <td><span class="badge {{ row.kill_level_badge }} text-xs">{{ row.kill_level_label }}</span></td>
-            <td class="font-mono text-xs text-gray-400">{{ "%.4f"|format(row.rolling_ic) }}</td>
-            <td class="font-mono text-xs text-gray-400">{{ "%.3f"|format(row.psi_value) }}</td>
-            <td class="text-xs text-gray-400">{{ row.regime }}</td>
-            <td class="text-xs text-amber-400">{{ row.action | upper }}</td>
-            <td class="font-mono text-xs {{ 'text-yellow-400' if row.n_alerts > 0 else 'text-gray-500' }}">{{ row.n_alerts }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+<div class="card mt-4">
+  <div class="card-header"><span>&#128214; 健康历史记录</span></div>
+  <div class="card-body p0">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>日期</th>
+          <th>健康评分</th>
+          <th>熔断状态</th>
+          <th>滚动 IC</th>
+          <th>PSI</th>
+          <th>市场状态</th>
+          <th>建议操作</th>
+          <th>告警</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in history %}
+        <tr>
+          <td class="font-mono c-muted" style="font-size: 12px;">{{ row.date }}</td>
+          <td class="font-mono {% if row.strategy_health_score >= 80 %}c-green{% elif row.strategy_health_score >= 60 %}c-yellow{% else %}c-red{% endif %}">
+            {{ row.health_score_pct }}
+          </td>
+          <td><span class="badge {{ row.kill_level_badge }}" style="font-size: 11px;">{{ row.kill_level_label }}</span></td>
+          <td class="font-mono c-muted" style="font-size: 12px;">{{ "%.4f" | format(row.rolling_ic) }}</td>
+          <td class="font-mono c-muted" style="font-size: 12px;">{{ "%.3f" | format(row.psi_value) }}</td>
+          <td style="font-size: 12px;">{{ row.regime }}</td>
+          <td class="c-amber" style="font-size: 12px;">{{ row.action | upper }}</td>
+          <td class="font-mono {% if row.n_alerts > 0 %}c-yellow{% else %}c-muted{% endif %}" style="font-size: 12px;">{{ row.n_alerts }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 {% endif %}

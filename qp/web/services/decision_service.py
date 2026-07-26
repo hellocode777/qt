@@ -69,6 +69,56 @@ class DecisionService:
             logger.error("Failed to load DecisionPackage {}: {}", package_id, e)
             return None
 
+    def mark_reviewed(self, package_id: str, notes: str = "") -> dict[str, Any] | None:
+        """Mark a decision package as human-reviewed.
+
+        Updates the JSON file on disk and the index.
+        """
+        from pathlib import Path
+
+        path = Path("data/decisions") / f"{package_id}.json"
+        if not path.exists():
+            logger.warning("DecisionPackage not found for review: {}", package_id)
+            return None
+
+        try:
+            pkg = DecisionPackage.from_json(path)
+            pkg.human_review.reviewed = True
+            pkg.human_review.reviewer = "webui"
+            pkg.human_review.notes = notes or pkg.human_review.notes
+            pkg.to_json(path)
+            pkg.update_index()
+            logger.info("DecisionPackage reviewed: {}", package_id)
+            return self._package_to_dict(pkg)
+        except Exception as e:
+            logger.error("Failed to mark reviewed {}: {}", package_id, e)
+            return None
+
+    def mark_executed(self, package_id: str) -> dict[str, Any] | None:
+        """Mark a decision package as executed (trades placed).
+
+        Updates the JSON file on disk and the index.
+        """
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        path = Path("data/decisions") / f"{package_id}.json"
+        if not path.exists():
+            logger.warning("DecisionPackage not found for execution: {}", package_id)
+            return None
+
+        try:
+            pkg = DecisionPackage.from_json(path)
+            pkg.human_review.executed = True
+            pkg.human_review.execution_time = datetime.now(UTC).isoformat()
+            pkg.to_json(path)
+            pkg.update_index()
+            logger.info("DecisionPackage executed: {}", package_id)
+            return self._package_to_dict(pkg)
+        except Exception as e:
+            logger.error("Failed to mark executed {}: {}", package_id, e)
+            return None
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

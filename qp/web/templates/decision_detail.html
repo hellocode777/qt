@@ -3,113 +3,134 @@
 {% block content %}
 
 {% if detail is none %}
-<!-- Not Found -->
-<div class="flex flex-col items-center justify-center py-24 text-center">
-  <div class="text-6xl mb-4">🔍</div>
-  <h1 class="text-xl font-bold text-gray-300 mb-2">Decision Not Found</h1>
-  <p class="text-gray-500 mb-4">Package <code class="text-amber-400 bg-gray-800 px-2 py-1 rounded text-sm">{{ package_id }}</code> does not exist.</p>
-  <a href="/decisions" class="text-blue-400 hover:text-blue-300 text-sm">← Back to Decision History</a>
-</div>
-{% else %}
-<!-- Decision Detail -->
-<div class="mb-6">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-lg font-bold text-gray-100">
-        Decision Package: <span class="text-amber-400 font-mono">{{ detail.package_id }}</span>
-      </h1>
-      <p class="text-sm text-gray-500 mt-1">
-        Date: {{ detail.date }} | Generated: {{ detail.generated_at_short }}
-      </p>
-    </div>
-    <a href="/decisions" class="text-sm text-blue-400 hover:text-blue-300">← Back to History</a>
-  </div>
+<div class="empty-state">
+  <div class="icon">&#128269;</div>
+  <h2>决策包未找到</h2>
+  <p>Package <code>{{ package_id }}</code> 不存在</p>
+  <a href="/decisions" style="color: var(--blue); text-decoration: none; font-size: 14px;">&#8592; 返回决策列表</a>
 </div>
 
-<!-- Regime + Strategy Health row -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-  {% include "components/regime_card.html" %}
+{% else %}
+
+<div class="page-header">
+  <div>
+    <h1>决策详情</h1>
+    <div class="meta">
+      Package: <code class="c-amber">{{ detail.package_id }}</code>
+      &nbsp;|&nbsp; 日期: <strong>{{ detail.date }}</strong>
+      &nbsp;|&nbsp; 生成时间: {{ detail.generated_at_short }}
+    </div>
+  </div>
+  <a href="/decisions" style="color: var(--blue); text-decoration: none; font-size: 14px;">&#8592; 返回列表</a>
+</div>
+
+<!-- Regime + Strategy -->
+<div class="card-grid">
   <div class="card">
-    <div class="card-header"><span>📊 Strategy Signals</span></div>
+    <div class="card-header">
+      <span>&#127758; 市场环境</span>
+      <span class="badge {{ detail.regime.badge_class }}">{{ detail.regime.label }}</span>
+    </div>
     <div class="card-body">
-      <div class="space-y-2">
-        {% for sig in detail.strategy_signals %}
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-400">{{ sig.strategy_id }}</span>
-          <span class="font-mono text-gray-300">{{ sig.count }} signals</span>
-        </div>
-        {% endfor %}
-        <div class="text-xs text-gray-500 mt-2">
-          Ensemble: {{ detail.ensemble_method }} | Effective Top-N: {{ detail.effective_top_n }}
-        </div>
+      <div class="metric-row">
+        <span class="metric-label">置信度</span>
+        <span class="metric-value">{{ detail.regime.confidence_pct }}%</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">建议敞口</span>
+        <span class="metric-value">{{ detail.regime.suggested_exposure_pct }}%</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">趋势强度</span>
+        <span class="metric-value font-mono">{{ "%.2f" | format(detail.regime.trend_strength) }}</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">年化波动</span>
+        <span class="metric-value font-mono">{{ detail.regime.annualized_vol_pct }}%</span>
+      </div>
+      {% if detail.regime.summary %}
+      <div class="reason-bar" style="margin-top: 8px;">{{ detail.regime.summary }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span>&#128200; 策略信号</span></div>
+    <div class="card-body">
+      {% for sig in detail.strategy_signals %}
+      <div class="metric-row">
+        <span class="metric-label">{{ sig.strategy_id }}</span>
+        <span class="metric-value font-mono">{{ sig.count }} 个信号</span>
+      </div>
+      {% endfor %}
+      <div class="c-muted" style="font-size: 12px; margin-top: 8px;">
+        集成方法: {{ detail.ensemble_method }} | 有效持仓: {{ detail.effective_top_n }}
       </div>
     </div>
   </div>
 </div>
 
 <!-- Recommendations -->
-<div class="card mb-4">
+<div class="card mt-4">
   <div class="card-header">
-    <span>📋 Recommendations</span>
-    <span class="text-xs text-gray-500">{{ detail.report.n_buys }} BUY / {{ detail.report.n_sells }} SELL</span>
+    <span>&#128203; 交易建议</span>
+    <span class="c-muted" style="font-size: 13px;">{{ detail.report.n_buys }} 买入 / {{ detail.report.n_sells }} 卖出</span>
   </div>
-  <div class="card-body p-0">
-    <div class="overflow-x-auto">
-      <table class="data-table w-full">
-        <thead>
-          <tr>
-            <th>#</th><th>Symbol</th><th>Action</th><th>Weight</th>
-            <th>Qty</th><th>Price</th><th>Cost</th>
-            <th>Reason</th><th>Conf</th><th>Strategy</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for rec in detail.buys %}
-          <tr>
-            <td class="text-gray-500 text-xs">{{ loop.index }}</td>
-            <td class="font-mono font-bold text-gray-200">{{ rec.symbol }}</td>
-            <td><span class="badge badge-green text-xs">BUY</span></td>
-            <td class="font-mono text-gray-300">{{ "%.1f"|format(rec.target_weight_pct) }}%</td>
-            <td class="font-mono text-gray-400 text-xs">{{ rec.quantity_shares }}</td>
-            <td class="font-mono text-gray-400 text-xs">{{ "%.2f"|format(rec.estimated_price) }}</td>
-            <td class="font-mono text-gray-500 text-xs">{{ "%.2f"|format(rec.estimated_cost) }}</td>
-            <td class="text-xs text-gray-400">{{ rec.reason }}</td>
-            <td class="font-mono text-xs text-gray-400">{{ rec.confidence_pct }}%</td>
-            <td class="text-xs text-gray-500">{{ rec.strategy[:20] }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <div class="card-body p0">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th><th>股票</th><th>操作</th><th>权重</th>
+          <th>数量</th><th>价格</th><th>成本</th>
+          <th>理由</th><th>置信度</th><th>策略</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rec in detail.buys %}
+        <tr>
+          <td class="c-muted">{{ loop.index }}</td>
+          <td class="font-mono" style="font-weight: 700;">{{ rec.symbol }}</td>
+          <td><span class="badge badge-green" style="font-size: 11px;">BUY</span></td>
+          <td class="font-mono">{{ "%.1f" | format(rec.target_weight_pct) }}%</td>
+          <td class="font-mono c-secondary">{{ rec.quantity_shares }}</td>
+          <td class="font-mono c-secondary">{{ "%.2f" | format(rec.estimated_price) }}</td>
+          <td class="font-mono c-muted">{{ "%.2f" | format(rec.estimated_cost) }}</td>
+          <td style="max-width: 200px;" class="truncate" title="{{ rec.reason }}">{{ rec.reason }}</td>
+          <td class="font-mono c-muted" style="font-size: 12px;">{{ rec.confidence_pct }}%</td>
+          <td class="c-muted" style="font-size: 12px;">{{ rec.strategy[:16] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 
-<!-- Risk Audit Summary -->
-<div class="card mb-4">
-  <div class="card-header"><span>⚠️ Risk Audit</span></div>
+<!-- Risk Audit -->
+<div class="card mt-4">
+  <div class="card-header"><span>&#9888; 风控审计 Risk Audit</span></div>
   <div class="card-body">
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+    <div class="stat-row" style="margin-bottom: 16px;">
       <div class="stat-tile">
-        <div class="stat-label">Candidates</div>
-        <div class="stat-value">{{ detail.risk_audit.candidates_in }} → {{ detail.risk_audit.candidates_out }}</div>
+        <div class="stat-label">候选</div>
+        <div class="stat-value">{{ detail.risk_audit.candidates_in }} &#8594; {{ detail.risk_audit.candidates_out }}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Risk Check</div>
-        <div class="stat-value">{% if detail.risk_audit.passed %}✅{% else %}⚠️{% endif %}</div>
+        <div class="stat-label">风控结果</div>
+        <div class="stat-value">{% if detail.risk_audit.passed %}&#9989;{% else %}&#9888;{% endif %}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Dropped</div>
-        <div class="stat-value text-red-400">{{ detail.risk_audit.dropped_symbols | length }}</div>
+        <div class="stat-label">剔除股票</div>
+        <div class="stat-value c-red">{{ detail.risk_audit.dropped_symbols | length }}</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Est. Cost</div>
-        <div class="stat-value text-amber-400">{{ "%.3f"|format(detail.estimated_cost_pct) }}%</div>
+        <div class="stat-label">预估成本</div>
+        <div class="stat-value c-amber">{{ "%.3f" | format(detail.estimated_cost_pct) }}%</div>
       </div>
     </div>
     {% if detail.risk_audit.entries %}
-    <div class="text-xs text-gray-500 space-y-1">
+    <div style="font-size: 13px;" class="space-y-2">
       {% for entry in detail.risk_audit.entries %}
-      <div class="p-1.5 bg-gray-800/50 rounded">{{ entry.detail }}</div>
+      <div style="padding: 8px 12px; background: #fafafa; border-radius: 4px;">{{ entry.detail }}</div>
       {% endfor %}
     </div>
     {% endif %}
@@ -117,29 +138,29 @@
 </div>
 
 <!-- Human Review -->
-<div class="card">
-  <div class="card-header"><span>✍️ Human Review</span></div>
+<div class="card mt-4">
+  <div class="card-header"><span>&#9997; 人工审核 Human Review</span></div>
   <div class="card-body">
-    <div class="flex items-center gap-4 text-sm">
+    <div style="display: flex; gap: 24px; font-size: 14px;">
       <div>
-        <span class="text-gray-500">Reviewed: </span>
+        <span class="c-muted">已审核: </span>
         {% if detail.human_review.reviewed %}
-        <span class="text-green-400">✅ Yes</span>
+        <span class="c-green">&#9989; 是</span>
         {% else %}
-        <span class="text-red-400">❌ Pending</span>
+        <span class="c-red">&#10060; 待审核</span>
         {% endif %}
       </div>
       <div>
-        <span class="text-gray-500">Executed: </span>
+        <span class="c-muted">已执行: </span>
         {% if detail.human_review.executed %}
-        <span class="text-green-400">✅ Yes</span>
+        <span class="c-green">&#9989; 是</span>
         {% else %}
-        <span class="text-gray-600">❌ Not yet</span>
+        <span class="c-muted">&#10060; 未执行</span>
         {% endif %}
       </div>
     </div>
     {% if detail.human_review.notes %}
-    <div class="mt-2 text-xs text-gray-400">{{ detail.human_review.notes }}</div>
+    <div class="reason-bar" style="margin-top: 8px;">{{ detail.human_review.notes }}</div>
     {% endif %}
   </div>
 </div>

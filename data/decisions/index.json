@@ -22,17 +22,6 @@
     "human_executed": false
   },
   {
-    "package_id": "dp-2026-07-26-fa6e3965",
-    "date": "2026-07-26",
-    "generated_at": "2026-07-26T09:12:07.055830+00:00",
-    "regime": "sideways_up",
-    "n_recommendations": 10,
-    "estimated_cost_pct": 0.1346,
-    "risk_passed": false,
-    "human_reviewed": false,
-    "human_executed": false
-  },
-  {
     "package_id": "dp-2026-07-26-cdea10cd",
     "date": "2026-07-26",
     "generated_at": "2026-07-26T09:12:17.232728+00:00",
@@ -174,6 +163,61 @@
     "risk_passed": false,
     "human_reviewed": false,
     "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-26-5b719279",
+    "date": "2026-07-26",
+    "generated_at": "2026-07-26T14:20:58.958796+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 12,
+    "estimated_cost_pct": 0.1357,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-26-90efbb39",
+    "date": "2026-07-26",
+    "generated_at": "2026-07-26T14:21:08.967838+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 12,
+    "estimated_cost_pct": 0.1357,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-26-ab9ca3dc",
+    "date": "2026-07-26",
+    "generated_at": "2026-07-26T14:29:51.956794+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 11,
+    "estimated_cost_pct": 0.1356,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-26-aea5b0f6",
+    "date": "2026-07-26",
+    "generated_at": "2026-07-26T14:30:01.848681+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 11,
+    "estimated_cost_pct": 0.1356,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
+    "package_id": "dp-2026-07-26-fa6e3965",
+    "date": "2026-07-26",
+    "generated_at": "2026-07-26T09:12:07.055830+00:00",
+    "regime": "sideways_up",
+    "n_recommendations": 10,
+    "estimated_cost_pct": 0.1346,
+    "risk_passed": false,
+    "human_reviewed": true,
+    "human_executed": true
   },
   {
     "package_id": "dp-2026-07-25-c1ce0173",
