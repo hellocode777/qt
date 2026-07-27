@@ -67,7 +67,12 @@ def _register_routers(app: FastAPI) -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: initialize services on startup."""
-    from qp.web.services import DecisionService, ExperimentService, HealthService
+    from qp.web.services import (
+        DataQualityService,
+        DecisionService,
+        ExperimentService,
+        HealthService,
+    )
 
     logger.info("QP Decision Center starting up...")
 
@@ -75,6 +80,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.decision_service = DecisionService()
     app.state.health_service = HealthService()
     app.state.experiment_service = ExperimentService()
+    app.state.data_quality_service = DataQualityService()
 
     logger.info("QP Decision Center ready — services initialized")
 

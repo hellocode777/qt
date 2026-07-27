@@ -1,6 +1,7 @@
 """Dashboard router — Decision Cockpit homepage.
 
 GET "/" — The main Decision Cockpit showing:
+  - Data quality overview
   - Market regime status
   - Strategy health
   - Today's BUY/SELL candidates
@@ -20,6 +21,7 @@ from fastapi import APIRouter, Form, Request
 from loguru import logger
 
 from qp.web.routers._templates import templates
+from qp.web.services.data_quality_service import DataQualityService
 from qp.web.services.decision_service import DecisionService
 from qp.web.services.health_service import HealthService
 
@@ -41,10 +43,13 @@ async def dashboard(request: Request) -> Any:
     """Decision Cockpit homepage."""
     decision_svc = _get_service(request, "decision_service", DecisionService)
     health_svc = _get_service(request, "health_service", HealthService)
+    dq_svc = _get_service(request, "data_quality_service", DataQualityService)
 
     decision = decision_svc.latest()
     system_state = health_svc.system_state()
     health = health_svc.latest_health()
+    data_quality = dq_svc.today_summary()
+    source_health = dq_svc.source_health()
     has_data = decision is not None
 
     if has_data:
@@ -63,6 +68,8 @@ async def dashboard(request: Request) -> Any:
             "decision": decision,
             "system_state": system_state,
             "health": health,
+            "data_quality": data_quality,
+            "source_health": source_health,
             "has_data": has_data,
             "page_title": "QP Decision Center",
         },

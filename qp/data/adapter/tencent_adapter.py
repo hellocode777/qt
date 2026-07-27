@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 import requests
 
+from qp.data.adapter.code_list import CORE_SYMBOLS
 from qp.shared.protocols.base_data_source import BaseDataSource
 
 
@@ -24,26 +25,7 @@ class TencentAdapter(BaseDataSource):
     Longer periods are automatically split into segments.
     """
 
-    DEFAULT_SYMBOLS: list[str] = [
-        "000001",  # 平安银行
-        "000002",  # 万科A
-        "000333",  # 美的集团
-        "000651",  # 格力电器
-        "000858",  # 五粮液
-        "002415",  # 海康威视
-        "002475",  # 立讯精密
-        "300750",  # 宁德时代
-        "600000",  # 浦发银行
-        "600036",  # 招商银行
-        "600276",  # 恒瑞医药
-        "600519",  # 贵州茅台
-        "600585",  # 海螺水泥
-        "600887",  # 伊利股份
-        "601012",  # 隆基绿能
-        "601166",  # 兴业银行
-        "601318",  # 中国平安
-        "601888",  # 中国中免
-    ]
+    DEFAULT_SYMBOLS: list[str] = CORE_SYMBOLS
 
     @property
     def dataset_name(self) -> str:
@@ -77,7 +59,7 @@ class TencentAdapter(BaseDataSource):
         all_rows: list[dict] = []
         for i, code in enumerate(symbols):
             if i > 0:
-                time.sleep(0.15)  # avoid rate limiting
+                time.sleep(0.3)  # avoid rate limiting (WAF blocks below ~0.2s)
             try:
                 tc = self._code_to_tencent(code)
                 rows = self._fetch_one_stock(tc, code, s_dt, e_dt)
@@ -127,7 +109,7 @@ class TencentAdapter(BaseDataSource):
         The Tencent API returns at most ~730 records per call.  Longer periods
         are split into ~2.5-year segments automatically.
         """
-        url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+        url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get"
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -140,7 +122,9 @@ class TencentAdapter(BaseDataSource):
         segments = self._build_segments(start_dt, end_dt)
         all_rows: list[dict] = []
 
-        for seg_start, seg_end in segments:
+        for i, (seg_start, seg_end) in enumerate(segments):
+            if i > 0:
+                time.sleep(0.2)  # gap between segments for same stock
             param = f"{tc},day,{seg_start},{seg_end},2000,qfq"
             try:
                 r = requests.get(url, params={"param": param}, headers=headers, timeout=30)
@@ -182,9 +166,13 @@ class TencentAdapter(BaseDataSource):
 
         Response structure:
           {"data": {"sh600519": {"qfqday": [...], "day": [...]}}}
+
+        Prefers ``day`` over ``qfqday`` because the API occasionally returns
+        an empty ``qfqday`` list while ``day`` has complete data.  Both keys
+        contain forward-adjusted (qfq) prices when the request specifies qfq.
         """
         symbol_data = data.get("data", {}).get(tc, {})
-        return symbol_data.get("qfqday") or symbol_data.get("day") or None
+        return symbol_data.get("day") or symbol_data.get("qfqday") or None
 
     @staticmethod
     def _build_segments(start: datetime, end: datetime) -> list[tuple[str, str]]:

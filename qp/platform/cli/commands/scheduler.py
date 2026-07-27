@@ -1,4 +1,5 @@
 """CLI command handlers for the "scheduler" group."""
+
 from __future__ import annotations
 
 import contextlib
@@ -114,7 +115,6 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
     """Start the background job scheduler for daily automation.
 
     Registers and starts:
-      - data_fetch:        FullDataPipeline           (weekdays 08:00)
       - monitor_check:     KillSwitchPipeline full    (weekdays 09:07)
       - retrain_notify:    Check retrain signals      (weekdays 09:17)
       - pre_close_check:   KillSwitchPipeline fast    (weekdays 16:53)
@@ -149,6 +149,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
     # Helper: create PipelineContext with runtime attached when available
     def _make_ctx(name: str, **params):
         from qp.platform.pipeline.context import PipelineContext
+
         if app is not None:
             return PipelineContext(pipeline_name=name, parameters=params, runtime=app.context)
         return PipelineContext(pipeline_name=name, parameters=params)
@@ -160,30 +161,9 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
 
         ping_dir = Path("data/monitoring/watchdog")
         ping_dir.mkdir(parents=True, exist_ok=True)
-        (ping_dir / f"{job_name}.ping").write_text(
-            f"{datetime.now(UTC).isoformat()}\n"
-        )
+        (ping_dir / f"{job_name}.ping").write_text(f"{datetime.now(UTC).isoformat()}\n")
 
-    # ── Job 1: daily data fetch (08:00 on weekdays) ──
-    def job_data_fetch() -> None:
-        from qp.data.loader.full_pipeline import FullDataPipeline
-
-        ctx = _make_ctx("scheduled_data_fetch")
-        pipeline = FullDataPipeline()
-        result = pipeline.run(ctx)
-        status = result.status.value
-        watchdog_ping("data_fetch")
-        print(f"[scheduler] data_fetch: {status}")
-
-    scheduler.add_job(
-        Job(
-            name="data_fetch",
-            task=job_data_fetch,
-            trigger=CronTrigger(day="1-5", hour="8", minute="3"),
-        )
-    )
-
-    # ── Job 2: morning health check (09:00 on weekdays) ──
+    # ── Job 1: morning health check (09:07 on weekdays) ──
     def job_monitor_check() -> None:
         from qp.monitoring.kill_switch_pipeline import (
             KillSwitchPipeline,
@@ -218,12 +198,17 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
 
             rs_logger = RetrainSignalLogger()
             signals = rs_logger.load_history(days=7)
-            actionable = [s for s in signals.iter_rows(named=True)
-                          if s.get("action") not in ("NONE", "MONITOR")]
+            actionable = [
+                s
+                for s in signals.iter_rows(named=True)
+                if s.get("action") not in ("NONE", "MONITOR")
+            ]
             if actionable:
                 print(f"[scheduler] retrain_signals: {len(actionable)} actionable")
                 for s in actionable[:3]:
-                    print(f"  - [{s.get('trigger', '?')}] {s.get('strategy_name', '?')}: {s.get('action', '?')}")
+                    print(
+                        f"  - [{s.get('trigger', '?')}] {s.get('strategy_name', '?')}: {s.get('action', '?')}"
+                    )
         except Exception:
             pass
 
@@ -237,7 +222,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
-    # ── Job 2.5: retrain signal check + Telegram alert (09:15 on weekdays) ──
+    # ── Job 2: retrain signal check + Telegram alert (09:17 on weekdays) ──
     def job_retrain_notify() -> None:
         """Check retrain_signals.parquet for actionable signals in last 7 days.
 
@@ -254,7 +239,8 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             rs_logger = RetrainSignalLogger()
             signals = rs_logger.load_history(days=7)
             actionable = [
-                s for s in signals.iter_rows(named=True)
+                s
+                for s in signals.iter_rows(named=True)
                 if s.get("action") not in ("NONE", "MONITOR")
             ]
 
@@ -314,7 +300,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
-    # ── Job 3: pre-close health gate (16:50 on weekdays) ──
+    # ── Job 3: pre-close health gate (16:53 on weekdays) ──
     def job_pre_close_check() -> None:
         """收盘前快速检查，决定是否执行盘后策略."""
         from qp.monitoring.kill_switch_pipeline import (
@@ -357,11 +343,15 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
-    # ── Job 4: daily decision pipeline (17:30 on weekdays) ──
+    # ── Job 4: daily decision pipeline (17:57 on weekdays) ──
     def job_daily_pipeline() -> None:
+        from datetime import date, timedelta
+
         from qp.pipeline.daily_pipeline import DailyPipeline
 
-        ctx = _make_ctx("scheduled_daily")
+        # Fetch recent data — incremental merge with existing history
+        recent_start = (date.today() - timedelta(days=5)).isoformat()
+        ctx = _make_ctx("scheduled_daily", start_date=recent_start)
         pipeline = DailyPipeline()
         result = pipeline.run(ctx)
         status = result.status.value
@@ -377,7 +367,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
-    # ── Job 5: email decision report (18:00 on weekdays) ──
+    # ── Job 5: email decision report (18:03 on weekdays) ──
     def job_email_report() -> None:
         """Send today's DecisionPackage as email after daily_pipeline completes."""
         import json as _json
@@ -397,9 +387,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         today_str = datetime.now(UTC).strftime("%Y-%m-%d")
 
         # Try JSON first, then markdown
-        json_files = sorted(
-            decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True
-        )
+        json_files = sorted(decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True)
         md_file = decisions_dir / f"{today_str}.md"
 
         subject = f"QP 每日投资决策 — {today_str}"
@@ -507,4 +495,3 @@ def _log_jobs(scheduler, log) -> None:
         log.info(text, module="scheduler")
     else:
         print(text)
-

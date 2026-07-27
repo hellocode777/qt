@@ -1,4 +1,5 @@
 """CLI command handlers for the "ingest" group."""
+
 from __future__ import annotations
 
 import sys
@@ -26,6 +27,10 @@ def cmd_ingest() -> int:
     for arg in args:
         if arg == "--demo":
             kwargs["demo"] = True
+        elif arg == "--quick":
+            kwargs["quick"] = True
+        elif arg.startswith("--source="):
+            kwargs["source"] = arg.split("=", 1)[1]
         elif not arg.startswith("--"):
             if "start_date" not in kwargs:
                 kwargs["start_date"] = arg
@@ -89,4 +94,3 @@ def cmd_run() -> int:
             print(f"  {e}")
 
     return 0 if result.status.value == "success" else 1
-

@@ -40,7 +40,98 @@
   </div>
 </div>
 
-<!-- Row 1: Market Regime + Strategy Health -->
+<!-- Row 1: Data Quality + Source Health -->
+<div class="card-grid">
+
+  <!-- Data Quality Card -->
+  <div class="card">
+    <div class="card-header">
+      <span>&#128200; 数据质量 Data Quality</span>
+      <span class="badge {% if data_quality.freshness_status == 'fresh' %}badge-green{% elif data_quality.freshness_status == 'stale' %}badge-yellow{% else %}badge-red{% endif %}">
+        {{ data_quality.freshness_label }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-label">今日拉取股票</div>
+          <div class="stat-value c-green">{{ data_quality.daily_stocks }} <span style="font-size: 14px; font-weight: 400;">只</span></div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">今日数据行数</div>
+          <div class="stat-value font-mono">{{ data_quality.daily_rows_fmt }}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">全量股票池</div>
+          <div class="stat-value c-blue">{{ data_quality.main_stocks }} <span style="font-size: 14px; font-weight: 400;">只</span></div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">全量数据行数</div>
+          <div class="stat-value font-mono">{{ data_quality.main_rows_fmt }}</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 24px; font-size: 13px; margin-top: 12px;">
+        <div>
+          <span class="c-muted">最新数据日期: </span>
+          <span class="font-mono">{{ data_quality.daily_end_date }}</span>
+        </div>
+        <div>
+          <span class="c-muted">今日数据集: </span>
+          <span class="font-mono">{{ data_quality.datasets_today }} 个</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source Health Card -->
+  <div class="card">
+    <div class="card-header">
+      <span>&#128225; 数据源健康 Source Health</span>
+      <span class="c-muted" style="font-size: 13px;">
+        {{ source_health | length }} 个数据源
+      </span>
+    </div>
+    <div class="card-body">
+      {% if source_health %}
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        {% for src in source_health %}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">{{ src.icon }}</span>
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">{{ src.source_name }}</div>
+              {% if src.description %}
+              <div style="font-size: 12px; color: #999;">{{ src.description }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            {% if src.last_success %}
+            <span class="c-muted" style="font-size: 12px;" title="最近成功时间">&#9200; {{ src.last_success }}</span>
+            {% endif %}
+            {% if src.avg_latency > 0 %}
+            <span class="c-muted" style="font-size: 12px;">{{ "%.1f" | format(src.avg_latency) }}s</span>
+            {% endif %}
+            <span class="badge {{ src.badge_class }}" style="font-size: 11px;">{{ src.status_label }}</span>
+            {% if src.consecutive_failures > 0 %}
+            <span class="badge badge-red" style="font-size: 10px;" title="连续失败次数">✕{{ src.consecutive_failures }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="padding: 20px; text-align: center; color: #999; font-size: 13px;">
+        暂无数据源健康信息<br>
+        <span style="font-size: 12px;">运行 <code>qp data fetch</code> 后自动生成</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Row 2: Market Regime + Strategy Health -->
 <div class="card-grid">
 
   <!-- Market Regime Card -->

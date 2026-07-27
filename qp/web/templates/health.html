@@ -5,7 +5,78 @@
 <div class="page-header">
   <div>
     <h1>系统健康 System Health</h1>
-    <div class="meta">监控概览 — 熔断开关、数据新鲜度、模型衰减</div>
+    <div class="meta">监控概览 — 数据质量、熔断开关、数据新鲜度、模型衰减</div>
+  </div>
+</div>
+
+<!-- Data Quality Section -->
+<div class="card-grid">
+  <div class="card">
+    <div class="card-header">
+      <span>&#128200; 数据质量 Data Quality</span>
+      <span class="badge {% if data_quality.freshness_status == 'fresh' %}badge-green{% elif data_quality.freshness_status == 'stale' %}badge-yellow{% else %}badge-red{% endif %}">
+        {{ data_quality.freshness_label }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-label">今日拉取股票</div>
+          <div class="stat-value c-green">{{ data_quality.daily_stocks }}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">今日数据行数</div>
+          <div class="stat-value font-mono">{{ data_quality.daily_rows_fmt }}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">全量股票池</div>
+          <div class="stat-value c-blue">{{ data_quality.main_stocks }}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">最新数据日期</div>
+          <div class="stat-value font-mono" style="font-size: 20px;">{{ data_quality.daily_end_date }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span>&#128225; 数据源健康 Source Health</span>
+      <span class="c-muted" style="font-size: 13px;">{{ source_health | length }} 个数据源</span>
+    </div>
+    <div class="card-body">
+      {% if source_health %}
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        {% for src in source_health %}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">{{ src.icon }}</span>
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">{{ src.source_name }}</div>
+              {% if src.data_kind %}
+              <div style="font-size: 12px; color: #999;">{{ src.data_kind }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            {% if src.last_success %}
+            <span class="c-muted" style="font-size: 12px;" title="最近成功">&#9200; {{ src.last_success }}</span>
+            {% endif %}
+            <span class="badge {{ src.badge_class }}" style="font-size: 11px;">{{ src.status_label }}</span>
+            {% if src.consecutive_failures > 0 %}
+            <span class="badge badge-red" style="font-size: 10px;">✕{{ src.consecutive_failures }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="padding: 20px; text-align: center; color: #999; font-size: 13px;">
+        暂无数据源健康信息<br>
+      </div>
+      {% endif %}
+    </div>
   </div>
 </div>
 
