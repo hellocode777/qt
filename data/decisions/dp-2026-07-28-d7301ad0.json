@@ -1,0 +1,367 @@
+{
+  "package_id": "dp-2026-07-28-d7301ad0",
+  "date": "2026-07-28",
+  "generated_at": "2026-07-28T13:28:26.408915+00:00",
+  "lineage": {
+    "dataset_name": "daily_price_main",
+    "dataset_version": "2026-07-28",
+    "dataset_rows": 7179226,
+    "dataset_symbols": 3051,
+    "feature_versions": {
+      "momentum_20d": "2026-07-28",
+      "volatility_20d": "2026-07-28"
+    },
+    "strategy_versions": {}
+  },
+  "regime": {
+    "regime": "neutral",
+    "confidence": 0.0,
+    "suggested_exposure": 1.0,
+    "trend_strength": 0.0,
+    "annualized_vol": 0.0,
+    "summary": ""
+  },
+  "strategy": {
+    "signals": {
+      "momentum_v1.0": 10,
+      "quality_v1.0": 10,
+      "value_v1.0": 10,
+      "multifactor_v1.0": 10
+    },
+    "ensemble_method": "equal_weight",
+    "effective_top_n": 10
+  },
+  "risk_audit": {
+    "candidates_in": 40,
+    "candidates_out": 13,
+    "entries": [
+      {
+        "symbol": "",
+        "violation_type": "risk_limit",
+        "detail": "Position count: 40 > 15 max — 25 dropped",
+        "threshold": "",
+        "actual": "",
+        "action": "warning"
+      },
+      {
+        "symbol": "",
+        "violation_type": "risk_limit",
+        "detail": "Sector cap: Other at 100.0% > 25%",
+        "threshold": "",
+        "actual": "",
+        "action": "warning"
+      },
+      {
+        "symbol": "",
+        "violation_type": "risk_limit",
+        "detail": "Correlation: 2 pair(s) > 70%, 2 symbol(s) dropped",
+        "threshold": "",
+        "actual": "",
+        "action": "warning"
+      },
+      {
+        "symbol": "601916/600016",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.729)",
+        "threshold": "0.70",
+        "actual": "0.729",
+        "action": "warning"
+      },
+      {
+        "symbol": "002304/600016",
+        "violation_type": "correlation",
+        "detail": "High correlation (0.701)",
+        "threshold": "0.70",
+        "actual": "0.701",
+        "action": "warning"
+      }
+    ],
+    "dropped_symbols": [
+      "000408",
+      "000599",
+      "000779",
+      "000792",
+      "000938",
+      "001391",
+      "002101",
+      "002141",
+      "002192",
+      "002304",
+      "002393",
+      "002396",
+      "002466",
+      "002558",
+      "002936",
+      "002958",
+      "600419",
+      "600502",
+      "600664",
+      "601186",
+      "601668",
+      "601916",
+      "601997",
+      "603137",
+      "603893",
+      "603983",
+      "603986"
+    ],
+    "sector_exposure": {
+      "Other": 0.9999999999999998
+    },
+    "passed": false
+  },
+  "estimated_cost_pct": 0.1351,
+  "validation": {
+    "momentum_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    },
+    "quality_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    },
+    "value_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    },
+    "multifactor_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading."
+    }
+  },
+  "report": {
+    "report_id": "dr-37a31470",
+    "strategy_id": "multi_strategy_ensemble",
+    "total_capital": 1000000,
+    "risk_summary": "风控告警 / Risk Warning (3项) | 持仓 13/40 | 最大行业: Other 100%",
+    "market_regime": "neutral",
+    "cost_summary": "预估总成本: ¥1,238 (0.12%) | 交易额: ¥990,714 | 含印花税+佣金+滑点",
+    "n_buys": 13,
+    "n_sells": 0,
+    "total_estimated_cost": 1238.39225,
+    "recommendations": [
+      {
+        "symbol": "600283",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 9700,
+        "estimated_price": 7.9,
+        "estimated_cost": 95.7875,
+        "reason": "多策略融合排名 #1 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 1.0,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "603444",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 200,
+        "estimated_price": 356.528,
+        "estimated_cost": 89.13200000000002,
+        "reason": "多策略融合排名 #2 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.9615384615384616,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "600210",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 18200,
+        "estimated_price": 4.22,
+        "estimated_cost": 96.005,
+        "reason": "多策略融合排名 #3 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.9230769230769231,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "002582",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 14000,
+        "estimated_price": 5.481,
+        "estimated_cost": 95.91749999999999,
+        "reason": "多策略融合排名 #4 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.8846153846153846,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "002381",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 11400,
+        "estimated_price": 6.74,
+        "estimated_cost": 96.045,
+        "reason": "多策略融合排名 #5 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.8461538461538461,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "600016",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 16200,
+        "estimated_price": 4.74,
+        "estimated_cost": 95.985,
+        "reason": "多策略融合排名 #6 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.8076923076923077,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "600461",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 16600,
+        "estimated_price": 4.613,
+        "estimated_cost": 95.71975,
+        "reason": "多策略融合排名 #7 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.7692307692307692,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "000566",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 20300,
+        "estimated_price": 3.78,
+        "estimated_cost": 95.91749999999999,
+        "reason": "多策略融合排名 #8 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.7307692307692308,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "601169",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 39300,
+        "estimated_price": 1.955,
+        "estimated_cost": 96.039375,
+        "reason": "多策略融合排名 #9 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.6923076923076923,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "000807",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 8500,
+        "estimated_price": 8.988,
+        "estimated_cost": 95.4975,
+        "reason": "多策略融合排名 #10 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.6538461538461539,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "002828",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 9800,
+        "estimated_price": 7.772,
+        "estimated_cost": 95.20700000000002,
+        "reason": "多策略融合排名 #11 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.6153846153846154,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "001258",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 10100,
+        "estimated_price": 7.573,
+        "estimated_cost": 95.609125,
+        "reason": "多策略融合排名 #12 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.5769230769230769,
+        "strategy": "multi_strategy_ensemble"
+      },
+      {
+        "symbol": "601238",
+        "action": "BUY",
+        "target_weight_pct": 7.6923076923076925,
+        "current_weight_pct": 0.0,
+        "quantity_shares": 8200,
+        "estimated_price": 9.32,
+        "estimated_cost": 95.53,
+        "reason": "多策略融合排名 #13 (score=0.000)",
+        "risk_warnings": [
+          "单仓占比 7.7% 接近 8% 上限"
+        ],
+        "confidence": 0.5384615384615384,
+        "strategy": "multi_strategy_ensemble"
+      }
+    ]
+  },
+  "human_review": {
+    "reviewed": false,
+    "reviewer": "",
+    "notes": "",
+    "executed": false,
+    "execution_time": ""
+  },
+  "metadata": {
+    "pipeline_run_id": "d7301ad0aa0b",
+    "allocator_used": "EqualWeightAllocator"
+  }
+}

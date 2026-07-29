@@ -80,6 +80,31 @@
           <span class="font-mono">{{ data_quality.datasets_today }} 个</span>
         </div>
       </div>
+      {% if data_quality.quality_checks %}
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+        <div style="font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px;">
+          &#128274; Validation Gate
+          <span class="badge {% if data_quality.all_checks_pass %}badge-green{% else %}badge-red{% endif %}" style="font-size: 10px; margin-left: 6px;">
+            {{ "PASS" if data_quality.all_checks_pass else "FAIL" }}
+          </span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px;">
+          {% for check, status in data_quality.quality_checks.items() %}
+          <span style="padding: 2px 8px; border-radius: 4px; {% if status == 'pass' %}background: #e8f5e9; color: #2e7d32;{% else %}background: #ffebee; color: #c62828;{% endif %}">
+            {{ "✓" if status == "pass" else "✗" }} {{ check }}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% if data_quality.data_hash %}
+      <div style="font-size: 11px; color: #999; margin-top: 8px;">
+        sha256: <code style="font-size: 11px;">{{ data_quality.data_hash }}</code>
+        {% if data_quality.pipeline_run_id %}
+        &nbsp;|&nbsp; run: <code style="font-size: 11px;">{{ data_quality.pipeline_run_id }}</code>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
   </div>
 

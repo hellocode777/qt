@@ -54,8 +54,7 @@ def _load_price_data() -> tuple[dict[str, pl.DataFrame], pl.DataFrame]:
         price_data_by_symbol: {code: DataFrame[date, open, high, low, close, volume]}
         flat_prices_df: Full Polars DataFrame for risk/backtest.
     """
-    today = date.today()
-    path = f"data/dataset/daily_price_{today.isoformat()}.parquet"
+    path = "data/dataset/daily_price_latest.parquet"
 
     if not os.path.exists(path):
         return {}, pl.DataFrame()
@@ -77,59 +76,97 @@ def _load_price_data() -> tuple[dict[str, pl.DataFrame], pl.DataFrame]:
 def _build_index_df(price_data: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Build a proxy index DataFrame from average close across all stocks.
 
-    In production, this should use actual index data (e.g. 000001.SH).
+    Uses group-by over all stocks per date instead of inner join,
+    so dates with partial coverage (early listings, delistings) are included.
     """
     if not price_data:
         return pl.DataFrame()
 
-    closes: list[pl.DataFrame] = []
     date_col = "trade_date" if "trade_date" in next(iter(price_data.values())).columns else "date"
 
-    for code, pdf in price_data.items():
-        if pdf is None or pdf.is_empty():
-            continue
-        sub = pdf.select([date_col, "close"]).rename({"close": f"close_{code}"})
-        closes.append(sub)
+    frames = []
+    for pdf in price_data.values():
+        if pdf is not None and not pdf.is_empty() and date_col in pdf.columns and "close" in pdf.columns:
+            frames.append(pdf.select([date_col, "close"]))
 
-    if not closes:
+    if not frames:
         return pl.DataFrame()
 
-    # Join all closes on date
-    merged = closes[0]
-    for df in closes[1:]:
-        merged = merged.join(df, on=date_col, how="inner")
+    all_closes = pl.concat(frames, how="vertical")
+    result = all_closes.group_by(date_col).agg(
+        pl.col("close").mean().alias("close")
+    ).sort(date_col).rename({date_col: "date"})
 
-    # Average close
-    close_cols = [c for c in merged.columns if c.startswith("close_")]
-    result = merged.select(
-        [
-            pl.col(date_col).alias("date"),
-            (pl.sum_horizontal([pl.col(c) for c in close_cols]) / len(close_cols)).alias("close"),
-        ]
-    )
     return result
 
 
-def _build_valuation_data(price_data: dict[str, pl.DataFrame]) -> dict[str, pl.DataFrame]:
-    """Build synthetic valuation data for ValueStrategy from price data.
+def _load_fundamental_data() -> dict[str, pl.DataFrame]:
+    """Load fundamental data from parquet (replaces QuantTrading DB).
 
-    In production, this should load actual fundamental data.
-    Provides minimal PE/PB proxies so ValueStrategy can run.
+    Returns:
+        {code: DataFrame(report_date, publish_date, ROE, gross_margin,
+         revenue_growth, net_margin, debt_ratio, net_profit_growth, EPS, NAV)}
+    """
+    from pathlib import Path as _Path
+
+    path = _Path("data/dataset") / "fundamentals_latest.parquet"
+
+    if not path.exists():
+        return {}
+
+    try:
+        df = pl.read_parquet(str(path))
+    except Exception:
+        return {}
+
+    if df.is_empty():
+        return {}
+
+    result: dict[str, pl.DataFrame] = {}
+    if "symbol" in df.columns:
+        for sym in df["symbol"].unique().to_list():
+            sub = df.filter(pl.col("symbol") == sym).sort("report_date")
+            if not sub.is_empty():
+                result[str(sym)] = sub.with_columns(pl.col("report_date").alias("publish_date"))
+
+    return result
+
+
+def _build_valuation_data(
+    price_data: dict[str, pl.DataFrame],
+    fundamental_data: dict[str, pl.DataFrame],
+) -> dict[str, pl.DataFrame]:
+    """Compute PE_TTM and PB from daily prices + quarterly fundamentals.
+
+    PE_TTM = close / EPS (latest annual EPS)
+    PB     = close / NAV (latest quarterly NAV)
     """
     valuation: dict[str, pl.DataFrame] = {}
     for code, pdf in price_data.items():
         if pdf is None or pdf.is_empty():
             continue
+        fund = fundamental_data.get(code)
+        if fund is None or fund.is_empty():
+            continue
+
         date_col = "trade_date" if "trade_date" in pdf.columns else "date"
-        dates = pdf[date_col].to_list()
-        # Synthetic valuation: use inverse of return as PE proxy
-        valuation[code] = pl.DataFrame(
-            {
-                "date": dates,
-                "PE_TTM": [15.0 + (hash(code) % 30)] * len(dates),
-                "PB": [2.0 + (hash(code + "pb") % 5)] * len(dates),
-            }
-        )
+        # Get latest EPS and NAV from fundamentals
+        latest_eps = fund["EPS"].drop_nulls().tail(1)
+        latest_nav = fund["NAV"].drop_nulls().tail(1)
+        eps_val = latest_eps.item() if not latest_eps.is_empty() else None
+        nav_val = latest_nav.item() if not latest_nav.is_empty() else None
+
+        rows = []
+        for row in pdf.select([date_col, "close"]).iter_rows(named=True):
+            d = row[date_col]
+            close = float(row["close"])
+            pe = close / eps_val if eps_val and eps_val > 0 else None
+            pb = close / nav_val if nav_val and nav_val > 0 else None
+            rows.append({"date": d, "PE_TTM": pe, "PB": pb})
+
+        if rows:
+            valuation[code] = pl.DataFrame(rows)
+
     return valuation
 
 
@@ -264,8 +301,7 @@ class DailyPipeline(BasePipeline):
                     )
                     result.status = PipelineStatus.SUCCESS
                     result.metadata["skip_reason"] = (
-                        f"System state {current_state.to_state.name}: "
-                        f"{current_state.reason}"
+                        f"System state {current_state.to_state.name}: {current_state.reason}"
                     )
                     return result
             except Exception:
@@ -307,8 +343,9 @@ class DailyPipeline(BasePipeline):
             # Build index proxy for regime detection
             index_df = _build_index_df(price_data)
 
-            # Build valuation data for value strategy
-            valuation_data = _build_valuation_data(price_data)
+            # Load fundamental data and compute valuation
+            fundamental_data = _load_fundamental_data()
+            valuation_data = _build_valuation_data(price_data, fundamental_data)
 
             # ================================================================
             # Step 4: Build Lineage Snapshot
@@ -330,6 +367,19 @@ class DailyPipeline(BasePipeline):
                     result.metadata["market_regime"] = regime_label
                     result.metrics["regime_position_pct"] = round(suggested_position_pct, 2)
                     result.metrics["regime_confidence"] = round(regime_result.confidence, 2)
+                    result.metrics["regime_trend"] = round(regime_result.trend_score, 2)
+                    # Compute actual annualized vol from price data
+                    if not index_df.is_empty() and "close" in index_df.columns:
+                        import numpy as np
+                        closes = index_df["close"].to_numpy().astype(np.float64)
+                        if len(closes) > 20:
+                            log_ret = np.diff(np.log(closes[-252:]))
+                            ann_vol = float(np.std(log_ret) * np.sqrt(252))
+                            result.metrics["regime_vol"] = round(ann_vol, 4)
+                        else:
+                            result.metrics["regime_vol"] = 0.0
+                    else:
+                        result.metrics["regime_vol"] = 0.0
                     result.metadata["regime_reason"] = regime_result.reason
 
                     # Adjust top_n by regime
@@ -367,6 +417,7 @@ class DailyPipeline(BasePipeline):
                 },
                 "quality_v1.0": {
                     "top_n": effective_top_n,
+                    "fundamental_data": fundamental_data,
                 },
             }
 
@@ -575,6 +626,8 @@ class DailyPipeline(BasePipeline):
                     if "alpha_score" in filtered_signals.columns
                     else "feature_value"
                     if "feature_value" in filtered_signals.columns
+                    else "aggregated_score"
+                    if "aggregated_score" in filtered_signals.columns
                     else "raw_score"
                     if "raw_score" in filtered_signals.columns
                     else None
@@ -646,6 +699,8 @@ class DailyPipeline(BasePipeline):
                 regime=regime_label,
                 confidence=result.metrics.get("regime_confidence", 0.0),
                 suggested_exposure=result.metrics.get("regime_position_pct", 1.0),
+                trend_strength=result.metrics.get("regime_trend", 0.0),
+                annualized_vol=result.metrics.get("regime_vol", 0.0),
                 summary=result.metadata.get("regime_reason", ""),
             )
 

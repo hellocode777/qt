@@ -9,10 +9,35 @@ def cmd_pipeline_list() -> int:
     """List registered pipelines."""
 
     print("Registered Pipelines:")
-    print("  data_ingest     — Raw data → cleaned daily_price.parquet")
-    print("  feature_compute — Compute momentum_20d feature")
-    print("  daily           — End-to-end: data → feature → strategy → report")
+    print("  data_ingest       — Raw data → cleaned daily_price.parquet")
+    print("  fundamental_ingest — Financial indicators → fundamentals.parquet")
+    print("  feature_compute   — Compute momentum_20d feature")
+    print("  daily             — End-to-end: data → feature → strategy → report")
     return 0
+
+
+def cmd_fundamental() -> int:
+    """Run fundamental data fetch pipeline."""
+    from qp.pipeline.fundamental_pipeline import FundamentalPipeline
+    from qp.platform.pipeline.context import PipelineContext
+
+    pipeline = FundamentalPipeline()
+
+    kwargs: dict = {}
+    args = sys.argv[2:]
+    for arg in args:
+        if arg == "--quick":
+            kwargs["quick"] = True
+
+    context = PipelineContext(pipeline_name=pipeline.name, parameters=kwargs)
+    result = pipeline.run(context)
+
+    print(f"Status: {result.status.value}")
+    print(f"Rows:    {result.metrics.get('raw_rows', 'N/A')} raw")
+    print(f"Symbols: {result.metrics.get('output_symbols', 'N/A')}")
+    print(f"Output:  {result.artifacts[0] if result.artifacts else 'N/A'}")
+
+    return 0 if result.status.value == "success" else 1
 
 
 def cmd_ingest() -> int:
@@ -55,6 +80,8 @@ def cmd_ingest() -> int:
 
 def cmd_run() -> int:
     """Run the daily end-to-end pipeline."""
+    from datetime import date, timedelta
+
     from qp.pipeline.daily_pipeline import DailyPipeline
     from qp.platform.pipeline.context import PipelineContext
 
@@ -62,9 +89,12 @@ def cmd_run() -> int:
     print()
 
     demo = "--demo" in sys.argv
+    # Default: fetch last 5 days (Sina, fast with progress).
+    # Full backfill via `qp ingest 2015-01-01`.
+    recent_start = (date.today() - timedelta(days=5)).isoformat()
     context = PipelineContext(
         pipeline_name="daily",
-        parameters={"demo": demo} if demo else {},
+        parameters={"demo": demo, "start_date": recent_start} if demo else {"start_date": recent_start},
     )
     pipeline = DailyPipeline()
     result = pipeline.run(context)

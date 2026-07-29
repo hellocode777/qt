@@ -146,7 +146,7 @@ class DecisionEngine:
             # Build reason
             rank = ranks[i] if i < len(ranks) else i + 1
             score = scores[i] if i < len(scores) else 0.0
-            reason = f"动量排名 #{rank} (score={score:.3f})"
+            reason = f"多策略融合排名 #{rank} (score={score:.3f})"
 
             # Build confidence (higher rank = higher confidence)
             confidence = max(0.5, 1.0 - (rank - 1) / max(n_stocks * 2, 1))

@@ -1,0 +1,22 @@
+{
+  "dataset": "daily_price",
+  "status": "PASS",
+  "timestamp": "2026-07-28T22:15:53.656813+00:00",
+  "pipeline_run_id": "f7c16d8c2e10",
+  "checks": {
+    "empty": "pass",
+    "schema": "pass",
+    "price_valid": "pass",
+    "date_valid": "pass",
+    "drift_valid": "pass"
+  },
+  "rows_before": 7179226,
+  "rows_after": 7179226,
+  "new_rows": 0,
+  "symbols": 3051,
+  "date_range": {
+    "min": "2015-01-05",
+    "max": "2026-07-28"
+  },
+  "sha256": "8b05a3202b5f79af"
+}

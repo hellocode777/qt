@@ -54,6 +54,10 @@ def main() -> int:
         from qp.platform.cli.commands.ingest import cmd_run
 
         return cmd_run()
+    if command == "fundamental":
+        from qp.platform.cli.commands.ingest import cmd_fundamental
+
+        return cmd_fundamental()
     if command == "pipeline" and len(sys.argv) > 2 and sys.argv[2] == "list":
         from qp.platform.cli.commands.ingest import cmd_pipeline_list
 

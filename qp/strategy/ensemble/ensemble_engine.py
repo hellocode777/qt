@@ -140,25 +140,56 @@ class EnsembleEngine:
                 strategy_tags=strategy_tags,
             )
 
-        # ── 3. Apply weights — scale each strategy's scores ──
-        weighted_dfs: list[pl.DataFrame] = []
+        # ── 3. Apply weights and fuse per-symbol ──
+        # Instead of filling missing with 0 (which penalizes uncovered stocks),
+        # normalize by valid-strategy weight so only active strategies vote.
+        all_symbols: set[str] = set()
+        for df in aligned.values():
+            all_symbols.update(df["symbol"].to_list())
+
+        # Per-strategy weighted scores keyed by symbol
+        strategy_scores: dict[str, dict[str, float | None]] = {
+            sym: {} for sym in all_symbols
+        }
         for sid, df in aligned.items():
-            w = weights.get(sid, 1.0 / len(aligned))
+            w = weights.get(sid, 1.0 / max(len(aligned), 1))
             if w <= 0:
                 continue
-            weighted = df.with_columns((pl.col(score_col) * w).alias(score_col))
-            weighted_dfs.append(weighted)
+            for row in df.iter_rows(named=True):
+                sym = str(row["symbol"])
+                s = row[score_col]
+                s_val = float(s) if s is not None and s == s else None  # NaN check
+                strategy_scores[sym][sid] = s_val * w if s_val is not None else None
 
-        if not weighted_dfs:
-            return AlphaSignalBatch(date=date_str)
+        # Compute ensemble score per symbol (weighted avg of available strategies)
+        rows: list[dict] = []
+        for sym, sid_scores in strategy_scores.items():
+            valid_vals = [v for v in sid_scores.values() if v is not None]
+            valid_weights = [
+                weights.get(sid, 1.0 / max(len(aligned), 1))
+                for sid, v in sid_scores.items()
+                if v is not None
+            ]
+            total_w = sum(valid_weights)
+            ensemble_score = sum(valid_vals) / total_w if total_w > 0 else 0.0
+            coverage = len(valid_vals) / max(len(aligned), 1)
 
-        # ── 4. Fuse via aggregator ──
-        aggregator = self.aggregator or SignalAggregator(method="rank_blend")
-        fused = aggregator.aggregate(weighted_dfs)
+            row = {
+                "symbol": sym,
+                "aggregated_score": round(ensemble_score, 6),
+                "strategy_coverage": round(coverage, 2),
+                "n_strategies": len(valid_vals),
+            }
+            # Add per-strategy scores
+            for sid in aligned:
+                row[f"score_{sid}"] = sid_scores.get(sid)
+            rows.append(row)
+
+        fused = pl.DataFrame(rows)
         if fused.is_empty():
             return AlphaSignalBatch(date=date_str)
 
-        # ── 5. Convert to AlphaSignalBatch ──
+        # ── 4. Convert to AlphaSignalBatch ──
         batch = self._to_batch(
             fused,
             date_str=date_str,
@@ -301,27 +332,26 @@ class EnsembleEngine:
         for row in fused_df.iter_rows(named=True):
             sym = str(row.get("symbol", ""))
             score = float(row.get(score_col, 0.0))
+            coverage = float(row.get("strategy_coverage", 1.0))
+            n_strategies = int(row.get("n_strategies", len(raw_components)))
 
-            # Look up raw components per strategy
+            # Per-strategy scores from fused DataFrame (already computed)
             components: dict[str, float] = {}
-            for sid, df in raw_components.items():
-                sym_rows = df.filter(pl.col("symbol") == sym)
-                if not sym_rows.is_empty():
-                    # Find a score column
-                    for c in ["raw_score", "feature_value", "score"]:
-                        if c in sym_rows.columns:
-                            components[sid] = float(sym_rows[c].item())
-                            break
+            for sid in raw_components:
+                col_name = f"score_{sid}"
+                if col_name in fused_df.columns:
+                    val = row.get(col_name)
+                    if val is not None and val == val:  # not NaN
+                        components[sid] = float(val)
 
-            # Normalize fused score to [0, 1] via rank in batch
             signals.append(
                 AlphaSignal(
                     date=date_str,
                     symbol=sym,
                     alpha_score=score,
                     raw_components=components,
-                    confidence=1.0,
-                    strategy_id="ensemble",
+                    confidence=coverage,  # strategy coverage as confidence
+                    strategy_id=f"ensemble_{n_strategies}",
                 )
             )
 

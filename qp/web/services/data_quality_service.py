@@ -76,7 +76,9 @@ class DataQualityService:
                 datasets_today += 1
 
         # 2. Also check the latest daily_price parquet directly for today's stock count
-        latest_parquet = self._find_latest_parquet("daily_price")
+        latest_parquet = self._dataset_dir / "daily_price_latest.parquet"
+        if not latest_parquet.exists():
+            latest_parquet = self._find_latest_parquet("daily_price")  # fallback to old files
         daily_stocks = 0
         daily_rows = 0
         daily_end_date = ""
@@ -96,18 +98,9 @@ class DataQualityService:
             except Exception as e:
                 logger.warning("Failed to read daily_price parquet: {}", e)
 
-        # 3. Check main board dataset
-        main_parquet = self._find_latest_parquet("daily_price_main")
-        main_stocks = 0
-        main_rows = 0
-        if main_parquet:
-            try:
-                df = pl.read_parquet(str(main_parquet))
-                main_rows = df.height
-                if "symbol" in df.columns:
-                    main_stocks = df["symbol"].n_unique()
-            except Exception as e:
-                logger.warning("Failed to read main parquet: {}", e)
+        # 3. Total dataset stats (same file, full history)
+        main_stocks = daily_stocks  # same dataset
+        main_rows = daily_rows
 
         # 4. Freshness: how recent is the data (trading-day aware)
         freshness_status = "fresh"
@@ -132,6 +125,26 @@ class DataQualityService:
                 freshness_status = "unknown"
                 freshness_label = f"最新: {daily_end_date}"
 
+        # 5. Read quality report and registry for validation status
+        quality_checks: dict[str, str] = {}
+        data_hash = ""
+        pipeline_run_id = ""
+        report_path = Path("data/reports") / f"data_quality_{today_str}.json"
+        if report_path.exists():
+            try:
+                qr = json.loads(report_path.read_text(encoding="utf-8"))
+                quality_checks = qr.get("checks", {})
+            except Exception:
+                pass
+
+        # Read registry for hash and status
+        registry_entries = self._read_registry()
+        dp_entry = registry_entries.get("daily_price@latest", {})
+        if dp_entry:
+            meta = dp_entry.get("metadata", {})
+            data_hash = meta.get("sha256", "")[:8]
+            pipeline_run_id = meta.get("pipeline_run_id", "")[:8]
+
         return {
             "today": today_str,
             "datasets_today": datasets_today,
@@ -145,6 +158,12 @@ class DataQualityService:
             "freshness_status": freshness_status,
             "freshness_label": freshness_label,
             "today_entries": today_entries,
+            "quality_checks": quality_checks,
+            "data_hash": data_hash,
+            "pipeline_run_id": pipeline_run_id,
+            "all_checks_pass": all(
+                v == "pass" for v in quality_checks.values()
+            ) if quality_checks else False,
         }
 
     # ------------------------------------------------------------------
@@ -154,50 +173,79 @@ class DataQualityService:
     def source_health(self) -> list[dict[str, Any]]:
         """Get health status for all data sources.
 
-        Returns:
-            List of source health dicts with status, latency, error info.
+        Checks ``data/metadata/sources.json`` first; falls back to health
+        inferred from dataset presence (Sina + Tencent).
         """
-        if not self._sources_path.exists():
-            return [
-                {
-                    "source_name": "quant_trading_db",
-                    "health_status": "unknown",
-                    "status_label": "未检测",
-                    "last_success": "",
-                    "consecutive_failures": 0,
-                    "avg_latency": 0.0,
-                    "icon": "⚪",
-                }
-            ]
+        if self._sources_path.exists():
+            try:
+                data = json.loads(self._sources_path.read_text(encoding="utf-8"))
+                file_sources = data.get("sources", [])
+                if file_sources:
+                    return self._format_sources(file_sources)
+            except Exception:
+                pass
 
-        try:
-            data = json.loads(self._sources_path.read_text(encoding="utf-8"))
-            sources = data.get("sources", [])
-            result = []
-            for s in sources:
-                status = s.get("health_status", "healthy")
-                failures = s.get("consecutive_failures", 0)
-                result.append(
-                    {
-                        "source_name": s.get("source_name", ""),
-                        "description": s.get("description", ""),
-                        "data_kind": s.get("data_kind", ""),
-                        "health_status": status,
-                        "status_label": _health_label(status),
-                        "last_success": _format_time(s.get("last_fetch_success", "")),
-                        "last_attempt": _format_time(s.get("last_fetch_attempt", "")),
-                        "consecutive_failures": failures,
-                        "fetch_error_count": s.get("fetch_error_count", 0),
-                        "avg_latency": s.get("avg_latency_seconds", 0.0),
-                        "health_notes": s.get("health_notes", ""),
-                        "icon": _health_icon(status),
-                        "badge_class": _health_badge(status),
-                    }
-                )
-            return result
-        except Exception as e:
-            logger.warning("Failed to read source metadata: {}", e)
-            return []
+        # Fallback: infer health from dataset registry
+        return self._inferred_source_health()
+
+    def _format_sources(self, raw_sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Format raw source dicts from sources.json."""
+        result = []
+        for s in raw_sources:
+            status = s.get("health_status", "healthy")
+            result.append(
+                {
+                    "source_name": s.get("source_name", ""),
+                    "description": s.get("description", ""),
+                    "data_kind": s.get("data_kind", ""),
+                    "health_status": status,
+                    "status_label": _health_label(status),
+                    "last_success": _format_time(s.get("last_fetch_success", "")),
+                    "last_attempt": _format_time(s.get("last_fetch_attempt", "")),
+                    "consecutive_failures": s.get("consecutive_failures", 0),
+                    "fetch_error_count": s.get("fetch_error_count", 0),
+                    "avg_latency": s.get("avg_latency_seconds", 0.0),
+                    "health_notes": s.get("health_notes", ""),
+                    "icon": _health_icon(status),
+                    "badge_class": _health_badge(status),
+                }
+            )
+        return result
+
+    def _inferred_source_health(self) -> list[dict[str, Any]]:
+        """Infer source health from dataset files when sources.json is absent."""
+        registry = self._read_registry()
+        has_data = len(registry) > 0
+        return [
+            {
+                "source_name": "sina",
+                "description": "新浪财经 API — 日线行情",
+                "data_kind": "daily_ohlcv",
+                "health_status": "healthy" if has_data else "unknown",
+                "status_label": "正常" if has_data else "未检测",
+                "last_success": "",
+                "consecutive_failures": 0,
+                "fetch_error_count": 0,
+                "avg_latency": 0.0,
+                "health_notes": "",
+                "icon": "🟢" if has_data else "⚪",
+                "badge_class": "badge-green" if has_data else "badge-gray",
+            },
+            {
+                "source_name": "tencent",
+                "description": "腾讯财经 API — 长周期历史数据",
+                "data_kind": "daily_ohlcv",
+                "health_status": "healthy" if has_data else "unknown",
+                "status_label": "正常" if has_data else "未检测",
+                "last_success": "",
+                "consecutive_failures": 0,
+                "fetch_error_count": 0,
+                "avg_latency": 0.0,
+                "health_notes": "",
+                "icon": "🟢" if has_data else "⚪",
+                "badge_class": "badge-green" if has_data else "badge-gray",
+            },
+        ]
 
     # ------------------------------------------------------------------
     # Dataset inventory
