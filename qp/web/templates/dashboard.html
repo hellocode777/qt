@@ -215,12 +215,12 @@
   <div class="card">
     <div class="card-header">
       <span>&#128154; 策略健康 Strategy Health</span>
-      <span class="badge {{ health.health_badge if health else 'badge-green' }}">
-        {{ health.health_label if health else 'HEALTHY' }}
+      <span class="badge {{ health.health_badge if health else 'badge-gray' }}">
+        {{ health.health_label if health else '未计算 / N/A' }}
       </span>
     </div>
     <div class="card-body">
-      <div class="gauge-wrapper" x-data="{ score: {{ health.strategy_health_score | default(100) | int }} }">
+      <div class="gauge-wrapper" x-data="{ score: {{ (health.strategy_health_score | int) if health else 0 }} }">
         <canvas id="healthGauge" width="140" height="140"></canvas>
         <div class="gauge-score" style="margin-top: -30px;"
              :class="score >= 80 ? 'c-green' : score >= 60 ? 'c-yellow' : score >= 40 ? 'c-orange' : 'c-red'"
@@ -230,24 +230,32 @@
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; margin-top: 5px;">
         <div>
           <span class="c-muted">滚动 IC: </span>
-          <span class="font-mono {% if health and health.rolling_ic > 0.02 %}c-green{% elif health and health.rolling_ic > 0 %}c-yellow{% else %}c-red{% endif %}">
+          {% if health %}
+          <span class="font-mono {% if health.rolling_ic > 0.02 %}c-green{% elif health.rolling_ic > 0 %}c-yellow{% else %}c-red{% endif %}">
             {{ "%.4f" | format(health.rolling_ic | default(0)) }}
           </span>
+          {% else %}
+          <span class="c-muted">N/A</span>
+          {% endif %}
         </div>
         <div>
           <span class="c-muted">PSI 分布漂移: </span>
-          <span class="font-mono {% if health and health.psi_value < 0.1 %}c-green{% elif health and health.psi_value < 0.25 %}c-yellow{% else %}c-red{% endif %}">
+          {% if health %}
+          <span class="font-mono {% if health.psi_value < 0.1 %}c-green{% elif health.psi_value < 0.25 %}c-yellow{% else %}c-red{% endif %}">
             {{ "%.3f" | format(health.psi_value | default(0)) }}
           </span>
+          {% else %}
+          <span class="c-muted">N/A</span>
+          {% endif %}
         </div>
         <div>
           <span class="c-muted">模型衰减: </span>
-          <span class="font-mono">{{ health.model_decay_stage if health else 'HEALTHY' }}</span>
+          <span class="font-mono">{{ health.model_decay_stage if health else 'N/A' }}</span>
         </div>
         <div>
           <span class="c-muted">熔断状态: </span>
-          <span class="badge {{ health.kill_level_badge if health else 'badge-green' }}" style="font-size: 11px;">
-            {{ health.kill_level_label if health else '正常' }}
+          <span class="badge {{ health.kill_level_badge if health else 'badge-gray' }}" style="font-size: 11px;">
+            {{ health.kill_level_label if health else 'N/A' }}
           </span>
         </div>
       </div>

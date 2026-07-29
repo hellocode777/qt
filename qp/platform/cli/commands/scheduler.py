@@ -163,62 +163,107 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         ping_dir.mkdir(parents=True, exist_ok=True)
         (ping_dir / f"{job_name}.ping").write_text(f"{datetime.now(UTC).isoformat()}\n")
 
+    # ── Per-job log file ──
+    from contextlib import contextmanager
+
+    @contextmanager
+    def job_log_sink(job_name: str):
+        """Add a per-job Loguru file sink for the duration of the job.
+
+        Logs go to ``logs/{date}/{job_name}.log``.  Old date directories
+        (>7 days) are cleaned up on each run.
+        """
+        import shutil as _shutil
+        from datetime import date as _date
+        from datetime import timedelta as _td
+        from pathlib import Path
+
+        from loguru import logger as _loguru
+
+        today_str = _date.today().isoformat()
+        jobs_dir = Path("logs")
+        day_dir = jobs_dir / today_str
+        day_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clean up directories older than 7 days
+        cutoff = _date.today() - _td(days=7)
+        for d in jobs_dir.iterdir():
+            if d.is_dir() and d.name != today_str:
+                try:
+                    if _date.fromisoformat(d.name) < cutoff:
+                        _shutil.rmtree(d)
+                except (ValueError, OSError):
+                    pass  # skip non-date dirs / permission errors
+
+        log_path = day_dir / f"{job_name}.log"
+        sink_id = _loguru.add(
+            str(log_path),
+            level="DEBUG",
+            format="{time:HH:mm:ss.SSS} | {level: <8} | {extra[module]: <20} | {message}",
+            encoding="utf-8",
+        )
+        try:
+            yield
+        finally:
+            _loguru.remove(sink_id)
+
     # ── Job 1: morning health check (09:07 on weekdays) ──
     def job_monitor_check() -> None:
-        from qp.monitoring.kill_switch_pipeline import (
-            KillSwitchPipeline,
-            MonitorAction,
-        )
+        with job_log_sink("monitor_check"):
+            from qp.monitoring.kill_switch_pipeline import (
+                KillSwitchPipeline,
+                MonitorAction,
+            )
 
-        ctx = _make_ctx("scheduled_monitor")
-        pipeline = KillSwitchPipeline()
-        result = pipeline.run(ctx)
+            ctx = _make_ctx("scheduled_monitor")
+            pipeline = KillSwitchPipeline()
+            result = pipeline.run(ctx)
 
-        if result.status.value != "success":
-            print(f"[scheduler] monitor_check FAILED: {result.errors}")
-            return
+            if result.status.value != "success":
+                print(f"[scheduler] monitor_check FAILED: {result.errors}")
+                return
 
-        report = result.metadata.get("report")  # type: ignore[union-attr]
-        if report is None:
-            return
+            report = result.metadata.get("report")  # type: ignore[union-attr]
+            if report is None:
+                return
 
-        action = report.action
-        print(
-            f"[scheduler] monitor_check: action={action.value} "
-            f"regime={report.regime.regime.value if report.regime else '?'} "
-            f"psi={report.psi_value:.3f} decay={report.model_decay_stage} "
-            f"ks={'YES' if report.kill_switch_triggered else 'no'}"
-        )
-        if action in (MonitorAction.STOP, MonitorAction.PAUSE_BUY):
-            print(f"[scheduler] ⚠️  EMERGENCY: {action.value} — review before trading!")
+            action = report.action
+            print(
+                f"[scheduler] monitor_check: action={action.value} "
+                f"regime={report.regime.regime.value if report.regime else '?'} "
+                f"psi={report.psi_value:.3f} decay={report.model_decay_stage} "
+                f"ks={'YES' if report.kill_switch_triggered else 'no'}"
+            )
+            if action in (MonitorAction.STOP, MonitorAction.PAUSE_BUY):
+                print(f"[scheduler] ⚠️  EMERGENCY: {action.value} — review before trading!")
 
-        # Consume pending retrain signals (#13 fix)
-        try:
-            from qp.monitoring.retrain_signal import RetrainSignalLogger
+            # Consume pending retrain signals (#13 fix)
+            try:
+                from qp.monitoring.retrain_signal import RetrainSignalLogger
 
-            rs_logger = RetrainSignalLogger()
-            signals = rs_logger.load_history(days=7)
-            actionable = [
-                s
-                for s in signals.iter_rows(named=True)
-                if s.get("action") not in ("NONE", "MONITOR")
-            ]
-            if actionable:
-                print(f"[scheduler] retrain_signals: {len(actionable)} actionable")
-                for s in actionable[:3]:
-                    print(
-                        f"  - [{s.get('trigger', '?')}] {s.get('strategy_name', '?')}: {s.get('action', '?')}"
-                    )
-        except Exception:
-            pass
+                rs_logger = RetrainSignalLogger()
+                signals = rs_logger.load_history(days=7)
+                actionable = [
+                    s
+                    for s in signals.iter_rows(named=True)
+                    if s.get("action") not in ("NONE", "MONITOR")
+                ]
+                if actionable:
+                    print(f"[scheduler] retrain_signals: {len(actionable)} actionable")
+                    for s in actionable[:3]:
+                        print(
+                            f"  - [{s.get('trigger', '?')}] {s.get('strategy_name', '?')}: {s.get('action', '?')}"
+                        )
+            except Exception:
+                pass
 
-        watchdog_ping("monitor_check")
+            watchdog_ping("monitor_check")
 
     scheduler.add_job(
         Job(
             name="monitor_check",
             task=job_monitor_check,
-            trigger=CronTrigger(day="1-5", hour="9", minute="7"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="9", minute="7"),
         )
     )
 
@@ -231,210 +276,214 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         because it requires data re-fetch, CV, and model registration — all
         of which need human oversight.
         """
-        try:
-            from qp.monitoring.retrain_signal import (
-                RetrainSignalLogger,
-            )
-
-            rs_logger = RetrainSignalLogger()
-            signals = rs_logger.load_history(days=7)
-            actionable = [
-                s
-                for s in signals.iter_rows(named=True)
-                if s.get("action") not in ("NONE", "MONITOR")
-            ]
-
-            if not actionable:
-                return  # Nothing to do
-
-            # Build alert
-            lines = [f"📢 Retrain Signal ({len(actionable)} actionable)"]
-            for s in actionable[:5]:
-                lines.append(
-                    f"  [{s.get('trigger', '?')}] {s.get('strategy_name', '?'):>24s} → "
-                    f"{s.get('action', '?')}"
-                )
-            lines.append(
-                f"  最近信号: {actionable[-1].get('message', '')[:80]}"
-                if len(actionable[-1].get("message", "")) > 0
-                else ""
-            )
-
-            alert_text = "\n".join(lines)
-            print(f"[scheduler] retrain_notify:\n{alert_text}")
-
-            # Send Email alert
+        with job_log_sink("retrain_notify"):
             try:
-                from qp.monitoring.alerts import (
-                    Alert,
-                    AlertManager,
-                    AlertSeverity,
-                    EmailAlert,
+                from qp.monitoring.retrain_signal import (
+                    RetrainSignalLogger,
                 )
 
-                email = EmailAlert()
-                if email.is_configured:
-                    mgr = AlertManager()
-                    mgr.add_channel(email)
-                    mgr.send(
-                        Alert(
-                            severity=AlertSeverity.WARNING,
-                            title="QP Retrain Signal",
-                            message=alert_text,
-                            source="retrain_notify",
-                        )
-                    )
-                    print("[scheduler] retrain_notify: Email alert sent")
-            except Exception:
-                pass  # Email is optional
-        except Exception:
-            pass
+                rs_logger = RetrainSignalLogger()
+                signals = rs_logger.load_history(days=7)
+                actionable = [
+                    s
+                    for s in signals.iter_rows(named=True)
+                    if s.get("action") not in ("NONE", "MONITOR")
+                ]
 
-        watchdog_ping("retrain_notify")
+                if not actionable:
+                    return  # Nothing to do
+
+                # Build alert
+                lines = [f"📢 Retrain Signal ({len(actionable)} actionable)"]
+                for s in actionable[:5]:
+                    lines.append(
+                        f"  [{s.get('trigger', '?')}] {s.get('strategy_name', '?'):>24s} → "
+                        f"{s.get('action', '?')}"
+                    )
+                lines.append(
+                    f"  最近信号: {actionable[-1].get('message', '')[:80]}"
+                    if len(actionable[-1].get("message", "")) > 0
+                    else ""
+                )
+
+                alert_text = "\n".join(lines)
+                print(f"[scheduler] retrain_notify:\n{alert_text}")
+
+                # Send Email alert
+                try:
+                    from qp.monitoring.alerts import (
+                        Alert,
+                        AlertManager,
+                        AlertSeverity,
+                        EmailAlert,
+                    )
+
+                    email = EmailAlert()
+                    if email.is_configured:
+                        mgr = AlertManager()
+                        mgr.add_channel(email)
+                        mgr.send(
+                            Alert(
+                                severity=AlertSeverity.WARNING,
+                                title="QP Retrain Signal",
+                                message=alert_text,
+                                source="retrain_notify",
+                            )
+                        )
+                        print("[scheduler] retrain_notify: Email alert sent")
+                except Exception:
+                    pass  # Email is optional
+            except Exception:
+                pass
+
+            watchdog_ping("retrain_notify")
 
     scheduler.add_job(
         Job(
             name="retrain_notify",
             task=job_retrain_notify,
-            trigger=CronTrigger(day="1-5", hour="9", minute="17"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="9", minute="17"),
         )
     )
 
     # ── Job 3: pre-close health gate (16:53 on weekdays) ──
     def job_pre_close_check() -> None:
         """收盘前快速检查，决定是否执行盘后策略."""
-        from qp.monitoring.kill_switch_pipeline import (
-            KillSwitchPipeline,
-            MonitorAction,
-        )
-
-        ctx = _make_ctx("pre_close_check")
-        pipeline = KillSwitchPipeline()
-        result = pipeline.run(ctx)
-
-        if result.status.value != "success":
-            print(f"[scheduler] pre_close_check FAILED: {result.errors}")
-            return
-
-        report = result.metadata.get("report")  # type: ignore[union-attr]
-        if report is None:
-            return
-
-        action = report.action
-        if action in (MonitorAction.STOP,):
-            print(
-                f"[scheduler] ⛔ pre_close_check: {action.value} — "
-                f"SKIPPING daily pipeline for safety!"
+        with job_log_sink("pre_close_check"):
+            from qp.monitoring.kill_switch_pipeline import (
+                KillSwitchPipeline,
+                MonitorAction,
             )
-            return  # daily_pipeline won't run because we return non-zero? No, we still run it but log the warning
 
-        print(
-            f"[scheduler] pre_close_check: {action.value} — "
-            f"regime={report.regime.regime.value if report.regime else '?'} "
-            f"health={report.strategy_health.health_score:.0f if report.strategy_health else '?'}"
-        )
-        watchdog_ping("pre_close_check")
+            ctx = _make_ctx("pre_close_check")
+            pipeline = KillSwitchPipeline()
+            result = pipeline.run(ctx)
+
+            if result.status.value != "success":
+                print(f"[scheduler] pre_close_check FAILED: {result.errors}")
+                return
+
+            report = result.metadata.get("report")  # type: ignore[union-attr]
+            if report is None:
+                return
+
+            action = report.action
+            if action in (MonitorAction.STOP,):
+                print(
+                    f"[scheduler] ⛔ pre_close_check: {action.value} — "
+                    f"SKIPPING daily pipeline for safety!"
+                )
+                return
+
+            print(
+                f"[scheduler] pre_close_check: {action.value} — "
+                f"regime={report.regime.regime.value if report.regime else '?'} "
+                f"health={report.strategy_health.health_score:.0f if report.strategy_health else '?'}"
+            )
+            watchdog_ping("pre_close_check")
 
     scheduler.add_job(
         Job(
             name="pre_close_check",
             task=job_pre_close_check,
-            trigger=CronTrigger(day="1-5", hour="16", minute="53"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="16", minute="53"),
         )
     )
 
     # ── Job 4: daily decision pipeline (17:57 on weekdays) ──
     def job_daily_pipeline() -> None:
-        from datetime import date, timedelta
+        with job_log_sink("daily_pipeline"):
+            from datetime import date, timedelta
 
-        from qp.pipeline.daily_pipeline import DailyPipeline
+            from qp.pipeline.daily_pipeline import DailyPipeline
 
-        # Fetch recent data — incremental merge with existing history
-        recent_start = (date.today() - timedelta(days=5)).isoformat()
-        ctx = _make_ctx("scheduled_daily", start_date=recent_start)
-        pipeline = DailyPipeline()
-        result = pipeline.run(ctx)
-        status = result.status.value
-        package_id = result.metadata.get("decision_package_id", "?")
-        watchdog_ping("daily_pipeline")
-        print(f"[scheduler] daily_pipeline: {status} → {package_id}")
+            # Fetch recent data — incremental merge with existing history
+            recent_start = (date.today() - timedelta(days=5)).isoformat()
+            ctx = _make_ctx("scheduled_daily", start_date=recent_start)
+            pipeline = DailyPipeline()
+            result = pipeline.run(ctx)
+            status = result.status.value
+            package_id = result.metadata.get("decision_package_id", "?")
+            watchdog_ping("daily_pipeline")
+            print(f"[scheduler] daily_pipeline: {status} → {package_id}")
 
     scheduler.add_job(
         Job(
             name="daily_pipeline",
             task=job_daily_pipeline,
-            trigger=CronTrigger(day="1-5", hour="17", minute="57"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="17", minute="57"),
         )
     )
 
     # ── Job 5: email decision report (18:03 on weekdays) ──
     def job_email_report() -> None:
         """Send today's DecisionPackage as email after daily_pipeline completes."""
-        import json as _json
-        from datetime import UTC, datetime
-        from pathlib import Path
+        with job_log_sink("email_report"):
+            import json as _json
+            from datetime import UTC, datetime
+            from pathlib import Path
 
-        from qp.monitoring.alerts import Alert, AlertManager, AlertSeverity, EmailAlert
+            from qp.monitoring.alerts import Alert, AlertManager, AlertSeverity, EmailAlert
 
-        email = EmailAlert()
-        if not email.is_configured:
-            print("[scheduler] email_report: Email not configured, skipping")
-            watchdog_ping("email_report")
-            return
+            email = EmailAlert()
+            if not email.is_configured:
+                print("[scheduler] email_report: Email not configured, skipping")
+                watchdog_ping("email_report")
+                return
 
-        # Find today's DecisionPackage
-        decisions_dir = Path("data/decisions")
-        today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+            # Find today's DecisionPackage
+            decisions_dir = Path("data/decisions")
+            today_str = datetime.now(UTC).strftime("%Y-%m-%d")
 
-        # Try JSON first, then markdown
-        json_files = sorted(decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True)
-        md_file = decisions_dir / f"{today_str}.md"
+            # Try JSON first, then markdown
+            json_files = sorted(decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True)
+            md_file = decisions_dir / f"{today_str}.md"
 
-        subject = f"QP 每日投资决策 — {today_str}"
-        body = ""
+            subject = f"QP 每日投资决策 — {today_str}"
+            body = ""
 
-        if json_files:
+            if json_files:
+                try:
+                    data = _json.loads(json_files[0].read_text(encoding="utf-8"))
+                    body = format_decision_email(data, today_str)
+                except Exception:
+                    pass
+
+            if not body and md_file.exists():
+                try:
+                    body = md_file.read_text(encoding="utf-8")
+                    # Truncate if too long for email
+                    if len(body) > 15000:
+                        body = body[:15000] + "\n\n... (truncated)"
+                    subject = f"QP 每日投资决策 — {today_str}"
+                except Exception:
+                    body = f"DecisionPackage for {today_str}\n\n(no readable content)"
+
+            if not body:
+                body = f"QP Daily Pipeline completed for {today_str}.\n\nNo DecisionPackage found — check logs."
+
             try:
-                data = _json.loads(json_files[0].read_text(encoding="utf-8"))
-                body = format_decision_email(data, today_str)
-            except Exception:
-                pass
-
-        if not body and md_file.exists():
-            try:
-                body = md_file.read_text(encoding="utf-8")
-                # Truncate if too long for email
-                if len(body) > 15000:
-                    body = body[:15000] + "\n\n... (truncated)"
-                subject = f"QP 每日投资决策 — {today_str}"
-            except Exception:
-                body = f"DecisionPackage for {today_str}\n\n(no readable content)"
-
-        if not body:
-            body = f"QP Daily Pipeline completed for {today_str}.\n\nNo DecisionPackage found — check logs."
-
-        try:
-            mgr = AlertManager()
-            mgr.add_channel(email)
-            mgr.send(
-                Alert(
-                    severity=AlertSeverity.INFO,
-                    title=subject,
-                    message=body,
-                    source="email_report",
+                mgr = AlertManager()
+                mgr.add_channel(email)
+                mgr.send(
+                    Alert(
+                        severity=AlertSeverity.INFO,
+                        title=subject,
+                        message=body,
+                        source="email_report",
+                    )
                 )
-            )
-            print(f"[scheduler] email_report: sent → {subject}")
-        except Exception as e:
-            print(f"[scheduler] email_report FAILED: {e}")
+                print(f"[scheduler] email_report: sent → {subject}")
+            except Exception as e:
+                print(f"[scheduler] email_report FAILED: {e}")
 
-        watchdog_ping("email_report")
+            watchdog_ping("email_report")
 
     scheduler.add_job(
         Job(
             name="email_report",
             task=job_email_report,
-            trigger=CronTrigger(day="1-5", hour="18", minute="3"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="3"),
         )
     )
 

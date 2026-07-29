@@ -1,8 +1,8 @@
 {
   "dataset": "daily_price",
   "status": "PASS",
-  "timestamp": "2026-07-28T22:15:53.656813+00:00",
-  "pipeline_run_id": "f7c16d8c2e10",
+  "timestamp": "2026-07-29T10:34:48.390775+00:00",
+  "pipeline_run_id": "eafa5645b04b",
   "checks": {
     "empty": "pass",
     "schema": "pass",
@@ -11,12 +11,12 @@
     "drift_valid": "pass"
   },
   "rows_before": 7179226,
-  "rows_after": 7179226,
-  "new_rows": 0,
+  "rows_after": 7182255,
+  "new_rows": 3029,
   "symbols": 3051,
   "date_range": {
     "min": "2015-01-05",
-    "max": "2026-07-28"
+    "max": "2026-07-29"
   },
-  "sha256": "8b05a3202b5f79af"
+  "sha256": "878e5fc92a8ee9a8"
 }

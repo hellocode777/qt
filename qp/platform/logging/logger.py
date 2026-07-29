@@ -65,11 +65,11 @@ class QPLogger:
                 colorize=True,
             )
 
-        # File handler — always structured
+        # File handler — structured, one directory per day
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
         self._logger.add(
-            log_path / "qp_{time:YYYY-MM-DD}.log",
+            str(log_path) + "/{time:YYYY-MM-DD}/qp.log",
             level=level,
             format=("{time:ISO8601} | {level: <8} | {extra[module]: <20} | {message} | {extra}"),
             rotation=rotation,

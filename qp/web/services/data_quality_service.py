@@ -98,8 +98,21 @@ class DataQualityService:
             except Exception as e:
                 logger.warning("Failed to read daily_price parquet: {}", e)
 
-        # 3. Total dataset stats (same file, full history)
-        main_stocks = daily_stocks  # same dataset
+        # 3. Today's new data: from quality report (only rows added today)
+        today_stocks = 0
+        today_rows = 0
+        qr: Any = None
+        report_path = Path("data/reports") / f"data_quality_{today_str}.json"
+        if report_path.exists():
+            try:
+                qr = json.loads(report_path.read_text(encoding="utf-8"))
+                today_rows = qr.get("new_rows", 0)
+                today_stocks = qr.get("symbols", daily_stocks)
+            except Exception:
+                pass
+
+        # 4. Total dataset stats (full history)
+        main_stocks = daily_stocks
         main_rows = daily_rows
 
         # 4. Freshness: how recent is the data (trading-day aware)
@@ -125,19 +138,12 @@ class DataQualityService:
                 freshness_status = "unknown"
                 freshness_label = f"最新: {daily_end_date}"
 
-        # 5. Read quality report and registry for validation status
-        quality_checks: dict[str, str] = {}
-        data_hash = ""
-        pipeline_run_id = ""
-        report_path = Path("data/reports") / f"data_quality_{today_str}.json"
-        if report_path.exists():
-            try:
-                qr = json.loads(report_path.read_text(encoding="utf-8"))
-                quality_checks = qr.get("checks", {})
-            except Exception:
-                pass
+        # 5. Validation checks from quality report (already loaded above)
+        quality_checks: dict[str, str] = qr.get("checks", {}) if qr else {}
 
         # Read registry for hash and status
+        data_hash = ""
+        pipeline_run_id = ""
         registry_entries = self._read_registry()
         dp_entry = registry_entries.get("daily_price@latest", {})
         if dp_entry:
@@ -148,9 +154,9 @@ class DataQualityService:
         return {
             "today": today_str,
             "datasets_today": datasets_today,
-            "daily_stocks": daily_stocks if daily_stocks > 0 else total_stocks,
-            "daily_rows": daily_rows if daily_rows > 0 else total_rows,
-            "daily_rows_fmt": f"{daily_rows if daily_rows > 0 else total_rows:,}",
+            "daily_stocks": today_stocks,
+            "daily_rows": today_rows,
+            "daily_rows_fmt": f"{today_rows:,}",
             "main_stocks": main_stocks,
             "main_rows": main_rows,
             "main_rows_fmt": f"{main_rows:,}",

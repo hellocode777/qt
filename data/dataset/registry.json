@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-28T22:15:53.656550+00:00",
+  "updated_at": "2026-07-29T10:34:48.390471+00:00",
   "base_dir": "data/dataset",
   "entries": {
     "daily_price@2026-07-27": {
@@ -41,20 +41,20 @@
       "path": "data/dataset/daily_price_latest.parquet",
       "metadata": {
         "start_date": "2015-01-05",
-        "end_date": "2026-07-28",
-        "rows": 7179226,
+        "end_date": "2026-07-29",
+        "rows": 7182255,
         "symbols": 3051,
-        "sha256": "8b05a3202b5f79af",
-        "updated_at": "2026-07-28T22:15:53.656490+00:00",
+        "sha256": "878e5fc92a8ee9a8",
+        "updated_at": "2026-07-29T10:34:48.390398+00:00",
         "status": "READY",
         "validation": {
           "passed": 7,
           "failed": 0
         },
-        "pipeline_run_id": "f7c16d8c2e10",
+        "pipeline_run_id": "eafa5645b04b",
         "source": "sina"
       },
-      "registered_at": "2026-07-28T22:15:53.656515+00:00"
+      "registered_at": "2026-07-29T10:34:48.390426+00:00"
     }
   }
 }

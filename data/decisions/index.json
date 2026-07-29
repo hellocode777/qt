@@ -11,6 +11,17 @@
     "human_executed": false
   },
   {
+    "package_id": "dp-2026-07-29-eafa5645",
+    "date": "2026-07-29",
+    "generated_at": "2026-07-29T10:37:26.526517+00:00",
+    "regime": "neutral",
+    "n_recommendations": 13,
+    "estimated_cost_pct": 0.1338,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
     "package_id": "dp-2026-07-28-28d0d0c8",
     "date": "2026-07-28",
     "generated_at": "2026-07-28T00:52:45.467689+00:00",

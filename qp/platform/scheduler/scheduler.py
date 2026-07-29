@@ -42,6 +42,7 @@ class QPScheduler:
                     year=job.trigger.year,
                     month=job.trigger.month,
                     day=job.trigger.day,
+                    day_of_week=job.trigger.day_of_week,
                     hour=job.trigger.hour,
                     minute=job.trigger.minute,
                 )
