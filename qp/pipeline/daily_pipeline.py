@@ -275,7 +275,7 @@ class DailyPipeline(BasePipeline):
         )
 
         try:
-            total_capital = context.parameters.get("capital", 1_000_000)
+            total_capital = context.parameters.get("capital", 100_000)
             top_n = context.parameters.get("top_n", 10)
             alloc_method = context.parameters.get("allocator", "equal_weight")
             today = date.today()

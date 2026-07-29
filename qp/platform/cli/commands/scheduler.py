@@ -118,8 +118,8 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
       - monitor_check:     KillSwitchPipeline full    (weekdays 09:07)
       - retrain_notify:    Check retrain signals      (weekdays 09:17)
       - pre_close_check:   KillSwitchPipeline fast    (weekdays 16:53)
-      - daily_pipeline:    DailyPipeline              (weekdays 17:57)
-      - email_report:      Email DecisionPackage      (weekdays 18:03)
+      - daily_pipeline:    DailyPipeline              (weekdays 18:00)
+      - email_report:      Email DecisionPackage      (weekdays 18:30)
 
     When an Application is provided (via CLI main), the scheduler uses
     the runtime's logger, config, and signal handling (ADR-012).
@@ -199,7 +199,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         sink_id = _loguru.add(
             str(log_path),
             level="DEBUG",
-            format="{time:HH:mm:ss.SSS} | {level: <8} | {extra[module]: <20} | {message}",
+            format="{time:HH:mm:ss.SSS} | {level: <8} | {name: <32} | {message}",
             encoding="utf-8",
         )
         try:
@@ -411,7 +411,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         Job(
             name="daily_pipeline",
             task=job_daily_pipeline,
-            trigger=CronTrigger(day_of_week="mon-fri", hour="17", minute="57"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="0"),
         )
     )
 
@@ -483,7 +483,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         Job(
             name="email_report",
             task=job_email_report,
-            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="3"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="30"),
         )
     )
 

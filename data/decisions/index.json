@@ -22,6 +22,17 @@
     "human_executed": false
   },
   {
+    "package_id": "dp-2026-07-29-8f43511b",
+    "date": "2026-07-29",
+    "generated_at": "2026-07-29T11:18:18.285704+00:00",
+    "regime": "sideways_down",
+    "n_recommendations": 14,
+    "estimated_cost_pct": 0.1317,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  },
+  {
     "package_id": "dp-2026-07-28-28d0d0c8",
     "date": "2026-07-28",
     "generated_at": "2026-07-28T00:52:45.467689+00:00",
