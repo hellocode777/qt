@@ -1,0 +1,13 @@
+[
+  {
+    "package_id": "dp-2026-07-29-4c3114c0",
+    "date": "2026-07-29",
+    "generated_at": "2026-07-29T12:42:40.756297+00:00",
+    "regime": "sideways_down",
+    "n_recommendations": 14,
+    "estimated_cost_pct": 0.1272,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false
+  }
+]

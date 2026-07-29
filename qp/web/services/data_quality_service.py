@@ -75,45 +75,49 @@ class DataQualityService:
                 total_rows += n_rows
                 datasets_today += 1
 
-        # 2. Also check the latest daily_price parquet directly for today's stock count
+        # 2. Scan the latest daily_price parquet for today & full stats
         latest_parquet = self._dataset_dir / "daily_price_latest.parquet"
         if not latest_parquet.exists():
             latest_parquet = self._find_latest_parquet("daily_price")  # fallback to old files
-        daily_stocks = 0
-        daily_rows = 0
+        today_stocks = 0
+        today_rows = 0
+        main_stocks = 0
+        main_rows = 0
         daily_end_date = ""
 
         if latest_parquet:
             try:
                 df = pl.read_parquet(str(latest_parquet))
-                daily_rows = df.height
+                main_rows = df.height
                 if "symbol" in df.columns:
-                    daily_stocks = df["symbol"].n_unique()
+                    main_stocks = df["symbol"].n_unique()
                 # Find latest trade_date
                 if "trade_date" in df.columns:
                     dates = (
                         df.select(pl.col("trade_date").cast(pl.Utf8)).unique().sort("trade_date")
                     )
                     daily_end_date = str(dates.tail(1).item() if not dates.is_empty() else "")
+                    # Today's rows: count rows matching latest trade_date
+                    today_df = df.filter(pl.col("trade_date").cast(pl.Utf8) == daily_end_date)
+                    today_rows = today_df.height
+                    if "symbol" in today_df.columns:
+                        today_stocks = today_df["symbol"].n_unique()
             except Exception as e:
                 logger.warning("Failed to read daily_price parquet: {}", e)
 
-        # 3. Today's new data: from quality report (only rows added today)
-        today_stocks = 0
-        today_rows = 0
+        # 3. Quality report (for validation checks)
         qr: Any = None
         report_path = Path("data/reports") / f"data_quality_{today_str}.json"
         if report_path.exists():
             try:
                 qr = json.loads(report_path.read_text(encoding="utf-8"))
-                today_rows = qr.get("new_rows", 0)
-                today_stocks = qr.get("symbols", daily_stocks)
             except Exception:
                 pass
 
-        # 4. Total dataset stats (full history)
-        main_stocks = daily_stocks
-        main_rows = daily_rows
+        # 4. Fallback: if no today data from parquet, try report
+        if today_rows == 0 and qr:
+            today_rows = qr.get("new_rows", 0)
+            today_stocks = qr.get("symbols", main_stocks)
 
         # 4. Freshness: how recent is the data (trading-day aware)
         freshness_status = "fresh"
