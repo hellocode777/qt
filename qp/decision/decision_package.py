@@ -244,6 +244,8 @@ class DecisionPackage:
                 "cost_summary": self.report.cost_summary,
                 "n_buys": self.report.n_buys,
                 "n_sells": self.report.n_sells,
+                "total_invested": self.report.total_invested,
+                "remaining_cash": self.report.remaining_cash,
                 "total_estimated_cost": self.report.total_estimated_cost,
                 "recommendations": recs,
             },

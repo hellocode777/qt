@@ -123,6 +123,16 @@ class DecisionReport:
         return sum(r.estimated_cost for r in self.recommendations)
 
     @property
+    def total_invested(self) -> float:
+        """Total trade value across all buy recommendations."""
+        return sum(r.trade_value for r in self.recommendations if r.action == "BUY")
+
+    @property
+    def remaining_cash(self) -> float:
+        """Cash remaining after all buy recommendations."""
+        return self.total_capital - self.total_invested
+
+    @property
     def total_trade_value(self) -> float:
         """Total trade value across all recommendations."""
         return sum(r.trade_value for r in self.recommendations)

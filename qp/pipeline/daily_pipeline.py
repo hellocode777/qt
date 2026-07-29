@@ -711,11 +711,16 @@ class DailyPipeline(BasePipeline):
                 total_capital=total_capital,
             )
             if not filtered_signals.is_empty() and not prices.is_empty():
+                # Use only latest price per symbol (avoid stale historical prices)
+                latest_prices = (
+                    prices.sort("trade_date", descending=True)
+                    .unique(subset=["symbol"], keep="first")
+                )
                 try:
                     engine = DecisionEngine()
                     decision_report = engine.generate(
                         signals=filtered_signals,
-                        prices=prices,
+                        prices=latest_prices,
                         risk_report=risk_report,
                         total_capital=total_capital,
                         strategy_id="multi_strategy_ensemble",
