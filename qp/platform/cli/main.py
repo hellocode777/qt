@@ -137,6 +137,14 @@ def main() -> int:
         print(f"qp position: unknown subcommand '{sub}'. Try: list, show, close, pnl, history", file=sys.stderr)
         return 1
 
+    # ── Simulation (Shadow Production) ──
+    if command == "simulation" and len(sys.argv) > 2 and sys.argv[2] == "shadow":
+        if len(sys.argv) > 3:
+            from qp.platform.cli.commands.shadow import cmd_shadow_run
+            return cmd_shadow_run(sys.argv[3])
+        from qp.platform.cli.commands.shadow import cmd_shadow_summary
+        return cmd_shadow_summary()
+
     # ── Experiment ──
     if command == "experiment":
         if len(sys.argv) < 3:

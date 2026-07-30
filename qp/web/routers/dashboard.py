@@ -49,6 +49,7 @@ async def dashboard(request: Request) -> Any:
     decision = decision_svc.latest()
     system_state = health_svc.system_state()
     health = health_svc.latest_health()
+    strategy_health = health_svc.strategy_health_list()
     data_quality = dq_svc.today_summary()
     source_health = dq_svc.source_health()
     has_data = decision is not None
@@ -69,6 +70,7 @@ async def dashboard(request: Request) -> Any:
             "decision": decision,
             "system_state": system_state,
             "health": health,
+            "strategy_health": strategy_health,
             "data_quality": data_quality,
             "source_health": source_health,
             "has_data": has_data,

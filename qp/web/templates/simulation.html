@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>影子运行 Shadow Production</h1>
+    <div class="meta">
+      模拟执行系统推荐 · 不涉及真实资金
+    </div>
+  </div>
+</div>
+
+{% if not has_data %}
+<div class="empty-state">
+  <div class="icon">&#128184;</div>
+  <h2>暂无影子运行数据</h2>
+  <p>运行 <code>qp run daily</code> 即可自动启动影子运行</p>
+</div>
+{% else %}
+
+<!-- Performance Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">交易日</div>
+    <div style="font-size: 28px; font-weight: 700;">{{ trading_days }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">累计收益</div>
+    <div style="font-size: 24px; font-weight: 700; color: {% if total_return >= 0 %}var(--green){% else %}var(--red){% endif %};">
+      {{ total_return_fmt }}
+    </div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">持仓市值</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ summary.total_value_fmt }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">已实现盈亏</div>
+    <div style="font-size: 20px; font-weight: 700; color: {% if summary.realized_pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">
+      {{ summary.realized_pnl_fmt }}
+    </div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">胜率</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ summary.win_rate }}</div>
+  </div>
+</div>
+
+<!-- Daily P&L Table -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header">
+    <span>&#128200; 每日权益 Daily Equity</span>
+    <span class="c-muted" style="font-size: 12px;">最近 {{ history|length }} 天</span>
+  </div>
+  <div class="card-body">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>日期</th>
+          <th>持仓</th>
+          <th>市值</th>
+          <th>当日盈亏</th>
+          <th>累计已实现</th>
+          <th>总权益</th>
+          <th>决策包</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in history|reverse %}
+        <tr>
+          <td>{{ h.date }}</td>
+          <td>{{ h.n_positions }}</td>
+          <td>¥{{ "%.0f"|format(h.market_value) }}</td>
+          <td style="color: {% if h.unrealized_pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">
+            ¥{{ "%+.0f"|format(h.unrealized_pnl) }}
+          </td>
+          <td>¥{{ "%.0f"|format(h.realized_pnl) }}</td>
+          <td><strong>¥{{ "%.0f"|format(h.total_equity) }}</strong></td>
+          <td><a href="/decisions/{{ h.decision_id }}" style="font-size: 12px; color: var(--blue);">{{ h.decision_id }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}

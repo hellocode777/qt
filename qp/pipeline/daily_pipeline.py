@@ -506,6 +506,53 @@ class DailyPipeline(BasePipeline):
                     }
 
             # ================================================================
+            # Step 7.5: Quality Gate — skip trading if all strategies fail badly
+            # ================================================================
+            avg_validation_score = (
+                sum(v.get("score", 0) for v in validation_results.values())
+                / max(len(validation_results), 1)
+            )
+            result.metrics["avg_validation_score"] = round(avg_validation_score, 1)
+
+            MIN_QUALITY_SCORE = 30.0  # Below this → skip trading entirely
+            if validation_results and avg_validation_score < MIN_QUALITY_SCORE:
+                result.metadata["quality_gate"] = (
+                    f"BLOCKED — 平均验证分 {avg_validation_score:.0f}/100 < {MIN_QUALITY_SCORE:.0f}，"
+                    f"今日不推荐交易"
+                )
+                logger.warning(
+                    "⛔ Quality Gate: avg validation {:.0f}/100 < {} → 跳过今日交易",
+                    avg_validation_score, MIN_QUALITY_SCORE,
+                )
+                # Build an empty DecisionPackage for the audit trail
+                package_id = f"dp-{today.isoformat()}-{run_id_short}"
+                quality_regime = RegimeContext(
+                    regime=regime_label,
+                    confidence=result.metrics.get("regime_confidence", 0.0),
+                    suggested_exposure=0.0,
+                )
+                package = DecisionPackage(
+                    package_id=package_id,
+                    date=today.isoformat(),
+                    generated_at=datetime.now(UTC).isoformat(),
+                    lineage=lineage_snapshot,
+                    regime=quality_regime,
+                    validation=validation_results,
+                    metadata={
+                        "pipeline_run_id": context.run_id,
+                        "quality_gate": "BLOCKED",
+                        "avg_validation_score": str(avg_validation_score),
+                    },
+                )
+                json_path = package.to_json()
+                md_path = package.to_markdown()
+                package.update_index()
+                result.metadata["decision_package_id"] = package_id
+                result.artifacts.append(str(json_path))
+                result.artifacts.append(str(md_path))
+                return result
+
+            # ================================================================
             # Step 8: Execute all registered strategies
             # ================================================================
             signals_map: dict[str, pl.DataFrame] = {}
@@ -766,16 +813,31 @@ class DailyPipeline(BasePipeline):
                     )
 
             # ================================================================
-            # Step 12.5: Exit Engine — daily risk exit check (P3.1)
+            # Step 12.5: Exit Engine — V2.1 Final compliant
+            #
+            # 第一类 Rank Exit:   仅调仓日 → Buffer Top[11-20], Sell >20
+            # 第二类 Risk Exit:   每日 → Stop Loss / ST / 退市 / 停牌
+            # 第三类 Portfolio:   仅调仓日 → 权重/行业调整
+            #
+            # 同 symbol 多个退出原因 → 合并为一条 SELL，保留所有 reason tags
             # ================================================================
             sell_recommendations: list[TradeRecommendation] = []
             active_positions: list[Any] = []
             holdings: dict[str, int | float] = {}
             cost_basis: dict[str, float] = {}
             current_prices: dict[str, float] = {}
+            # V2.1: rebalance day = first trading day of month (or forced)
+            is_rebalance_day = today.day <= 5  # Approximate: first week of month
+            TARGET_TOP_N = effective_top_n if effective_top_n > 0 else 10
+            SELL_BUFFER_RANK = TARGET_TOP_N * 2  # V2.1: Buy Top10, Buffer 11-20, Sell >20
+
             try:
                 from qp.decision.position_ledger import PositionLedger
-                from qp.portfolio.risk_exit import RiskExitManager
+                from qp.portfolio.risk_exit import (
+                    Priority,
+                    RiskExitManager,
+                    TradeReason,
+                )
 
                 ledger = PositionLedger()
                 active_positions = ledger.get_active()
@@ -796,119 +858,132 @@ class DailyPipeline(BasePipeline):
                             if sym in holdings:
                                 current_prices[sym] = float(row["close"])
 
+                    # ── V2.1: Per-symbol exit signal collector ──
+                    # {symbol: {reasons: set, details: list, priority: Priority}}
+                    exit_map: dict[str, dict[str, Any]] = {}
+
+                    def _add_exit(sym: str, reason: str, detail: str, prio: Priority) -> None:
+                        if sym not in exit_map:
+                            exit_map[sym] = {
+                                "reasons": set(), "details": [], "priority": prio,
+                            }
+                        exit_map[sym]["reasons"].add(reason)
+                        if detail:
+                            exit_map[sym]["details"].append(detail)
+                        if prio.value < exit_map[sym]["priority"].value:
+                            exit_map[sym]["priority"] = prio
+
+                    # ── 第二类：Risk Exit (每日必检) ──
                     if holdings and current_prices:
                         exit_mgr = RiskExitManager()
-                        exit_signals = exit_mgr.evaluate_daily(
+                        risk_signals = exit_mgr.evaluate_daily(
                             holdings=holdings,
                             prices=current_prices,
                             cost_basis=cost_basis,
                             date_str=today.isoformat(),
                         )
-
-                        # Convert to SELL TradeRecommendations
-                        for es in exit_signals:
-                            shares = int(holdings.get(es.symbol, 0))
-                            px = current_prices.get(es.symbol, 0.0)
-                            sell_recommendations.append(
-                                TradeRecommendation(
-                                    symbol=es.symbol,
-                                    action="SELL",
-                                    quantity_shares=shares,
-                                    estimated_price=px,
-                                    reason="; ".join(es.reasons),
-                                    risk_warnings=[es.detail] if es.detail else [],
-                                    confidence=0.95,
-                                    strategy="risk_exit",
+                        for es in risk_signals:
+                            for r in es.reasons:
+                                _add_exit(
+                                    es.symbol, r, es.detail,
+                                    es.priority,
                                 )
-                            )
+                        result.metrics["risk_exit_signals"] = len(risk_signals)
 
-                        result.metrics["exit_signals"] = len(exit_signals)
-                        if exit_signals:
-                            logger.info(
-                                "Exit Engine: {} sell signals — {}",
-                                len(exit_signals),
-                                [(e.symbol, e.reasons) for e in exit_signals],
-                            )
-            except Exception as exc:
-                logger.warning("Exit Engine check skipped: {}", exc)
+                    # ── 第一类：Rank Exit (仅调仓日) ──
+                    if is_rebalance_day and active_positions and not combined_signals.is_empty():
+                        # V2.1: today's rank map (1 = best)
+                        rank_map: dict[str, int] = {}
+                        sig_symbols = combined_signals["symbol"].to_list()
+                        for i, s in enumerate(sig_symbols):
+                            rank_map[str(s)] = i + 1
 
-            # P3.2: Alpha decay check — positions no longer in top-N
-            try:
-                if active_positions and not combined_signals.is_empty():
-                    from qp.portfolio.alpha_decay import (
-                        AlphaDecayConfig,
-                        AlphaDecayDetector,
-                        top_n_symbols,
-                    )
+                        for pos in active_positions:
+                            rank = rank_map.get(pos.symbol, 9999)
+                            if rank > SELL_BUFFER_RANK:
+                                _add_exit(
+                                    pos.symbol,
+                                    TradeReason.RANK_DROP,
+                                    f"排名 #{rank} > Sell Line {SELL_BUFFER_RANK}",
+                                    Priority.LOW,
+                                )
+                            elif rank > TARGET_TOP_N:
+                                # In buffer zone — hold, don't sell
+                                pass
+                        result.metrics["rank_exit_checked"] = len(active_positions)
 
-                    today_top_n = top_n_symbols(combined_signals, top_n=effective_top_n)
-                    if today_top_n:
-                        decay_detector = AlphaDecayDetector(
-                            config=AlphaDecayConfig(top_n=effective_top_n)
-                        )
-                        decay_exits = decay_detector.check(
+                    # ── 第三类：Fundamental deterioration (仅调仓日) ──
+                    if is_rebalance_day and active_positions and fundamental_data:
+                        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+                        fund_detector = FundamentalExitDetector()
+                        fund_exits = fund_detector.check(
                             active_positions=active_positions,
-                            today_signals=today_top_n,
+                            fundamental_data=fundamental_data,
                         )
-                        for de in decay_exits:
-                            shares = int(holdings.get(de.symbol, 0))
-                            px = current_prices.get(de.symbol, 0.0)
-                            sell_recommendations.append(
-                                TradeRecommendation(
-                                    symbol=de.symbol,
-                                    action="SELL",
-                                    quantity_shares=shares,
-                                    estimated_price=px,
-                                    reason="; ".join(de.reasons),
-                                    risk_warnings=[de.detail] if de.detail else [],
-                                    confidence=0.70,
-                                    strategy="alpha_decay",
-                                )
-                            )
-                        if decay_exits:
-                            result.metrics["alpha_decay_signals"] = len(decay_exits)
-                            logger.info(
-                                "Alpha Decay: {} signals — {}",
-                                len(decay_exits),
-                                [e.symbol for e in decay_exits],
-                            )
-            except Exception as exc:
-                logger.warning("Alpha decay check skipped: {}", exc)
+                        for fe in fund_exits:
+                            for r in fe.reasons:
+                                _add_exit(fe.symbol, r, fe.detail, Priority.LOW)
+                        result.metrics["fundamental_exit_signals"] = len(fund_exits)
 
-            # P3.3: Fundamental deterioration check
-            try:
-                if active_positions and fundamental_data:
-                    from qp.portfolio.exit_signals import FundamentalExitDetector
-
-                    fund_detector = FundamentalExitDetector()
-                    fund_exits = fund_detector.check(
-                        active_positions=active_positions,
-                        fundamental_data=fundamental_data,
+                    # ── V2.1: Merge → single SELL per symbol, sorted by priority ──
+                    merged = sorted(
+                        exit_map.items(),
+                        key=lambda x: x[1]["priority"].value,  # type: ignore[no-any-return]
                     )
-                    for fe in fund_exits:
-                        shares = int(holdings.get(fe.symbol, 0))
-                        px = current_prices.get(fe.symbol, 0.0)
+                    for sym, info in merged:
+                        shares = int(holdings.get(sym, 0))
+                        px = current_prices.get(sym, 0.0)
                         sell_recommendations.append(
                             TradeRecommendation(
-                                symbol=fe.symbol,
+                                symbol=sym,
                                 action="SELL",
                                 quantity_shares=shares,
                                 estimated_price=px,
-                                reason="; ".join(fe.reasons),
-                                risk_warnings=[fe.detail] if fe.detail else [],
-                                confidence=0.60,
-                                strategy="fundamental_exit",
+                                reason="; ".join(sorted(info["reasons"])),
+                                risk_warnings=info["details"],
+                                confidence=(
+                                    0.95 if info["priority"] in (Priority.CRITICAL, Priority.HIGH)
+                                    else 0.70 if info["priority"] == Priority.MEDIUM
+                                    else 0.55
+                                ),
+                                strategy="risk_exit"
+                                if info["priority"] in (Priority.CRITICAL, Priority.HIGH)
+                                else "rank_exit",
                             )
                         )
-                    if fund_exits:
-                        result.metrics["fundamental_exit_signals"] = len(fund_exits)
+
+                    if exit_map:
                         logger.info(
-                            "Fundamental Exit: {} signals — {}",
-                            len(fund_exits),
-                            [e.symbol for e in fund_exits],
+                            "Exit Engine (V2.1): {} symbols → {} merged SELL signals",
+                            len(exit_map), len(sell_recommendations),
                         )
+                        result.metrics["exit_signals_total"] = len(sell_recommendations)
+                        result.metadata["rebalance_day"] = str(is_rebalance_day)
+
             except Exception as exc:
-                logger.warning("Fundamental exit check skipped: {}", exc)
+                logger.warning("Exit Engine check skipped: {}", exc)
+
+            # ================================================================
+            # Step 12.8: Shadow Production — daily paper trading (Shadow Production)
+            # ================================================================
+            try:
+                from qp.simulation.shadow_ledger import ShadowLedger
+
+                shadow = ShadowLedger()
+                shadow_result = shadow.run_daily(today.isoformat())
+                result.metrics["shadow_equity"] = round(
+                    shadow_result.get("total_equity", total_capital), 2
+                )
+                result.metadata["shadow_pnl"] = str(shadow_result.get("unrealized_pnl", 0))
+                logger.info(
+                    "Shadow: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
+                    shadow_result.get("total_equity", 0),
+                    shadow_result.get("unrealized_pnl", 0),
+                    shadow_result.get("n_positions", 0),
+                )
+            except Exception as exc:
+                logger.warning("Shadow production skipped: {}", exc)
 
             # ================================================================
             # Step 13: Build DecisionPackage

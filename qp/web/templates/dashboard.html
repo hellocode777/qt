@@ -316,6 +316,46 @@
   </div>
 </div>
 
+<!-- Strategy Health Summary (P4.1) -->
+{% if strategy_health %}
+<div class="card mt-4">
+  <div class="card-header">
+    <span>&#128202; 策略健康 Strategy Health</span>
+    <a href="/health/strategies" style="font-size: 12px; color: var(--blue); text-decoration: none;">详情 &#8594;</a>
+  </div>
+  <div class="card-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
+    {% for s in strategy_health %}
+    <div style="flex: 1; min-width: 180px; max-width: 240px; padding: 10px 12px;
+                background: var(--bg-2); border-radius: 8px; border-left: 3px solid
+                {% if s.health_score >= 80 %}var(--green){% elif s.health_score >= 60 %}var(--amber){% elif s.health_score >= 40 %}var(--orange){% else %}var(--red){% endif %};">
+      <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">{{ s.strategy_id }}</div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span>
+          <span style="font-size: 20px; font-weight: 700;">{{ s.health_score }}</span><span style="font-size: 12px; color: var(--c-muted);">/100</span>
+        </span>
+        <span style="font-size: 14px;">{{ s.trend_icon }}</span>
+      </div>
+      <div style="font-size: 11px; color: var(--c-muted); margin-top: 2px;">
+        {{ s.recommendation_label }}
+        {% if s.n_alerts > 0 %}<span style="color: var(--orange);"> &#9888;{{ s.n_alerts }}</span>{% endif %}
+      </div>
+      {% if decision %}
+      {% for val in decision.validation %}
+      {% if val.strategy_id == s.strategy_id %}
+      <div style="font-size: 11px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border);">
+        验证: <span style="color: {% if val.passed %}var(--green){% else %}var(--red){% endif %}; font-weight: 600;">
+          {{ val.score }}/100 {% if val.passed %}✅{% else %}❌{% endif %}
+        </span>
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Today's Decisions -->
 <div class="card mt-4">
   <div class="card-header">

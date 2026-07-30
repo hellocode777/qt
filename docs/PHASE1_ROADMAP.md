@@ -220,7 +220,7 @@ FastAPI + Jinja2 + HTMX + Alpine.js + Chart.js 已搭建，实际进展比预期
 
 ### 任务列表
 
-- [x] **Task P4.1**: Dashboard 页完善 ✅ (已在 P1.4 + P0.5 完成)（数据接入）
+- [x] **Task P4.1**: Dashboard 页完善 ✅（数据接入）
   - 文件：`qp/web/routers/dashboard.py` / `qp/web/services/health_service.py`
   - 内容：确保 Strategy Health 数据来自真实 pipeline 输出而非 mock（当前大部分 UI 已存在，主要补数据管道）
   - 依赖：P1.2
