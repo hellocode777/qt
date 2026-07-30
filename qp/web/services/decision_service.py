@@ -1,26 +1,39 @@
-"""DecisionService — read-only access to DecisionPackage data.
+"""DecisionService — DecisionPackage lifecycle management.
 
 Bridges the QP Decision layer (Layer 8) to the Web layer.
+Handles both query (read) and status transitions (write).
 Returns plain dicts — never exposes domain objects to templates.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from qp.decision.decision_package import DecisionPackage
+from qp.decision.state_machine import DecisionStateError
+
+DECISIONS_DIR = Path("data/decisions")
 
 
 class DecisionService:
-    """Read-only service for decision data.
+    """Decision lifecycle service — query + status transitions.
 
     Usage:
         svc = DecisionService()
-        latest = svc.latest()  # Today's decision package
-        history = svc.history(limit=30)  # Recent decisions
-        detail = svc.get_by_id("dp-2026-07-26-xxx")  # Specific package
+        latest = svc.latest()                          # Today's decision
+        history = svc.history(limit=30)                # Recent decisions
+        detail = svc.get_by_id("dp-2026-07-30-xxx")   # Specific package
+
+        # State transitions (validated via state machine)
+        svc.approve("dp-xxx", reviewer="张三")         # PENDING → APPROVED
+        svc.reject("dp-xxx", reviewer="李四")          # PENDING → REJECTED
+        svc.modify("dp-xxx", reviewer="王五")          # PENDING → MODIFIED
+        svc.mark_executed("dp-xxx")                    # APPROVED → PARTIALLY_EXECUTED
+        svc.mark_executed("dp-xxx")                    # PARTIALLY_EXECUTED → MONITORING
+        svc.close("dp-xxx")                            # MONITORING → CLOSED
     """
 
     def __init__(self) -> None:
@@ -38,7 +51,6 @@ class DecisionService:
         """
         pkg = DecisionPackage.load_latest()
         if pkg is None:
-            # Fall back to most recent from index
             pkg = self._load_most_recent()
         if pkg is None:
             return None
@@ -55,9 +67,7 @@ class DecisionService:
 
     def get_by_id(self, package_id: str) -> dict[str, Any] | None:
         """Load a specific decision package by ID."""
-        from pathlib import Path
-
-        path = Path("data/decisions") / f"{package_id}.json"
+        path = _resolve_path(package_id)
         if not path.exists():
             logger.warning("DecisionPackage not found: {}", package_id)
             return None
@@ -69,54 +79,167 @@ class DecisionService:
             logger.error("Failed to load DecisionPackage {}: {}", package_id, e)
             return None
 
+    # ------------------------------------------------------------------
+    # Status transitions (P0.3 — state-machine validated)
+    # ------------------------------------------------------------------
+
+    def approve(
+        self, package_id: str, reviewer: str = "", notes: str = "",
+        create_positions: bool = True,
+    ) -> dict[str, Any] | None:
+        """Approve a decision (PENDING/MODIFIED → APPROVED).
+
+        Validates the transition via the state machine.
+        Saves updated JSON and refreshes the index.
+
+        If create_positions is True (default), auto-creates Position records
+        for each BUY recommendation via PositionLedger.open_from_decision().
+        """
+        result = self._transition(
+            package_id,
+            method_name="approve",
+            reviewer=reviewer,
+            notes=notes,
+        )
+        if result is not None and create_positions:
+            try:
+                path = _resolve_path(package_id)
+                pkg = DecisionPackage.from_json(path)
+                from qp.decision.position_ledger import PositionLedger
+
+                ledger = PositionLedger()
+                positions = ledger.open_from_decision(pkg)
+                logger.info(
+                    "Auto-created {} positions from {}",
+                    len(positions), package_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to auto-create positions for {}: {}",
+                    package_id, e,
+                )
+        return result
+
+    def reject(
+        self, package_id: str, reviewer: str = "", notes: str = "",
+    ) -> dict[str, Any] | None:
+        """Reject a decision (PENDING → REJECTED, terminal)."""
+        return self._transition(
+            package_id,
+            method_name="reject",
+            reviewer=reviewer,
+            notes=notes,
+        )
+
+    def modify(
+        self, package_id: str, reviewer: str = "", notes: str = "",
+    ) -> dict[str, Any] | None:
+        """Mark a decision as modified (PENDING → MODIFIED)."""
+        return self._transition(
+            package_id,
+            method_name="modify",
+            reviewer=reviewer,
+            notes=notes,
+        )
+
+    def mark_executed(
+        self, package_id: str, notes: str = "",
+    ) -> dict[str, Any] | None:
+        """Mark trades as executed (APPROVED → PARTIALLY_EXECUTED → MONITORING).
+
+        First call moves APPROVED → PARTIALLY_EXECUTED.
+        Second call moves PARTIALLY_EXECUTED → MONITORING.
+        """
+        return self._transition(
+            package_id,
+            method_name="mark_executed",
+            actor="system",
+            notes=notes,
+        )
+
+    def close(
+        self, package_id: str, notes: str = "",
+    ) -> dict[str, Any] | None:
+        """Close a decision (MONITORING → CLOSED, terminal)."""
+        return self._transition(
+            package_id,
+            method_name="close",
+            actor="system",
+            notes=notes,
+        )
+
+    # ------------------------------------------------------------------
+    # Legacy API (backward compat — delegates to state machine)
+    # ------------------------------------------------------------------
+
     def mark_reviewed(self, package_id: str, notes: str = "") -> dict[str, Any] | None:
-        """Mark a decision package as human-reviewed.
+        """Legacy: mark a decision as reviewed (delegates to approve).
 
-        Updates the JSON file on disk and the index.
+        Kept for backward compatibility with existing WebUI endpoints.
         """
-        from pathlib import Path
+        return self.approve(package_id, reviewer="webui", notes=notes)
 
-        path = Path("data/decisions") / f"{package_id}.json"
+    # ------------------------------------------------------------------
+    # Internal: generic transition handler
+    # ------------------------------------------------------------------
+
+    def _transition(
+        self,
+        package_id: str,
+        method_name: str,
+        reviewer: str = "",
+        actor: str = "",
+        notes: str = "",
+    ) -> dict[str, Any] | None:
+        """Load DP → call state-machine method → save → update index.
+
+        Args:
+            package_id: Decision package ID.
+            method_name: Name of the DecisionPackage transition method to call.
+            reviewer: Who initiated (for human actions).
+            actor: Who initiated (for system actions).
+            notes: Optional reason or comment.
+
+        Returns:
+            Template-ready dict, or None on error.
+        """
+        path = _resolve_path(package_id)
         if not path.exists():
-            logger.warning("DecisionPackage not found for review: {}", package_id)
+            logger.warning("DecisionPackage not found: {}", package_id)
             return None
 
         try:
             pkg = DecisionPackage.from_json(path)
-            pkg.human_review.reviewed = True
-            pkg.human_review.reviewer = "webui"
-            pkg.human_review.notes = notes or pkg.human_review.notes
+            method = getattr(pkg, method_name)
+
+            # Dispatch based on method signature
+            if method_name in ("approve", "reject", "modify"):
+                method(reviewer=reviewer or actor, notes=notes)
+            elif method_name in ("mark_executed", "close"):
+                method(actor=reviewer or actor or "system", notes=notes)
+            else:
+                method()
+
             pkg.to_json(path)
             pkg.update_index()
-            logger.info("DecisionPackage reviewed: {}", package_id)
+            logger.info(
+                "Decision {} → {} by {}: {}",
+                package_id,
+                pkg.human_review.status,
+                reviewer or actor or "system",
+                notes,
+            )
             return self._package_to_dict(pkg)
-        except Exception as e:
-            logger.error("Failed to mark reviewed {}: {}", package_id, e)
+        except DecisionStateError as e:
+            logger.warning(
+                "Invalid transition for {}: {} → rejected: {}",
+                package_id,
+                e.from_status.value if hasattr(e, "from_status") else "?",
+                e,
+            )
             return None
-
-    def mark_executed(self, package_id: str) -> dict[str, Any] | None:
-        """Mark a decision package as executed (trades placed).
-
-        Updates the JSON file on disk and the index.
-        """
-        from datetime import UTC, datetime
-        from pathlib import Path
-
-        path = Path("data/decisions") / f"{package_id}.json"
-        if not path.exists():
-            logger.warning("DecisionPackage not found for execution: {}", package_id)
-            return None
-
-        try:
-            pkg = DecisionPackage.from_json(path)
-            pkg.human_review.executed = True
-            pkg.human_review.execution_time = datetime.now(UTC).isoformat()
-            pkg.to_json(path)
-            pkg.update_index()
-            logger.info("DecisionPackage executed: {}", package_id)
-            return self._package_to_dict(pkg)
         except Exception as e:
-            logger.error("Failed to mark executed {}: {}", package_id, e)
+            logger.error("Failed to transition {} ({}): {}", package_id, method_name, e)
             return None
 
     # ------------------------------------------------------------------
@@ -291,8 +414,39 @@ class DecisionService:
                 "reviewed": pkg.human_review.reviewed,
                 "executed": pkg.human_review.executed,
                 "notes": pkg.human_review.notes,
+                "reviewer": pkg.human_review.reviewer,
+                "execution_time": pkg.human_review.execution_time,
+                # P0.2+ — state machine fields
+                "status": pkg.human_review.status,
+                "status_label": pkg.human_review.current_status.label,
+                "is_pending": pkg.human_review.is_pending,
+                "is_terminal": pkg.human_review.is_terminal,
+                "status_history": pkg.human_review.status_history,
+                # Allowed next transitions (for UI buttons)
+                "_next": sorted(
+                    s.value for s in _allowed_next(pkg.human_review.current_status)
+                ),
             },
         }
+
+
+# ------------------------------------------------------------------
+# Display helpers
+# ------------------------------------------------------------------
+
+
+def _resolve_path(package_id: str) -> Path:
+    """Resolve the JSON path for a decision package."""
+    return DECISIONS_DIR / f"{package_id}.json"
+
+
+def _allowed_next(current: Any) -> set[Any]:
+    """Return valid next statuses (excluding self)."""
+    from qp.decision.state_machine import allowed_transitions
+
+    allowed = allowed_transitions(current)
+    allowed.discard(current)
+    return allowed
 
 
 # ------------------------------------------------------------------

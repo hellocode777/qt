@@ -16,6 +16,8 @@ from __future__ import annotations
 import tempfile
 from unittest.mock import patch
 
+import polars as pl
+
 
 class TestDailyPipelineCriticalPath:
     """Critical path: DailyPipeline Step 0 (SystemState check) and FAILED handling."""
@@ -58,6 +60,8 @@ class TestDailyPipelineCriticalPath:
         from qp.monitoring.system_state import SystemStateManager
         from qp.pipeline.daily_pipeline import DailyPipeline
         from qp.platform.pipeline.context import PipelineContext
+        from qp.platform.pipeline.result import PipelineResult
+        from qp.shared.types import PipelineStatus
 
         with tempfile.TemporaryDirectory() as tmpdir:
             mgr = SystemStateManager(base_dir=tmpdir)
@@ -68,9 +72,23 @@ class TestDailyPipelineCriticalPath:
             )
 
             pipeline = DailyPipeline()
-            with patch(
-                "qp.monitoring.system_state.SystemStateManager",
-                return_value=mgr,
+            with (
+                patch(
+                    "qp.monitoring.system_state.SystemStateManager",
+                    return_value=mgr,
+                ),
+                patch(
+                    "qp.pipeline.daily_pipeline.DataPipeline.run",
+                    return_value=PipelineResult(status=PipelineStatus.SUCCESS),
+                ),
+                patch(
+                    "qp.pipeline.daily_pipeline.FeaturePipeline.run",
+                    return_value=PipelineResult(status=PipelineStatus.SUCCESS),
+                ),
+                patch(
+                    "qp.pipeline.daily_pipeline._load_price_data",
+                    return_value=({}, pl.DataFrame()),
+                ),
             ):
                 result = pipeline.run(ctx)
 
@@ -100,6 +118,8 @@ class TestDailyPipelineCriticalPath:
         """If SystemStateManager fails, pipeline continues (doesn't crash)."""
         from qp.pipeline.daily_pipeline import DailyPipeline
         from qp.platform.pipeline.context import PipelineContext
+        from qp.platform.pipeline.result import PipelineResult
+        from qp.shared.types import PipelineStatus
 
         ctx = PipelineContext(
             pipeline_name="test_advisory",
@@ -107,9 +127,23 @@ class TestDailyPipelineCriticalPath:
         )
 
         pipeline = DailyPipeline()
-        with patch(
-            "qp.monitoring.system_state.SystemStateManager",
-            side_effect=RuntimeError("State manager unavailable"),
+        with (
+            patch(
+                "qp.monitoring.system_state.SystemStateManager",
+                side_effect=RuntimeError("State manager unavailable"),
+            ),
+            patch(
+                "qp.pipeline.daily_pipeline.DataPipeline.run",
+                return_value=PipelineResult(status=PipelineStatus.SUCCESS),
+            ),
+            patch(
+                "qp.pipeline.daily_pipeline.FeaturePipeline.run",
+                return_value=PipelineResult(status=PipelineStatus.SUCCESS),
+            ),
+            patch(
+                "qp.pipeline.daily_pipeline._load_price_data",
+                return_value=({}, pl.DataFrame()),
+            ),
         ):
             result = pipeline.run(ctx)
             assert result.status.value in ("success", "failed")

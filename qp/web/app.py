@@ -58,10 +58,12 @@ def _register_routers(app: FastAPI) -> None:
     from qp.web.routers.dashboard import router as dashboard_router
     from qp.web.routers.decisions import router as decisions_router
     from qp.web.routers.health import router as health_router
+    from qp.web.routers.portfolio import router as portfolio_router
 
     app.include_router(dashboard_router)
     app.include_router(decisions_router)
     app.include_router(health_router)
+    app.include_router(portfolio_router)
 
 
 @asynccontextmanager

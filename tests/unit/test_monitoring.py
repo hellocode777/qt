@@ -1,5 +1,7 @@
 """Tests for Monitoring Layer — drift, decay, regime, kill switch."""
 
+from pathlib import Path
+
 import numpy as np
 
 
@@ -1561,3 +1563,896 @@ class TestClusterAnalyzer:
             loaded = analyzer.load_rules()
             assert len(loaded) == 1
             assert loaded[0].condition == "PE_TTM > 100"
+
+
+# ==================================================================
+# StrategyHealthLogger tests (P1.1)
+# ==================================================================
+
+
+class TestStrategyHealthLogger:
+    """Test StrategyHealthLogger persistence and health computation."""
+
+    def test_record_and_check_basic(self, tmp_path) -> None:
+        from qp.monitoring.strategy_health_logger import StrategyHealthLogger, MONITORING_DIR
+        import os
+        original_dir = str(MONITORING_DIR)
+        try:
+            # Redirect to temp dir
+            import qp.monitoring.strategy_health_logger as mod
+            mod.MONITORING_DIR = tmp_path
+            mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
+
+            logger = StrategyHealthLogger(window_days=60)
+            health = logger.record_and_check(
+                strategy_id="test_strategy_v1.0",
+                date="2026-07-30",
+                n_signals=8,
+                n_buys=8,
+                n_sells=0,
+            )
+
+            assert health.strategy_id == "test_strategy_v1.0"
+            assert 0 <= health.health_score <= 100
+            assert health.avg_daily_signals == 8.0
+            assert health.days_since_last_signal == 0
+        finally:
+            # Restore
+            import qp.monitoring.strategy_health_logger as mod
+            mod.MONITORING_DIR = Path(original_dir)
+            mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
+
+    def test_persistence_across_runs(self, tmp_path) -> None:
+        import qp.monitoring.strategy_health_logger as mod
+        from pathlib import Path
+
+        original_dir = str(mod.MONITORING_DIR)
+        try:
+            mod.MONITORING_DIR = tmp_path
+            mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
+
+            # First run
+            logger1 = mod.StrategyHealthLogger()
+            logger1.record_and_check(
+                strategy_id="persist_test",
+                date="2026-07-29",
+                n_signals=10,
+                n_buys=10,
+            )
+
+            # Second run — should load history
+            logger2 = mod.StrategyHealthLogger()
+            health2 = logger2.record_and_check(
+                strategy_id="persist_test",
+                date="2026-07-30",
+                n_signals=5,
+                n_buys=5,
+            )
+
+            assert health2.avg_daily_signals == 7.5  # (10+5)/2
+        finally:
+            mod.MONITORING_DIR = Path(original_dir)
+            mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
+
+    def test_load_all_latest(self, tmp_path) -> None:
+        import qp.monitoring.strategy_health_logger as mod
+
+        original_dir = str(mod.MONITORING_DIR)
+        try:
+            mod.MONITORING_DIR = tmp_path
+            mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
+
+            logger = mod.StrategyHealthLogger()
+            for sid in ["strat_a", "strat_b", "strat_c"]:
+                logger.record_and_check(
+                    strategy_id=sid,
+                    date="2026-07-30",
+                    n_signals=5,
+                    n_buys=5,
+                )
+
+            latest = logger.load_all_latest()
+            assert len(latest) == 3
+            assert "strat_a" in latest
+            assert "strat_b" in latest
+            assert latest["strat_a"].health_score >= 0
+        finally:
+            mod.MONITORING_DIR = Path(original_dir)
+            mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
+
+    def test_health_to_dict(self) -> None:
+        from qp.monitoring.strategy_health_logger import StrategyHealthLogger
+        from qp.monitoring.strategy_monitor import StrategyHealth, HealthLevel
+
+        health = StrategyHealth(
+            strategy_id="test",
+            health_level=HealthLevel.HEALTHY,
+            health_score=95.0,
+            alerts=["low signal count"],
+            summary="test summary",
+        )
+        d = StrategyHealthLogger.health_to_dict(health)
+        assert d["health_level"] == "healthy"
+        assert d["health_score"] == 95.0
+        assert len(d["alerts"]) == 1
+        assert d["summary"] == "test summary"
+
+    def test_empty_history_returns_healthy(self, tmp_path) -> None:
+        import qp.monitoring.strategy_health_logger as mod
+
+        original_dir = str(mod.MONITORING_DIR)
+        try:
+            mod.MONITORING_DIR = tmp_path
+            mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
+
+            logger = mod.StrategyHealthLogger()
+            health = logger.record_and_check(
+                strategy_id="new_strategy",
+                date="2026-07-30",
+                n_signals=5,
+                n_buys=5,
+            )
+            # First recording — should be healthy (no history to compare)
+            assert health.health_level.value == "healthy"
+            assert health.health_score == 100.0
+        finally:
+            mod.MONITORING_DIR = Path(original_dir)
+            mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
+
+    def test_load_latest_health_nonexistent(self) -> None:
+        from qp.monitoring.strategy_health_logger import StrategyHealthLogger
+
+        logger = StrategyHealthLogger()
+        result = logger.load_latest_health("nonexistent_strategy")
+        assert result is None
+
+
+class TestStrategyHealthPipelineIntegration:
+    """Integration tests simulating daily pipeline health recording (P1.1)."""
+
+    def test_multi_day_accumulation(self, tmp_path) -> None:
+        """Simulate 5 days of pipeline runs — health should evolve."""
+        import qp.monitoring.strategy_health_logger as mod
+
+        original_dir = str(mod.MONITORING_DIR)
+        try:
+            mod.MONITORING_DIR = tmp_path
+            mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
+
+            # Day 1-3: stable signals
+            for day in range(1, 4):
+                logger = mod.StrategyHealthLogger()
+                h = logger.record_and_check(
+                    strategy_id="test_integration",
+                    date=f"2026-07-0{day}",
+                    n_signals=10,
+                    n_buys=10,
+                )
+                assert h.health_score >= 90, f"Day {day}: expected healthy"
+
+            # Day 4: signal drop
+            logger = mod.StrategyHealthLogger()
+            h = logger.record_and_check(
+                strategy_id="test_integration",
+                date="2026-07-04",
+                n_signals=2,
+                n_buys=2,
+            )
+            # Should detect lower avg signals vs expected range (5-30)
+            assert h.avg_daily_signals < 10
+
+            # Day 5: zero signals — should trigger alert
+            logger = mod.StrategyHealthLogger()
+            h = logger.record_and_check(
+                strategy_id="test_integration",
+                date="2026-07-05",
+                n_signals=0,
+                n_buys=0,
+            )
+            assert h.health_score < 90  # Should drop from 100
+            assert h.days_since_last_signal >= 1
+        finally:
+            mod.MONITORING_DIR = Path(original_dir)
+            mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
+
+    def test_health_saved_to_parquet(self, tmp_path) -> None:
+        """Verify health records are persisted to parquet."""
+        import polars as pl
+        import qp.monitoring.strategy_health_logger as mod
+
+        original_dir = str(mod.MONITORING_DIR)
+        try:
+            mod.MONITORING_DIR = tmp_path
+            mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
+
+            logger = mod.StrategyHealthLogger()
+            h = logger.record_and_check(
+                strategy_id="persist_check",
+                date="2026-07-30",
+                n_signals=8,
+                n_buys=8,
+            )
+
+            # Verify file exists and has data
+            assert mod.HEALTH_PARQUET.exists()
+            df = pl.read_parquet(str(mod.HEALTH_PARQUET))
+            assert df.height >= 1
+            assert "strategy_id" in df.columns
+            assert "health_score" in df.columns
+            assert df.filter(pl.col("strategy_id") == "persist_check").height == 1
+        finally:
+            mod.MONITORING_DIR = Path(original_dir)
+            mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
+
+    def test_signals_saved_to_parquet(self, tmp_path) -> None:
+        """Verify signal records are persisted for history loading."""
+        import polars as pl
+        import qp.monitoring.strategy_health_logger as mod
+
+        original_dir = str(mod.MONITORING_DIR)
+        try:
+            mod.MONITORING_DIR = tmp_path
+            mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
+
+            logger = mod.StrategyHealthLogger()
+            logger.record_and_check(
+                strategy_id="sig_check",
+                date="2026-07-30",
+                n_signals=7,
+                n_buys=5,
+                n_sells=2,
+            )
+
+            sig_path = tmp_path / "strategy_signals.parquet"
+            assert sig_path.exists()
+            df = pl.read_parquet(str(sig_path))
+            row = df.filter(pl.col("strategy_id") == "sig_check")
+            assert row.height == 1
+            assert row["n_signals"][0] == 7
+            assert row["n_buys"][0] == 5
+            assert row["n_sells"][0] == 2
+        finally:
+            mod.MONITORING_DIR = Path(original_dir)
+            mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
+
+    def test_health_to_dict_includes_all_fields(self) -> None:
+        """health_to_dict must include all required fields for DecisionPackage."""
+        from qp.monitoring.strategy_health_logger import StrategyHealthLogger
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        health = StrategyHealth(
+            strategy_id="full_test",
+            health_level=HealthLevel.WARNING,
+            health_score=55.5,
+            avg_daily_signals=3.2,
+            signal_consistency=0.8,
+            weekly_turnover_pct=0.15,
+            current_drawdown_pct=0.05,
+            days_since_last_signal=2,
+            alerts=["low signal count", "high turnover"],
+            summary="test summary",
+        )
+        d = StrategyHealthLogger.health_to_dict(health)
+
+        required = [
+            "health_level", "health_score", "avg_daily_signals",
+            "signal_consistency", "weekly_turnover_pct", "current_drawdown_pct",
+            "days_since_last_signal", "alerts", "summary",
+        ]
+        for field in required:
+            assert field in d, f"Missing field: {field}"
+        assert len(d["alerts"]) == 2
+
+
+class TestStrategyHealthReport:
+    """Test StrategyHealthReport generation (P1.2)."""
+
+    def test_from_healthy_strategy(self) -> None:
+        from qp.monitoring.strategy_health_report import (
+            HealthRecommendation,
+            StrategyHealthReport,
+        )
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        health = StrategyHealth(
+            strategy_id="momentum_v1.0",
+            health_level=HealthLevel.HEALTHY,
+            health_score=92.0,
+            avg_daily_signals=12.0,
+            signal_consistency=0.9,
+            alerts=[],
+        )
+        report = StrategyHealthReport.from_health(health)
+
+        assert report.recommendation == HealthRecommendation.HEALTHY
+        assert report.can_use_in_decision is True
+        assert report.needs_human_review is False
+        assert report.trend == "unknown"  # No history
+
+    def test_from_critical_strategy(self) -> None:
+        from qp.monitoring.strategy_health_report import (
+            HealthRecommendation,
+            StrategyHealthReport,
+        )
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        health = StrategyHealth(
+            strategy_id="broken_v1.0",
+            health_level=HealthLevel.CRITICAL,
+            health_score=15.0,
+            avg_daily_signals=1.0,
+            alerts=["no signals for 10 days", "drawdown breach"],
+        )
+        report = StrategyHealthReport.from_health(health)
+
+        assert report.recommendation == HealthRecommendation.NOT_APPROVED
+        assert report.can_use_in_decision is False
+        assert report.needs_human_review is True
+
+    def test_warning_needs_retrain(self) -> None:
+        from qp.monitoring.strategy_health_report import (
+            HealthRecommendation,
+            StrategyHealthReport,
+        )
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        health = StrategyHealth(
+            strategy_id="decaying_v1.0",
+            health_level=HealthLevel.WARNING,
+            health_score=55.0,
+            avg_daily_signals=4.0,
+            alerts=["low signal count"],
+        )
+        report = StrategyHealthReport.from_health(health)
+
+        assert report.recommendation == HealthRecommendation.NEEDS_RETRAIN
+
+    def test_trend_computation_improving(self) -> None:
+        from qp.monitoring.strategy_health_report import (
+            StrategyHealthReport,
+            _compute_trend,
+        )
+        from qp.monitoring.strategy_monitor import StrategyHealth
+
+        # Scores: 40, 55, 70, 85, 92 — clearly improving
+        history = [
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [40.0, 55.0, 70.0, 85.0, 92.0]
+        ]
+        trend = _compute_trend(history)
+        assert trend == "improving"
+
+    def test_trend_computation_declining(self) -> None:
+        from qp.monitoring.strategy_health_report import _compute_trend
+        from qp.monitoring.strategy_monitor import StrategyHealth
+
+        # Scores: 95, 88, 75, 60, 45 — clearly declining
+        history = [
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [95.0, 88.0, 75.0, 60.0, 45.0]
+        ]
+        trend = _compute_trend(history)
+        assert trend == "declining"
+
+    def test_trend_computation_stable(self) -> None:
+        from qp.monitoring.strategy_health_report import _compute_trend
+        from qp.monitoring.strategy_monitor import StrategyHealth
+
+        history = [
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [80.0, 81.0, 79.0, 80.5, 80.0]
+        ]
+        trend = _compute_trend(history)
+        assert trend == "stable"
+
+    def test_to_dict_includes_required_fields(self) -> None:
+        from qp.monitoring.strategy_health_report import StrategyHealthReport
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        health = StrategyHealth(
+            strategy_id="test",
+            health_level=HealthLevel.HEALTHY,
+            health_score=88.0,
+        )
+        report = StrategyHealthReport.from_health(health)
+        d = report.to_dict()
+
+        required = [
+            "strategy_id", "recommendation", "recommendation_label",
+            "health_score", "health_level", "trend", "trend_icon",
+            "signal_summary", "alerts", "details",
+        ]
+        for field in required:
+            assert field in d, f"Missing: {field}"
+
+    def test_to_markdown(self) -> None:
+        from qp.monitoring.strategy_health_report import StrategyHealthReport
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        health = StrategyHealth(
+            strategy_id="momentum_v1.0",
+            health_level=HealthLevel.HEALTHY,
+            health_score=92.0,
+            alerts=["low turnover"],
+        )
+        report = StrategyHealthReport.from_health(health)
+        md = report.to_markdown()
+
+        assert "momentum_v1.0" in md
+        assert "92" in md
+        assert "healthy" in md
+        assert "low turnover" in md
+
+    def test_warning_declining_is_not_approved(self) -> None:
+        from qp.monitoring.strategy_health_report import (
+            HealthRecommendation,
+            StrategyHealthReport,
+        )
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        # Declining history
+        history = [
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [90.0, 80.0, 70.0, 60.0, 50.0]
+        ]
+        health = StrategyHealth(
+            strategy_id="t",
+            health_level=HealthLevel.WARNING,
+            health_score=50.0,
+        )
+        report = StrategyHealthReport.from_health(health, history=history)
+        assert report.recommendation == HealthRecommendation.NOT_APPROVED
+
+    def test_single_history_point_trend_unknown(self) -> None:
+        from qp.monitoring.strategy_health_report import StrategyHealthReport
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
+        health = StrategyHealth(
+            strategy_id="new_strat",
+            health_level=HealthLevel.HEALTHY,
+            health_score=100.0,
+        )
+        history = [StrategyHealth(strategy_id="new_strat", health_score=100.0)]
+        report = StrategyHealthReport.from_health(health, history=history)
+        assert report.trend == "unknown"
+        assert report.recommendation.value == "healthy"
+
+
+class TestExitEnginePipelineIntegration:
+    """Integration tests for Exit Engine → Daily Pipeline (P3.1)."""
+
+    def test_exit_check_with_active_positions(self, tmp_path) -> None:
+        """Active positions with stop-loss trigger should produce SELL signals."""
+        import qp.decision.position_ledger as ledgermod
+        from qp.portfolio.risk_exit import RiskExitManager
+
+        orig_pos_dir = str(ledgermod.POSITIONS_DIR)
+        try:
+            ledgermod.POSITIONS_DIR = tmp_path / "positions"
+            ledgermod.POSITIONS_PARQUET = ledgermod.POSITIONS_DIR / "positions.parquet"
+            ledgermod.POSITIONS_INDEX = ledgermod.POSITIONS_DIR / "index.json"
+
+            # Create active positions
+            ledger = ledgermod.PositionLedger()
+            ledger.open("600519", 1450.0, 100, decision_id="dp-001")  # Not in loss
+            ledger.open("000001", 14.0, 1000, decision_id="dp-001")   # -14% → stop loss
+
+            # Current prices: 600519 at 1500 (profit), 000001 at 12.0 (loss -14%)
+            prices = {"600519": 1500.0, "000001": 12.0}
+            holdings = {p.symbol: p.shares for p in ledger.get_active()}
+            cost_basis = {p.symbol: p.entry_price for p in ledger.get_active()}
+
+            mgr = RiskExitManager()
+            exits = mgr.evaluate_daily(
+                holdings=holdings,
+                prices=prices,
+                cost_basis=cost_basis,
+                date_str="2026-07-30",
+            )
+
+            assert len(exits) == 1
+            assert exits[0].symbol == "000001"
+            assert "STOP_LOSS" in exits[0].reasons
+        finally:
+            ledgermod.POSITIONS_DIR = Path(orig_pos_dir)
+            ledgermod.POSITIONS_PARQUET = Path(orig_pos_dir) / "positions.parquet"
+            ledgermod.POSITIONS_INDEX = Path(orig_pos_dir) / "index.json"
+
+    def test_exit_check_st_risk(self, tmp_path) -> None:
+        """ST stock should trigger CRITICAL exit."""
+        import qp.decision.position_ledger as ledgermod
+        from qp.portfolio.risk_exit import RiskExitManager
+
+        orig_pos_dir = str(ledgermod.POSITIONS_DIR)
+        try:
+            ledgermod.POSITIONS_DIR = tmp_path / "positions"
+            ledgermod.POSITIONS_PARQUET = ledgermod.POSITIONS_DIR / "positions.parquet"
+            ledgermod.POSITIONS_INDEX = ledgermod.POSITIONS_DIR / "index.json"
+
+            ledger = ledgermod.PositionLedger()
+            ledger.open("000888", 5.0, 1000, decision_id="dp-001")
+
+            mgr = RiskExitManager()
+            exits = mgr.evaluate_daily(
+                holdings={"000888": 1000},
+                prices={"000888": 4.5},
+                cost_basis={"000888": 5.0},
+                stock_names={"000888": "*ST风险"},
+                date_str="2026-07-30",
+            )
+
+            assert len(exits) == 1
+            assert "RISK_ST" in exits[0].reasons
+        finally:
+            ledgermod.POSITIONS_DIR = Path(orig_pos_dir)
+            ledgermod.POSITIONS_PARQUET = Path(orig_pos_dir) / "positions.parquet"
+            ledgermod.POSITIONS_INDEX = Path(orig_pos_dir) / "index.json"
+
+    def test_exit_check_empty_positions(self) -> None:
+        """No active positions → no exit signals."""
+        from qp.portfolio.risk_exit import RiskExitManager
+
+        mgr = RiskExitManager()
+        exits = mgr.evaluate_daily(
+            holdings={},
+            prices={},
+            cost_basis={},
+        )
+        assert exits == []
+
+    def test_exit_priorities(self, tmp_path) -> None:
+        """CRITICAL > HIGH priority ordering."""
+        import qp.decision.position_ledger as ledgermod
+        from qp.portfolio.risk_exit import Priority, RiskExitManager
+
+        orig_pos_dir = str(ledgermod.POSITIONS_DIR)
+        try:
+            ledgermod.POSITIONS_DIR = tmp_path / "positions"
+            ledgermod.POSITIONS_PARQUET = ledgermod.POSITIONS_DIR / "positions.parquet"
+            ledgermod.POSITIONS_INDEX = ledgermod.POSITIONS_DIR / "index.json"
+
+            mgr = RiskExitManager()
+            exits = mgr.evaluate_daily(
+                holdings={"000001": 1000, "000888": 500},
+                prices={"000001": 12.0, "000888": 4.5},
+                cost_basis={"000001": 14.0, "000888": 5.0},
+                stock_names={"000001": "平安银行", "000888": "*ST风险"},
+                date_str="2026-07-30",
+            )
+
+            # ST should be CRITICAL (priority 1), Stop Loss HIGH (priority 2)
+            assert len(exits) == 2
+            assert exits[0].symbol == "000888"  # CRITICAL first
+            assert exits[0].priority == Priority.CRITICAL
+            assert exits[1].priority == Priority.HIGH
+        finally:
+            ledgermod.POSITIONS_DIR = Path(orig_pos_dir)
+            ledgermod.POSITIONS_PARQUET = Path(orig_pos_dir) / "positions.parquet"
+            ledgermod.POSITIONS_INDEX = Path(orig_pos_dir) / "index.json"
+
+
+class TestAlphaDecayDetector:
+    """Test AlphaDecayDetector (P3.2)."""
+
+    def test_position_in_top_n_no_signal(self) -> None:
+        from qp.portfolio.alpha_decay import AlphaDecayDetector
+
+        # Mock position
+        class MockPos:
+            symbol = "600519"
+            is_active = True
+
+        detector = AlphaDecayDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            today_signals={"600519", "000001", "000002"},
+        )
+        assert exits == []
+
+    def test_position_fallen_out_generates_signal(self) -> None:
+        from qp.portfolio.alpha_decay import AlphaDecayDetector
+        from qp.portfolio.risk_exit import Priority, TradeReason
+
+        class MockPos:
+            symbol = "600519"
+            is_active = True
+
+        detector = AlphaDecayDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            today_signals={"000001", "000002"},  # 600519 not in top-N
+        )
+        assert len(exits) == 1
+        assert exits[0].symbol == "600519"
+        assert TradeReason.RANK_DROP in exits[0].reasons
+        assert exits[0].priority == Priority.LOW
+
+    def test_inactive_position_skipped(self) -> None:
+        from qp.portfolio.alpha_decay import AlphaDecayDetector
+
+        class MockPos:
+            symbol = "600519"
+            is_active = False  # Already closed
+
+        detector = AlphaDecayDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            today_signals=set(),
+        )
+        assert exits == []
+
+    def test_check_with_rank(self) -> None:
+        from qp.portfolio.alpha_decay import AlphaDecayDetector
+
+        class MockPos:
+            symbol = "000001"
+            is_active = True
+            entry_price = 12.5
+
+        detector = AlphaDecayDetector()
+        exits = detector.check_with_rank(
+            active_positions=[MockPos()],
+            signal_ranks={"600519": 1, "000002": 2, "000001": 25},  # rank 25 > top_n
+        )
+        assert len(exits) == 1
+        assert "排名 #25" in exits[0].detail
+        assert "¥12.50" in exits[0].detail
+
+    def test_check_with_rank_not_found(self) -> None:
+        from qp.portfolio.alpha_decay import AlphaDecayDetector
+
+        class MockPos:
+            symbol = "000888"
+            is_active = True
+            entry_price = 5.0
+
+        detector = AlphaDecayDetector()
+        exits = detector.check_with_rank(
+            active_positions=[MockPos()],
+            signal_ranks={"600519": 1},  # 000888 not in ranks at all
+        )
+        assert len(exits) == 1
+        assert "跌出 Top-20" in exits[0].detail
+
+    def test_top_n_symbols_with_rank_column(self) -> None:
+        import polars as pl
+        from qp.portfolio.alpha_decay import top_n_symbols
+
+        df = pl.DataFrame({
+            "symbol": ["A", "B", "C", "D", "E", "F"],
+            "rank": [1, 2, 3, 4, 5, 6],
+        })
+        result = top_n_symbols(df, top_n=3)
+        assert result == {"A", "B", "C"}
+
+    def test_top_n_symbols_with_score_column(self) -> None:
+        import polars as pl
+        from qp.portfolio.alpha_decay import top_n_symbols
+
+        df = pl.DataFrame({
+            "symbol": ["X", "Y", "Z", "W"],
+            "aggregated_score": [0.9, 0.7, 0.5, 0.3],
+        })
+        result = top_n_symbols(df, top_n=2)
+        assert result == {"X", "Y"}
+
+    def test_top_n_symbols_empty(self) -> None:
+        import polars as pl
+        from qp.portfolio.alpha_decay import top_n_symbols
+
+        assert top_n_symbols(None, top_n=10) == set()
+        assert top_n_symbols(pl.DataFrame(), top_n=10) == set()
+
+    def test_multiple_positions_mixed(self) -> None:
+        from qp.portfolio.alpha_decay import AlphaDecayDetector
+
+        class MockPos:
+            pass
+
+        p1 = MockPos()
+        p1.symbol = "A"; p1.is_active = True
+        p2 = MockPos()
+        p2.symbol = "B"; p2.is_active = True
+        p3 = MockPos()
+        p3.symbol = "C"; p3.is_active = False  # Inactive
+
+        detector = AlphaDecayDetector()
+        exits = detector.check(
+            active_positions=[p1, p2, p3],
+            today_signals={"A"},  # Only A still in top-N
+        )
+        assert len(exits) == 1  # Only B (C is inactive)
+        assert exits[0].symbol == "B"
+
+
+class TestFundamentalExitDetector:
+    """Test FundamentalExitDetector (P3.3)."""
+
+    def test_roe_decline_triggers_exit(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "600519"
+            is_active = True
+
+        # ROE declining from 25% to 15% → 40% decline
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30", "2026-03-31"],
+            "ROE": [0.15, 0.25],
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"600519": fund},
+        )
+        assert len(exits) == 1
+        assert "ROE" in exits[0].detail
+        assert "40%" in exits[0].detail
+
+    def test_stable_fundamentals_no_signal(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000001"
+            is_active = True
+
+        # Stable ROE
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30", "2026-03-31"],
+            "ROE": [0.18, 0.19],
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"000001": fund},
+        )
+        assert exits == []
+
+    def test_revenue_growth_negative(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000002"
+            is_active = True
+
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30", "2026-03-31"],
+            "ROE": [0.10, 0.10],
+            "revenue_growth": [-0.15, 0.05],
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"000002": fund},
+        )
+        assert len(exits) == 1
+        assert "营收增速" in exits[0].detail
+
+    def test_net_profit_decline(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000003"
+            is_active = True
+
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30", "2026-03-31"],
+            "ROE": [0.10, 0.10],
+            "net_profit_growth": [-0.25, 0.08],
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"000003": fund},
+        )
+        assert len(exits) == 1
+        assert "净利润增速" in exits[0].detail
+
+    def test_debt_ratio_increase(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000004"
+            is_active = True
+
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30", "2026-03-31"],
+            "debt_ratio": [0.70, 0.50],  # 40% increase
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"000004": fund},
+        )
+        assert len(exits) == 1
+        assert "负债率" in exits[0].detail
+
+    def test_insufficient_data_no_signal(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000005"
+            is_active = True
+
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30"],
+            "ROE": [0.05],
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"000005": fund},
+        )
+        assert exits == []  # Need at least 2 periods
+
+    def test_no_fundamental_data_skips(self) -> None:
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000006"
+            is_active = True
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={},
+        )
+        assert exits == []
+
+    def test_inactive_position_skipped(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000007"
+            is_active = False
+
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30", "2026-03-31"],
+            "ROE": [0.05, 0.20],
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"000007": fund},
+        )
+        assert exits == []
+
+    def test_multiple_deterioration_reasons(self) -> None:
+        import polars as pl
+        from qp.portfolio.exit_signals import FundamentalExitDetector
+
+        class MockPos:
+            symbol = "000008"
+            is_active = True
+
+        # Both ROE decline AND negative revenue growth
+        fund = pl.DataFrame({
+            "report_date": ["2026-06-30", "2026-03-31"],
+            "ROE": [0.10, 0.20],
+            "revenue_growth": [-0.12, 0.05],
+        })
+
+        detector = FundamentalExitDetector()
+        exits = detector.check(
+            active_positions=[MockPos()],
+            fundamental_data={"000008": fund},
+        )
+        assert len(exits) == 1
+        detail = exits[0].detail
+        assert "ROE" in detail
+        assert "营收增速" in detail
+        assert "FUNDAMENTAL_DETERIORATION" in exits[0].reasons

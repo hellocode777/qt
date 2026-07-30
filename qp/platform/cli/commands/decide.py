@@ -70,9 +70,11 @@ def cmd_decide() -> int:
     if show_id:
         return cmd_decide_show(show_id)
 
-    # ── --review: interactive human review ──
+    # ── --review [--action approve|reject|modify] [--notes ...]: human review ──
     if review:
-        return cmd_decide_review(today)
+        action = _parse_flag_arg(args, "--action", "")
+        notes = _parse_flag_arg(args, "--notes", "")
+        return cmd_decide_review(today, action=action, notes=notes)
 
     # ── Default / --force: load or generate DecisionPackage ──
     if not force:
@@ -258,14 +260,20 @@ def print_decision_package_summary(pkg: DecisionPackage) -> None:
         print(f"  预估总成本: {pkg.estimated_cost_pct:.2f}%")
     print()
 
-    # Human review status
+    # Human review status (P0.4 — state-machine aware)
     hr = pkg.human_review
+    status = pkg.status
     print("  ── 人工审核 / Human Review ──")
+    print(f"  状态: {status.label} ({status.value})")
     if hr.reviewed:
-        print(f"  ✅ 已审核 by {hr.reviewer}")
-        if hr.executed:
-            print(f"  ✅ 已执行 at {hr.execution_time}")
-    else:
+        print(f"  审核人: {hr.reviewer}")
+    if hr.notes:
+        print(f"  备注: {hr.notes}")
+    if hr.status_history:
+        print(f"  状态历史: {len(hr.status_history)} 条记录")
+        for entry in hr.status_history[-3:]:
+            print(f"    {entry['from_status']} → {entry['to_status']} ({entry['timestamp'][:19]})")
+    if not hr.reviewed:
         print("  ❌ 待审核 — 运行 'qp decide --review' 进行审核")
     print()
 
@@ -283,12 +291,14 @@ def cmd_decide_history() -> int:
         return 0
 
     print(
-        f"{'Package ID':<32s} {'Date':<12s} {'Regime':<14s} {'Recs':>5s} {'Cost%':>7s} {'Risk':>6s} {'Reviewed':>9s}"
+        f"{'Package ID':<32s} {'Date':<12s} {'Regime':<14s} "
+        f"{'Recs':>5s} {'Cost%':>7s} {'Risk':>6s} {'Status':<12s}"
     )
-    print("-" * 95)
+    print("-" * 100)
     for e in entries:
         risk_icon = "✅" if e.get("risk_passed") else "⚠️"
-        rev_icon = "✅" if e.get("human_reviewed") else "❌"
+        status_val = e.get("status", "pending")
+        status_label = _status_label(status_val)
         print(
             f"{e.get('package_id', ''):<32s} "
             f"{e.get('date', ''):<12s} "
@@ -296,7 +306,7 @@ def cmd_decide_history() -> int:
             f"{e.get('n_recommendations', 0):>5d} "
             f"{e.get('estimated_cost_pct', 0):>6.2f}% "
             f"{risk_icon:<6s} "
-            f"{rev_icon:<9s}"
+            f"{status_label:<12s}"
         )
     print(f"\n共 {len(entries)} 条记录 / {len(entries)} decisions total")
     return 0
@@ -328,10 +338,19 @@ def cmd_decide_show(package_id: str) -> int:
         return 1
 
 
-def cmd_decide_review(today: object) -> int:
-    """Interactive human review of today's DecisionPackage."""
-    from datetime import datetime
+def cmd_decide_review(
+    today: object,
+    action: str = "",
+    notes: str = "",
+) -> int:
+    """Interactive human review of today's DecisionPackage.
 
+    Args:
+        today: Current date.
+        action: If set, skip interactive prompt and use this action.
+                One of: approve, reject, modify.
+        notes: Optional review notes.
+    """
     from qp.decision.decision_package import DecisionPackage
 
     pkg = DecisionPackage.load_latest()
@@ -340,44 +359,154 @@ def cmd_decide_review(today: object) -> int:
         print("   No DecisionPackage for today. Run 'qp run daily' first.")
         return 1
 
+    # If --action is provided, execute directly (non-interactive)
+    if action:
+        return _execute_review_action(pkg, action, notes)
+
+    # Interactive mode
     print_decision_package_summary(pkg)
 
     print("── 人工审核 / Human Review ──")
+    print(f"  当前状态: {pkg.status.label} ({pkg.status.value})")
     print()
 
-    # Prompt user
+    if not pkg.human_review.is_pending and pkg.status.value != "modified":
+        print("  ⚠️ 当前状态不支持审核 (需为待审核或已修改状态)")
+        print(f"     当前: {pkg.status.label}")
+        print("     可用操作: qp decide --history 查看历史")
+        return 1
+
+    # Show available actions
+    print("  可选操作:")
+    print("    [a] 批准 / Approve")
+    print("    [r] 驳回 / Reject")
+    print("    [m] 修改 / Modify")
+    print()
+
     try:
-        ans = input("  审核通过? [y/n]: ").strip().lower()
+        ans = input("  选择操作 [a/r/m]: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print("\n  已取消。")
         return 0
 
-    if ans not in ("y", "yes"):
-        print("  已标记为未通过 / Marked as rejected.")
-        pkg.human_review.reviewed = True
-        pkg.human_review.reviewer = "user"
-        pkg.human_review.notes = "REJECTED — manual review failed"
-        pkg.human_review.executed = False
+    action_map = {
+        "a": "approve",
+        "y": "approve",  # legacy compat
+        "yes": "approve",
+        "r": "reject",
+        "n": "reject",  # legacy compat
+        "no": "reject",
+        "m": "modify",
+    }
+    resolved = action_map.get(ans, "")
+    if not resolved:
+        print(f"  ❌ 无效操作: {ans}")
+        return 1
+
+    # Get notes
+    if resolved == "modify":
+        try:
+            notes = input("  修改说明 / Modification notes: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            notes = ""
+    elif resolved == "reject":
+        try:
+            notes = input("  驳回原因 / Rejection reason (可选): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            notes = ""
     else:
         try:
-            notes = input("  备注 / Notes: ").strip()
+            notes = input("  备注 / Notes (可选): ").strip()
         except (EOFError, KeyboardInterrupt):
             notes = ""
 
-        pkg.human_review.reviewed = True
-        pkg.human_review.reviewer = "user"
-        pkg.human_review.notes = notes
-        pkg.human_review.executed = True
-        pkg.human_review.execution_time = datetime.now().isoformat()
+    return _execute_review_action(pkg, resolved, notes)
 
-    # Save updated package
+
+def _execute_review_action(
+    pkg: DecisionPackage,
+    action: str,
+    notes: str,
+) -> int:
+    """Execute a review action using the state machine, then save."""
+    from qp.decision.state_machine import DecisionStateError
+
+    try:
+        if action == "approve":
+            pkg.approve(reviewer="cli", notes=notes)
+        elif action == "reject":
+            pkg.reject(reviewer="cli", notes=notes)
+        elif action == "modify":
+            pkg.modify(reviewer="cli", notes=notes)
+        else:
+            print(f"  ❌ 未知操作: {action}")
+            return 1
+    except DecisionStateError as e:
+        print(f"  ❌ 状态转换失败: {e}")
+        return 1
+
+    # Save
     json_path = pkg.to_json()
     pkg.to_markdown()
     pkg.update_index()
 
-    print()
-    status = "✅ 已通过并标记执行" if pkg.human_review.executed else "⚠️ 已标记未通过"
-    print(f"  {status}")
+    # P2.3: Auto-create positions on approve
+    if action == "approve":
+        try:
+            from qp.decision.position_ledger import PositionLedger
+
+            ledger = PositionLedger()
+            positions = ledger.open_from_decision(pkg)
+            if positions:
+                print(f"  📊 自动创建 {len(positions)} 条持仓记录")
+        except Exception as exc:
+            print(f"  ⚠️ 持仓创建失败: {exc}")
+
+    labels = {
+        "approve": "✅ 已批准",
+        "reject": "🚫 已驳回",
+        "modify": "📝 已标记修改",
+    }
+    print(f"\n  {labels.get(action, action)} / {action}")
+    print(f"  新状态: {pkg.status.label}")
+    if notes:
+        print(f"  备注: {notes}")
     print(f"  已保存至 / Saved to: {json_path}")
     return 0
 
+
+
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+
+
+def _parse_flag_arg(args: list[str], flag: str, default: str = "") -> str:
+    """Extract a flag value from args list.
+
+    Supports both --flag=value and --flag value forms.
+    Removes consumed args in-place.
+    """
+    for i, arg in enumerate(args):
+        if arg.startswith(f"{flag}="):
+            args.pop(i)
+            return arg.split("=", 1)[1]
+        if arg == flag and i + 1 < len(args):
+            args.pop(i)
+            val = args.pop(i)
+            return val
+    return default
+
+
+def _status_label(status_value: str) -> str:
+    """Return a compact Chinese label for a status value."""
+    labels = {
+        "pending": "待审核",
+        "approved": "已批准",
+        "rejected": "已驳回",
+        "modified": "已修改",
+        "partially_executed": "部分执行",
+        "monitoring": "监控中",
+        "closed": "已关闭",
+    }
+    return labels.get(status_value, status_value)

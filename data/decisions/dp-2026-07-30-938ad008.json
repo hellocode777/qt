@@ -287,7 +287,9 @@
     "reviewer": "",
     "notes": "",
     "executed": false,
-    "execution_time": ""
+    "execution_time": "",
+    "status": "pending",
+    "status_history": []
   },
   "metadata": {
     "pipeline_run_id": "938ad0080c6c",

@@ -9,6 +9,7 @@ The runtime Application (ADR-012) is created for long-running commands
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from typing import TYPE_CHECKING
 
@@ -84,6 +85,56 @@ def main() -> int:
         return 1
     if command == "portfolio":
         print("qp portfolio: missing subcommand. Try: qp portfolio report", file=sys.stderr)
+        return 1
+
+    # ── Position (P2.4) ──
+    if command == "position":
+        if len(sys.argv) < 3:
+            print("qp position: missing subcommand. Try: list, show, close, pnl, history", file=sys.stderr)
+            return 1
+        sub = sys.argv[2]
+        if sub == "list":
+            from qp.platform.cli.commands.position import cmd_position_list
+
+            return cmd_position_list()
+        if sub == "show":
+            if len(sys.argv) < 4:
+                print("qp position show: missing <id>. Try: qp position show P-00001", file=sys.stderr)
+                return 1
+            from qp.platform.cli.commands.position import cmd_position_show
+
+            return cmd_position_show(sys.argv[3])
+        if sub == "close":
+            if len(sys.argv) < 4:
+                print("qp position close: missing <id>. Try: qp position close P-00001 --price 15.50", file=sys.stderr)
+                return 1
+            price = 0.0
+            reason = ""
+            for i, arg in enumerate(sys.argv[3:], start=3):
+                if arg.startswith("--price="):
+                    price = float(arg.split("=", 1)[1])
+                elif arg == "--price" and i + 1 < len(sys.argv):
+                    price = float(sys.argv[i + 1])
+                if arg.startswith("--reason="):
+                    reason = arg.split("=", 1)[1]
+                elif arg == "--reason" and i + 1 < len(sys.argv):
+                    reason = sys.argv[i + 1]
+            from qp.platform.cli.commands.position import cmd_position_close
+
+            return cmd_position_close(sys.argv[3], exit_price=price, reason=reason)
+        if sub == "pnl":
+            from qp.platform.cli.commands.position import cmd_position_pnl
+
+            return cmd_position_pnl()
+        if sub == "history":
+            limit = 30
+            if len(sys.argv) > 3:
+                with contextlib.suppress(ValueError):
+                    limit = int(sys.argv[3])
+            from qp.platform.cli.commands.position import cmd_position_history
+
+            return cmd_position_history(limit=limit)
+        print(f"qp position: unknown subcommand '{sub}'. Try: list, show, close, pnl, history", file=sys.stderr)
         return 1
 
     # ── Experiment ──

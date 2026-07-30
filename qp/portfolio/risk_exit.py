@@ -54,6 +54,7 @@ class TradeReason(str):
     RISK_SUSPENSION = "RISK_SUSPENSION"
     RISK_LIQUIDITY = "RISK_LIQUIDITY"
     RANK_DROP = "RANK_DROP"
+    FUNDAMENTAL_DETERIORATION = "FUNDAMENTAL_DETERIORATION"
     NEW_ENTRY = "NEW_ENTRY"
     REBALANCE = "REBALANCE"
 
@@ -314,8 +315,9 @@ class RiskExitManager:
             return Priority.CRITICAL
         if TradeReason.STOP_LOSS in reasons:
             return Priority.HIGH
-        if TradeReason.RISK_SUSPENSION in reasons:
+        if TradeReason.RISK_SUSPENSION in reasons or TradeReason.RISK_LIQUIDITY in reasons:
             return Priority.MEDIUM
+        # RANK_DROP, FUNDAMENTAL_DETERIORATION, REBALANCE → LOW
         return Priority.LOW
 
     @staticmethod

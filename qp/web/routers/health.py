@@ -59,3 +59,23 @@ async def health_overview(request: Request) -> Any:
             "page_title": "System Health — QP Decision Center",
         },
     )
+
+
+@router.get("/health/strategies")
+async def strategy_health_page(request: Request) -> Any:
+    """Per-strategy health detail page (P1.4)."""
+    health_svc = _get_service(request, "health_service", HealthService)
+
+    strategies = health_svc.strategy_health_list()
+
+    logger.info("Strategy health: {} strategies loaded", len(strategies))
+
+    return templates.TemplateResponse(
+        request=request,
+        name="strategy_health.html",
+        context={
+            "strategies": strategies,
+            "has_strategies": len(strategies) > 0,
+            "page_title": "Strategy Health — QP Decision Center",
+        },
+    )

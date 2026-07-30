@@ -24,6 +24,7 @@
     <div class="navbar-links">
       <a href="/" class="{% if request.url.path == '/' %}active{% endif %}" hx-boost="true">首页 Cockpit</a>
       <a href="/decisions" class="{% if request.url.path.startswith('/decisions') %}active{% endif %}" hx-boost="true">决策记录 Decisions</a>
+      <a href="/portfolio" class="{% if request.url.path == '/portfolio' %}active{% endif %}" hx-boost="true">投资组合 Portfolio</a>
       <a href="/health" class="{% if request.url.path == '/health' %}active{% endif %}" hx-boost="true">系统健康 Health</a>
     </div>
     <div class="navbar-status">

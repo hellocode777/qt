@@ -69,13 +69,24 @@ class IndustryMapper:
             except Exception:
                 pass
 
+    def _lookup(self, clean: str) -> tuple[str, str] | None:
+        """Look up sector mapping, preferring non-Other results.
+
+        Priority: fallback map (curated) > JSON file (auto-classified).
+        Falls back to JSON if fallback doesn't have the code.
+        """
+        fb = _FALLBACK_MAP.get(clean)
+        if fb is not None:
+            return fb
+        return self._map.get(clean)
+
     def get_sector(self, symbol: str) -> str:
         """Get the top-level sector for a symbol.
 
         Returns ``"Other"`` for unknown symbols.
         """
         clean = symbol.split(".")[0] if "." in symbol else symbol
-        mapping = self._map.get(clean) or _FALLBACK_MAP.get(clean)
+        mapping = self._lookup(clean)
         return mapping[0] if mapping else "Other"
 
     def get_sector_group(self, symbol: str) -> str:
@@ -84,12 +95,16 @@ class IndustryMapper:
         Returns ``"Other"`` for unknown symbols.
         """
         clean = symbol.split(".")[0] if "." in symbol else symbol
-        mapping = self._map.get(clean) or _FALLBACK_MAP.get(clean)
+        mapping = self._lookup(clean)
         return mapping[1] if mapping else "Other"
 
     def get_symbols_in_sector(self, sector: str) -> list[str]:
-        """Get all known symbols belonging to a sector."""
-        return [sym for sym, (s, _) in {**self._map, **_FALLBACK_MAP}.items() if s == sector]
+        """Get all known symbols belonging to a sector.
+
+        Fallback map takes priority over JSON file for well-known stocks.
+        """
+        merged: dict[str, tuple[str, str]] = {**self._map, **_FALLBACK_MAP}
+        return [sym for sym, (s, _) in merged.items() if s == sector]
 
     def get_sector_weights(
         self,

@@ -7,10 +7,11 @@ GET "/" — The main Decision Cockpit showing:
   - Today's BUY/SELL candidates
   - Risk audit summary
   - Kill switch status
-  - Human review panel
+  - Human review panel (state-machine powered)
 
-POST "/review/{package_id}" — Mark decision as human-reviewed
-POST "/execute/{package_id}" — Mark decision as executed
+POST "/review/{package_id}"  — approve / reject / modify (action param)
+POST "/execute/{package_id}" — mark trades executed (progressive)
+POST "/close/{package_id}"   — close a monitored decision
 """
 
 from __future__ import annotations
@@ -77,15 +78,32 @@ async def dashboard(request: Request) -> Any:
 
 
 @router.post("/review/{package_id}")
-async def mark_reviewed(request: Request, package_id: str, notes: str = Form("")) -> Any:
-    """Mark a decision package as reviewed by human."""
+async def mark_reviewed(
+    request: Request,
+    package_id: str,
+    action: str = Form("approve"),
+    notes: str = Form(""),
+) -> Any:
+    """Execute a human review action (P0.5 — state-machine validated).
+
+    Supports: approve, reject, modify.
+    """
     decision_svc = _get_service(request, "decision_service", DecisionService)
-    result = decision_svc.mark_reviewed(package_id, notes=notes)
+    result: dict[str, Any] | None = None
+
+    if action == "reject":
+        result = decision_svc.reject(package_id, reviewer="webui", notes=notes)
+    elif action == "modify":
+        result = decision_svc.modify(package_id, reviewer="webui", notes=notes)
+    else:
+        # Default: approve (backward compat with old mark_reviewed)
+        result = decision_svc.approve(package_id, reviewer="webui", notes=notes)
+
     if result is None:
         return templates.TemplateResponse(
             request=request,
             name="components/human_review_panel.html",
-            context={"decision": None, "error": "Decision package not found"},
+            context={"decision": None, "error": "Decision not found or invalid transition"},
             status_code=404,
         )
     return templates.TemplateResponse(
@@ -96,15 +114,42 @@ async def mark_reviewed(request: Request, package_id: str, notes: str = Form("")
 
 
 @router.post("/execute/{package_id}")
-async def mark_executed(request: Request, package_id: str) -> Any:
-    """Mark a decision package as executed (trades placed)."""
+async def mark_executed(
+    request: Request,
+    package_id: str,
+    notes: str = Form(""),
+) -> Any:
+    """Mark trades as executed (APPROVED → PARTIALLY_EXECUTED → MONITORING)."""
     decision_svc = _get_service(request, "decision_service", DecisionService)
-    result = decision_svc.mark_executed(package_id)
+    result = decision_svc.mark_executed(package_id, notes=notes)
     if result is None:
         return templates.TemplateResponse(
             request=request,
             name="components/human_review_panel.html",
-            context={"decision": None, "error": "Decision package not found"},
+            context={"decision": None, "error": "Decision not found or invalid transition"},
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="components/human_review_panel.html",
+        context={"decision": result},
+    )
+
+
+@router.post("/close/{package_id}")
+async def close_decision(
+    request: Request,
+    package_id: str,
+    notes: str = Form(""),
+) -> Any:
+    """Close a monitored decision (MONITORING → CLOSED)."""
+    decision_svc = _get_service(request, "decision_service", DecisionService)
+    result = decision_svc.close(package_id, notes=notes)
+    if result is None:
+        return templates.TemplateResponse(
+            request=request,
+            name="components/human_review_panel.html",
+            context={"decision": None, "error": "Decision not found or invalid transition"},
             status_code=404,
         )
     return templates.TemplateResponse(

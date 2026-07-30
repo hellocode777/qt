@@ -8,7 +8,8 @@
     "estimated_cost_pct": 0.1278,
     "risk_passed": false,
     "human_reviewed": false,
-    "human_executed": false
+    "human_executed": false,
+    "status": "pending"
   },
   {
     "package_id": "dp-2026-07-29-4c3114c0",

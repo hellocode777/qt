@@ -143,21 +143,15 @@
   <div class="card-body">
     <div style="display: flex; gap: 24px; font-size: 14px;">
       <div>
-        <span class="c-muted">已审核: </span>
-        {% if detail.human_review.reviewed %}
-        <span class="c-green">&#9989; 是</span>
-        {% else %}
-        <span class="c-red">&#10060; 待审核</span>
-        {% endif %}
+        <span class="c-muted">状态: </span>
+        <strong>{{ detail.human_review.status_label }}</strong>
       </div>
+      {% if detail.human_review.reviewer %}
       <div>
-        <span class="c-muted">已执行: </span>
-        {% if detail.human_review.executed %}
-        <span class="c-green">&#9989; 是</span>
-        {% else %}
-        <span class="c-muted">&#10060; 未执行</span>
-        {% endif %}
+        <span class="c-muted">审核人: </span>
+        {{ detail.human_review.reviewer }}
       </div>
+      {% endif %}
     </div>
     {% if detail.human_review.notes %}
     <div class="reason-bar" style="margin-top: 8px;">{{ detail.human_review.notes }}</div>

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>投资组合 / Portfolio</h1>
+    <div class="meta">
+      持仓追踪 · P&L 统计 · 卖出建议
+    </div>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">活跃持仓</div>
+    <div style="font-size: 28px; font-weight: 700;">{{ stats.active_count }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">持仓市值</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ stats.total_value_fmt }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">已实现盈亏</div>
+    <div style="font-size: 20px; font-weight: 700; color: {% if stats.total_realized_pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">
+      {{ stats.total_realized_pnl_fmt }}
+    </div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">胜率</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ stats.win_rate }}</div>
+  </div>
+</div>
+
+<!-- Active Positions -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header">
+    <span>&#128202; 活跃持仓 Active Positions</span>
+    <span class="c-muted" style="font-size: 12px;">{{ stats.active_count }} 个</span>
+  </div>
+  <div class="card-body">
+    {% if not has_positions %}
+    <div class="empty-state" style="padding: 24px;">
+      <div class="icon">&#128202;</div>
+      <p>暂无活跃持仓</p>
+      <p class="c-muted" style="font-size: 12px;">
+        运行 <code>qp run daily</code> 并在 Decision Cockpit 中批准交易建议后，持仓将自动创建。
+      </p>
+    </div>
+    {% else %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>标的</th>
+          <th>入场日</th>
+          <th>入场价</th>
+          <th>股数</th>
+          <th>市值</th>
+          <th>策略</th>
+          <th>决策包</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in positions %}
+        <tr>
+          <td><code>{{ p.position_id }}</code></td>
+          <td><strong>{{ p.symbol }}</strong></td>
+          <td>{{ p.entry_date }}</td>
+          <td>¥{{ "%.2f"|format(p.entry_price) }}</td>
+          <td>{{ p.shares }}</td>
+          <td>¥{{ "%.0f"|format(p.market_value) }}</td>
+          <td><span style="font-size: 12px;">{{ p.strategy_id }}</span></td>
+          <td>
+            <a href="/decisions/{{ p.decision_id }}" style="color: var(--blue); font-size: 12px;">
+              {{ p.decision_id }}
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Sell Signals from latest DecisionPackage -->
+{% if has_sell_signals %}
+<div class="card" style="border-left: 4px solid var(--red);">
+  <div class="card-header">
+    <span>&#128680; 卖出建议 Sell Signals</span>
+    <span class="c-muted" style="font-size: 12px;">来自最新决策包</span>
+  </div>
+  <div class="card-body">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>标的</th>
+          <th>建议股数</th>
+          <th>预估价格</th>
+          <th>原因</th>
+          <th>置信度</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sell_signals %}
+        <tr>
+          <td><strong>{{ s.symbol }}</strong></td>
+          <td>{{ s.quantity_shares }}</td>
+          <td>¥{{ "%.2f"|format(s.estimated_price) if s.estimated_price else "—" }}</td>
+          <td style="font-size: 12px;">{{ s.reason or s.exit_reason or "—" }}</td>
+          <td>{{ (s.confidence * 100)|int if s.confidence else 0 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

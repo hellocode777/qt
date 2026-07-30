@@ -1,45 +1,71 @@
-<!-- Human Review Panel — HTMX-powered interactive review/execute controls -->
+<!-- Human Review Panel — HTMX-powered state-machine review controls (P0.5) -->
 <div id="human-review-panel" class="card mt-4">
   <div class="card-header">
     <span>&#9997; 人工审核 Human Review</span>
     <span class="c-muted" style="font-size: 12px;">
       Package: <code>{{ decision.package_id }}</code>
+      | 状态: <strong>{{ decision.human_review.status_label }}</strong>
     </span>
   </div>
   <div class="card-body">
-    {% if decision.human_review.reviewed %}
-    <!-- REVIEWED state -->
-    <p style="margin-bottom: 12px; color: var(--green); font-weight: 600;">
-      &#9989; 已审核 — 我理解并同意以上所有交易建议
-    </p>
-    {% else %}
-    <!-- NOT REVIEWED — show review button -->
+
+    {% set status = decision.human_review.status %}
+    {% set reviewed = decision.human_review.reviewed %}
+    {% set executed = decision.human_review.executed %}
+
+    <!-- ============================================================ -->
+    <!-- PENDING / MODIFIED: show Approve + Reject + Modify buttons   -->
+    <!-- ============================================================ -->
+    {% if status == "pending" or status == "modified" %}
     <div style="margin-bottom: 12px; padding: 16px; background: #e3f2fd; border-left: 4px solid var(--blue); border-radius: 0 8px 8px 0;">
       <p style="font-size: 14px; margin-bottom: 10px;">
-        &#128073; <strong>请逐条检查以上交易建议</strong>，确认无误后点击审核通过。
+        {% if status == "modified" %}
+        &#128221; <strong>已修改，待重新确认</strong> — 请确认修改后的交易建议。
+        {% else %}
+        &#128073; <strong>请逐条检查以上交易建议</strong>，选择操作：
+        {% endif %}
       </p>
       <form hx-post="/review/{{ decision.package_id }}"
             hx-target="#human-review-panel"
             hx-swap="outerHTML"
-            style="display: flex; gap: 8px; align-items: flex-end;">
-        <input type="text" name="notes" placeholder="审核备注（可选）"
-               style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;">
-        <button type="submit"
-                style="padding: 8px 20px; background: var(--blue); color: #fff; border: none; border-radius: 6px;
+            style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+        <input type="text" name="notes" placeholder="备注（可选）"
+               style="flex: 1; min-width: 150px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;">
+        <input type="hidden" name="action" value="approve">
+        <button type="button"
+                onclick="this.form.action.value='approve'; this.form.submit();"
+                style="padding: 8px 16px; background: var(--green); color: #fff; border: none; border-radius: 6px;
                        font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
-          &#9989; 审核通过 Approve
+          &#9989; 批准 Approve
+        </button>
+        <button type="button"
+                onclick="this.form.action.value='modify'; this.form.submit();"
+                style="padding: 8px 16px; background: var(--amber); color: #fff; border: none; border-radius: 6px;
+                       font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+          &#128221; 修改 Modify
+        </button>
+        <button type="button"
+                onclick="this.form.action.value='reject'; this.form.submit();"
+                style="padding: 8px 16px; background: var(--red); color: #fff; border: none; border-radius: 6px;
+                       font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+          &#10060; 驳回 Reject
         </button>
       </form>
     </div>
     {% endif %}
 
-    {% if decision.human_review.reviewed and not decision.human_review.executed %}
-    <!-- REVIEWED but NOT EXECUTED — show execute button -->
+    <!-- ============================================================ -->
+    <!-- APPROVED: show execute button                               -->
+    <!-- ============================================================ -->
+    {% if status == "approved" %}
+    <p style="margin-bottom: 12px; color: var(--green); font-weight: 600;">
+      &#9989; 已批准 — {{ decision.human_review.reviewer or "审核人" }}
+    </p>
     <div style="padding: 16px; background: #fff8e1; border-left: 4px solid var(--amber); border-radius: 0 8px 8px 0;">
       <p style="font-size: 14px; margin-bottom: 10px;">
-        &#128073; 审核已通过。请在券商平台完成实际交易后，点击「确认已执行」。
+        &#128073; 审核已通过。请在券商平台完成实际交易后确认。
         <br><span class="c-muted" style="font-size: 12px;">
-          QP 不直接下单 — 你需要在自己的券商账户中手动执行交易。
+          QP 不直接下单 — 你需要在券商账户中手动执行交易。
         </span>
       </p>
       <form hx-post="/execute/{{ decision.package_id }}"
@@ -48,22 +74,98 @@
         <button type="submit"
                 style="padding: 8px 20px; background: var(--amber); color: #fff; border: none; border-radius: 6px;
                        font-size: 13px; font-weight: 600; cursor: pointer;">
-          &#9989; 确认已执行 Confirm Executed
+          &#9989; 部分已执行 Confirm Partial Execute
         </button>
       </form>
     </div>
     {% endif %}
 
-    {% if decision.human_review.reviewed and decision.human_review.executed %}
-    <!-- DONE — both reviewed and executed -->
-    <p style="color: var(--green); font-weight: 600;">
-      &#9989; 已审核 & 已执行 — 决策闭环完成
+    <!-- ============================================================ -->
+    <!-- PARTIALLY_EXECUTED: show confirm all executed                -->
+    <!-- ============================================================ -->
+    {% if status == "partially_executed" %}
+    <p style="margin-bottom: 12px; color: var(--amber); font-weight: 600;">
+      &#128260; 部分执行中
     </p>
-    {% if decision.human_review.execution_time %}
-    <p class="c-muted" style="font-size: 12px; margin-top: 4px;">
-      执行时间: {{ decision.human_review.execution_time[:19] }}
+    <div style="padding: 16px; background: #e8f5e9; border-left: 4px solid var(--green); border-radius: 0 8px 8px 0;">
+      <p style="font-size: 14px; margin-bottom: 10px;">
+        &#128073; 剩余交易完成后，确认全部执行。
+      </p>
+      <form hx-post="/execute/{{ decision.package_id }}"
+            hx-target="#human-review-panel"
+            hx-swap="outerHTML"
+            style="display: flex; gap: 8px; align-items: flex-end;">
+        <input type="text" name="notes" placeholder="备注（可选）"
+               style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;">
+        <button type="submit"
+                style="padding: 8px 20px; background: var(--green); color: #fff; border: none; border-radius: 6px;
+                       font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+          &#9989; 全部已执行 Confirm All Executed
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- ============================================================ -->
+    <!-- MONITORING: show close button                               -->
+    <!-- ============================================================ -->
+    {% if status == "monitoring" %}
+    <p style="margin-bottom: 12px; color: var(--green); font-weight: 600;">
+      &#128064; 监控中 — 所有交易已执行，持仓监控中
+    </p>
+    <div style="padding: 16px; background: #e8eaf6; border-left: 4px solid var(--blue); border-radius: 0 8px 8px 0;">
+      <p style="font-size: 14px; margin-bottom: 10px;">
+        &#128073; 所有仓位平仓后，关闭此决策包。
+      </p>
+      <form hx-post="/close/{{ decision.package_id }}"
+            hx-target="#human-review-panel"
+            hx-swap="outerHTML"
+            style="display: flex; gap: 8px; align-items: flex-end;">
+        <input type="text" name="notes" placeholder="关闭原因（可选）"
+               style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;">
+        <button type="submit"
+                style="padding: 8px 20px; background: var(--red); color: #fff; border: none; border-radius: 6px;
+                       font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+          &#128274; 关闭 Close
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- ============================================================ -->
+    <!-- REJECTED / CLOSED: terminal state                           -->
+    <!-- ============================================================ -->
+    {% if status == "rejected" %}
+    <p style="color: var(--red); font-weight: 600;">
+      &#10060; 已驳回 — 本决策包已作废
     </p>
     {% endif %}
+
+    {% if status == "closed" %}
+    <p style="color: var(--green); font-weight: 600;">
+      &#128274; 已关闭 — 决策闭环完成
+    </p>
+    {% endif %}
+
+    <!-- ============================================================ -->
+    <!-- Status history                                              -->
+    <!-- ============================================================ -->
+    {% if decision.human_review.status_history %}
+    <details style="margin-top: 12px; font-size: 12px;">
+      <summary style="cursor: pointer; color: var(--c-muted);">
+        状态历史 ({{ decision.human_review.status_history|length }} 条)
+      </summary>
+      <div style="margin-top: 6px; max-height: 150px; overflow-y: auto;">
+        {% for entry in decision.human_review.status_history|reverse %}
+        <div style="padding: 3px 0; border-bottom: 1px solid var(--border-light);">
+          <span style="color: var(--c-muted);">{{ entry.timestamp[:19] }}</span>
+          <strong>{{ entry.from_status }}</strong> &rarr; <strong>{{ entry.to_status }}</strong>
+          {% if entry.actor %}<span style="color: var(--blue);">by {{ entry.actor }}</span>{% endif %}
+          {% if entry.notes %}<br><span style="color: var(--c-muted); padding-left: 20px;">{{ entry.notes }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </details>
     {% endif %}
 
     <!-- Notes display -->
@@ -72,5 +174,12 @@
       <strong>备注:</strong> {{ decision.human_review.notes }}
     </div>
     {% endif %}
+
+    {% if decision.human_review.execution_time and status not in ("rejected", "closed") %}
+    <p class="c-muted" style="font-size: 12px; margin-top: 4px;">
+      最近执行时间: {{ decision.human_review.execution_time[:19] }}
+    </p>
+    {% endif %}
+
   </div>
 </div>

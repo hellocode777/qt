@@ -45,11 +45,14 @@
             {% endif %}
           </td>
           <td>
-            {% if entry.human_reviewed %}
-            <span class="c-green" style="font-size: 12px;">&#9989; 已审核</span>
+            {% if entry.status == "rejected" %}
+            <span class="c-red" style="font-size: 12px;">&#10060; 已驳回</span>
+            {% elif entry.status == "approved" or entry.status == "monitoring" or entry.status == "closed" or entry.status == "partially_executed" %}
+            <span class="c-green" style="font-size: 12px;">&#9989; {{ entry.status }}</span>
             {% else %}
             <span class="c-muted" style="font-size: 12px;">待审核</span>
             {% endif %}
+          </td>
           </td>
           <td>
             <a href="/decisions/{{ entry.package_id }}" style="color: var(--blue); text-decoration: none; font-size: 12px;">

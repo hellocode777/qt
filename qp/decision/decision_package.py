@@ -24,6 +24,7 @@ from typing import Any
 from loguru import logger
 
 from qp.decision.models import DecisionReport
+from qp.decision.state_machine import DecisionStatus, StatusTransition
 
 DECISIONS_DIR = Path("data/decisions")
 INDEX_PATH = DECISIONS_DIR / "index.json"
@@ -105,13 +106,90 @@ class RiskAudit:
 
 @dataclass
 class HumanReview:
-    """User-filled review after reading the decision package."""
+    """User-filled review after reading the decision package.
+
+    Attributes:
+        reviewed: Legacy — True if human has reviewed (kept for backward compat).
+        reviewer: Name of the person who reviewed.
+        notes: Review notes or modification details.
+        executed: Legacy — True if trades have been executed.
+        execution_time: ISO timestamp of execution.
+        status: DecisionStatus value (source of truth for state machine).
+        status_history: Audit trail of all status transitions.
+    """
 
     reviewed: bool = False
     reviewer: str = ""
     notes: str = ""
     executed: bool = False
     execution_time: str = ""
+    status: str = "pending"
+    status_history: list[dict[str, str]] = field(default_factory=list)
+
+    @property
+    def current_status(self) -> DecisionStatus:
+        """Current DecisionStatus enum value."""
+        try:
+            return DecisionStatus(self.status)
+        except ValueError:
+            return DecisionStatus.PENDING
+
+    @property
+    def is_pending(self) -> bool:
+        """True if awaiting human review."""
+        return self.status == "pending"
+
+    @property
+    def is_terminal(self) -> bool:
+        """True if in a terminal state."""
+        return self.current_status.is_terminal
+
+    def record_transition(
+        self,
+        to_status: DecisionStatus,
+        actor: str = "",
+        notes: str = "",
+    ) -> None:
+        """Record a status transition and update legacy compat fields.
+
+        Args:
+            to_status: The new DecisionStatus.
+            actor: Who initiated the transition.
+            notes: Optional reason or comment.
+        """
+        old_status = self.current_status
+
+        record = StatusTransition(
+            from_status=old_status,
+            to_status=to_status,
+            actor=actor,
+            notes=notes,
+        )
+
+        self.status = to_status.value
+        self.status_history.append({
+            "from_status": record.from_status.value,
+            "to_status": record.to_status.value,
+            "timestamp": record.timestamp,
+            "actor": record.actor,
+            "notes": record.notes,
+        })
+
+        # Update legacy compat fields
+        if to_status in (DecisionStatus.APPROVED, DecisionStatus.MODIFIED):
+            self.reviewed = True
+            if actor:
+                self.reviewer = actor
+            if notes:
+                self.notes = notes
+        elif to_status == DecisionStatus.REJECTED:
+            self.reviewed = True
+            if actor:
+                self.reviewer = actor
+        elif to_status in (DecisionStatus.PARTIALLY_EXECUTED,
+                           DecisionStatus.MONITORING):
+            self.executed = True
+            self.execution_time = record.timestamp
 
 
 # ==================================================================
@@ -255,6 +333,8 @@ class DecisionPackage:
                 "notes": self.human_review.notes,
                 "executed": self.human_review.executed,
                 "execution_time": self.human_review.execution_time,
+                "status": self.human_review.status,
+                "status_history": self.human_review.status_history,
             },
             "metadata": self.metadata,
         }
@@ -338,12 +418,34 @@ class DecisionPackage:
         )
 
         hr_data = data.get("human_review", {})
+        # Backward compat: infer status from legacy booleans if status field missing
+        hr_status = hr_data.get("status", "")
+        hr_history = hr_data.get("status_history", [])
+        if not hr_status:
+            # Old format — infer from reviewed/executed booleans
+            if hr_data.get("executed", False):
+                hr_status = "monitoring"
+            elif hr_data.get("reviewed", False):
+                hr_status = "approved"
+            else:
+                hr_status = "pending"
+            # Create a synthetic initial entry for the audit trail
+            if hr_status != "pending":
+                hr_history = [{
+                    "from_status": "pending",
+                    "to_status": hr_status,
+                    "timestamp": hr_data.get("execution_time", hr_data.get("generated_at", "")),
+                    "actor": hr_data.get("reviewer", ""),
+                    "notes": "Migrated from legacy format",
+                }]
         human_review = HumanReview(
             reviewed=hr_data.get("reviewed", False),
             reviewer=hr_data.get("reviewer", ""),
             notes=hr_data.get("notes", ""),
             executed=hr_data.get("executed", False),
             execution_time=hr_data.get("execution_time", ""),
+            status=hr_status,
+            status_history=hr_history,
         )
 
         strategy_data = data.get("strategy", {})
@@ -439,6 +541,108 @@ class DecisionPackage:
         return cls.from_json(candidates[0])
 
     # ==================================================================
+    # Status transitions (delegates to state machine)
+    # ==================================================================
+
+    def transition_status(
+        self,
+        to_status: DecisionStatus | str,
+        actor: str = "",
+        notes: str = "",
+    ) -> StatusTransition:
+        """Transition this decision to a new status, with validation.
+
+        Args:
+            to_status: Target DecisionStatus.
+            actor: Who initiated the transition.
+            notes: Optional reason or comment.
+
+        Returns:
+            StatusTransition audit record.
+
+        Raises:
+            DecisionStateError: If the transition is not allowed.
+        """
+        from qp.decision.state_machine import transition
+
+        if isinstance(to_status, str):
+            to_status = DecisionStatus(to_status)
+
+        new_status, record = transition(
+            self.human_review.current_status,
+            to_status,
+            actor=actor,
+            notes=notes,
+        )
+        self.human_review.record_transition(new_status, actor=actor, notes=notes)
+        return record
+
+    def approve(self, reviewer: str = "", notes: str = "") -> StatusTransition:
+        """Approve this decision (PENDING/MODIFIED → APPROVED)."""
+        from qp.decision.state_machine import approve
+
+        new_status, record = approve(
+            self.human_review.current_status,
+            reviewer=reviewer,
+            notes=notes,
+        )
+        self.human_review.record_transition(new_status, actor=reviewer, notes=notes)
+        return record
+
+    def reject(self, reviewer: str = "", notes: str = "") -> StatusTransition:
+        """Reject this decision (PENDING → REJECTED)."""
+        from qp.decision.state_machine import reject
+
+        new_status, record = reject(
+            self.human_review.current_status,
+            reviewer=reviewer,
+            notes=notes,
+        )
+        self.human_review.record_transition(new_status, actor=reviewer, notes=notes)
+        return record
+
+    def modify(self, reviewer: str = "", notes: str = "") -> StatusTransition:
+        """Mark as modified (PENDING → MODIFIED)."""
+        from qp.decision.state_machine import modify
+
+        new_status, record = modify(
+            self.human_review.current_status,
+            reviewer=reviewer,
+            notes=notes,
+        )
+        self.human_review.record_transition(new_status, actor=reviewer, notes=notes)
+        return record
+
+    def mark_executed(self, actor: str = "system", notes: str = "") -> StatusTransition:
+        """Mark trades executed (APPROVED → PARTIALLY_EXECUTED → MONITORING)."""
+        from qp.decision.state_machine import mark_executed
+
+        new_status, record = mark_executed(
+            self.human_review.current_status,
+            actor=actor,
+            notes=notes,
+        )
+        self.human_review.record_transition(new_status, actor=actor, notes=notes)
+        return record
+
+    def close(self, actor: str = "system", notes: str = "") -> StatusTransition:
+        """Close this decision (MONITORING → CLOSED)."""
+        from qp.decision.state_machine import close
+
+        new_status, record = close(
+            self.human_review.current_status,
+            actor=actor,
+            notes=notes,
+        )
+        self.human_review.record_transition(new_status, actor=actor, notes=notes)
+        return record
+
+    @property
+    def status(self) -> DecisionStatus:
+        """Current DecisionStatus of this package."""
+        return self.human_review.current_status
+
+    # ==================================================================
     # Index management
     # ==================================================================
 
@@ -480,6 +684,7 @@ class DecisionPackage:
                 "risk_passed": self.risk_audit.passed,
                 "human_reviewed": self.human_review.reviewed,
                 "human_executed": self.human_review.executed,
+                "status": self.human_review.status,
             }
         )
 
@@ -547,24 +752,77 @@ class DecisionPackage:
             lines.append(f"| {sid} | {count} |")
         lines.append("")
 
-        # Validation
+        # Validation + Health (P1.1/P1.2)
         if self.validation:
             lines.extend(
                 [
                     "## 4. 验证门禁 / Validation Gate",
                     "",
-                    "| Strategy | Stage | Score | Passed | Rules Failed |",
-                    "|----------|-------|-------|--------|--------------|",
+                    "| Strategy | Stage | Score | Passed | Health | Trend | Rec |",
+                    "|----------|-------|-------|--------|--------|-------|-----|",
                 ]
             )
             for sid, v in self.validation.items():
                 passed_icon = "✅" if v.get("passed", False) else "❌"
+                health = v.get("health", {})
+                report = v.get("health_report", {})
+                if health:
+                    health_score = health.get("health_score", "?")
+                    health_level = health.get("health_level", "?")
+                    n_alerts = len(health.get("alerts", []))
+                    alert_str = f"⚠️ {n_alerts}" if n_alerts else "—"
+                    health_str = f"{health_score} ({health_level}){alert_str}"
+                else:
+                    health_str = "—"
+                if report:
+                    trend = report.get("trend", "?")
+                    trend_icon = {"improving": "📈", "stable": "➡️", "declining": "📉", "unknown": "❓"}.get(trend, "?")
+                    rec = report.get("recommendation", "?")
+                    rec_icon = {"healthy": "✅", "needs_retrain": "⚠️", "not_approved": "❌"}.get(rec, "?")
+                else:
+                    trend_icon = "—"
+                    rec_icon = "—"
                 lines.append(
                     f"| {sid} | {v.get('stage', '?')} | "
                     f"{v.get('score', 0)}/100 | {passed_icon} | "
-                    f"{v.get('rules_failed', '?')} |"
+                    f"{health_str} | {trend_icon} | {rec_icon} |"
                 )
             lines.append("")
+
+            # Per-strategy validation rule details (P1.3)
+            for sid, v in self.validation.items():
+                rules = v.get("rules", [])
+                if rules:
+                    failed = [r for r in rules if r.get("status") == "fail"]
+                    if failed:
+                        lines.append(f"**{sid}** — {len(failed)}/{len(rules)} rules failed:")
+                        for r in failed:
+                            threshold_str = f" (threshold: {r.get('threshold')})" if r.get("threshold") is not None else ""
+                            actual_str = f" actual: {r.get('actual_value')}" if r.get("actual_value") is not None else ""
+                            detail_str = f" — {r.get('detail')}" if r.get("detail") else ""
+                            lines.append(
+                                f"  - ❌ {r.get('rule_name', '?')}: "
+                                f"score={r.get('score', 0)}{threshold_str}{actual_str}{detail_str}"
+                            )
+                        lines.append("")
+
+            # Per-strategy health report details (P1.2)
+            for sid, v in self.validation.items():
+                report = v.get("health_report", {})
+                if report:
+                    rec_label = report.get("recommendation_label", "")
+                    signal_summary = report.get("signal_summary", "")
+                    lines.extend([
+                        f"**{sid}**: {rec_label}",
+                        f"  - 信号: {signal_summary}",
+                    ])
+                    alerts = report.get("alerts", [])
+                    if alerts:
+                        for a in alerts:
+                            lines.append(f"  - ⚠️ {a}")
+                    lines.append("")
+            if not any(v.get("health_report") for v in self.validation.values()):
+                lines.append("")
 
         # Risk Audit
         lines.extend(

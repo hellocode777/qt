@@ -27,7 +27,7 @@ from qp.decision.decision_package import (
     RiskAuditEntry,
 )
 from qp.decision.engine import DecisionEngine
-from qp.decision.models import DecisionReport
+from qp.decision.models import DecisionReport, TradeRecommendation
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
@@ -469,6 +469,13 @@ class DailyPipeline(BasePipeline):
                     val_pipeline = ValidationPipeline(config=val_config)
                     val_ctx = _build_validation_context(sid, price_data, result.metrics)
                     val_result = val_pipeline.run(val_ctx)
+                    # Extract per-rule details from the full validation result (P1.3)
+                    full_validation = (
+                        val_result.metadata.get("validation", {})
+                        if isinstance(val_result.metadata, dict)
+                        else {}
+                    )
+                    rules_detail = full_validation.get("rules", [])
                     validation_results[sid] = {
                         "stage": strategy_lifecycle.value,
                         "score": val_result.metrics.get("validation_score", 0),
@@ -476,6 +483,8 @@ class DailyPipeline(BasePipeline):
                         "rules_total": val_result.metrics.get("rules_total", 0),
                         "rules_failed": val_result.metrics.get("rules_failed", 0),
                         "recommendation": val_result.metadata.get("recommendation", ""),
+                        "rules": rules_detail,  # P1.3: per-rule details
+                        "gate_levels": full_validation.get("gate_levels", {}),
                     }
                     if val_result.status == PipelineStatus.FAILED:
                         logger.warning(
@@ -511,6 +520,81 @@ class DailyPipeline(BasePipeline):
                     result.metadata[f"strategy_error_{sid}"] = str(exc)
 
             result.metrics["strategies_with_signals"] = len(signals_map)
+
+            # ================================================================
+            # Step 8.5: Strategy Health Monitoring (P1.1)
+            # ================================================================
+            strategy_health_data: dict[str, dict[str, Any]] = {}
+            try:
+                from qp.monitoring.strategy_health_logger import StrategyHealthLogger
+
+                health_logger = StrategyHealthLogger()
+                date_str = today.isoformat()
+                for sid in registered_ids:
+                    sig_count = len(signals_map.get(sid, pl.DataFrame()))
+                    n_buys = 0
+                    if sid in signals_map and not signals_map[sid].is_empty():
+                        sig_df = signals_map[sid]
+                        if "action" in sig_df.columns:
+                            n_buys = sig_df.filter(pl.col("action") == "BUY").height
+                        else:
+                            n_buys = sig_df.height  # All signals treated as buys
+
+                    health = health_logger.record_and_check(
+                        strategy_id=sid,
+                        date=date_str,
+                        n_signals=sig_count,
+                        n_buys=n_buys,
+                        n_sells=0,
+                    )
+                    strategy_health_data[sid] = (
+                        StrategyHealthLogger.health_to_dict(health)
+                    )
+                    result.metrics[f"health_score_{sid}"] = round(health.health_score, 1)
+
+                result.metadata["strategy_health_count"] = str(len(strategy_health_data))
+                logger.info("Strategy health recorded for {} strategies", len(strategy_health_data))
+
+                # Merge health data into validation results for DecisionPackage
+                for sid, health in strategy_health_data.items():
+                    if sid in validation_results:
+                        validation_results[sid]["health"] = health
+
+                # P1.2: Generate StrategyHealthReports
+                strategy_reports: dict[str, dict[str, Any]] = {}
+                from qp.monitoring.strategy_health_report import StrategyHealthReport
+
+                for sid in registered_ids:
+                    if sid in strategy_health_data:
+                        # Load history for trend analysis
+                        try:
+                            hist_health = [
+                                health_logger.load_latest_health(sid)
+                            ]
+                            hist_health = [h for h in hist_health if h is not None]
+                        except Exception:
+                            hist_health = []
+                        # Build current health from dict
+                        hd = strategy_health_data[sid]
+                        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+                        current = StrategyHealth(
+                            strategy_id=sid,
+                            health_level=HealthLevel(hd["health_level"]),
+                            health_score=hd["health_score"],
+                            avg_daily_signals=hd["avg_daily_signals"],
+                            signal_consistency=hd["signal_consistency"],
+                            weekly_turnover_pct=hd["weekly_turnover_pct"],
+                            current_drawdown_pct=hd["current_drawdown_pct"],
+                            days_since_last_signal=hd["days_since_last_signal"],
+                            alerts=hd["alerts"],
+                            summary=hd["summary"],
+                        )
+                        report = StrategyHealthReport.from_health(current, history=hist_health)
+                        strategy_reports[sid] = report.to_dict()
+                        if sid in validation_results:
+                            validation_results[sid]["health_report"] = report.to_dict()
+            except Exception as exc:
+                logger.warning("Strategy health monitoring skipped: {}", exc)
 
             # ================================================================
             # Step 9: Multi-strategy signal fusion via EnsembleEngine
@@ -682,6 +766,151 @@ class DailyPipeline(BasePipeline):
                     )
 
             # ================================================================
+            # Step 12.5: Exit Engine — daily risk exit check (P3.1)
+            # ================================================================
+            sell_recommendations: list[TradeRecommendation] = []
+            active_positions: list[Any] = []
+            holdings: dict[str, int | float] = {}
+            cost_basis: dict[str, float] = {}
+            current_prices: dict[str, float] = {}
+            try:
+                from qp.decision.position_ledger import PositionLedger
+                from qp.portfolio.risk_exit import RiskExitManager
+
+                ledger = PositionLedger()
+                active_positions = ledger.get_active()
+
+                if active_positions and not prices.is_empty():
+                    for pos in active_positions:
+                        if pos.shares > 0:
+                            holdings[pos.symbol] = pos.shares
+                            cost_basis[pos.symbol] = pos.entry_price
+
+                    # Build current price lookup
+                    if not prices.is_empty():
+                        latest_prices = prices.sort(
+                            "trade_date", descending=True
+                        ).unique(subset=["symbol"], keep="first")
+                        for row in latest_prices.iter_rows(named=True):
+                            sym = str(row["symbol"])
+                            if sym in holdings:
+                                current_prices[sym] = float(row["close"])
+
+                    if holdings and current_prices:
+                        exit_mgr = RiskExitManager()
+                        exit_signals = exit_mgr.evaluate_daily(
+                            holdings=holdings,
+                            prices=current_prices,
+                            cost_basis=cost_basis,
+                            date_str=today.isoformat(),
+                        )
+
+                        # Convert to SELL TradeRecommendations
+                        for es in exit_signals:
+                            shares = int(holdings.get(es.symbol, 0))
+                            px = current_prices.get(es.symbol, 0.0)
+                            sell_recommendations.append(
+                                TradeRecommendation(
+                                    symbol=es.symbol,
+                                    action="SELL",
+                                    quantity_shares=shares,
+                                    estimated_price=px,
+                                    reason="; ".join(es.reasons),
+                                    risk_warnings=[es.detail] if es.detail else [],
+                                    confidence=0.95,
+                                    strategy="risk_exit",
+                                )
+                            )
+
+                        result.metrics["exit_signals"] = len(exit_signals)
+                        if exit_signals:
+                            logger.info(
+                                "Exit Engine: {} sell signals — {}",
+                                len(exit_signals),
+                                [(e.symbol, e.reasons) for e in exit_signals],
+                            )
+            except Exception as exc:
+                logger.warning("Exit Engine check skipped: {}", exc)
+
+            # P3.2: Alpha decay check — positions no longer in top-N
+            try:
+                if active_positions and not combined_signals.is_empty():
+                    from qp.portfolio.alpha_decay import (
+                        AlphaDecayConfig,
+                        AlphaDecayDetector,
+                        top_n_symbols,
+                    )
+
+                    today_top_n = top_n_symbols(combined_signals, top_n=effective_top_n)
+                    if today_top_n:
+                        decay_detector = AlphaDecayDetector(
+                            config=AlphaDecayConfig(top_n=effective_top_n)
+                        )
+                        decay_exits = decay_detector.check(
+                            active_positions=active_positions,
+                            today_signals=today_top_n,
+                        )
+                        for de in decay_exits:
+                            shares = int(holdings.get(de.symbol, 0))
+                            px = current_prices.get(de.symbol, 0.0)
+                            sell_recommendations.append(
+                                TradeRecommendation(
+                                    symbol=de.symbol,
+                                    action="SELL",
+                                    quantity_shares=shares,
+                                    estimated_price=px,
+                                    reason="; ".join(de.reasons),
+                                    risk_warnings=[de.detail] if de.detail else [],
+                                    confidence=0.70,
+                                    strategy="alpha_decay",
+                                )
+                            )
+                        if decay_exits:
+                            result.metrics["alpha_decay_signals"] = len(decay_exits)
+                            logger.info(
+                                "Alpha Decay: {} signals — {}",
+                                len(decay_exits),
+                                [e.symbol for e in decay_exits],
+                            )
+            except Exception as exc:
+                logger.warning("Alpha decay check skipped: {}", exc)
+
+            # P3.3: Fundamental deterioration check
+            try:
+                if active_positions and fundamental_data:
+                    from qp.portfolio.exit_signals import FundamentalExitDetector
+
+                    fund_detector = FundamentalExitDetector()
+                    fund_exits = fund_detector.check(
+                        active_positions=active_positions,
+                        fundamental_data=fundamental_data,
+                    )
+                    for fe in fund_exits:
+                        shares = int(holdings.get(fe.symbol, 0))
+                        px = current_prices.get(fe.symbol, 0.0)
+                        sell_recommendations.append(
+                            TradeRecommendation(
+                                symbol=fe.symbol,
+                                action="SELL",
+                                quantity_shares=shares,
+                                estimated_price=px,
+                                reason="; ".join(fe.reasons),
+                                risk_warnings=[fe.detail] if fe.detail else [],
+                                confidence=0.60,
+                                strategy="fundamental_exit",
+                            )
+                        )
+                    if fund_exits:
+                        result.metrics["fundamental_exit_signals"] = len(fund_exits)
+                        logger.info(
+                            "Fundamental Exit: {} signals — {}",
+                            len(fund_exits),
+                            [e.symbol for e in fund_exits],
+                        )
+            except Exception as exc:
+                logger.warning("Fundamental exit check skipped: {}", exc)
+
+            # ================================================================
             # Step 13: Build DecisionPackage
             # ================================================================
             package_id = f"dp-{today.isoformat()}-{run_id_short}"
@@ -729,6 +958,11 @@ class DailyPipeline(BasePipeline):
                 except Exception as exc:
                     logger.warning("DecisionEngine failed: {}", exc)
 
+            # P3.1: Append exit engine SELL recommendations
+            if sell_recommendations:
+                decision_report.recommendations.extend(sell_recommendations)
+                result.metrics["sell_recommendations"] = len(sell_recommendations)
+
             # Build strategy signal counts
             strategy_signal_counts: dict[str, int] = {}
             if "signals_map" in dir():
@@ -753,6 +987,7 @@ class DailyPipeline(BasePipeline):
                 metadata={
                     "pipeline_run_id": context.run_id,
                     "allocator_used": str(result.metadata.get("allocator_used", "equal_weight")),
+                    "strategy_health_count": str(len(strategy_health_data)),
                 },
             )
 
