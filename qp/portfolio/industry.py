@@ -1,98 +1,101 @@
 """IndustryMapper — maps stock symbols to industry sectors.
 
-Hardcoded sector classification for A-share stocks currently
-in the default symbol set.  Extended symbols fall through to "Other".
-
-In Phase 4 this will be replaced by a formal sector classification
-loaded from the Data Layer (e.g. Shenwan industry codes).
+Loads industry classification from ``data/stock_industry.json`` (generated
+by the stock-name keyword classifier).  Falls back to a hardcoded map for
+the original 18 default stocks, then to "Other".
 """
 
 from __future__ import annotations
 
-# Sector mapping for the 18 default stocks
+import json as _json
+from pathlib import Path as _Path
+
+# Hardcoded fallback for the 18 original default stocks
 # Sourced from public Shenwan industry classification (2024 edition)
-_SECTOR_MAP: dict[str, tuple[str, str]] = {
+_FALLBACK_MAP: dict[str, tuple[str, str]] = {
     # Banking (申万银行)
     "000001": ("Financials", "Banking"),
     "600000": ("Financials", "Banking"),
     "600036": ("Financials", "Banking"),
     "601166": ("Financials", "Banking"),
-    # Consumer / Food & Beverage / Home Appliances (申万食品饮料/家用电器)
+    # Consumer / Food & Beverage / Home Appliances
     "000333": ("Consumer", "HomeAppliances"),
     "000651": ("Consumer", "HomeAppliances"),
     "000858": ("Consumer", "FoodBeverage"),
     "600519": ("Consumer", "FoodBeverage"),
     "601888": ("Consumer", "Retail"),
-    # Technology / Electronics (申万电子)
+    # Technology / Electronics
     "002415": ("Technology", "Electronics"),
     "002475": ("Technology", "Electronics"),
     "300750": ("Technology", "NewEnergy"),
-    # Real Estate (申万房地产)
+    # Real Estate
     "000002": ("RealEstate", "RealEstate"),
-    # Healthcare / Pharmaceuticals (申万医药生物)
+    # Healthcare / Pharmaceuticals
     "600276": ("Healthcare", "Pharma"),
-    # Materials / Building Materials (申万建筑材料)
+    # Materials / Building Materials
     "600585": ("Materials", "BuildingMaterials"),
-    # Energy / Power Equipment (申万电力设备)
+    # Energy / Power Equipment
     "601012": ("Energy", "SolarPower"),
-    # Insurance (申万非银金融)
+    # Insurance
     "601318": ("Financials", "Insurance"),
 }
+
+_INDUSTRY_PATH = _Path("data/stock_industry.json")
 
 
 class IndustryMapper:
     """Maps stock symbols to industry sector and sub-sector.
 
+    Loads from ``data/stock_industry.json`` (name-keyword classifier);
+    falls back to hardcoded map, then ``"Other"``.
+
     Usage:
         mapper = IndustryMapper()
         sector = mapper.get_sector("600519")   # "Consumer"
         group = mapper.get_sector_group("600519")  # "FoodBeverage"
-
-        # Get all symbols in a sector
-        banks = mapper.get_symbols_in_sector("Financials")  # ["000001", ...]
     """
 
     def __init__(self) -> None:
-        pass
+        self._map: dict[str, tuple[str, str]] = {}
+        self._load()
+
+    def _load(self) -> None:
+        """Load industry data from the JSON file if available."""
+        if _INDUSTRY_PATH.exists():
+            try:
+                data = _json.loads(_INDUSTRY_PATH.read_text(encoding="utf-8"))
+                for code, info in data.items():
+                    self._map[code] = (info.get("sector", "Other"), info.get("subsector", "Other"))
+            except Exception:
+                pass
 
     def get_sector(self, symbol: str) -> str:
         """Get the top-level sector for a symbol.
 
-        Handles both raw codes ("600519") and exchange-suffixed
-        codes ("600519.SH", "000858.SZ").
-
-        Returns "Other" for unknown symbols.
+        Returns ``"Other"`` for unknown symbols.
         """
-        # Strip exchange suffix if present
         clean = symbol.split(".")[0] if "." in symbol else symbol
-        mapping = _SECTOR_MAP.get(clean)
+        mapping = self._map.get(clean) or _FALLBACK_MAP.get(clean)
         return mapping[0] if mapping else "Other"
 
     def get_sector_group(self, symbol: str) -> str:
         """Get the sub-sector group for a symbol.
 
-        Returns "Other" for unknown symbols.
+        Returns ``"Other"`` for unknown symbols.
         """
         clean = symbol.split(".")[0] if "." in symbol else symbol
-        mapping = _SECTOR_MAP.get(clean)
+        mapping = self._map.get(clean) or _FALLBACK_MAP.get(clean)
         return mapping[1] if mapping else "Other"
 
     def get_symbols_in_sector(self, sector: str) -> list[str]:
         """Get all known symbols belonging to a sector."""
-        return [sym for sym, (s, _) in _SECTOR_MAP.items() if s == sector]
+        return [sym for sym, (s, _) in {**self._map, **_FALLBACK_MAP}.items() if s == sector]
 
     def get_sector_weights(
         self,
         holdings: dict[str, float],
     ) -> dict[str, float]:
-        """Compute sector exposure weights from a holdings dict.
-
-        Args:
-            holdings: symbol → weight mapping (e.g. {"600519": 0.08, ...})
-
-        Returns:
-            sector → total_weight mapping.
-        """
+        """Compute sector exposure weights from a holdings dict."""
         sector_weights: dict[str, float] = {}
         for sym, w in holdings.items():
             sector = self.get_sector(sym)
