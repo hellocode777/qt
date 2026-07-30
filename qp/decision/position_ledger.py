@@ -397,16 +397,25 @@ class PositionLedger:
     ) -> list[Position]:
         """Create positions from an approved DecisionPackage's recommendations.
 
+        Idempotent: skips symbols that already have active positions from
+        this decision_id to prevent duplicates on re-approval.
+
         Args:
             decision_package: An approved DecisionPackage with BUY recommendations.
 
         Returns:
-            List of newly created Positions.
+            List of newly created Positions (may be empty if all already exist).
         """
+        # Check existing positions for this decision
+        existing = self.get_by_decision(decision_package.package_id)
+        existing_symbols = {p.symbol for p in existing if p.is_active}
+
         positions: list[Position] = []
         for rec in decision_package.report.recommendations:
             if rec.action != "BUY" or rec.quantity_shares <= 0:
                 continue
+            if rec.symbol in existing_symbols:
+                continue  # Already opened — dedup
             pos = self.open(
                 symbol=rec.symbol,
                 entry_price=rec.estimated_price,

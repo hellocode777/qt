@@ -1,4 +1,14 @@
 <!-- Human Review Panel — HTMX-powered state-machine review controls (P0.5) -->
+{% if decision is none %}
+<div id="human-review-panel" class="card mt-4" style="border-left: 4px solid var(--red);">
+  <div class="card-header">
+    <span>&#9997; 人工审核 Human Review</span>
+  </div>
+  <div class="card-body">
+    <p style="color: var(--red);">❌ 操作失败 — 状态转换无效或决策包不存在</p>
+  </div>
+</div>
+{% else %}
 <div id="human-review-panel" class="card mt-4">
   <div class="card-header">
     <span>&#9997; 人工审核 Human Review</span>
@@ -31,21 +41,18 @@
             style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
         <input type="text" name="notes" placeholder="备注（可选）"
                style="flex: 1; min-width: 150px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;">
-        <input type="hidden" name="action" value="approve">
-        <button type="button"
-                onclick="this.form.action.value='approve'; this.form.submit();"
+        
+        <button type="submit" name="action" value="approve"
                 style="padding: 8px 16px; background: var(--green); color: #fff; border: none; border-radius: 6px;
                        font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
           &#9989; 批准 Approve
         </button>
-        <button type="button"
-                onclick="this.form.action.value='modify'; this.form.submit();"
+        <button type="submit" name="action" value="modify"
                 style="padding: 8px 16px; background: var(--amber); color: #fff; border: none; border-radius: 6px;
                        font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
           &#128221; 修改 Modify
         </button>
-        <button type="button"
-                onclick="this.form.action.value='reject'; this.form.submit();"
+        <button type="submit" name="action" value="reject"
                 style="padding: 8px 16px; background: var(--red); color: #fff; border: none; border-radius: 6px;
                        font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;">
           &#10060; 驳回 Reject
@@ -183,3 +190,4 @@
 
   </div>
 </div>
+{% endif %}
