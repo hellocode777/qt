@@ -439,11 +439,14 @@ def _build_risk_matrix(
     symbols: list[str],
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
+    volatility_map: dict[str, float] | None = None,
+    amount_map: dict[str, float] | None = None,
     min_stocks_per_industry: int = 3,
 ) -> tuple[np.ndarray, list[str]]:
     """Build risk factor matrix for OLS neutralization.
 
-    Columns: [Size (market_cap), industry_dummy_1, industry_dummy_2, ...]
+    Columns: [log_size, volatility, log_amount, industry_dummy_1, ...]
+
     A constant (intercept) column is NOT included — np.linalg.lstsq
     handles the intercept implicitly when X has full column rank, but we
     include it explicitly by adding a column of ones.
@@ -452,6 +455,8 @@ def _build_risk_matrix(
         symbols: Stock identifiers in row order.
         industry_map: {symbol: industry_name}. Optional.
         market_cap_map: {symbol: market_cap_value}. Optional.
+        volatility_map: {symbol: 20d annualized volatility}. Optional.
+        amount_map: {symbol: avg daily turnover amount}. Optional.
         min_stocks_per_industry: Minimum stocks per industry for inclusion.
 
     Returns:
@@ -472,6 +477,26 @@ def _build_risk_matrix(
             caps_log = np.where(caps > 0, np.log(caps), np.nan)
         parts.append(caps_log.reshape(-1, 1))
         col_names.append("log_market_cap")
+
+    # Volatility risk factor (20d annualized vol)
+    if volatility_map:
+        vols = np.array(
+            [volatility_map.get(str(s), np.nan) for s in symbols],
+            dtype=np.float64,
+        )
+        parts.append(vols.reshape(-1, 1))
+        col_names.append("volatility_20d")
+
+    # Liquidity risk factor (log average daily amount)
+    if amount_map:
+        amounts = np.array(
+            [amount_map.get(str(s), np.nan) for s in symbols],
+            dtype=np.float64,
+        )
+        with np.errstate(divide="ignore", invalid="ignore"):
+            amounts_log = np.where(amounts > 0, np.log(amounts), np.nan)
+        parts.append(amounts_log.reshape(-1, 1))
+        col_names.append("log_amount")
 
     # Industry dummies (one-hot encoded, reference category dropped)
     if industry_map:
@@ -494,21 +519,26 @@ def neutralize_cross_section_ols(
     symbols: list[str],
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
+    volatility_map: dict[str, float] | None = None,
+    amount_map: dict[str, float] | None = None,
     min_stocks_per_industry: int = 3,
     min_samples: int = 30,
 ) -> pl.Series:
     """OLS cross-sectional neutralization for a single date.
 
-    Regresses factor values against risk matrix (Size + Industry dummies),
+    Regresses factor values against risk matrix (Size + Vol + Amount + Industry),
     returns residuals ε̂ = y - Xβ as the pure alpha factor.
 
-    Formula: f_raw,i = α + β₁·Size_i + Σ γₖ·Industry_i,k + ε_i
+    Formula: f_raw,i = α + β₁·Size_i + β₂·Vol_i + β₃·logAmt_i
+                     + Σ γₖ·Industry_i,k + ε_i
 
     Args:
         factor_values: Factor values for all stocks on one date.
         symbols: Stock identifiers in the same order as factor_values.
         industry_map: {symbol: industry_name}. Optional.
         market_cap_map: {symbol: market_cap_value}. Optional.
+        volatility_map: {symbol: 20d annualized volatility}. Optional.
+        amount_map: {symbol: avg daily turnover amount}. Optional.
         min_stocks_per_industry: Minimum stocks per industry for inclusion.
         min_samples: Minimum total stocks required for regression.
 
@@ -526,7 +556,9 @@ def neutralize_cross_section_ols(
 
     # Build risk matrix
     risk_matrix, risk_cols = _build_risk_matrix(
-        symbols, industry_map, market_cap_map, min_stocks_per_industry
+        symbols, industry_map, market_cap_map,
+        volatility_map=volatility_map, amount_map=amount_map,
+        min_stocks_per_industry=min_stocks_per_industry,
     )
 
     if risk_matrix.shape[1] == 0:
@@ -573,6 +605,8 @@ def neutralize_factors_ols(
     factor_df: pl.DataFrame,
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
+    volatility_map: dict[str, float] | None = None,
+    amount_map: dict[str, float] | None = None,
     id_col: str = "symbol",
     min_stocks_per_industry: int = 3,
     min_samples: int = 30,
@@ -580,11 +614,14 @@ def neutralize_factors_ols(
     """OLS neutralization for all factor columns in a single cross-section.
 
     Applies neutralize_cross_section_ols() to each factor column.
+    Strips Size + Volatility + Liquidity + Industry bias simultaneously.
 
     Args:
         factor_df: Cross-sectional DataFrame with [id_col, factor_cols...].
         industry_map: {symbol: industry_name}.
         market_cap_map: {symbol: market_cap_value}.
+        volatility_map: {symbol: 20d annualized volatility}.
+        amount_map: {symbol: avg daily turnover amount}.
         id_col: Column name for stock identifier.
         min_stocks_per_industry: Minimum stocks per industry for OLS.
         min_samples: Minimum total stocks for regression.
@@ -612,6 +649,8 @@ def neutralize_factors_ols(
             symbols=symbols,
             industry_map=industry_map,
             market_cap_map=market_cap_map,
+            volatility_map=volatility_map,
+            amount_map=amount_map,
             min_stocks_per_industry=min_stocks_per_industry,
             min_samples=min_samples,
         )
@@ -744,6 +783,8 @@ def factor_pipeline(
     winsorize_method: str = "mad",
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
+    volatility_map: dict[str, float] | None = None,
+    amount_map: dict[str, float] | None = None,
     neutralize_method: str | None = "median",
     orthogonalize: bool = False,
     vif_threshold: float = 10.0,
@@ -764,6 +805,8 @@ def factor_pipeline(
     winsorize_method: str = "mad",
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
+    volatility_map: dict[str, float] | None = None,
+    amount_map: dict[str, float] | None = None,
     neutralize_method: str | None = "median",
     orthogonalize: bool = False,
     vif_threshold: float = 10.0,
@@ -785,6 +828,8 @@ def factor_pipeline(
     winsorize_method: str = "mad",
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
+    volatility_map: dict[str, float] | None = None,
+    amount_map: dict[str, float] | None = None,
     neutralize_method: str | None = "median",
     orthogonalize: bool = False,
     vif_threshold: float = 10.0,
@@ -804,6 +849,8 @@ def factor_pipeline(
     winsorize_method: str = "mad",
     industry_map: dict[str, str] | None = None,
     market_cap_map: dict[str, float] | None = None,
+    volatility_map: dict[str, float] | None = None,
+    amount_map: dict[str, float] | None = None,
     neutralize_method: str | None = "median",
     orthogonalize: bool = False,
     vif_threshold: float = 10.0,
@@ -819,9 +866,9 @@ def factor_pipeline(
     For each date (cross-section):
       1. Build factor DataFrame (stocks × factors)
       2. [optional] Orthogonalize (VIF detection → regression residual)
-      3. [optional] Neutralize (industry + market cap):
+      3. [optional] Neutralize (industry + market cap + vol + liquidity):
          - "median": subtract industry median (fast, industry only)
-         - "ols": OLS regression residual (Size + Industry, gold standard)
+         - "ols": OLS regression residual (Size + Vol + Amount + Industry)
       4. Winsorize → Normalize → Weighted Combine → Score
 
     Args:
@@ -831,9 +878,11 @@ def factor_pipeline(
         winsorize_method: "mad" (default) | "percentile" | None.
         industry_map: {symbol: industry_name}. Required for neutralization.
         market_cap_map: {symbol: market_cap_value}. Used by OLS neutralization.
+        volatility_map: {symbol: 20d annualized volatility}. Strips vol bias.
+        amount_map: {symbol: avg daily amount}. Strips liquidity bias.
         neutralize_method: "median" (default) | "ols" | None.
             - "median": subtract industry median (fast approx).
-            - "ols": OLS regression residual (strips Size + Industry).
+            - "ols": OLS regression residual (strips Size+Vol+Amt+Industry).
             - None: skip neutralization, combine raw factors directly.
         orthogonalize: Enable VIF-based factor orthogonalization.
         vif_threshold: VIF threshold for orthogonalization (default 10.0).
@@ -921,12 +970,15 @@ def factor_pipeline(
         has_industries = industry_map is not None and len(set(industry_map.values())) > 1
         has_market_cap = market_cap_map is not None and len(market_cap_map) > 0
 
-        if neutralize_method == "ols" and (has_industries or has_market_cap):
-            # OLS regression residual: strip Size + Industry simultaneously
+        if neutralize_method == "ols" and (has_industries or has_market_cap
+                                             or volatility_map or amount_map):
+            # OLS regression residual: strip Size + Vol + Amount + Industry
             factor_df_neutral = neutralize_factors_ols(
                 df,
                 industry_map=industry_map,
                 market_cap_map=market_cap_map,
+                volatility_map=volatility_map,
+                amount_map=amount_map,
                 id_col="symbol",
                 min_stocks_per_industry=ols_min_stocks_per_industry,
                 min_samples=ols_min_samples,

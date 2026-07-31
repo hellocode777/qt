@@ -407,6 +407,10 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["spread_t_stat"] = layered.spread_t_stat
         result.metrics["monotonicity_t_stat"] = layered.monotonicity_t_stat
         result.metrics["is_monotonic"] = float(layered.is_monotonic)
+        result.metrics["direction_correct"] = float(layered.direction_correct)
+
+        # ── Diagnostic: Q1-Q5 特征画像 ──
+        _diagnose_quintile_profiles(scores, price_data, logger)
 
         # ── IC Gate (§10.1 — 强制) ──
         # Per rule.md §10.1: "未同时满足以上条件的因子，只能进入
@@ -425,7 +429,13 @@ class MultiFactorPipeline(BasePipeline):
             if not ic_record.ic_t_stat_pass:
                 failures.append(f"IC t-stat={ic_record.ic_t_stat:.2f} < 2.0 (阈值)")
             if not layered.is_monotonic:
-                failures.append("分层收益不单调")
+                if not layered.direction_correct:
+                    failures.append(
+                        f"因子方向反转: 高分→低收益 (Q5-Q1={layered.top_bottom_spread:+.4f})，"
+                        "无法用于做多策略"
+                    )
+                else:
+                    failures.append("分层收益不单调")
             if layered.spread_t_stat < 2.0:
                 failures.append(f"Q5-Q1 spread t={layered.spread_t_stat:.2f} < 2.0 (阈值)")
 
@@ -618,6 +628,8 @@ class MultiFactorPipeline(BasePipeline):
         logger.info("   期末资产:  ¥{:,.0f}", bt["final_equity"])
         logger.info("   交易次数:  {} (止损触发: {})", bt["n_trades"], bt.get("stop_loss_hits", 0))
         logger.info("   总成本:    ¥{:,.0f} (佣金+印花税+滑点)", bt["total_cost"])
+        if bt.get("turnover_pct", 0) > 0:
+            logger.info("   累计换手:  {:.0f}% (总卖出/平均权益)", bt["turnover_pct"])
         result.metrics["total_return_pct"] = bt["total_return_pct"]
         result.metrics["sharpe"] = bt["sharpe"]
         result.metrics["max_dd_pct"] = bt["max_dd_pct"]
@@ -625,6 +637,7 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["n_trading_days"] = float(bt["n_trading_days"])
         result.metrics["n_trades"] = float(bt["n_trades"])
         result.metrics["total_cost"] = bt["total_cost"]
+        result.metrics["turnover_pct"] = bt.get("turnover_pct", 0.0)
         result.metrics["stop_loss_hits"] = float(bt.get("stop_loss_hits", 0))
         result.metrics["risk_exit_hits"] = float(bt.get("risk_exit_hits", 0))
 
@@ -1026,6 +1039,7 @@ class MultiFactorPipeline(BasePipeline):
                 "n_trades": 0,
                 "total_cost": 0.0,
                 "stop_loss_hits": 0,
+                "turnover_pct": 0.0,
             }
 
         broker = SimulatedBroker(initial_cash=initial_capital)
@@ -1043,6 +1057,7 @@ class MultiFactorPipeline(BasePipeline):
                 "n_trades": 0,
                 "total_cost": 0.0,
                 "stop_loss_hits": 0,
+                "turnover_pct": 0.0,
             }
 
         # Build stock name map (ST detection)
@@ -1054,6 +1069,8 @@ class MultiFactorPipeline(BasePipeline):
         all_dates = sorted(all_prices["trade_date"].unique().to_list())
         daily_equity: list[float] = []
         total_trades = 0
+        total_buy_value: float = 0.0
+        total_sell_value: float = 0.0
         stop_loss_hits = 0
         risk_exit_hits = 0
         min_equity = initial_capital
@@ -1123,6 +1140,7 @@ class MultiFactorPipeline(BasePipeline):
             if not day_signals.is_empty():
                 # Liquidate remaining positions (risk exits already handled)
                 positions_df = broker.get_positions()
+                n_positions_before = len(positions_df)
                 if not positions_df.empty:
                     for _, row in positions_df.iterrows():
                         shares = int(float(row["shares"]))  # type: ignore[arg-type]
@@ -1136,9 +1154,26 @@ class MultiFactorPipeline(BasePipeline):
                                 }
                             )
 
+                # Execute sells immediately to free up cash for buy orders
+                # (otherwise submit_order(BUY) fails cash check because
+                #  liquidation proceeds haven't been realized yet)
+                sell_trades = broker.execute_pending()
+                total_trades += len(sell_trades)
+                for st in sell_trades:
+                    if st.side == "SELL":
+                        total_sell_value += float(st.price) * st.shares
+
                 # Buy new top-N positions (equal weight)
                 buys = day_signals.filter(pl.col("signal") == "buy")
                 buy_symbols = buys["symbol"].to_list()
+                logger.debug(
+                    "   🔄 {} 调仓: {}持仓→{}卖出→{}买入候选 (现金¥{:,.0f})",
+                    d_str,
+                    n_positions_before,
+                    len(sell_trades),
+                    len(buy_symbols),
+                    broker.get_cash(),
+                )
                 if buy_symbols:
                     current_equity = broker.get_equity()
                     n_positions = len(buy_symbols)
@@ -1171,10 +1206,13 @@ class MultiFactorPipeline(BasePipeline):
                 sym = ex.symbol
                 side = ex.side
                 fill_px = float(ex.price) if ex.price else 0.0
+                trade_value = fill_px * ex.shares
                 if side == "SELL":
                     cost_basis.pop(sym, None)
+                    total_sell_value += trade_value
                 elif side == "BUY" and fill_px > 0:
                     cost_basis[sym] = fill_px
+                    total_buy_value += trade_value
 
             eq_now = broker.get_equity()
             daily_equity.append(eq_now)
@@ -1195,6 +1233,12 @@ class MultiFactorPipeline(BasePipeline):
 
         final_equity = daily_equity[-1] if daily_equity else initial_capital
         total_ret = (final_equity / initial_capital - 1) * 100
+
+        # Turnover: total sell value / average equity (cumulative, %)
+        avg_equity = float(np.mean(daily_equity)) if daily_equity else initial_capital
+        turnover_pct = (
+            round(total_sell_value / avg_equity * 100, 2) if avg_equity > 0 else 0.0
+        )
 
         # Daily returns from equity curve
         daily_rets = [
@@ -1229,6 +1273,7 @@ class MultiFactorPipeline(BasePipeline):
             "total_commission": round(broker.total_commission, 2),
             "total_stamp_tax": round(broker.total_stamp_tax, 2),
             "total_slippage": round(broker.total_slippage, 2),
+            "turnover_pct": turnover_pct,
         }
 
     @staticmethod
@@ -1331,6 +1376,145 @@ class MultiFactorPipeline(BasePipeline):
             },
         )
         logger.info("📝 实验已记录: {}", experiment_id)
+
+
+# ── Q1-Q5 特征画像诊断 ───────────────────────────────────────────
+
+
+def _diagnose_quintile_profiles(
+    scores: pl.DataFrame,
+    price_data: dict[str, pl.DataFrame],
+    logger: Any,
+    n_quantiles: int = 5,
+) -> None:
+    """Print Q1-Q5 characteristic profiles for Q5 collapse diagnosis.
+
+    Analyzes size proxy (close×volume), volatility, and turnover per quintile
+    to identify risk factor biases concentrated in extreme bins.
+    """
+    if scores.is_empty():
+        return
+
+    # Build flat price data with additional metrics
+    parts = []
+    for code, df in price_data.items():
+        if df is None or df.is_empty():
+            continue
+        needed = ["trade_date", "close", "volume"]
+        cols = [c for c in needed if c in df.columns]
+        if "close" not in cols:
+            continue
+        has_vol = "volume" in cols
+        # Compute 20d volatility and turnover per stock
+        df_s = df.sort("trade_date").with_columns(
+            pl.col("close").pct_change().alias("ret"),
+        )
+        if has_vol:
+            df_s = df_s.with_columns(
+                (pl.col("volume") * pl.col("close")).alias("amount"),
+            )
+        df_s = df_s.with_columns(
+            pl.col("ret").rolling_std(20).alias("vol_20d"),
+        )
+        if has_vol:
+            df_s = df_s.with_columns(
+                (pl.col("volume") / pl.col("volume").rolling_mean(20)).alias("turnover_ratio"),
+            )
+        parts.append(
+            df_s.select(
+                [
+                    pl.col("trade_date"),
+                    pl.lit(str(code)).alias("symbol"),
+                    pl.col("close"),
+                    pl.col("ret"),
+                    pl.col("vol_20d"),
+                ]
+                + ([pl.col("amount"), pl.col("turnover_ratio")] if has_vol else [])
+            )
+        )
+    if not parts:
+        return
+    px_rich = pl.concat(parts)
+
+    # Join with scores — align trade_date types
+    score_dtype = scores.schema["trade_date"]
+    if score_dtype != px_rich.schema["trade_date"]:
+        px_rich = px_rich.with_columns(pl.col("trade_date").cast(score_dtype))
+    merged = scores.join(px_rich, on=["trade_date", "symbol"], how="inner")
+    if merged.is_empty():
+        return
+
+    # Rank ascending: Q1 = lowest scores, Q5 = highest scores (industry convention)
+    merged = merged.with_columns(
+        pl.col("score").rank("ordinal", descending=False).over("trade_date").alias("_rank"),
+        pl.col("score").count().over("trade_date").alias("_n"),
+    )
+    merged = merged.with_columns(
+        (pl.col("_rank") / pl.col("_n") * n_quantiles).ceil().clip(1, n_quantiles).cast(pl.Int32).alias("quintile"),
+    )
+
+    # Aggregate per quintile
+    agg_exprs = [
+        pl.col("score").mean().alias("avg_score"),
+        pl.col("close").mean().alias("avg_price"),
+        pl.col("vol_20d").mean().alias("avg_vol_20d"),
+        pl.len().alias("n"),
+    ]
+    if "amount" in merged.columns:
+        agg_exprs.append(pl.col("amount").mean().alias("avg_amount"))
+    if "turnover_ratio" in merged.columns:
+        agg_exprs.append(pl.col("turnover_ratio").mean().alias("avg_turnover"))
+
+    profile = merged.group_by("quintile").agg(agg_exprs).sort("quintile")
+
+    logger.info("")
+    logger.info("   🔍 Q1-Q5 特征画像 (Q1=最低分, Q{}=最高分):", n_quantiles)
+    cols_have = profile.columns
+    header = "   {:5s} {:>10s} {:>10s}".format("分位", "得分均值", "波动率20d")
+    if "avg_amount" in cols_have:
+        header += " {:>14s}".format("日均成交额")
+    if "avg_turnover" in cols_have:
+        header += " {:>10s}".format("换手率比")
+    header += " {:>8s}".format("样本数")
+    logger.info(header)
+    logger.info("   " + "-" * len(header))
+
+    for row in profile.iter_rows(named=True):
+        q = int(row["quintile"])
+        line = "   Q{:<4d} {:>+10.4f} {:>10.4f}".format(
+            q,
+            float(row["avg_score"]),
+            float(row["avg_vol_20d"] or 0.0),
+        )
+        if "avg_amount" in cols_have:
+            amt = float(row["avg_amount"] or 0.0)
+            if amt >= 1e8:
+                line += f" {amt / 1e4:>12.0f}万"
+            else:
+                line += f" {amt:>12.0f}"
+        if "avg_turnover" in cols_have:
+            line += " {:>9.2f}".format(float(row["avg_turnover"] or 0.0))
+        line += " {:>8d}".format(int(row["n"]))
+        logger.info(line)
+
+    # Highlight: ratio of Q5 to Q1
+    n = profile.height
+    if n >= n_quantiles:
+        q1_row = profile.filter(pl.col("quintile") == 1)
+        q5_row = profile.filter(pl.col("quintile") == n_quantiles)
+        logger.info("")
+        logger.info("   📊 Q5/Q1 比值 (极值端风险暴露):")
+        for label, col in [("波动率", "avg_vol_20d"), ("成交额", "avg_amount"), ("换手率", "avg_turnover")]:
+            if col in cols_have:
+                v1 = q1_row.select(pl.col(col)).item()
+                v5 = q5_row.select(pl.col(col)).item()
+                v1f = float(v1) if v1 is not None else 0.0
+                v5f = float(v5) if v5 is not None else 0.0
+                if v1f > 0:
+                    ratio = v5f / v1f
+                    warn = " ⚠️" if ratio > 1.5 or ratio < 0.67 else ""
+                    logger.info("      {:<8s}: Q5/Q1 = {:.2f}{}", label, ratio, warn)
+        logger.info("")
 
 
 # ------------------------------------------------------------------
@@ -1506,12 +1690,10 @@ def _log_factor_ic_table(
         )
 
     # ── Factor direction-aware mismatch check ──
-    # Price/volume factors have built-in direction in ALL_FACTOR_DIRECTIONS
-    # (e.g. Momentum_1M direction=-1 means raw return is flipped to reversal).
-    # The effective contribution to composite score is: norm * direction * weight.
-    # We check: effective_sign vs IC_sign.
-    from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS as _AFD
-
+    # sign(weight) must match sign(IC_raw).  The builtin direction cancels:
+    #   effective_contribution = norm * direction * weight
+    #   effective_IC = direction * IC_raw
+    #   Aligning them → sign(weight) = sign(IC_raw)
     positive = [e for e in factor_ic_table if e["ic_mean"] > 0]
     negative = [e for e in factor_ic_table if e["ic_mean"] < 0]
     weight_mismatch = []
@@ -1521,9 +1703,10 @@ def _log_factor_ic_table(
         ic = e["ic_mean"]
         if ic == 0 or wt == 0:
             continue
-        builtin_dir = _AFD.get(fname, 1)  # default +1 for fundamental/valuation factors
-        effective = builtin_dir * wt
-        if (ic > 0 and effective < 0) or (ic < 0 and effective > 0):
+        # sign(weight) must match sign(IC_raw).
+        # builtin_dir cancels out: effective_contribution = direction * weight,
+        # effective_IC = direction * IC_raw.  Aligning them → sign(wt) == sign(IC_raw).
+        if (ic > 0 and wt < 0) or (ic < 0 and wt > 0):
             weight_mismatch.append(e)
 
     logger.info("   " + "-" * 70)
@@ -1549,16 +1732,15 @@ def _optimize_weights_from_ic(
 
     Algorithm:
       1. Drop factors with |IC| < min_ic_threshold (noise, breaks monotonicity)
-      2. Effective direction = sign(IC) × sign(builtin_direction)
-         — corrects for MOMENTUM_DIRECTIONS/VOLATILITY_DIRECTIONS built-in flip
+      2. sign(weight) = sign(IC_raw)
+         — builtin_dir is already handled by the combine_factors pipeline,
+         so the weight sign only needs to match the raw factor IC direction.
       3. Weight magnitude ∝ |IC|
       4. Normalize so sum of absolute weights = 1.0
 
     This replaces the old 18-stock-tuned weights with data-driven weights
     computed on the full 3039-stock universe.
     """
-    from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS as _AFD
-
     ic_map = {e["factor"]: e["ic_mean"] for e in factor_ic_table}
     optimized: dict[str, float] = {}
     dropped: list[str] = []
@@ -1566,12 +1748,10 @@ def _optimize_weights_from_ic(
     for fname in current_weights:
         ic = ic_map.get(fname, 0.0)
         if abs(ic) >= min_ic_threshold:
-            # Compensate for built-in direction flip in combine_factors:
-            #   effective_contribution = norm * builtin_dir * weight
-            # We want effective sign = sign(IC), so:
-            #   sign(weight) = sign(IC * builtin_dir)
-            builtin_dir = _AFD.get(fname, 1)  # default +1 for fundamental factors
-            optimized[fname] = ic * builtin_dir
+            # sign(weight) = sign(IC_raw).
+            # builtin_dir cancels out (see _log_factor_ic_table for derivation),
+            # so the weight simply follows the raw IC direction.
+            optimized[fname] = ic
         else:
             dropped.append(fname)
 

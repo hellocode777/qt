@@ -25,10 +25,11 @@ class LayeredTestResult:
     n_quantiles: int
     quantile_returns: dict[int, float]  # quantile → mean forward return
     quantile_counts: dict[int, int]
-    top_bottom_spread: float  # Q_top - Q_bottom mean return
+    top_bottom_spread: float  # Q_top - Q_bottom mean return (Q5 - Q1, >0 = correct)
     spread_t_stat: float  # t-stat of spread significance
     monotonicity_t_stat: float  # regression of returns on quantile rank
-    is_monotonic: bool  # monotonicity_t_stat ≥ 2.0
+    is_monotonic: bool  # monotonicity_t_stat ≥ 2.0 AND direction correct
+    direction_correct: bool  # higher score → higher return
     n_days: int
 
     def to_dict(self) -> dict[str, Any]:
@@ -40,15 +41,17 @@ class LayeredTestResult:
             "spread_t_stat": self.spread_t_stat,
             "monotonicity_t_stat": self.monotonicity_t_stat,
             "is_monotonic": self.is_monotonic,
+            "direction_correct": self.direction_correct,
             "n_days": self.n_days,
         }
 
     def summary(self) -> str:
         status = "✅" if self.is_monotonic else "❌"
+        dir_status = "↑" if self.direction_correct else "↓ REVERSED"
         return (
             f"{status} Q{self.n_quantiles}-Q1 spread={self.top_bottom_spread:+.4f} "
             f"| t_spread={self.spread_t_stat:.2f} | t_mono={self.monotonicity_t_stat:.2f} "
-            f"| N={self.n_days}d"
+            f"| dir={dir_status} | N={self.n_days}d"
         )
 
 
@@ -104,6 +107,7 @@ def compute_layered_returns(
             spread_t_stat=0.0,
             monotonicity_t_stat=0.0,
             is_monotonic=False,
+            direction_correct=False,
             n_days=0,
         )
 
@@ -119,8 +123,9 @@ def compute_layered_returns(
         if n < min_stocks_per_day:
             continue
 
-        # Rank by score (higher score = better)
-        day_data = day_data.sort("score", descending=True)
+        # Rank by score ascending: Q1 = lowest scores, QN = highest scores
+        # (industry convention — higher quantile = higher factor exposure)
+        day_data = day_data.sort("score", descending=False)
 
         # Assign quantiles (equal-sized groups)
         rets_arr = day_data["forward_return"].to_numpy()
@@ -145,7 +150,7 @@ def compute_layered_returns(
 
     n_days = max(len(quantile_daily_rets.get(1, [])), 0)
 
-    # Top-bottom spread
+    # Top-bottom spread: QN - Q1 (>0 means higher scores → higher returns)
     top_ret = quantile_returns.get(n_quantiles, 0.0)
     bottom_ret = quantile_returns.get(1, 0.0)
     spread = top_ret - bottom_ret
@@ -176,8 +181,14 @@ def compute_layered_returns(
             mono_t = abs(beta[1]) / se_beta if se_beta > 0 else 0.0
         except np.linalg.LinAlgError:
             mono_t = 0.0
+            beta = np.array([0.0, 0.0])
     else:
         mono_t = 0.0
+        beta = np.array([0.0, 0.0])
+
+    # Direction check: for long-only strategy, higher scores must → higher returns
+    # Q1 = lowest scores, Q5 = highest scores → slope should be positive
+    direction_correct = bool(beta[1] > 0)
 
     return LayeredTestResult(
         n_quantiles=n_quantiles,
@@ -186,7 +197,8 @@ def compute_layered_returns(
         top_bottom_spread=round(spread, 6),
         spread_t_stat=round(spread_t, 2),
         monotonicity_t_stat=round(mono_t, 2),
-        is_monotonic=mono_t >= 2.0,
+        is_monotonic=mono_t >= 2.0 and direction_correct,
+        direction_correct=direction_correct,
         n_days=n_days,
     )
 
@@ -238,7 +250,7 @@ def compute_quantile_spread_series(
         if n < min_stocks_per_day:
             continue
 
-        day_data = day_data.sort("score", descending=True)
+        day_data = day_data.sort("score", descending=False)
         rets = day_data["forward_return"].to_numpy()
         quantile_edges = np.linspace(0, n, n_quantiles + 1, dtype=int)
 

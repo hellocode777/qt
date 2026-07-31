@@ -243,12 +243,18 @@ def compute_cross_sectional_scores(
         all_dates = sorted(all_raw.keys())
 
     # ── Factor pipeline ──
+    # Compute vol/amount risk maps for OLS neutralization
+    vol_map, amt_map = _build_risk_maps(price_data)
+
     scores_result = factor_pipeline(
         all_raw,
         weights=weights,
         normalize_method="rank",
         winsorize_method="mad",
         industry_map=industry_map,
+        volatility_map=vol_map,
+        amount_map=amt_map,
+        neutralize_method="ols" if (industry_map or vol_map) else "median",
         orthogonalize=orthogonalize,
         return_diagnostics=return_diagnostics,
         model_mode=model_mode,
@@ -261,6 +267,51 @@ def compute_cross_sectional_scores(
         return scores, diagnostics  # type: ignore[return-value]
 
     return scores_result  # type: ignore[return-value]
+
+
+def _build_risk_maps(
+    price_data: dict[str, pl.DataFrame],
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Build per-stock volatility and average daily amount maps.
+
+    Computes latest 20-day annualized volatility and log average daily
+    turnover amount for each stock.  These are used as control variables
+    in OLS cross-sectional neutralization to strip vol/liquidity biases.
+
+    Returns:
+        (volatility_map, amount_map) — {symbol: float}.
+    """
+    vol_map: dict[str, float] = {}
+    amt_map: dict[str, float] = {}
+
+    for code, df in price_data.items():
+        if df is None or df.is_empty():
+            continue
+        if "close" not in df.columns:
+            continue
+
+        df_s = df.sort("trade_date").with_columns(
+            pl.col("close").cast(pl.Float64),
+        )
+        if "volume" in df_s.columns:
+            df_s = df_s.with_columns(pl.col("volume").cast(pl.Float64))
+
+        # 20-day annualized volatility
+        rets = df_s["close"].pct_change()
+        vol_20d = rets.tail(20).std()
+        vol_val: float = float(vol_20d) if vol_20d is not None and vol_20d > 0 else 0.0  # type: ignore[arg-type]
+        if vol_val > 0:
+            vol_map[str(code)] = float(vol_val * np.sqrt(252))
+
+        # Average daily amount (20-day)
+        if "volume" in df_s.columns:
+            amt = df_s["close"] * df_s["volume"]
+            avg_amt = amt.tail(20).mean()
+            amt_val: float = float(avg_amt) if avg_amt is not None and avg_amt > 0 else 0.0  # type: ignore[arg-type]
+            if amt_val > 0:
+                amt_map[str(code)] = amt_val
+
+    return vol_map, amt_map
 
 
 # ------------------------------------------------------------------

@@ -1,0 +1,59 @@
+{
+  "strategy_id": "momentum_vol_full",
+  "stage": "backtest_passed",
+  "decision": "blocked",
+  "score": 70.0,
+  "confidence": 0.8,
+  "timestamp": "2026-07-31T08:26:11.990371+00:00",
+  "data_integrity": "PASS",
+  "factor_validity": "FAIL",
+  "portfolio_conversion": "PASS",
+  "robustness": "NOT_RUN",
+  "cost_capacity": "NOT_RUN",
+  "rules": [
+    {
+      "rule_name": "rank_ic",
+      "status": "pass",
+      "score": 80,
+      "threshold": 0.02,
+      "actual_value": 0.0205,
+      "detail": "|IC|=0.0205"
+    },
+    {
+      "rule_name": "ic_ir",
+      "status": "fail",
+      "score": 30,
+      "threshold": 0.3,
+      "actual_value": 0.17,
+      "detail": "IC_IR=0.17"
+    },
+    {
+      "rule_name": "ic_t_stat",
+      "status": "pass",
+      "score": 80,
+      "threshold": 2.0,
+      "actual_value": 6.54,
+      "detail": "t=6.54"
+    },
+    {
+      "rule_name": "monotonicity",
+      "status": "pass",
+      "score": 80,
+      "threshold": 2.0,
+      "actual_value": 7.36,
+      "detail": "monotonicity t=7.36"
+    },
+    {
+      "rule_name": "spread",
+      "status": "pass",
+      "score": 80,
+      "threshold": 2.0,
+      "actual_value": 7.15,
+      "detail": "Q5-Q1 spread t=7.15"
+    }
+  ],
+  "recommendation": "策略 momentum_vol_full 因子检验未通过。建议: 检查因子计算、数据源、或缩减因子数量。",
+  "artifacts": [
+    "data/knowledge/research_debt/20260731-082611-momentum-vol-full-gate-failure-factor-validity-fai.md"
+  ]
+}

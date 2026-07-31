@@ -65,28 +65,39 @@ def load_valuation_data(
         remaining = list(symbols)
 
     if remaining:
-        logger.info("📊 计算估值数据: {} 只 (EPS/NAV→PE/PB/PCF)", len(remaining))
+        logger.info("📊 计算估值数据: {} 只待计算 (缓存命中 {} 只)", len(remaining), len(result))
 
-        # Load fundamental per-share data from quant.db (one query, all symbols)
+        # Load fundamental per-share data from quant.db
         fund_map = _load_fund_per_share(remaining, db_path)
-        if not fund_map:
-            logger.warning("无基本面每股数据，无法计算估值")
-            return result
 
         # Compute valuation for each symbol
+        n_computed = 0
+        n_no_fund = 0
         for sym in remaining:
             price_df = price_data.get(sym)
             if price_df is None or price_df.is_empty():
+                n_no_fund += 1
                 continue
 
             fund_df = fund_map.get(sym)
             if fund_df is None or fund_df.is_empty():
+                n_no_fund += 1
                 continue
 
             val_df = _compute_valuation(sym, price_df, fund_df)
             if val_df is not None and not val_df.is_empty():
                 result[sym] = val_df
                 _save_to_cache(sym, val_df)
+                n_computed += 1
+            else:
+                n_no_fund += 1
+
+        if n_no_fund > 0:
+            logger.info(
+                "   {} 只缺基本面数据 (无EPS/NAV), {} 只计算完成",
+                n_no_fund,
+                n_computed,
+            )
 
     n_with_val = len(result)
     total = len(symbols)
@@ -109,41 +120,44 @@ def load_valuation_data(
 def _load_fund_per_share(
     symbols: list[str],
     db_path: str,
+    batch_size: int = 500,
 ) -> dict[str, pl.DataFrame]:
     """Load EPS/NAV/cashflow_per_share from quant.db's EAV fundamental_data table.
+
+    Batches queries to stay within SQLite's 999-parameter limit.
 
     Returns:
         {symbol: pl.DataFrame[report_date, publish_date, EPS, NAV, cashflow_per_share]}
     """
     import sqlite3
-
-    conn = sqlite3.connect(db_path)
-
-    # Build IN clause
-    placeholders = ",".join("?" for _ in symbols)
-    field_phs = ",".join("?" for _ in _VALUATION_FIELDS)
-
-    rows = conn.execute(
-        f"SELECT code, report_date, publish_date, field_name, field_value "
-        f"FROM fundamental_data "
-        f"WHERE code IN ({placeholders}) "
-        f"AND field_name IN ({field_phs}) "
-        f"ORDER BY code, report_date",
-        symbols + _VALUATION_FIELDS,
-    ).fetchall()
-    conn.close()
-
-    if not rows:
-        return {}
-
-    # Pivot: (code, report_date) → {EPS, NAV, cashflow_per_share}
     from collections import defaultdict
 
+    conn = sqlite3.connect(db_path)
     pivot: dict[str, dict[str, dict[str, float | str]]] = defaultdict(lambda: defaultdict(dict))
-    for code, report_date, publish_date, field_name, field_value in rows:
-        rd = str(report_date)
-        pivot[code][rd][field_name] = float(field_value)
-        pivot[code][rd]["publish_date"] = str(publish_date)
+    field_phs = ",".join("?" for _ in _VALUATION_FIELDS)
+
+    # Batch queries to respect SQLite's variable limit (~999)
+    for batch_start in range(0, len(symbols), batch_size):
+        batch = symbols[batch_start : batch_start + batch_size]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"SELECT code, report_date, publish_date, field_name, field_value "
+            f"FROM fundamental_data "
+            f"WHERE code IN ({placeholders}) "
+            f"AND field_name IN ({field_phs}) "
+            f"ORDER BY code, report_date",
+            batch + _VALUATION_FIELDS,
+        ).fetchall()
+
+        for code, report_date, publish_date, field_name, field_value in rows:
+            rd = str(report_date)
+            pivot[code][rd][field_name] = float(field_value)
+            pivot[code][rd]["publish_date"] = str(publish_date)
+
+    conn.close()
+
+    if not pivot:
+        return {}
 
     # Convert to DataFrames
     result: dict[str, pl.DataFrame] = {}
