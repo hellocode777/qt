@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>策略注册表 / Strategy Registry</h1>
+    <div class="meta">已注册策略概览 · 点击查看详情</div>
+  </div>
+</div>
+
+{% if not has_strategies %}
+<div class="empty-state">
+  <div class="icon">&#128640;</div>
+  <h2>暂无已注册策略</h2>
+  <p>运行 <code>qp run daily</code> 后策略将自动注册</p>
+</div>
+{% else %}
+<div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px;">
+  {% for s in strategies %}
+  <div class="card" style="border-left: 3px solid var(--blue); cursor: pointer;"
+       onclick="location.href='/strategies/{{ s.strategy_id }}'">
+    <div class="card-header">
+      <span><a href="/strategies/{{ s.strategy_id }}" style="color: inherit; text-decoration: none; font-weight: 600;">{{ s.strategy_id }}</a></span>
+      <span class="badge badge-blue" style="font-size: 11px;">{{ s.lifecycle }}</span>
+    </div>
+    <div class="card-body" style="font-size: 13px;">
+      <div style="display: flex; gap: 16px; margin-bottom: 6px;">
+        <span class="c-muted">版本:</span> <span>{{ s.version }}</span>
+        <span class="c-muted">负责人:</span> <span>{{ s.owner }}</span>
+      </div>
+      {% if s.description %}
+      <div style="font-size: 12px; color: var(--c-muted);">{{ s.description[:120] }}{% if s.description|length > 120 %}...{% endif %}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

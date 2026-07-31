@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>{{ model_id }}</h1>
+    <div class="meta"><a href="/models" style="color: var(--blue);">&larr; 返回模型列表</a></div>
+  </div>
+</div>
+
+{% if not found %}
+<div class="empty-state">
+  <div class="icon">&#129302;</div>
+  <h2>模型未找到 / Not Found</h2>
+  <p>{{ model_id }} 不存在或已被移除</p>
+</div>
+{% else %}
+
+<!-- Summary Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
+  <div class="card" style="text-align: center; padding: 14px;">
+    <div style="font-size: 11px; color: var(--c-muted);">阶段 Stage</div>
+    <div style="font-size: 22px; font-weight: 700;">
+      {% set stage = model.stage or '' %}
+      {% if 'production' in stage %}<span class="badge badge-green">production</span>
+      {% elif 'shadow' in stage %}<span class="badge badge-blue">shadow</span>
+      {% else %}<span class="badge">{{ stage }}</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card" style="text-align: center; padding: 14px;">
+    <div style="font-size: 11px; color: var(--c-muted);">关联策略</div>
+    <div style="font-size: 18px; font-weight: 700;"><code>{{ model.strategy_id or '—' }}</code></div>
+  </div>
+  <div class="card" style="text-align: center; padding: 14px;">
+    <div style="font-size: 11px; color: var(--c-muted);">特征集</div>
+    <div style="font-size: 14px; font-weight: 700;">{{ model.features or '—' }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 14px;">
+    <div style="font-size: 11px; color: var(--c-muted);">创建时间</div>
+    <div style="font-size: 14px; font-weight: 700;">{{ model.created_at[:19] if model.created_at else '—' }}</div>
+  </div>
+</div>
+
+<!-- Metrics -->
+{% set m = model.metrics or {} %}
+{% if m %}
+<div class="card">
+  <div class="card-header"><span>&#128202; 模型指标 Metrics</span></div>
+  <div class="card-body">
+    <table class="data-table" style="font-size: 13px;">
+      <thead><tr><th>指标</th><th>值</th></tr></thead>
+      <tbody>
+        {% for k, v in m.items() %}
+        <tr><td>{{ k }}</td><td class="font-mono">{{ v }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Raw Data -->
+<div class="card" style="margin-top: 20px;">
+  <div class="card-header"><span>&#128269; 原始数据 Raw</span></div>
+  <div class="card-body">
+    <pre style="font-size: 11px; max-height: 400px; overflow: auto; background: var(--c-bg-alt); padding: 12px; border-radius: 4px;">{{ model | tojson(indent=2) }}</pre>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}

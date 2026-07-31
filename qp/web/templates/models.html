@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>模型注册表 / Model Registry</h1>
+    <div class="meta">已注册 LightGBM 模型 · 版本追踪 · 阶段管理</div>
+  </div>
+</div>
+
+{% if not has_models %}
+<div class="empty-state">
+  <div class="icon">&#129302;</div>
+  <h2>暂无注册模型</h2>
+  <p>运行 <code>qp experiment run</code> 训练模型后将自动注册</p>
+</div>
+{% else %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>模型 ID</th>
+      <th>阶段 Stage</th>
+      <th>关联策略</th>
+      <th>特征集</th>
+      <th>Sharpe</th>
+      <th>IC</th>
+      <th>创建时间</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in models %}
+    <tr style="cursor: pointer;" onclick="location.href='/models/{{ m.model_id }}'">
+      <td>
+        <a href="/models/{{ m.model_id }}" style="color: var(--blue); font-weight: 600; font-size: 13px;">
+          {{ m.model_id }}
+        </a>
+      </td>
+      <td>
+        {% set stage = m.stage or '' %}
+        {% if 'production' in stage %}<span class="badge badge-green">production</span>
+        {% elif 'shadow' in stage %}<span class="badge badge-blue">shadow</span>
+        {% elif 'paper' in stage %}<span class="badge badge-orange">paper</span>
+        {% elif 'backtest' in stage %}<span class="badge">backtest</span>
+        {% else %}<span class="badge">{{ stage }}</span>
+        {% endif %}
+      </td>
+      <td><code style="font-size: 12px;">{{ m.strategy_id or '—' }}</code></td>
+      <td style="font-size: 12px;">{{ m.features or '—' }}</td>
+      {% set mt = m.metrics or {} %}
+      <td class="font-mono" style="color: {% if (mt.sharpe_ratio or 0) >= 1.0 %}var(--green){% endif %};">
+        {{ "%.2f"|format(mt.sharpe_ratio or 0) }}
+      </td>
+      <td class="font-mono">{{ "%.4f"|format(mt.ic_mean or 0) }}</td>
+      <td style="font-size: 12px;">{{ m.created_at[:19] if m.created_at else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% endblock %}

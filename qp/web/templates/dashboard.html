@@ -15,6 +15,52 @@
 
 {% else %}
 
+<!-- Portfolio at a Glance -->
+{% if portfolio_summary.has_data %}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">组合净值 Portfolio NAV</div>
+    <div style="font-size: 24px; font-weight: 700;">{{ portfolio_summary.total_nav_fmt }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">夏普比率 Sharpe</div>
+    <div style="font-size: 24px; font-weight: 700; color: {% if portfolio_summary.sharpe | float >= 1.0 %}var(--green){% elif portfolio_summary.sharpe | float >= 0.5 %}var(--orange){% else %}var(--red){% endif %};">
+      {{ portfolio_summary.sharpe }}
+    </div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">最大回撤 MaxDD</div>
+    <div style="font-size: 24px; font-weight: 700; color: {% if portfolio_summary.max_dd | replace('%','') | float <= 20 %}var(--green){% else %}var(--orange){% endif %};">
+      {{ portfolio_summary.max_dd }}
+    </div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">年化收益 Ann.Ret</div>
+    <div style="font-size: 24px; font-weight: 700; color: {% if '+' in portfolio_summary.ann_ret %}var(--green){% else %}var(--red){% endif %};">
+      {{ portfolio_summary.ann_ret }}
+    </div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">评级 Rating</div>
+    <div style="font-size: 18px; font-weight: 700;">{{ portfolio_summary.rating }}</div>
+    <div style="font-size: 11px; color: var(--c-muted);">{{ portfolio_summary.n_days }} 天数据</div>
+  </div>
+</div>
+
+<!-- NAV Mini Chart -->
+{% if nav_values | length > 1 %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header">
+    <span>&#128200; 净值走势 NAV Trend</span>
+    <a href="/portfolio" style="font-size: 12px; color: var(--blue); text-decoration: none;">详细 &#8594;</a>
+  </div>
+  <div class="card-body" style="padding: 8px;">
+    <canvas id="dashboardNavChart" height="60"></canvas>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
 <!-- Page Header -->
 <div class="page-header">
   <div>
@@ -583,6 +629,57 @@
 <!-- Human Review Panel -->
 {% include "components/human_review_panel.html" %}
 
+{% endif %}
+
+{% if nav_values | length > 1 %}
+<script>
+(function() {
+  const ctx = document.getElementById('dashboardNavChart').getContext('2d');
+  const dates = {{ nav_dates | tojson }};
+  const values = {{ nav_values | tojson }};
+  const isUp = values.length > 0 && values[values.length - 1] >= values[0];
+  const lineColor = isUp ? '#2e7d32' : '#c62828';
+  const fillColor = isUp ? 'rgba(46,125,50,0.08)' : 'rgba(198,40,40,0.08)';
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [{
+        data: values,
+        borderColor: lineColor,
+        backgroundColor: fillColor,
+        borderWidth: 1.5,
+        fill: true,
+        pointRadius: 0,
+        pointHitRadius: 6,
+        tension: 0.2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          display: true,
+          ticks: { maxTicksLimit: 8, maxRotation: 0, font: { size: 9 } },
+          grid: { display: false }
+        },
+        y: {
+          display: true,
+          ticks: {
+            font: { size: 9 },
+            callback: function(v) { return '¥' + (v/10000).toFixed(0) + '万'; }
+          },
+          grid: { color: 'rgba(0,0,0,0.05)' }
+        }
+      }
+    }
+  });
+})();
+</script>
 {% endif %}
 
 {% endblock %}

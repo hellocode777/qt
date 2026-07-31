@@ -939,6 +939,10 @@ class MultiFactorPipeline(BasePipeline):
 
             pattern = f"data/dataset/{dataset}_*.parquet"
             candidates = sorted(_Path().glob(pattern), reverse=True)
+            # Also check exact match without version suffix (e.g. daily_price_latest.parquet)
+            exact_path = _Path(f"data/dataset/{dataset}.parquet")
+            if exact_path.exists():
+                candidates.insert(0, exact_path)
             for candidate in candidates:
                 if candidate.exists():
                     gold_path = str(candidate)

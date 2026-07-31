@@ -63,6 +63,35 @@ async def dashboard(request: Request) -> Any:
             len(decision.get("sells", [])),
         )
 
+    # Load portfolio NAV for summary cards + chart
+    nav_dates: list[str] = []
+    nav_values: list[float] = []
+    portfolio_summary = {"has_data": False}
+    try:
+        from qp.portfolio.metrics import PortfolioMetrics
+        from qp.portfolio.nav_ledger import NAVLedger
+
+        nav_ledger = NAVLedger()
+        nav_df = nav_ledger.load_history()
+        if not nav_df.is_empty() and nav_df.height >= 2:
+            nav_dicts = nav_ledger.get_history_dicts(days=90)
+            nav_dates = [d["date"] for d in nav_dicts]
+            nav_values = [d["total_nav"] for d in nav_dicts]
+            if nav_df.height >= 5:
+                metrics = PortfolioMetrics.from_nav(nav_df)
+                portfolio_summary = {
+                    "has_data": True,
+                    "total_nav": nav_values[-1] if nav_values else 0,
+                    "total_nav_fmt": f"¥{nav_values[-1]:,.0f}" if nav_values else "N/A",
+                    "sharpe": f"{metrics.sharpe_ratio:.2f}",
+                    "max_dd": f"{metrics.max_drawdown_pct:.1f}%",
+                    "ann_ret": f"{metrics.annualized_return_pct:+.1f}%",
+                    "n_days": metrics.n_days,
+                    "rating": metrics.rating(),
+                }
+    except Exception:
+        pass
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -74,6 +103,10 @@ async def dashboard(request: Request) -> Any:
             "data_quality": data_quality,
             "source_health": source_health,
             "has_data": has_data,
+            "nav_dates": nav_dates,
+            "nav_values": nav_values,
+            "nav_json": nav_values,  # For Chart.js
+            "portfolio_summary": portfolio_summary,
             "page_title": "QP Decision Center",
         },
     )

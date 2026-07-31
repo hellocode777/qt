@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>实验记录 / Experiments</h1>
+    <div class="meta">回测实验 · 模型评估 · 对比分析</div>
+  </div>
+</div>
+
+{% if not has_experiments %}
+<div class="empty-state">
+  <div class="icon">&#128300;</div>
+  <h2>暂无实验记录</h2>
+  <p>运行 <code>qp experiment run</code> 或 <code>qp run daily</code> 生成实验</p>
+</div>
+{% else %}
+
+<!-- Filters -->
+<div style="margin-bottom: 16px; display: flex; gap: 8px; font-size: 13px;">
+  <span class="c-muted">筛选:</span>
+  <a href="/experiments" class="badge {% if not filter_status %}badge-blue{% endif %}" style="text-decoration: none;">全部 ({{ experiments | length }})</a>
+  <a href="/experiments?status=completed" class="badge {% if filter_status == 'completed' %}badge-green{% endif %}" style="text-decoration: none;">已完成</a>
+  <a href="/experiments?status=failed" class="badge {% if filter_status == 'failed' %}badge-red{% endif %}" style="text-decoration: none;">失败</a>
+</div>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>实验 ID</th>
+      <th>策略</th>
+      <th>状态</th>
+      <th>Sharpe</th>
+      <th>MaxDD</th>
+      <th>年化收益</th>
+      <th>IC Mean</th>
+      <th>时间</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in experiments %}
+    <tr style="cursor: pointer;" onclick="location.href='/experiments/{{ e.experiment_id or e.get('config', {}).get('experiment_id', '') }}'">
+      <td>
+        <a href="/experiments/{{ e.experiment_id or e.get('config', {}).get('experiment_id', '') }}" style="color: var(--blue); font-weight: 600;">
+          {{ e.experiment_id or e.get('config', {}).get('experiment_id', '?') }}
+        </a>
+      </td>
+      <td><code>{{ (e.config or {}).get('strategy_name', '?') }}</code></td>
+      <td>
+        {% set st = e.status or (e.config or {}).get('status', '') %}
+        {% if st == 'completed' %}<span class="badge badge-green">完成</span>
+        {% elif st == 'failed' %}<span class="badge badge-red">失败</span>
+        {% else %}<span class="badge">{{ st }}</span>
+        {% endif %}
+      </td>
+      {% set m = e.metrics or {} %}
+      <td class="font-mono" style="color: {% if (m.sharpe_ratio or 0) >= 1.0 %}var(--green){% elif (m.sharpe_ratio or 0) >= 0 %}var(--amber){% else %}var(--red){% endif %};">
+        {{ "%.2f"|format(m.sharpe_ratio or 0) }}
+      </td>
+      <td class="font-mono">{{ "%.1f"|format(m.max_drawdown_pct or 0) }}%</td>
+      <td class="font-mono" style="color: {% if (m.annual_return_pct or 0) >= 0 %}var(--green){% else %}var(--red){% endif %};">
+        {{ "%+.1f"|format(m.annual_return_pct or 0) }}%
+      </td>
+      <td class="font-mono">{{ "%.4f"|format(m.ic_mean or 0) }}</td>
+      <td style="font-size: 12px;">{{ (e.config or {}).get('created_at', '')[:19] or e.get('created_at', '')[:19] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% endblock %}

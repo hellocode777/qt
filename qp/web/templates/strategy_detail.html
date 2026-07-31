@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>{{ strategy_id }}</h1>
+    <div class="meta">
+      <a href="/strategies" style="color: var(--blue);">&larr; 返回策略列表</a>
+      &nbsp;|&nbsp;
+      生命周期: <span class="badge badge-blue">{{ meta.lifecycle or 'unknown' }}</span>
+      &nbsp;|&nbsp;
+      版本: {{ meta.version or '?' }}
+      &nbsp;|&nbsp;
+      负责人: {{ meta.owner or '?' }}
+    </div>
+  </div>
+</div>
+
+{% if meta.description %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-body" style="font-size: 14px; color: var(--c-muted);">{{ meta.description }}</div>
+</div>
+{% endif %}
+
+<!-- Health Trend Chart -->
+{% if has_health %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header">
+    <span>&#128200; 健康分趋势 Health Score Trend</span>
+    <span class="c-muted" style="font-size: 12px;">{{ health_records | length }} 条记录</span>
+  </div>
+  <div class="card-body">
+    <canvas id="healthTrendChart" height="55"></canvas>
+  </div>
+</div>
+
+<!-- Health Records Table -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header"><span>&#128203; 健康记录 Health Records</span></div>
+  <div class="card-body">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>日期</th>
+          <th>健康分</th>
+          <th>信号数</th>
+          <th>买入</th>
+          <th>卖出</th>
+          <th>换手率</th>
+          <th>回撤</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in health_records | reverse %}
+        <tr>
+          <td>{{ r.date }}</td>
+          <td><strong style="color: {% if r.health_score >= 80 %}var(--green){% elif r.health_score >= 60 %}var(--amber){% elif r.health_score >= 40 %}var(--orange){% else %}var(--red){% endif %};">{{ "%.1f"|format(r.health_score) }}</strong></td>
+          <td>{{ r.n_signals or 0 }}</td>
+          <td>{{ r.n_buys or 0 }}</td>
+          <td>{{ r.n_sells or 0 }}</td>
+          <td>{{ "%.1f"|format(r.weekly_turnover_pct or 0) }}%</td>
+          <td style="color: {% if (r.current_drawdown_pct or 0) <= 10 %}var(--green){% else %}var(--red){% endif %};">
+            {{ "%.1f"|format(r.current_drawdown_pct or 0) }}%
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-body" style="text-align: center; padding: 32px; color: var(--c-muted);">
+    暂无健康数据 — 运行 <code>qp run daily</code> 后生成
+  </div>
+</div>
+{% endif %}
+
+<!-- Proposals -->
+{% if has_proposals %}
+<div class="card">
+  <div class="card-header"><span>&#128221; 相关提案 Proposals</span></div>
+  <div class="card-body">
+    <table class="data-table">
+      <thead>
+        <tr><th>ID</th><th>目标</th><th>状态</th><th>提议人</th><th>时间</th></tr>
+      </thead>
+      <tbody>
+        {% for p in proposals %}
+        <tr>
+          <td><a href="/proposals/{{ p.proposal_id }}" style="color: var(--blue);">{{ p.proposal_id }}</a></td>
+          <td>{{ p.target_lifecycle }}</td>
+          <td>{% if p.status == 'approved' %}<span class="badge badge-green">已批准</span>{% elif p.status == 'rejected' %}<span class="badge badge-red">已驳回</span>{% else %}<span class="badge">{{ p.status }}</span>{% endif %}</td>
+          <td>{{ p.proposed_by }}</td>
+          <td style="font-size: 12px;">{{ p.created_at[:19] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if has_health %}
+<script>
+(function() {
+  const ctx = document.getElementById('healthTrendChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: {{ health_dates | tojson }},
+      datasets: [{
+        data: {{ health_scores | tojson }},
+        borderColor: '#1565c0',
+        backgroundColor: 'rgba(21,101,192,0.08)',
+        borderWidth: 2,
+        fill: true,
+        pointRadius: 2,
+        tension: 0.2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { display: false } },
+        y: { min: 0, max: 100, ticks: { font: { size: 10 }, stepSize: 20 }, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+
+{% endblock %}

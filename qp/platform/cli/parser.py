@@ -51,24 +51,26 @@ def doctor() -> None:
 # ==================================================================
 
 
-@cli.command()
-def ingest() -> None:
-    """Ingest market data from configured sources."""
+@cli.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def ingest(ctx: click.Context) -> None:
+    """Ingest market data from configured sources. All args pass through."""
     from qp.platform.cli.commands.ingest import cmd_ingest
 
     raise SystemExit(cmd_ingest())
 
 
-@cli.command()
-@click.argument("subcommand", required=False)
-def run(subcommand: str | None) -> None:
-    """Run a pipeline (e.g. 'qp run daily')."""
-    if subcommand == "daily":
-        from qp.platform.cli.commands.ingest import cmd_run
+@cli.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def run(ctx: click.Context) -> None:
+    """Run a pipeline. All args pass through to handler."""
+    from qp.platform.cli.commands.ingest import cmd_run
 
-        raise SystemExit(cmd_run())
-    click.echo("qp run: missing or unknown subcommand. Try: qp run daily", err=True)
-    raise SystemExit(1)
+    raise SystemExit(cmd_run())
 
 
 @cli.command()
@@ -218,50 +220,72 @@ def experiment() -> None:
     """Experiment management (list, show, run, compare, validate, clean)."""
 
 
-@experiment.command("list")
-def experiment_list() -> None:
+@experiment.command(
+    "list",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def experiment_list(ctx: click.Context) -> None:
     """List experiments."""
     from qp.platform.cli.commands.experiment import cmd_experiment_list
 
     raise SystemExit(cmd_experiment_list())
 
 
-@experiment.command("show")
-@click.argument("experiment_id", required=False)
-def experiment_show(experiment_id: str | None) -> None:
+@experiment.command(
+    "show",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def experiment_show(ctx: click.Context) -> None:
     """Show experiment details."""
     from qp.platform.cli.commands.experiment import cmd_experiment_show
 
     raise SystemExit(cmd_experiment_show())
 
 
-@experiment.command("run")
-def experiment_run() -> None:
-    """Run a multifactor experiment."""
+@experiment.command(
+    "run",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def experiment_run(ctx: click.Context) -> None:
+    """Run a multifactor experiment. All args passed through to handler."""
     from qp.platform.cli.commands.experiment import cmd_experiment_run
 
     raise SystemExit(cmd_experiment_run())
 
 
-@experiment.command("compare")
-def experiment_compare() -> None:
+@experiment.command(
+    "compare",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def experiment_compare(ctx: click.Context) -> None:
     """Compare experiments."""
     from qp.platform.cli.commands.experiment import cmd_experiment_compare
 
     raise SystemExit(cmd_experiment_compare())
 
 
-@experiment.command("validate")
-@click.argument("experiment_id", required=False)
-def experiment_validate(experiment_id: str | None) -> None:
+@experiment.command(
+    "validate",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def experiment_validate(ctx: click.Context) -> None:
     """Validate an experiment against quality gates."""
     from qp.platform.cli.commands.experiment import cmd_experiment_validate
 
     raise SystemExit(cmd_experiment_validate())
 
 
-@experiment.command("clean")
-def experiment_clean() -> None:
+@experiment.command(
+    "clean",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def experiment_clean(ctx: click.Context) -> None:
     """Clean old experiment files."""
     from qp.platform.cli.commands.experiment import cmd_experiment_clean
 
@@ -305,9 +329,13 @@ def data() -> None:
     """Data operations."""
 
 
-@data.command("fetch")
-def data_fetch() -> None:
-    """Fetch market data."""
+@data.command(
+    "fetch",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def data_fetch(ctx: click.Context) -> None:
+    """Fetch market data. All extra args passed through to handler."""
     from qp.platform.cli.commands.data_cmd import cmd_data_fetch
 
     raise SystemExit(cmd_data_fetch())
@@ -323,10 +351,13 @@ def backtest() -> None:
     """Backtest operations."""
 
 
-@backtest.command("run")
-@click.argument("strategy", required=False)
-def backtest_run(strategy: str | None) -> None:
-    """Run a backtest."""
+@backtest.command(
+    "run",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def backtest_run(ctx: click.Context) -> None:
+    """Run a backtest. All extra args passed through to handler."""
     from qp.platform.cli.commands.backtest import cmd_backtest_run
 
     raise SystemExit(cmd_backtest_run())

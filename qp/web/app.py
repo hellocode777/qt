@@ -57,17 +57,23 @@ def _register_routers(app: FastAPI) -> None:
     """Register all route modules."""
     from qp.web.routers.dashboard import router as dashboard_router
     from qp.web.routers.decisions import router as decisions_router
+    from qp.web.routers.experiments import router as experiments_router
     from qp.web.routers.health import router as health_router
+    from qp.web.routers.models import router as models_router
     from qp.web.routers.portfolio import router as portfolio_router
     from qp.web.routers.proposals import router as proposals_router
     from qp.web.routers.simulation import router as simulation_router
+    from qp.web.routers.strategies import router as strategies_router
 
     app.include_router(dashboard_router)
     app.include_router(decisions_router)
+    app.include_router(experiments_router)
     app.include_router(health_router)
+    app.include_router(models_router)
     app.include_router(portfolio_router)
     app.include_router(proposals_router)
     app.include_router(simulation_router)
+    app.include_router(strategies_router)
 
 
 @asynccontextmanager

@@ -93,6 +93,18 @@ async def portfolio(request: Request) -> Any:
     except Exception:
         kpi_metrics = {"has_data": False}
 
+    # Load NAV chart data
+    nav_dates: list[str] = []
+    nav_values: list[float] = []
+    try:
+        from qp.portfolio.nav_ledger import NAVLedger
+        nav_ledger = NAVLedger()
+        nav_dicts = nav_ledger.get_history_dicts(days=252)
+        nav_dates = [d["date"] for d in nav_dicts]
+        nav_values = [d["total_nav"] for d in nav_dicts]
+    except Exception:
+        pass
+
     logger.info(
         "Portfolio: {} active, {} closed, PnL=¥{:.0f}",
         len(active), len(closed), total_pnl,
@@ -108,6 +120,8 @@ async def portfolio(request: Request) -> Any:
             "has_sell_signals": len(sell_signals) > 0,
             "stats": portfolio_stats,
             "kpi": kpi_metrics,
+            "nav_dates": nav_dates,
+            "nav_values": nav_values,
             "page_title": "Portfolio — QP Decision Center",
         },
     )
