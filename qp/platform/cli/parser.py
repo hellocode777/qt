@@ -342,28 +342,6 @@ def data_fetch(ctx: click.Context) -> None:
 
 
 # ==================================================================
-# Backtest
-# ==================================================================
-
-
-@cli.group()
-def backtest() -> None:
-    """Backtest operations."""
-
-
-@backtest.command(
-    "run",
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
-)
-@click.pass_context
-def backtest_run(ctx: click.Context) -> None:
-    """Run a backtest. All extra args passed through to handler."""
-    from qp.platform.cli.commands.backtest import cmd_backtest_run
-
-    raise SystemExit(cmd_backtest_run())
-
-
-# ==================================================================
 # Monitor
 # ==================================================================
 

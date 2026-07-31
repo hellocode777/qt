@@ -1,5 +1,54 @@
 {
-  "updated_at": "",
+  "updated_at": "2026-07-31T05:17:01.079103+00:00",
   "base_dir": "data/dataset",
-  "entries": {}
+  "entries": {
+    "daily_price@latest": {
+      "name": "daily_price",
+      "version": "latest",
+      "path": "data/dataset/daily_price_latest.parquet",
+      "metadata": {
+        "start_date": "2015-01-05",
+        "end_date": "2026-07-31",
+        "rows": 7173135,
+        "symbols": 3051,
+        "sha256": "5d88a40cc3b46dc0",
+        "updated_at": "2026-07-31T05:01:43.139324+00:00",
+        "status": "READY",
+        "validation": {
+          "passed": 7,
+          "failed": 0
+        },
+        "pipeline_run_id": "746c99c82002",
+        "source": "tencent"
+      },
+      "registered_at": "2026-07-31T05:01:43.139347+00:00"
+    },
+    "test_ds@2026-07-31": {
+      "name": "test_ds",
+      "version": "2026-07-31",
+      "path": "data/dataset/test_ds_2026-07-31.parquet",
+      "metadata": {
+        "name": "test_ds",
+        "owner": "me",
+        "source": "demo",
+        "schema": {
+          "trade_date": "date",
+          "symbol": "str"
+        },
+        "frequency": "daily",
+        "primary_key": [
+          "trade_date",
+          "symbol"
+        ],
+        "timezone": "Asia/Shanghai",
+        "coverage_start": "2024-01-01",
+        "coverage_end": "2024-01-05",
+        "pit_confidence": "high",
+        "update_policy": "daily_append",
+        "validation_rules": [],
+        "version": "2026-07-31"
+      },
+      "registered_at": "2026-07-31T05:17:01.079092+00:00"
+    }
+  }
 }

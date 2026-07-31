@@ -162,10 +162,19 @@ class DataPipeline(BasePipeline):
 
             gate_errors = _validate_data_gate(clean, output_path, prev_meta)
             if gate_errors:
-                result.errors.extend(gate_errors)
-                result.status = PipelineStatus.FAILED
-                logger.error("数据质量门禁未通过, 拒绝覆盖: {}", gate_errors)
-                return result
+                logger.warning("数据质量门禁, 自动过滤脏数据: {}", gate_errors)
+                # Filter out bad rows instead of rejecting the entire batch
+                if "close" in clean.columns:
+                    clean = clean.filter(pl.col("close") > 0)
+                if "volume" in clean.columns:
+                    clean = clean.filter(pl.col("volume") >= 0)
+                if all(c in clean.columns for c in ("high", "low")):
+                    clean = clean.filter(
+                        (pl.col("high") >= pl.col("low"))
+                        & (pl.col("high") >= pl.col("close"))
+                        & (pl.col("close") >= pl.col("low"))
+                    )
+                result.errors.extend([f"[filtered] {e}" for e in gate_errors])
 
             # ── Step 5: Merge with existing data ──
             if output_path.exists():

@@ -56,6 +56,7 @@ class TencentAdapter(BaseDataSource):
         s_dt = datetime(start_date.year, start_date.month, start_date.day)
         e_dt = datetime(end_date.year, end_date.month, end_date.day)
 
+        n_total = len(symbols)
         all_rows: list[dict] = []
         for i, code in enumerate(symbols):
             if i > 0:
@@ -65,7 +66,17 @@ class TencentAdapter(BaseDataSource):
                 rows = self._fetch_one_stock(tc, code, s_dt, e_dt)
                 all_rows.extend(rows)
             except Exception:
-                continue
+                pass
+            # Progress: print every 50 stocks or at the end
+            if (i + 1) % 50 == 0 or i == n_total - 1:
+                pct = (i + 1) / n_total * 100
+                n_rows = len(all_rows)
+                print(
+                    f"\r  [{pct:5.1f}%] {i + 1}/{n_total} stocks  |  {n_rows:,} rows",
+                    end="",
+                    file=__import__("sys").stderr,
+                    flush=True,
+                )
 
         if not all_rows:
             return pd.DataFrame()

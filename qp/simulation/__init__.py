@@ -1,6 +1,5 @@
 """Simulation Layer — paper trading, backtest, execution simulation."""
 
-from qp.simulation.backtest import SimpleVectorBacktest
 from qp.simulation.broker import Position, SimulatedBroker, Trade
 from qp.simulation.result import SimulationResult
 from qp.simulation.slippage import (
@@ -13,7 +12,6 @@ from qp.simulation.slippage import (
 __all__ = [
     "FixedSlippage",
     "Position",
-    "SimpleVectorBacktest",
     "SimulatedBroker",
     "SimulationResult",
     "SqrtImpactModel",
