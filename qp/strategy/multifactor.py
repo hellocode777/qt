@@ -331,6 +331,10 @@ def generate_rebalance_signals(
     regime_positions: dict[str, int] | None = None,
     score_percentile_min: float | None = None,
     score_percentile_max: float | None = None,
+    price_data: dict | None = None,
+    anti_chase: bool = False,
+    chase_threshold: float = 0.20,
+    chase_lookback: int = 5,
 ) -> pl.DataFrame:
     """Generate buy/sell signals from cross-sectional scores.
 
@@ -354,12 +358,16 @@ def generate_rebalance_signals(
         rebalance_freq: Days between rebalance checks.
         force_rebalance_today: Treat last day as rebalance day.
         holdings: Currently held stock codes.
-        chased_codes: Stocks to skip due to recent surge.
+        chased_codes: DEPRECATED — use price_data + anti_chase instead.
         sell_buffer_rank: Extra ranks before selling (recommend top_n*2).
         regime_map: {date_str: regime} for adaptive position sizing.
         regime_positions: {regime: top_n} — different N per market regime.
         score_percentile_min: If set, only select from scores above this percentile.
         score_percentile_max: If set, only select from scores below this percentile.
+        price_data: {code: DataFrame(date, close, ...)} for per-date anti-chase.
+        anti_chase: Skip stocks that surged >chase_threshold in last chase_lookback days.
+        chase_threshold: Max recent return before skipping (default 20%).
+        chase_lookback: Lookback days for chase detection (default 5).
 
     Returns:
         Polars DataFrame [date, symbol, signal, score, reason].
@@ -385,7 +393,7 @@ def generate_rebalance_signals(
             rebalance_indices.append(last_idx)
 
     signals: list[dict[str, Any]] = []
-    prev_top: set[str] = set()
+    bought: set[str] = set()  # Actually purchased (not anti-chase skipped)
     chase_skipped = 0
 
     for idx in rebalance_indices:
@@ -423,10 +431,38 @@ def generate_rebalance_signals(
 
         current_top = set(top_pool[:_tn])
 
+        # Per-date anti-chase check (no temporal leakage)
+        chased_today: set[str] = set()
+        if anti_chase and price_data:
+            for code in current_top:
+                df = price_data.get(code)
+                if df is None or df.is_empty():
+                    continue
+                # Get rows up to this date, take last (lookback+1) closes
+                window = (
+                    df.sort("trade_date")
+                    .filter(pl.col("trade_date").cast(pl.Utf8) <= date_str)
+                    .tail(chase_lookback + 1)["close"]
+                    .to_list()
+                )
+                if len(window) < chase_lookback + 1:
+                    continue
+                recent_high = float(window[-1])
+                recent_low = float(window[0])
+                if recent_low > 0 and recent_high / recent_low - 1 > chase_threshold:
+                    chased_today.add(code)
+
+        # Merge per-date chased with legacy global chased (backward compat)
+        skip_codes = chased_today | (chased_codes or set())
+
         if idx == 0:
-            # First rebalance: buy all Top-N
+            # First rebalance: buy all Top-N (skip chased)
+            logger.debug(
+                "   🎯 首次调仓 {}: Top-{}={} | 防追高过滤={}",
+                date_str, _tn, current_top, len(skip_codes),
+            )
             for j, code in enumerate(current_top):
-                if chased_codes and code in chased_codes:
+                if code in skip_codes:
                     chase_skipped += 1
                     continue
                 signals.append(
@@ -438,11 +474,12 @@ def generate_rebalance_signals(
                         "reason": f"初始买入 Top{_tn}",
                     }
                 )
+                bought.add(code)
         else:
             # New entries to Top-N → BUY
-            new_buys = current_top - prev_top
+            new_buys = current_top - bought
             for code in new_buys:
-                if chased_codes and code in chased_codes:
+                if code in skip_codes:
                     chase_skipped += 1
                     continue
                 # Find score
@@ -460,13 +497,14 @@ def generate_rebalance_signals(
                         "reason": f"因子排名进入前{_tn}",
                     }
                 )
+                bought.add(code)
 
             # Fallen out of buffer zone → SELL
             current_sell_zone = set(symbols[:_sz])
             if holdings is not None:
                 new_sells = holdings - current_sell_zone
             else:
-                new_sells = prev_top - current_sell_zone
+                new_sells = bought - current_sell_zone
 
             for code in new_sells:
                 # Find current rank for the reason string
@@ -487,8 +525,7 @@ def generate_rebalance_signals(
                         "reason": reason,
                     }
                 )
-
-        prev_top = current_top
+                bought.discard(code)
 
     if not signals:
         return pl.DataFrame()
@@ -579,23 +616,6 @@ def run_multifactor_strategy(
             if filtered > 0:
                 price_data = {k: v for k, v in price_data.items() if k in qualified_codes}
 
-    # ── 0.5 Anti-chase ──
-    chased_codes: set[str] = set()
-    if anti_chase:
-        for code, df in price_data.items():
-            if df is None or df.is_empty() or df.height < chase_lookback + 1:
-                continue
-            close_col = "close"
-            try:
-                recent_high = float(df[close_col].tail(1).item())
-                recent_low = float(df[close_col].slice(df.height - chase_lookback - 1, 1).item())
-                if recent_low > 0:
-                    pct_change = recent_high / recent_low - 1
-                    if pct_change > chase_threshold:
-                        chased_codes.add(code)
-            except (IndexError, ValueError):
-                continue
-
     # ── 1. Cross-sectional scoring ──
     is_live = force_rebalance_today and holdings is not None
     css_result = compute_cross_sectional_scores(
@@ -626,12 +646,15 @@ def run_multifactor_strategy(
         rebalance_freq=rebalance_freq,
         force_rebalance_today=force_rebalance_today,
         holdings=holdings,
-        chased_codes=chased_codes if anti_chase else None,
         sell_buffer_rank=sell_buffer_rank,
         regime_map=regime_map,
         regime_positions=regime_positions,
         score_percentile_min=score_percentile_min,
         score_percentile_max=score_percentile_max,
+        price_data=price_data if anti_chase else None,
+        anti_chase=anti_chase,
+        chase_threshold=chase_threshold,
+        chase_lookback=chase_lookback,
     )
 
     # ── 3. Add stock names ──

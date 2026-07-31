@@ -1163,6 +1163,15 @@ class MultiFactorPipeline(BasePipeline):
                     if st.side == "SELL":
                         total_sell_value += float(st.price) * st.shares
 
+                # Clamp negative cash (rounding residual from prior buys)
+                cash_now = broker.get_cash()
+                if cash_now < 0:
+                    logger.debug(
+                        "   ⚠ 现金负数 {:.0f} → 补正为 0 (买入成本舍入残留)",
+                        cash_now,
+                    )
+                    broker._cash = 0.0
+
                 # Buy new top-N positions (equal weight)
                 buys = day_signals.filter(pl.col("signal") == "buy")
                 buy_symbols = buys["symbol"].to_list()

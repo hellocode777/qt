@@ -223,6 +223,7 @@ def cmd_experiment_run() -> int:
             "    --score-band auto            Auto-search all bands and compare",
             file=sys.stderr,
         )
+        print("    --debug                     Enable DEBUG-level logging", file=sys.stderr)
         return 1
 
     pipeline_name = sys.argv[3]
@@ -234,15 +235,22 @@ def cmd_experiment_run() -> int:
         )
         return 1
 
+    # Parse options
+    from loguru import logger as _loguru_logger
+
     from qp.pipeline.multifactor_pipeline import MultiFactorPipeline
     from qp.platform.pipeline.context import PipelineContext
 
-    # Parse options
     params: dict[str, object] = {}
     args = sys.argv[4:]
+    debug_mode = False
     i = 0
     while i < len(args):
         arg = args[i]
+        if arg == "--debug":
+            debug_mode = True
+            i += 1
+            continue
         if arg.startswith("--symbols="):
             params["symbols"] = arg.split("=", 1)[1].split(",")
         elif arg == "--symbols" and i + 1 < len(args):
@@ -295,6 +303,21 @@ def cmd_experiment_run() -> int:
         i += 1
 
     # Check if comma-separated strategy list for batch run
+    if debug_mode:
+        _loguru_logger.remove()
+        _loguru_logger.add(
+            sys.stderr,
+            level="DEBUG",
+            format=(
+                "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+                "<level>{level: <8}</level> | "
+                "<cyan>{name: <32}</cyan> | "
+                "<level>{message}</level>"
+            ),
+            colorize=True,
+        )
+        _loguru_logger.debug("🐛 Debug mode enabled")
+
     strategy_val = str(params.get("strategy", ""))
     strategies: list[str] = []
     if "," in strategy_val:
