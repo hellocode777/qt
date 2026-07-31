@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>策略提案 / Strategy Proposals</h1>
+    <div class="meta">
+      策略生命周期审批 · 人工审核 · 审计跟踪
+    </div>
+  </div>
+</div>
+
+{% if error %}
+<div class="card" style="border-left: 4px solid var(--red); margin-bottom: 20px;">
+  <div class="card-body" style="padding: 12px;">
+    ⚠ {{ error }}
+  </div>
+</div>
+{% endif %}
+
+{% if not has_proposals %}
+<div class="empty-state">
+  <div class="icon">&#128221;</div>
+  <h2>暂无提案 / No Proposals</h2>
+  <p style="font-size: 14px; color: var(--c-muted);">
+    使用 <code>qp proposal create --strategy &lt;id&gt; --target &lt;lifecycle&gt;</code> 创建提案
+  </p>
+</div>
+{% else %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header">
+    <span>&#128203; 全部提案 All Proposals</span>
+    <span class="c-muted" style="font-size: 12px;">{{ proposals|length }} 条</span>
+  </div>
+  <div class="card-body">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>策略 Strategy</th>
+          <th>目标 Target</th>
+          <th>状态 Status</th>
+          <th>提议人 By</th>
+          <th>时间 Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in proposals %}
+        <tr>
+          <td>
+            <a href="/proposals/{{ p.proposal_id }}" style="color: var(--blue); font-weight: 600;">
+              {{ p.proposal_id }}
+            </a>
+          </td>
+          <td><code>{{ p.strategy_id }}</code></td>
+          <td><span style="font-size: 12px;">{{ p.target_lifecycle }}</span></td>
+          <td>
+            {% if p.status == "approved" %}
+            <span class="badge badge-green">已批准</span>
+            {% elif p.status == "rejected" %}
+            <span class="badge badge-red">已驳回</span>
+            {% elif p.status == "pending_review" %}
+            <span class="badge badge-orange">待审核</span>
+            {% elif p.status == "withdrawn" %}
+            <span class="badge">已撤回</span>
+            {% else %}
+            <span class="badge">{{ p.status }}</span>
+            {% endif %}
+          </td>
+          <td>{{ p.proposed_by }}</td>
+          <td style="font-size: 12px;">{{ p.created_at[:19] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

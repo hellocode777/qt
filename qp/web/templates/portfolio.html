@@ -33,6 +33,51 @@
   </div>
 </div>
 
+<!-- KPI Row — Portfolio-level Performance Metrics -->
+{% if kpi.has_data %}
+<div style="margin-bottom: 20px;">
+  <div class="card-header" style="padding: 8px 16px; background: var(--c-bg-alt); border-bottom: 1px solid var(--c-border);">
+    <span>&#128200; 组合绩效 Portfolio Performance</span>
+    <span class="c-muted" style="font-size: 12px;">{{ kpi.n_days }} 天数据 · {{ kpi.rating }}</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; padding: 12px;">
+    <div class="card" style="text-align: center; padding: 12px;">
+      <div style="font-size: 11px; color: var(--c-muted);">夏普 Sharpe</div>
+      <div style="font-size: 22px; font-weight: 700; color: {% if kpi.sharpe_ratio >= 1.0 %}var(--green){% elif kpi.sharpe_ratio >= 0.5 %}var(--orange){% else %}var(--red){% endif %};">
+        {{ "%.2f"|format(kpi.sharpe_ratio) }}
+      </div>
+    </div>
+    <div class="card" style="text-align: center; padding: 12px;">
+      <div style="font-size: 11px; color: var(--c-muted);">最大回撤 MaxDD</div>
+      <div style="font-size: 18px; font-weight: 700; color: {% if kpi.max_drawdown_pct <= 20 %}var(--green){% elif kpi.max_drawdown_pct <= 30 %}var(--orange){% else %}var(--red){% endif %};">
+        {{ "%.1f"|format(kpi.max_drawdown_pct) }}%
+      </div>
+    </div>
+    <div class="card" style="text-align: center; padding: 12px;">
+      <div style="font-size: 11px; color: var(--c-muted);">年化收益 Ann.Ret</div>
+      <div style="font-size: 18px; font-weight: 700; color: {% if kpi.annualized_return_pct >= 0 %}var(--green){% else %}var(--red){% endif %};">
+        {{ "%+.1f"|format(kpi.annualized_return_pct) }}%
+      </div>
+    </div>
+    <div class="card" style="text-align: center; padding: 12px;">
+      <div style="font-size: 11px; color: var(--c-muted);">年化波动 Ann.Vol</div>
+      <div style="font-size: 18px; font-weight: 700;">{{ "%.1f"|format(kpi.annualized_volatility_pct) }}%</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 12px;">
+      <div style="font-size: 11px; color: var(--c-muted);">卡玛 Calmar</div>
+      <div style="font-size: 18px; font-weight: 700;">{{ "%.2f"|format(kpi.calmar_ratio) }}</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 12px;">
+      <div style="font-size: 11px; color: var(--c-muted);">总收益 Total</div>
+      <div style="font-size: 18px; font-weight: 700; color: {% if kpi.total_return_pct >= 0 %}var(--green){% else %}var(--red){% endif %};">
+        {{ "%+.1f"|format(kpi.total_return_pct) }}%
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Active Positions -->
 <div class="card" style="margin-bottom: 20px;">
   <div class="card-header">

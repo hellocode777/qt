@@ -136,10 +136,14 @@ def _build_valuation_data(
     price_data: dict[str, pl.DataFrame],
     fundamental_data: dict[str, pl.DataFrame],
 ) -> dict[str, pl.DataFrame]:
-    """Compute PE_TTM and PB from daily prices + quarterly fundamentals.
+    """Compute PE and PB from daily prices + quarterly fundamentals.
 
-    PE_TTM = close / EPS (latest annual EPS)
-    PB     = close / NAV (latest quarterly NAV)
+    **PIT-aligned (Point-in-Time)**: For each trade_date, uses the most
+    recent fundamental report where ``report_date <= trade_date``.  No
+    lookahead bias — a 2024 trade date never sees a 2026Q1 EPS value.
+
+    PE = close / EPS (trailing latest available EPS)
+    PB = close / NAV (trailing latest available NAV)
     """
     valuation: dict[str, pl.DataFrame] = {}
     for code, pdf in price_data.items():
@@ -150,19 +154,46 @@ def _build_valuation_data(
             continue
 
         date_col = "trade_date" if "trade_date" in pdf.columns else "date"
-        # Get latest EPS and NAV from fundamentals
-        latest_eps = fund["EPS"].drop_nulls().tail(1)
-        latest_nav = fund["NAV"].drop_nulls().tail(1)
-        eps_val = latest_eps.item() if not latest_eps.is_empty() else None
-        nav_val = latest_nav.item() if not latest_nav.is_empty() else None
+
+        # Sort fundamentals by report_date ascending, drop rows with
+        # missing EPS or NAV so we never pick a null as the best value.
+        fund_clean = (
+            fund.filter(
+                pl.col("EPS").is_not_null() & pl.col("NAV").is_not_null()
+            )
+            .sort("report_date")
+        )
+        if fund_clean.is_empty():
+            continue
+
+        report_dates = fund_clean["report_date"].to_list()
+        eps_list = fund_clean["EPS"].to_list()
+        nav_list = fund_clean["NAV"].to_list()
+        n_reports = len(report_dates)
 
         rows = []
+        # Cache the last matched index to avoid scanning from the end
+        # every time (report dates and trade dates are both monotonic).
+        last_idx: int = -1
         for row in pdf.select([date_col, "close"]).iter_rows(named=True):
-            d = row[date_col]
+            trade_d = row[date_col]
             close = float(row["close"])
+
+            # Find the latest report_date <= trade_date (PIT alignment).
+            # Start from last_idx; if the next report also qualifies, advance.
+            while last_idx + 1 < n_reports and report_dates[last_idx + 1] <= trade_d:
+                last_idx += 1
+
+            if last_idx >= 0:
+                eps_val = eps_list[last_idx]
+                nav_val = nav_list[last_idx]
+            else:
+                eps_val = None
+                nav_val = None
+
             pe = close / eps_val if eps_val and eps_val > 0 else None
             pb = close / nav_val if nav_val and nav_val > 0 else None
-            rows.append({"date": d, "PE_TTM": pe, "PB": pb})
+            rows.append({"date": trade_d, "PE_TTM": pe, "PB": pb})
 
         if rows:
             valuation[code] = pl.DataFrame(rows)
@@ -1026,23 +1057,41 @@ class DailyPipeline(BasePipeline):
             # ================================================================
             # Step 12.8: Shadow Production — daily paper trading (Shadow Production)
             # ================================================================
+            shadow_equity = total_capital
+            shadow_n_positions = 0
             try:
                 from qp.simulation.shadow_ledger import ShadowLedger
 
                 shadow = ShadowLedger()
                 shadow_result = shadow.run_daily(today.isoformat())
-                result.metrics["shadow_equity"] = round(
-                    shadow_result.get("total_equity", total_capital), 2
-                )
+                shadow_equity = shadow_result.get("total_equity", total_capital)
+                shadow_n_positions = shadow_result.get("n_positions", 0)
+                result.metrics["shadow_equity"] = round(shadow_equity, 2)
                 result.metadata["shadow_pnl"] = str(shadow_result.get("unrealized_pnl", 0))
                 logger.info(
                     "Shadow: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
-                    shadow_result.get("total_equity", 0),
+                    shadow_equity,
                     shadow_result.get("unrealized_pnl", 0),
-                    shadow_result.get("n_positions", 0),
+                    shadow_n_positions,
                 )
             except Exception as exc:
                 logger.warning("Shadow production skipped: {}", exc)
+
+            # Step 12.9: Record portfolio NAV for KPI tracking
+            # ================================================================
+            try:
+                from qp.portfolio.nav_ledger import NAVLedger
+
+                nav_ledger = NAVLedger()
+                nav_ledger.record_daily(
+                    date=today.isoformat(),
+                    total_value=shadow_equity,
+                    cash=total_capital * 0.05,  # ~5% cash buffer
+                    n_positions=shadow_n_positions,
+                )
+                result.metrics["nav_history_days"] = nav_ledger.row_count()
+            except Exception as exc:
+                logger.debug("NAV recording skipped: {}", exc)
 
             # ================================================================
             # Step 13: Build DecisionPackage

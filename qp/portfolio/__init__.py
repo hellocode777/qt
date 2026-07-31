@@ -25,12 +25,14 @@ from qp.portfolio.correlation import CorrelationAnalyzer
 from qp.portfolio.cost_model import CostBreakdown, CostModel, MarketImpactModel
 from qp.portfolio.exposure import FactorExposureAnalyzer, LiquidityExposure, MarketCapExposure
 from qp.portfolio.industry import IndustryMapper
+from qp.portfolio.metrics import PortfolioMetrics
 from qp.portfolio.models import (
     AllocationResult,
     PortfolioSnapshot,
     RiskApprovedCandidate,
     TargetPortfolio,
 )
+from qp.portfolio.nav_ledger import NAVLedger
 from qp.portfolio.optimization import ConstraintSet, OptimizationConstraintsBuilder
 from qp.portfolio.optimizer import MeanVarianceOptimizer, OptimizationResult
 from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine, RiskEngineConfig
@@ -64,11 +66,13 @@ __all__ = [
     "MarketCapExposure",
     "MarketImpactModel",
     "MeanVarianceOptimizer",
+    "NAVLedger",
     "NormalizationResult",
     "OptimizationConstraintsBuilder",
     "OptimizationResult",
     "Order",
     "PortfolioRiskEngine",
+    "PortfolioMetrics",
     "PortfolioRiskManager",
     "PortfolioSnapshot",
     "PositionSizer",

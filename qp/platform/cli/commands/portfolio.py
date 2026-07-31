@@ -169,12 +169,42 @@ def cmd_portfolio_report() -> int:
 
     # ── KPI 仪表盘 ──
     print("── 组合 KPI 仪表盘 / Portfolio KPI Dashboard ──")
-    print(f"  {'指标':<20s} {'目标':>10s} {'状态':>10s}  {'说明'}")
-    print(f"  {'─' * 58}")
-    print(f"  {'夏普比率 / Sharpe':<18s} {'≥ 1.2':>8s}  {'待回测':>8s}   年度风险调整收益")
-    print(f"  {'最大回撤 / MaxDD':<18s} {'≤ 20%':>8s}  {'待回测':>8s}   历史最大亏损")
-    print(f"  {'超额占比 / Alpha%':<18s} {'≥ 60%':>8s}  {'待回测':>8s}   Alpha 收益占比")
-    print(f"  {'持仓数量 / Count':<18s}  {'8-15':>8s} {len(symbols):>10}    当前候选标的")
+
+    # Load real metrics from NAV history
+    try:
+        from qp.portfolio.metrics import PortfolioMetrics
+        from qp.portfolio.nav_ledger import NAVLedger
+
+        nav_ledger = NAVLedger()
+        nav_df = nav_ledger.load_history()
+        if not nav_df.is_empty() and nav_df.height >= 5:
+            metrics = PortfolioMetrics.from_nav(nav_df)
+            sharpe_str = f"{metrics.sharpe_ratio:.2f}"
+            maxdd_str = f"{metrics.max_drawdown_pct:.1f}%"
+            ret_str = f"{metrics.annualized_return_pct:.1f}%"
+            vol_str = f"{metrics.annualized_volatility_pct:.1f}%"
+            calmar_str = f"{metrics.calmar_ratio:.2f}"
+            rating_str = metrics.rating()
+            n_days = metrics.n_days
+        else:
+            sharpe_str = maxdd_str = ret_str = vol_str = calmar_str = "N/A"
+            rating_str = "数据不足 / No Data"
+            n_days = 0
+    except Exception:
+        sharpe_str = maxdd_str = ret_str = vol_str = calmar_str = "N/A"
+        rating_str = "计算失败 / Error"
+        n_days = 0
+
+    print(f"  {'指标':<20s} {'当前值':>12s}  {'说明'}")
+    print(f"  {'─' * 52}")
+    print(f"  {'夏普比率 / Sharpe':<20s} {sharpe_str:>12s}  年度风险调整收益")
+    print(f"  {'最大回撤 / MaxDD':<20s} {maxdd_str:>12s}  历史最大亏损")
+    print(f"  {'年化收益 / Ann.Ret':<20s} {ret_str:>12s}  年化收益率")
+    print(f"  {'年化波动 / Ann.Vol':<20s} {vol_str:>12s}  年化波动率")
+    print(f"  {'卡玛比率 / Calmar':<20s} {calmar_str:>12s}  收益/最大回撤")
+    print(f"  {'评级 / Rating':<20s} {rating_str:>12s}  基于夏普比率")
+    print(f"  {'数据天数 / Days':<20s} {str(n_days):>12s}  NAV 记录数")
+    print(f"  {'持仓数量 / Count':<20s} {len(symbols):>12}    当前候选标的")
 
     return 0
 

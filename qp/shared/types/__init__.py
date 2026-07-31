@@ -119,7 +119,18 @@ class RebalanceSchedule(Enum):
     MONTHLY = "monthly"
 
 
+class ProposalStatus(Enum):
+    """Strategy proposal workflow states."""
+
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
+
+
 __all__ = [
+    "ProposalStatus",
     "RuntimeState",
     "PipelineStatus",
     "PositionState",

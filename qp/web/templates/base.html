@@ -27,6 +27,7 @@
       <a href="/portfolio" class="{% if request.url.path == '/portfolio' %}active{% endif %}" hx-boost="true">投资组合 Portfolio</a>
       <a href="/simulation" class="{% if request.url.path == '/simulation' %}active{% endif %}" hx-boost="true">影子运行 Shadow</a>
       <a href="/health" class="{% if request.url.path == '/health' %}active{% endif %}" hx-boost="true">系统健康 Health</a>
+      <a href="/proposals" class="{% if request.url.path.startswith('/proposals') %}active{% endif %}" hx-boost="true">提案 Proposals</a>
     </div>
     <div class="navbar-status">
       <span class="status-dot"></span>

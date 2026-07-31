@@ -274,19 +274,32 @@ class StrategyRegistry:
             s for sid, s in self._strategies.items() if self._lifecycles.get(sid) in ready_states
         ]
 
-    def set_lifecycle(self, strategy_id: str, state: StrategyLifecycle) -> None:
+    def set_lifecycle(
+        self,
+        strategy_id: str,
+        state: StrategyLifecycle,
+        require_proposal: bool = False,
+    ) -> None:
         """Update a strategy's lifecycle state.
 
         Enforces lineage validation when promoting to PAPER_TRADING,
         SHADOW_PRODUCTION, or PRODUCTION.
 
+        Optionally requires an approved proposal for gated promotions
+        (G-011: human-in-the-loop approval workflow).  Set
+        ``require_proposal=True`` to enable the proposal gate.
+
         Args:
             strategy_id: Strategy to update.
             state: New lifecycle state.
+            require_proposal: If True, requires an approved proposal
+                from the ProposalStore for promotions to PAPER_TRADING
+                or above.
 
         Raises:
             KeyError: If strategy is not registered.
-            ValueError: If lineage validation fails for a gated state.
+            ValueError: If lineage validation fails or no approved
+                proposal exists (when require_proposal=True).
         """
         if strategy_id not in self._strategies:
             raise KeyError(f"Strategy '{strategy_id}' not registered")
@@ -297,6 +310,25 @@ class StrategyRegistry:
                 raise ValueError(
                     f"Cannot promote '{strategy_id}' to '{state.value}': {validation['message']}"
                 )
+
+            # G-011: Proposal gate for human-in-the-loop approval
+            if require_proposal:
+                from qp.platform.proposals.store import ProposalStore
+
+                store = ProposalStore()
+                active = store.get_active_for_strategy(strategy_id)
+                if active is None or active.status != "approved":
+                    raise ValueError(
+                        f"Cannot promote '{strategy_id}' to '{state.value}': "
+                        f"no approved proposal found. "
+                        f"Create one with: qp proposal create --strategy {strategy_id} "
+                        f"--target {state.value}"
+                    )
+                if active.target_lifecycle != state.value:
+                    raise ValueError(
+                        f"Cannot promote '{strategy_id}' to '{state.value}': "
+                        f"approved proposal targets '{active.target_lifecycle}'"
+                    )
 
         self._lifecycles[strategy_id] = state
 

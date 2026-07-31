@@ -75,6 +75,24 @@ async def portfolio(request: Request) -> Any:
         "pnl_badge": "badge-green" if total_pnl >= 0 else "badge-red",
     }
 
+    # Load portfolio-level performance metrics from NAV history
+    kpi_metrics: dict = {}
+    try:
+        from qp.portfolio.metrics import PortfolioMetrics
+        from qp.portfolio.nav_ledger import NAVLedger
+
+        nav_ledger = NAVLedger()
+        nav_df = nav_ledger.load_history()
+        if not nav_df.is_empty() and nav_df.height >= 5:
+            metrics = PortfolioMetrics.from_nav(nav_df)
+            kpi_metrics = metrics.to_dict()
+            kpi_metrics["rating"] = metrics.rating()
+            kpi_metrics["has_data"] = True
+        else:
+            kpi_metrics = {"has_data": False}
+    except Exception:
+        kpi_metrics = {"has_data": False}
+
     logger.info(
         "Portfolio: {} active, {} closed, PnL=¥{:.0f}",
         len(active), len(closed), total_pnl,
@@ -89,6 +107,7 @@ async def portfolio(request: Request) -> Any:
             "sell_signals": sell_signals,
             "has_sell_signals": len(sell_signals) > 0,
             "stats": portfolio_stats,
+            "kpi": kpi_metrics,
             "page_title": "Portfolio — QP Decision Center",
         },
     )
