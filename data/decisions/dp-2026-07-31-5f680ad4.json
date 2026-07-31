@@ -1,0 +1,497 @@
+{
+  "package_id": "dp-2026-07-31-5f680ad4",
+  "date": "2026-07-31",
+  "generated_at": "2026-07-31T12:57:21.523926+00:00",
+  "lineage": {
+    "dataset_name": "daily_price_main",
+    "dataset_version": "2026-07-31",
+    "dataset_rows": 7176382,
+    "dataset_symbols": 3075,
+    "feature_versions": {
+      "momentum_20d": "2026-07-31",
+      "volatility_20d": "2026-07-31"
+    },
+    "strategy_versions": {}
+  },
+  "regime": {
+    "regime": "neutral",
+    "confidence": 0.3,
+    "suggested_exposure": 0.0,
+    "trend_strength": 0.0,
+    "annualized_vol": 0.0,
+    "summary": ""
+  },
+  "strategy": {
+    "signals": {},
+    "ensemble_method": "equal_weight",
+    "effective_top_n": 10
+  },
+  "risk_audit": {
+    "candidates_in": 0,
+    "candidates_out": 0,
+    "entries": [],
+    "dropped_symbols": [],
+    "sector_exposure": {},
+    "passed": true
+  },
+  "estimated_cost_pct": 0.0,
+  "validation": {
+    "momentum_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading.",
+      "rules": [
+        {
+          "rule_name": "rank_ic",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_ir",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_t_stat",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "stratification",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "neutralization",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing pre_neutralization_ic or post_neutralization_ic in context.metadata. Compute IC before/after neutralize_cross_section_ols() and set both values."
+        },
+        {
+          "rule_name": "min_sample_period",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing train_start or train_end in context.metadata. Set context.metadata['train_start'] = '2021-01-01' etc."
+        },
+        {
+          "rule_name": "sharpe_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Sharpe ratio is zero or missing — insufficient data."
+        },
+        {
+          "rule_name": "max_drawdown",
+          "status": "pass",
+          "score": 100.0,
+          "threshold": 25.0,
+          "actual_value": 0.0,
+          "detail": "Max Drawdown = 0.00% ≤ threshold 25.0%"
+        },
+        {
+          "rule_name": "turnover",
+          "status": "pass",
+          "score": 50.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Turnover data not available — skipping check."
+        },
+        {
+          "rule_name": "cost_adjusted",
+          "status": "fail",
+          "score": 50.0,
+          "threshold": 1.0,
+          "actual_value": 0.0,
+          "detail": "Post-cost: Sharpe=0.00, MaxDD=0.0%. Net Sharpe 0.00 < 1.0"
+        },
+        {
+          "rule_name": "overfit_ic_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing in_sample_ic or out_of_sample_ic in validation context. Set context.metadata['in_sample_ic'] and ['out_of_sample_ic']."
+        },
+        {
+          "rule_name": "feature_importance",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_importance in validation context. Set context.metadata['feature_importance'] to a DataFrame with columns [feature, gain]."
+        }
+      ],
+      "gate_levels": {}
+    },
+    "quality_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading.",
+      "rules": [
+        {
+          "rule_name": "rank_ic",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_ir",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_t_stat",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "stratification",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "neutralization",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing pre_neutralization_ic or post_neutralization_ic in context.metadata. Compute IC before/after neutralize_cross_section_ols() and set both values."
+        },
+        {
+          "rule_name": "min_sample_period",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing train_start or train_end in context.metadata. Set context.metadata['train_start'] = '2021-01-01' etc."
+        },
+        {
+          "rule_name": "sharpe_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Sharpe ratio is zero or missing — insufficient data."
+        },
+        {
+          "rule_name": "max_drawdown",
+          "status": "pass",
+          "score": 100.0,
+          "threshold": 25.0,
+          "actual_value": 0.0,
+          "detail": "Max Drawdown = 0.00% ≤ threshold 25.0%"
+        },
+        {
+          "rule_name": "turnover",
+          "status": "pass",
+          "score": 50.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Turnover data not available — skipping check."
+        },
+        {
+          "rule_name": "cost_adjusted",
+          "status": "fail",
+          "score": 50.0,
+          "threshold": 1.0,
+          "actual_value": 0.0,
+          "detail": "Post-cost: Sharpe=0.00, MaxDD=0.0%. Net Sharpe 0.00 < 1.0"
+        },
+        {
+          "rule_name": "overfit_ic_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing in_sample_ic or out_of_sample_ic in validation context. Set context.metadata['in_sample_ic'] and ['out_of_sample_ic']."
+        },
+        {
+          "rule_name": "feature_importance",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_importance in validation context. Set context.metadata['feature_importance'] to a DataFrame with columns [feature, gain]."
+        }
+      ],
+      "gate_levels": {}
+    },
+    "value_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading.",
+      "rules": [
+        {
+          "rule_name": "rank_ic",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_ir",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_t_stat",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "stratification",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "neutralization",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing pre_neutralization_ic or post_neutralization_ic in context.metadata. Compute IC before/after neutralize_cross_section_ols() and set both values."
+        },
+        {
+          "rule_name": "min_sample_period",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing train_start or train_end in context.metadata. Set context.metadata['train_start'] = '2021-01-01' etc."
+        },
+        {
+          "rule_name": "sharpe_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Sharpe ratio is zero or missing — insufficient data."
+        },
+        {
+          "rule_name": "max_drawdown",
+          "status": "pass",
+          "score": 100.0,
+          "threshold": 25.0,
+          "actual_value": 0.0,
+          "detail": "Max Drawdown = 0.00% ≤ threshold 25.0%"
+        },
+        {
+          "rule_name": "turnover",
+          "status": "pass",
+          "score": 50.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Turnover data not available — skipping check."
+        },
+        {
+          "rule_name": "cost_adjusted",
+          "status": "fail",
+          "score": 50.0,
+          "threshold": 1.0,
+          "actual_value": 0.0,
+          "detail": "Post-cost: Sharpe=0.00, MaxDD=0.0%. Net Sharpe 0.00 < 1.0"
+        },
+        {
+          "rule_name": "overfit_ic_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing in_sample_ic or out_of_sample_ic in validation context. Set context.metadata['in_sample_ic'] and ['out_of_sample_ic']."
+        },
+        {
+          "rule_name": "feature_importance",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_importance in validation context. Set context.metadata['feature_importance'] to a DataFrame with columns [feature, gain]."
+        }
+      ],
+      "gate_levels": {}
+    },
+    "multifactor_v1.0": {
+      "stage": "backtest_passed",
+      "score": 16.67,
+      "passed": false,
+      "rules_total": 12,
+      "rules_failed": 10,
+      "recommendation": "Strategy failed 10/12 rules: rank_ic, ic_ir, ic_t_stat, stratification, neutralization, min_sample_period, sharpe_ratio, cost_adjusted, overfit_ic_ratio, feature_importance. Fix the issues above before promoting to Paper Trading.",
+      "rules": [
+        {
+          "rule_name": "rank_ic",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_ir",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "ic_t_stat",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "stratification",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_df or price_df in validation context."
+        },
+        {
+          "rule_name": "neutralization",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing pre_neutralization_ic or post_neutralization_ic in context.metadata. Compute IC before/after neutralize_cross_section_ols() and set both values."
+        },
+        {
+          "rule_name": "min_sample_period",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing train_start or train_end in context.metadata. Set context.metadata['train_start'] = '2021-01-01' etc."
+        },
+        {
+          "rule_name": "sharpe_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Sharpe ratio is zero or missing — insufficient data."
+        },
+        {
+          "rule_name": "max_drawdown",
+          "status": "pass",
+          "score": 100.0,
+          "threshold": 25.0,
+          "actual_value": 0.0,
+          "detail": "Max Drawdown = 0.00% ≤ threshold 25.0%"
+        },
+        {
+          "rule_name": "turnover",
+          "status": "pass",
+          "score": 50.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Turnover data not available — skipping check."
+        },
+        {
+          "rule_name": "cost_adjusted",
+          "status": "fail",
+          "score": 50.0,
+          "threshold": 1.0,
+          "actual_value": 0.0,
+          "detail": "Post-cost: Sharpe=0.00, MaxDD=0.0%. Net Sharpe 0.00 < 1.0"
+        },
+        {
+          "rule_name": "overfit_ic_ratio",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing in_sample_ic or out_of_sample_ic in validation context. Set context.metadata['in_sample_ic'] and ['out_of_sample_ic']."
+        },
+        {
+          "rule_name": "feature_importance",
+          "status": "fail",
+          "score": 0.0,
+          "threshold": null,
+          "actual_value": null,
+          "detail": "Missing feature_importance in validation context. Set context.metadata['feature_importance'] to a DataFrame with columns [feature, gain]."
+        }
+      ],
+      "gate_levels": {}
+    }
+  },
+  "report": {
+    "report_id": "",
+    "strategy_id": "",
+    "total_capital": 0.0,
+    "risk_summary": "",
+    "market_regime": "",
+    "cost_summary": "",
+    "n_buys": 0,
+    "n_sells": 0,
+    "total_invested": 0,
+    "remaining_cash": 0.0,
+    "total_estimated_cost": 0,
+    "recommendations": []
+  },
+  "human_review": {
+    "reviewed": false,
+    "reviewer": "",
+    "notes": "",
+    "executed": false,
+    "execution_time": "",
+    "status": "pending",
+    "status_history": []
+  },
+  "metadata": {
+    "pipeline_run_id": "5f680ad4c6c5",
+    "quality_gate": "BLOCKED",
+    "avg_validation_score": "16.67",
+    "is_rebalance_day": "False"
+  }
+}

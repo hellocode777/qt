@@ -510,6 +510,68 @@ def proposal_withdraw(proposal_id: str) -> None:
 
 
 # ==================================================================
+# Strategy (ADR-031: approve, list, deactivate)
+# ==================================================================
+
+
+@cli.group()
+def strategy() -> None:
+    """Strategy management (list, approve, deactivate)."""
+
+
+@strategy.command("list")
+def strategy_list() -> None:
+    """List all registered strategies with lifecycle."""
+    from qp.platform.cli.commands.strategy import cmd_strategy_list
+
+    raise SystemExit(cmd_strategy_list())
+
+
+@strategy.command("approve")
+@click.argument("strategy_id")
+@click.option("--by", type=str, default="", help="Approver name")
+@click.option("--version", type=str, default=None, help="Freeze version string")
+def strategy_approve(strategy_id: str, by: str, version: str | None) -> None:
+    """Freeze a strategy as an ApprovedStrategy snapshot."""
+    from qp.platform.cli.commands.strategy import cmd_strategy_approve
+
+    raise SystemExit(cmd_strategy_approve(
+        strategy_id=strategy_id, approved_by=by, version=version,
+    ))
+
+
+@strategy.group()
+def approved() -> None:
+    """Approved strategy snapshots (ADR-031)."""
+
+
+@approved.command("list")
+def strategy_approved_list() -> None:
+    """List all approved (frozen) strategy snapshots."""
+    from qp.platform.cli.commands.strategy import cmd_strategy_approved_list
+
+    raise SystemExit(cmd_strategy_approved_list())
+
+
+@approved.command("show")
+@click.argument("strategy_id")
+def strategy_approved_show(strategy_id: str) -> None:
+    """Show details of an approved strategy snapshot."""
+    from qp.platform.cli.commands.strategy import cmd_strategy_approved_show
+
+    raise SystemExit(cmd_strategy_approved_show(strategy_id))
+
+
+@strategy.command("deactivate")
+@click.argument("strategy_id")
+def strategy_deactivate(strategy_id: str) -> None:
+    """Deactivate an approved strategy."""
+    from qp.platform.cli.commands.strategy import cmd_strategy_deactivate
+
+    raise SystemExit(cmd_strategy_deactivate(strategy_id))
+
+
+# ==================================================================
 # Web
 # ==================================================================
 

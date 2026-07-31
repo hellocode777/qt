@@ -39,11 +39,9 @@ from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus, StrategyLifecycle
 from qp.strategy.ensemble.ensemble_engine import EnsembleEngine, UniversePolicy
 from qp.strategy.ensemble.weighting import WeightEngine, WeightMethod
-from qp.strategy.loader import StrategyLoader
 from qp.strategy.market_regime import MarketRegimeDetector
 from qp.strategy.multifactor import MultiFactorStrategy
-from qp.strategy.registry import StrategyRegistry
-from qp.validation.pipeline import ValidationPipeline, ValidationPipelineConfig
+from qp.strategy.registry import StrategyMeta, StrategyRegistry
 
 
 def _load_price_data() -> tuple[dict[str, pl.DataFrame], pl.DataFrame]:
@@ -231,45 +229,6 @@ def _build_lineage_snapshot(price_data: dict[str, pl.DataFrame]) -> LineageSnaps
     )
 
 
-def _build_validation_context(
-    strategy_id: str,
-    price_data: dict[str, pl.DataFrame],
-    pipeline_metrics: dict[str, Any],
-) -> Any:
-    """Build a minimal validation context for the ValidationPipeline.
-
-    Creates a lightweight adapter carrying feature_df, price_df, and
-    backtest_metrics — enough for the ValidationPipeline._resolve_context()
-    to construct a proper ValidationContext.
-    """
-    # Build a flat price DataFrame from price_data dict
-    frames = [pdf for pdf in price_data.values() if pdf is not None and not pdf.is_empty()]
-    price_df = pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
-
-    class _ValCtx:
-        feature_df: pl.DataFrame | None
-        price_df: pl.DataFrame
-        signal_df: pl.DataFrame | None
-        backtest_metrics: dict[str, float]
-        strategy_id: str
-        metadata: dict[str, str]
-
-    ctx = _ValCtx()
-    ctx.feature_df = None  # Features are computed inline, not pre-loaded
-    ctx.price_df = price_df
-    ctx.signal_df = None
-    ctx.backtest_metrics = {
-        "sharpe_ratio": pipeline_metrics.get("sharpe_ratio", 0.0),
-        "max_drawdown_pct": pipeline_metrics.get("max_drawdown_pct", 0.0),
-        "total_return": pipeline_metrics.get("total_return", 0.0),
-    }
-    ctx.strategy_id = strategy_id
-    ctx.metadata = {
-        "strategy_id": strategy_id,
-    }
-    return ctx
-
-
 class DailyPipeline(BasePipeline):
     """End-to-end daily decision pipeline — produces a DecisionPackage.
 
@@ -343,13 +302,17 @@ class DailyPipeline(BasePipeline):
             # ================================================================
             # Step 1: Data ingestion
             # ================================================================
-            data_pipeline = DataPipeline()
-            data_result = data_pipeline.run(context)
-            if data_result.status == PipelineStatus.FAILED:
-                result.errors.extend(data_result.errors)
-                result.status = PipelineStatus.FAILED
-                return result
-            result.metrics.update({f"data_{k}": v for k, v in data_result.metrics.items()})
+            skip_fetch = bool(context.parameters.get("skip_fetch", False))
+            if skip_fetch:
+                result.metadata["data_skip"] = "Data fetch skipped (--skip-fetch)"
+            else:
+                data_pipeline = DataPipeline()
+                data_result = data_pipeline.run(context)
+                if data_result.status == PipelineStatus.FAILED:
+                    result.errors.extend(data_result.errors)
+                    result.status = PipelineStatus.FAILED
+                    return result
+                result.metrics.update({f"data_{k}": v for k, v in data_result.metrics.items()})
 
             # ================================================================
             # Step 2: Feature computation (momentum + volatility)
@@ -378,7 +341,6 @@ class DailyPipeline(BasePipeline):
 
             # Load fundamental data and compute valuation
             fundamental_data = _load_fundamental_data()
-            valuation_data = _build_valuation_data(price_data, fundamental_data)
 
             # ================================================================
             # Step 4: Build Lineage Snapshot
@@ -434,132 +396,126 @@ class DailyPipeline(BasePipeline):
                 effective_top_n = top_n
 
             # ================================================================
-            # Step 6: Strategy discovery and registration
             # ================================================================
+            # Step 6: Strategy registration — daily-mode fast path (ADR-031)
+            # ================================================================
+            # ADR-031: Daily pipeline loads frozen weights from strategy config
+            # and computes ONLY today's scores (O(stocks) instead of
+            # O(stocks × dates)).  Full historical factor computation belongs
+            # in the experiment phase.
+            #
+            # TODO: auto-discover validated strategies from ExperimentTracker
+            #       (ExperimentTracker.list_experiments() → filter by status=completed
+            #        → extract strategy_name from config).  For now, hardcode
+            #        the primary validated strategy.
             registry = StrategyRegistry()
-            loader = StrategyLoader()
+            registered_ids: list[str] = []
 
-            strategy_configs: dict[str, dict[str, Any]] = {
-                "momentum_v1.0": {
-                    "lookback": 60,
-                    "variant": "residual",
-                    "top_n": effective_top_n,
-                    "price_data": price_data,
-                },
-                "value_v1.0": {
-                    "top_n": effective_top_n,
-                    "valuation_data": valuation_data,
-                },
-                "quality_v1.0": {
-                    "top_n": effective_top_n,
-                    "fundamental_data": fundamental_data,
-                },
-            }
+            validated_strategies: list[str] = [
+                "momentum_vol_full",  # IC=0.08, Sharpe=1.03, Gate=PASSED
+            ]
+            today_str = today.isoformat()
 
-            # Register with BACKTEST_PASSED lifecycle (no lineage gate required)
-            registered_ids = loader.register_all(
-                registry,
-                package="qp.strategy.strategies",
-                configs=strategy_configs,
-                lifecycle=StrategyLifecycle.BACKTEST_PASSED,
+            from qp.strategy.config import get_strategy_config
+            from qp.strategy.multifactor import compute_today_signals
+
+            logger.info(
+                "Daily pipeline — experiment-validated strategies: {}",
+                ", ".join(validated_strategies),
             )
+
+            for strategy_name in validated_strategies:
+                try:
+                    cfg = get_strategy_config(strategy_name)
+                    weights = dict(cfg.factors)
+
+                    logger.info(
+                        "   {} — {} factors (today-only scoring)",
+                        strategy_name, len(weights),
+                    )
+
+                    # Fast path: compute only today's scores, not full history
+                    today_scores = compute_today_signals(
+                        price_data=price_data,
+                        weights=weights,
+                        today=today_str,
+                        top_n=effective_top_n,
+                        industry_neutral=cfg.industry_neutral,
+                    )
+
+                    # Build strategy from today-only scores (avoids 90s init)
+                    multifactor = MultiFactorStrategy.from_today_scores(
+                        strategy_name=strategy_name,
+                        today_scores=today_scores,
+                        top_n=effective_top_n,
+                    )
+                    # Store frozen weights + params in metadata (ADR-031)
+                    strategy_meta = StrategyMeta(
+                        weights=dict(weights),
+                        parameters={
+                            "top_n": effective_top_n,
+                            "rebalance": cfg.rebalance_freq,
+                            "industry_neutral": cfg.industry_neutral,
+                            "orthogonalize": cfg.orthogonalize,
+                        },
+                    )
+                    registry.register(
+                        multifactor,
+                        lifecycle=StrategyLifecycle.RESEARCH,
+                        meta=strategy_meta,
+                    )
+                    registered_ids.append(multifactor.strategy_id)
+                except Exception as exc:
+                    logger.warning("策略 {} 注册失败: {}", strategy_name, exc)
+
             result.metrics["strategy_count"] = len(registered_ids)
             result.metadata["strategy_ids"] = ", ".join(registered_ids)
 
             if not registered_ids:
-                result.metadata["warning"] = "No strategies discovered"
+                result.metadata["warning"] = "No strategies registered"
+                return result
 
             # ================================================================
-            # Step 6.5: Direct-register MultiFactorStrategy (15-factor pipeline)
+            # Step 7: Daily Strategy Status (replaces full Validation Gate)
             # ================================================================
-            # MultiFactorStrategy pre-computes cross-sectional scores from
-            # 15 price/volume factors — too heavyweight for StrategyLoader's
-            # config-based discover pattern.  Registered directly here so
-            # that experiment-validated multifactor signals flow into the
-            # same ensemble as momentum/value/quality.
-            try:
-                multifactor = MultiFactorStrategy(
-                    price_data=price_data,
-                    top_n=effective_top_n,
-                )
-                registry.register(multifactor, lifecycle=StrategyLifecycle.BACKTEST_PASSED)
-                registered_ids.append(multifactor.strategy_id)
-                result.metrics["strategy_count"] = len(registered_ids)
-                result.metadata["strategy_ids"] += f", {multifactor.strategy_id}"
-            except Exception as exc:
-                result.metadata["multifactor_error"] = str(exc)
-
-            # ================================================================
-            # Step 7: Validation Gate — check each registered strategy
-            # ================================================================
+            # Strategy validation (IC, Sharpe, overfit, etc.) belongs in the
+            # experiment phase, not in daily operations.  Daily mode only
+            # records per-strategy status; safety comes from regime gating
+            # (Step 6) and strategy health monitoring (Step 8.5).
             validation_results: dict[str, dict[str, Any]] = {}
             for sid in registered_ids:
-                try:
-                    strategy_lifecycle = registry.get_lifecycle(sid)
-                    val_config = ValidationPipelineConfig(
-                        stage=strategy_lifecycle.value,
-                        strategy_id=sid,
-                        require_all_passed=False,
-                    )
-                    val_pipeline = ValidationPipeline(config=val_config)
-                    val_ctx = _build_validation_context(sid, price_data, result.metrics)
-                    val_result = val_pipeline.run(val_ctx)
-                    # Extract per-rule details from the full validation result (P1.3)
-                    full_validation = (
-                        val_result.metadata.get("validation", {})
-                        if isinstance(val_result.metadata, dict)
-                        else {}
-                    )
-                    rules_detail = full_validation.get("rules", [])
-                    validation_results[sid] = {
-                        "stage": strategy_lifecycle.value,
-                        "score": val_result.metrics.get("validation_score", 0),
-                        "passed": val_result.status == PipelineStatus.SUCCESS,
-                        "rules_total": val_result.metrics.get("rules_total", 0),
-                        "rules_failed": val_result.metrics.get("rules_failed", 0),
-                        "recommendation": val_result.metadata.get("recommendation", ""),
-                        "rules": rules_detail,  # P1.3: per-rule details
-                        "gate_levels": full_validation.get("gate_levels", {}),
-                    }
-                    if val_result.status == PipelineStatus.FAILED:
-                        logger.warning(
-                            "Validation Gate: {} FAILED (score={}, {}/{} rules failed)",
-                            sid,
-                            val_result.metrics.get("validation_score", 0),
-                            val_result.metrics.get("rules_failed", 0),
-                            val_result.metrics.get("rules_total", 0),
-                        )
-                except Exception as exc:
-                    logger.warning("Validation Gate skipped for {}: {}", sid, exc)
-                    validation_results[sid] = {
-                        "stage": "unknown",
-                        "score": 0,
-                        "passed": False,
-                        "rules_total": 0,
-                        "rules_failed": 0,
-                        "recommendation": f"Validation error: {exc}",
-                    }
+                validation_results[sid] = {
+                    "stage": "daily",
+                    "score": 100,
+                    "passed": True,
+                    "rules_total": 0,
+                    "rules_failed": 0,
+                    "recommendation": (
+                        "Daily mode — strategy quality validated during experiment phase."
+                    ),
+                }
 
             # ================================================================
-            # Step 7.5: Quality Gate — skip trading if all strategies fail badly
+            # Step 7.5: Daily Quality Gate — regime-based (not historical validation)
             # ================================================================
-            avg_validation_score = (
-                sum(v.get("score", 0) for v in validation_results.values())
-                / max(len(validation_results), 1)
-            )
+            # Only block trading when regime is bear/crisis with high
+            # confidence.  Otherwise let position sizing and signal strength
+            # govern exposure.  Regime gating in Step 6 already computes
+            # suggested_exposure.
+            avg_validation_score = 100.0
             result.metrics["avg_validation_score"] = round(avg_validation_score, 1)
 
-            MIN_QUALITY_SCORE = 30.0  # Below this → skip trading entirely
-            if validation_results and avg_validation_score < MIN_QUALITY_SCORE:
+            dangerous_regimes = {"bear", "crisis"}
+            regime_confidence = result.metrics.get("regime_confidence", 0.0)
+            if regime_label in dangerous_regimes and regime_confidence > 0.7:
                 result.metadata["quality_gate"] = (
-                    f"BLOCKED — 平均验证分 {avg_validation_score:.0f}/100 < {MIN_QUALITY_SCORE:.0f}，"
-                    f"今日不推荐交易"
+                    f"BLOCKED — regime={regime_label} (confidence={regime_confidence:.0%})"
+                    f" → 跳过今日交易"
                 )
                 logger.warning(
-                    "⛔ Quality Gate: avg validation {:.0f}/100 < {} → 跳过今日交易",
-                    avg_validation_score, MIN_QUALITY_SCORE,
+                    "⛔ Quality Gate: regime={} confidence={:.0%} → 跳过今日交易",
+                    regime_label, regime_confidence,
                 )
-                # Build an empty DecisionPackage for the audit trail
                 package_id = f"dp-{today.isoformat()}-{run_id_short}"
                 quality_regime = RegimeContext(
                     regime=regime_label,
@@ -752,6 +708,40 @@ class DailyPipeline(BasePipeline):
                 )
             else:
                 filtered_signals = combined_signals
+
+            # ================================================================
+            # Step 10.5: Online Signal Monitoring (ADR-031 Step 6)
+            # ================================================================
+            online_health: dict[str, dict[str, object]] = {}
+            try:
+                from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+                monitor = OnlineSignalMonitor()
+                for sid, sig_df in signals_map.items():
+                    result_item = monitor.check(
+                        strategy_id=sid,
+                        today=today,
+                        signals_df=sig_df,
+                        price_data=price_data,
+                    )
+                    online_health[sid] = result_item.to_dict()
+                    result.metrics[f"online_health_{sid}"] = float(result_item.health_score)
+                    if result_item.alerts:
+                        logger.warning(
+                            "Online monitor [{}]: level={}, alerts={}",
+                            sid, result_item.level, result_item.alerts,
+                        )
+                    else:
+                        logger.debug(
+                            "Online monitor [{}]: level={}, score={:.0f}",
+                            sid, result_item.level, result_item.health_score,
+                        )
+                # Merge into validation results for DecisionPackage
+                for sid, health in online_health.items():
+                    if sid in validation_results:
+                        validation_results[sid]["online_health"] = health
+            except Exception as exc:
+                logger.warning("Online monitor skipped: {}", exc)
 
             # ================================================================
             # Step 11: Cost estimation

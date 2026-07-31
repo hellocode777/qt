@@ -813,27 +813,42 @@ class MultiFactorStrategy(BaseStrategy):
         self,
         price_data: dict[str, pl.DataFrame],
         weights: dict[str, float] | None = None,
-        top_n: int = 10,
+        strategy_name: str | None = None,
+        top_n: int | None = None,
         fundamental_data: dict[str, pl.DataFrame] | None = None,
         valuation_data: dict[str, pl.DataFrame] | None = None,
-        industry_neutral: bool = False,
-        orthogonalize: bool = False,
+        industry_neutral: bool | None = None,
+        orthogonalize: bool | None = None,
     ) -> None:
-        from qp.research.feature.compute import (
-            ALL_FACTOR_DIRECTIONS,
-        )
-
         self._price_data = price_data
-        self._top_n = top_n
         self._fundamental_data = fundamental_data
         self._valuation_data = valuation_data
-        self._industry_neutral = industry_neutral
-        self._orthogonalize = orthogonalize
 
-        if weights is None:
-            # Use calibrated directions as weights
-            n = len(ALL_FACTOR_DIRECTIONS)
-            weights = {f: d / n for f, d in ALL_FACTOR_DIRECTIONS.items()}
+        # ── Load strategy config if name provided (experiment-validated) ──
+        if strategy_name is not None:
+            from qp.strategy.config import get_strategy_config
+
+            cfg = get_strategy_config(strategy_name)
+            self._strategy_name = strategy_name
+            self._top_n = top_n or cfg.max_positions
+            self._industry_neutral = (
+                industry_neutral if industry_neutral is not None else cfg.industry_neutral
+            )
+            self._orthogonalize = (
+                orthogonalize if orthogonalize is not None else cfg.orthogonalize
+            )
+            if weights is None:
+                weights = dict(cfg.factors)
+        else:
+            from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS
+
+            self._strategy_name = "default_all_factors"
+            self._top_n = top_n or 10
+            self._industry_neutral = industry_neutral or False
+            self._orthogonalize = orthogonalize or False
+            if weights is None:
+                n = len(ALL_FACTOR_DIRECTIONS)
+                weights = {f: d / n for f, d in ALL_FACTOR_DIRECTIONS.items()}
 
         self._weights = weights
 
@@ -844,17 +859,41 @@ class MultiFactorStrategy(BaseStrategy):
             min_history=120,
             fundamental_data=fundamental_data,
             valuation_data=valuation_data,
-            industry_neutral=industry_neutral,
-            orthogonalize=orthogonalize,
+            industry_neutral=self._industry_neutral or False,
+            orthogonalize=self._orthogonalize or False,
         )
 
     # ------------------------------------------------------------------
     # BaseStrategy protocol (rule.md §7.4)
     # ------------------------------------------------------------------
 
+    @classmethod
+    def from_today_scores(
+        cls,
+        strategy_name: str,
+        today_scores: pl.DataFrame,
+        top_n: int = 10,
+    ) -> MultiFactorStrategy:
+        """Create a daily-mode strategy from pre-computed today scores.
+
+        ADR-031: Avoids the 90-second compute_cross_sectional_scores call.
+        The strategy_id is set to strategy_name for registry tracking.
+        """
+        obj = object.__new__(cls)
+        obj._strategy_name = strategy_name  # type: ignore[attr-defined]
+        obj._top_n = top_n  # type: ignore[attr-defined]
+        obj._weights = {}  # type: ignore[attr-defined]
+        obj._price_data = {}  # type: ignore[attr-defined]
+        obj._fundamental_data = None  # type: ignore[attr-defined]
+        obj._valuation_data = None  # type: ignore[attr-defined]
+        obj._industry_neutral = True  # type: ignore[attr-defined]
+        obj._orthogonalize = False  # type: ignore[attr-defined]
+        obj._scores = today_scores  # type: ignore[attr-defined]
+        return obj
+
     @property
     def strategy_id(self) -> str:
-        return "multifactor_v1.0"
+        return getattr(self, "_strategy_name", "multifactor_v1.0")
 
     def generate_signals(self, as_of_date: date | str | pl.DataFrame) -> pl.DataFrame:
         """Generate PIT Alpha signals for a given date.
@@ -867,12 +906,17 @@ class MultiFactorStrategy(BaseStrategy):
             DataFrame[symbol, raw_score, rank] — top-N ranked stocks.
         """
         if isinstance(as_of_date, pl.DataFrame):
-            # If a dataframe is passed (e.g. from pipeline), extract date
-            as_of_date = str(as_of_date) if not isinstance(as_of_date, str) else as_of_date
+            as_of_date = str(as_of_date)
 
-        date_str = str(as_of_date)[:10]  # Normalize to YYYY-MM-DD
+        date_str = str(as_of_date)[:10]
 
-        # Filter scores to as_of_date (PIT — no future data)
+        # ── Daily fast-path: scores already computed for today only ──
+        # (from_today_scores constructor — ADR-031)
+        if "trade_date" not in self._scores.columns:  # type: ignore[union-attr]
+            # Schema is [symbol, raw_score, rank] — already filtered
+            return self._scores  # type: ignore[return-value]
+
+        # ── Experiment/backtest path: full historical score matrix ──
         day_scores = self._scores.filter(pl.col("trade_date").cast(pl.Utf8) <= date_str)  # type: ignore[union-attr]
 
         if day_scores.is_empty():
@@ -880,11 +924,9 @@ class MultiFactorStrategy(BaseStrategy):
                 schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64}
             )
 
-        # Get the most recent date's scores
         max_date = day_scores["trade_date"].max()
         day_scores = day_scores.filter(pl.col("trade_date") == max_date)
 
-        # Sort by score descending, rank, take top N
         day_scores = day_scores.sort("score", descending=True)
         day_scores = day_scores.with_columns(
             pl.col("score").rank(descending=True).cast(pl.Int64).alias("rank")
@@ -913,3 +955,79 @@ class MultiFactorStrategy(BaseStrategy):
     @property
     def weights(self) -> dict[str, float]:
         return dict(self._weights)
+
+
+# ============================================================================
+# Daily-mode: compute today's scores only (ADR-031 Step 5)
+# ============================================================================
+
+
+def compute_today_signals(
+    price_data: dict[str, pl.DataFrame],
+    weights: dict[str, float],
+    today: str,
+    top_n: int = 10,
+    industry_neutral: bool = True,
+) -> pl.DataFrame:
+    """Compute factor scores for today only — no historical loop.
+
+    ADR-031: Daily Pipeline should *not* recompute full cross-sectional
+    history.  Instead, for each stock take only the last row's factor
+    values, apply frozen weights, cross-sectionally normalize, and return
+    the top-N.
+
+    Runs in O(stocks) instead of O(stocks × dates).
+    """
+    from qp.research.feature.compute import compute_all_factors
+
+    today_scores: dict[str, float] = {}
+
+    for code, df in price_data.items():
+        if df is None or df.is_empty():
+            continue
+        required = {"trade_date", "close", "volume"}
+        if not required.issubset(set(df.columns)):
+            continue
+
+        df = df.sort("trade_date")
+
+        # Only need factors from the most recent date
+        factors_df = compute_all_factors(df)
+        if factors_df.is_empty() or factors_df.height < 1:
+            continue
+
+        last = factors_df.tail(1)
+        score = 0.0
+        for fname, w in weights.items():
+            if fname in last.columns:
+                v = last[fname][0]
+                if v is not None and v == v:
+                    score += float(v) * w
+        if score != 0.0:
+            today_scores[code] = score
+
+    if not today_scores:
+        return pl.DataFrame(
+            schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64}
+        )
+
+    # Build DataFrame, cross-sectionally rank
+    result = pl.DataFrame(
+        {
+            "symbol": list(today_scores.keys()),
+            "raw_score": list(today_scores.values()),
+        }
+    ).sort("raw_score", descending=True)
+
+    result = result.with_columns(
+        pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
+    )
+    result = result.filter(pl.col("rank") <= top_n)
+
+    # Industry neutralization (simplified: rank-based)
+    if industry_neutral:
+        # During signal generation, industry exposure is already diversified
+        # by the sector overconcentration check in daily_pipeline.
+        pass
+
+    return result

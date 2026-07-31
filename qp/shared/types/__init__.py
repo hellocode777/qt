@@ -59,6 +59,7 @@ class StrategyLifecycle(Enum):
     RESEARCH = "research"
     BACKTEST_PASSED = "backtest_passed"
     PAPER_TRADING = "paper_trading"
+    APPROVED = "approved"  # ADR-031: frozen snapshot, ready for production
     SHADOW_PRODUCTION = "shadow_production"
     PRODUCTION = "production"
     WARNING = "warning"

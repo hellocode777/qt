@@ -1,0 +1,50 @@
+[
+  {
+    "package_id": "dp-2026-07-31-5f680ad4",
+    "date": "2026-07-31",
+    "generated_at": "2026-07-31T12:57:21.523926+00:00",
+    "regime": "neutral",
+    "n_recommendations": 0,
+    "estimated_cost_pct": 0.0,
+    "risk_passed": true,
+    "human_reviewed": false,
+    "human_executed": false,
+    "status": "pending"
+  },
+  {
+    "package_id": "dp-2026-07-31-c448d2a0",
+    "date": "2026-07-31",
+    "generated_at": "2026-07-31T13:26:01.168311+00:00",
+    "regime": "neutral",
+    "n_recommendations": 0,
+    "estimated_cost_pct": 0.13,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false,
+    "status": "pending"
+  },
+  {
+    "package_id": "dp-2026-07-31-3b3152ad",
+    "date": "2026-07-31",
+    "generated_at": "2026-07-31T15:18:28.941170+00:00",
+    "regime": "neutral",
+    "n_recommendations": 0,
+    "estimated_cost_pct": 0.1459,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false,
+    "status": "pending"
+  },
+  {
+    "package_id": "dp-2026-07-31-cecd97a9",
+    "date": "2026-07-31",
+    "generated_at": "2026-07-31T15:30:18.447798+00:00",
+    "regime": "neutral",
+    "n_recommendations": 0,
+    "estimated_cost_pct": 0.1459,
+    "risk_passed": false,
+    "human_reviewed": false,
+    "human_executed": false,
+    "status": "pending"
+  }
+]

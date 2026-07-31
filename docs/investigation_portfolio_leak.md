@@ -111,6 +111,10 @@ Score 计算
 
 - [x] Gate 方向检查 (`direction_correct`) — 2026-07-31
 - [x] Q 编号翻转 (Q1=最低分, Q5=最高分) — 2026-07-31
+- [x] Daily pipeline Quality Gate 误拦截 — 2026-07-31
+  - 根因：lifecycle 声明为 BACKTEST_PASSED，但 daily context 无 backtest/overfit 数据 → 6/12 规则得 0 分 → avg=16.7 < 30 → 永远拦截
+  - 短期修复：lifecycle → RESEARCH，移除 Validation Gate，改 regime-based Quality Gate
+  - 长期方向：Lifecycle（策略状态）与 ValidationMode（今天检查什么）解耦，见 §架构待办
 
 ---
 
@@ -148,6 +152,22 @@ Debug log 揭示：
 ### ❌ 新发现 #2 — 仓位累积不轮换
 
 持仓数逐渐增加（6→12→18→23→28），说明每次调仓不是"全清→全买"，而是"部分清→部分买"。卖出数始终 ≤ 买入数，仓位只增不减。
+
+---
+
+## 架构待办
+
+- [ ] **Research/Production 分离** — 见 ADR-031 + `docs/strategy_freeze_roadmap.md`（7 步实施计划）
+- [ ] **ValidationMode 与 Lifecycle 解耦** — 当前 lifecycle 字段同时决定「策略状态」和「今天检查什么」，应分离：
+  ```
+  Lifecycle（策略在哪）     ValidationMode（今天查什么）
+  RESEARCH                  EXPERIMENT:  IC/Sharpe/Overfit
+  BACKTEST_PASSED           DAILY:       Health/Drift/Risk/Regime
+  PRODUCTION                PRODUCTION:  All operational checks
+  ```
+  daily pipeline 的 context 永远不会有 backtest 数据，不应要求它跑 backtest checks。策略质量验证属于 `qp experiment run`，日常安全检查属于 `qp run daily`。
+
+- [ ] **调仓日改用交易日历** — 当前 `today.day <= 5` 直接用自然日判断，遇到春节等长假会导致整月不调仓。应改为「每月前 5 个交易日」或接入交易日历（如 `qp/data/calendar/`）。当前利用周末自然跳过缓解了部分问题，但长假仍是死角。
 
 ---
 

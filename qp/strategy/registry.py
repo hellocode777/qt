@@ -13,11 +13,19 @@ LineageLayer.md §1④:
 
 from __future__ import annotations
 
+import contextlib
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from qp.shared.protocols.base_strategy import BaseStrategy
 from qp.shared.types import RebalanceSchedule, StrategyLifecycle
+from qp.strategy.approved import cast_dict
+
+# Persistence path for strategy metadata (no strategy instances,
+# just lifecycle + metadata — enough for WebUI listing)
+_REGISTRY_FILE = Path("data/strategy_registry.json")
 
 if TYPE_CHECKING:
     from qp.lineage.engine import LineageRegistry
@@ -51,6 +59,12 @@ class StrategyMeta:
         owner: Person or team responsible for this strategy.
         description: Human-readable description.
         tags: Free-form tags for categorisation.
+        weights: Frozen factor weights (ADR-031 — ApprovedStrategy snapshot).
+        parameters: Frozen strategy parameters (top_n, rebalance, filters, etc.).
+        backtest_ic: Mean Rank IC from experiment validation.
+        backtest_sharpe: Sharpe ratio from experiment backtest.
+        backtest_max_dd: Max drawdown (%) from experiment backtest.
+        backtest_excess_return: Excess return (%) vs benchmark.
     """
 
     strategy_version: str = "1.0.0"
@@ -63,6 +77,14 @@ class StrategyMeta:
     description: str = ""
     tags: list[str] = field(default_factory=list)
 
+    # Frozen strategy snapshot (ADR-031)
+    weights: dict[str, float] = field(default_factory=dict)
+    parameters: dict[str, object] = field(default_factory=dict)
+    backtest_ic: float = 0.0
+    backtest_sharpe: float = 0.0
+    backtest_max_dd: float = 0.0
+    backtest_excess_return: float = 0.0
+
     def to_dict(self) -> dict[str, object]:
         return {
             "strategy_version": self.strategy_version,
@@ -74,6 +96,13 @@ class StrategyMeta:
             "owner": self.owner,
             "description": self.description,
             "tags": self.tags,
+            # Frozen snapshot
+            "weights": self.weights,
+            "parameters": self.parameters,
+            "backtest_ic": self.backtest_ic,
+            "backtest_sharpe": self.backtest_sharpe,
+            "backtest_max_dd": self.backtest_max_dd,
+            "backtest_excess_return": self.backtest_excess_return,
         }
 
     @classmethod
@@ -86,6 +115,20 @@ class StrategyMeta:
                 freq = RebalanceSchedule(str(freq_raw))
             except ValueError:
                 freq = RebalanceSchedule.DAILY
+
+        weights_raw = data.get("weights", {})
+        weights: dict[str, float] = (
+            {str(k): float(str(v)) for k, v in cast("dict[object, object]", weights_raw).items()}
+            if weights_raw
+            else {}
+        )
+        params_raw = data.get("parameters", {})
+        parameters: dict[str, object] = (
+            {str(k): v for k, v in cast("dict[object, object]", params_raw).items()}
+            if params_raw
+            else {}
+        )
+
         return cls(
             strategy_version=str(data.get("strategy_version", "1.0.0")),
             model_version=str(data.get("model_version", "")),
@@ -96,6 +139,12 @@ class StrategyMeta:
             owner=str(data.get("owner", "")),
             description=str(data.get("description", "")),
             tags=list(cast("list[str]", data.get("tags", []))),
+            weights=weights,
+            parameters=parameters,
+            backtest_ic=float(str(data.get("backtest_ic", 0.0))),
+            backtest_sharpe=float(str(data.get("backtest_sharpe", 0.0))),
+            backtest_max_dd=float(str(data.get("backtest_max_dd", 0.0))),
+            backtest_excess_return=float(str(data.get("backtest_excess_return", 0.0))),
         )
 
 
@@ -125,7 +174,59 @@ class StrategyRegistry:
         self._strategies: dict[str, BaseStrategy] = {}
         self._lifecycles: dict[str, StrategyLifecycle] = {}
         self._metadata: dict[str, StrategyMeta] = {}
+        self._approved: dict[str, object] = {}  # ApprovedStrategy snapshots (ADR-031)
+        self._active_versions: dict[str, bool] = {}  # Which versions are active
         self._lineage_registry: LineageRegistry | None = None
+        self._load()
+
+    # ------------------------------------------------------------------
+    # Persistence — metadata only (strategy instances can't be serialized)
+    # ------------------------------------------------------------------
+
+    def _load(self) -> None:
+        """Load lifecycle, metadata, and approved snapshots from disk."""
+        if not _REGISTRY_FILE.exists():
+            return
+        try:
+            data = json.loads(_REGISTRY_FILE.read_text())
+            for sid, entry in data.get("strategies", {}).items():
+                lifecycle_raw = entry.get("lifecycle", "research")
+                try:
+                    self._lifecycles[sid] = StrategyLifecycle(lifecycle_raw)
+                except ValueError:
+                    self._lifecycles[sid] = StrategyLifecycle.RESEARCH
+                self._metadata[sid] = StrategyMeta.from_dict(entry.get("meta", {}))
+
+                # Load approved snapshot if present (ADR-031)
+                approved_raw = entry.get("approved")
+                if approved_raw and isinstance(approved_raw, dict):
+                    self._approved[sid] = cast_dict(approved_raw)
+                    self._active_versions[sid] = bool(entry.get("active", False))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    def _save(self) -> None:
+        """Persist lifecycle, metadata, and approved snapshots to disk."""
+        data: dict[str, dict[str, object]] = {}
+        for sid in set(self._strategies.keys()) | set(self._lifecycles.keys()):
+            lifecycle = self._lifecycles.get(sid, StrategyLifecycle.RESEARCH)
+            meta = self._metadata.get(sid, StrategyMeta())
+            entry: dict[str, object] = {
+                "lifecycle": lifecycle.value,
+                "meta": meta.to_dict(),
+                "active": self._active_versions.get(sid, False),
+            }
+            # Persist approved snapshot
+            if sid in self._approved:
+                entry["approved"] = self._approved[sid]
+            data[sid] = entry
+        try:
+            _REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _REGISTRY_FILE.write_text(json.dumps(
+                {"strategies": data}, ensure_ascii=False, indent=2,
+            ))
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------
     # Lineage gate
@@ -233,7 +334,9 @@ class StrategyRegistry:
 
         self._strategies[sid] = strategy
         self._lifecycles[sid] = lifecycle
-        self._metadata[sid] = meta or StrategyMeta()
+        # Preserve metadata loaded from disk if no explicit meta provided
+        self._metadata[sid] = meta or self._metadata.get(sid, StrategyMeta())
+        self._save()
 
     def get(self, strategy_id: str) -> BaseStrategy:
         """Get a registered strategy by ID."""
@@ -242,8 +345,13 @@ class StrategyRegistry:
         return self._strategies[strategy_id]
 
     def list_strategies(self) -> list[str]:
-        """List all registered strategy IDs."""
-        return list(self._strategies.keys())
+        """List all registered strategy IDs.
+
+        Includes strategies from persisted metadata (WebUI / cross-process)
+        even when strategy instances aren't loaded into this process.
+        """
+        sids = set(self._strategies.keys()) | set(self._lifecycles.keys())
+        return sorted(sids)
 
     def get_active(self) -> list[BaseStrategy]:
         """Get strategies eligible for signal generation.
@@ -254,6 +362,7 @@ class StrategyRegistry:
         """
         active_states = {
             StrategyLifecycle.PAPER_TRADING,
+            StrategyLifecycle.APPROVED,
             StrategyLifecycle.SHADOW_PRODUCTION,
             StrategyLifecycle.PRODUCTION,
         }
@@ -301,7 +410,7 @@ class StrategyRegistry:
             ValueError: If lineage validation fails or no approved
                 proposal exists (when require_proposal=True).
         """
-        if strategy_id not in self._strategies:
+        if strategy_id not in self._strategies and strategy_id not in self._lifecycles:
             raise KeyError(f"Strategy '{strategy_id}' not registered")
 
         if state in _LINEAGE_REQUIRED_STATES:
@@ -331,9 +440,12 @@ class StrategyRegistry:
                     )
 
         self._lifecycles[strategy_id] = state
+        self._save()
 
     def get_lifecycle(self, strategy_id: str) -> StrategyLifecycle:
         """Get a strategy's current lifecycle state."""
+        if strategy_id in self._lifecycles:
+            return self._lifecycles[strategy_id]
         if strategy_id not in self._strategies:
             raise KeyError(f"Strategy '{strategy_id}' not registered")
         return self._lifecycles[strategy_id]
@@ -354,6 +466,8 @@ class StrategyRegistry:
         Raises:
             KeyError: If strategy is not registered.
         """
+        if strategy_id in self._metadata:
+            return self._metadata[strategy_id]
         if strategy_id not in self._strategies:
             raise KeyError(f"Strategy '{strategy_id}' not registered")
         return self._metadata.get(strategy_id, StrategyMeta())
@@ -366,11 +480,147 @@ class StrategyRegistry:
             meta: New metadata.
 
         Raises:
-            KeyError: If strategy is not registered.
+            KeyError: If strategy is not registered (in _strategies
+                      or _lifecycles — supports metadata-only entries
+                      loaded from disk for cross-process workflows).
         """
-        if strategy_id not in self._strategies:
+        if strategy_id not in self._strategies and strategy_id not in self._lifecycles:
             raise KeyError(f"Strategy '{strategy_id}' not registered")
         self._metadata[strategy_id] = meta
+        self._save()
+
+    # ------------------------------------------------------------------
+    # Approved strategy snapshots (ADR-031 Step 3)
+    # ------------------------------------------------------------------
+
+    def approve(
+        self,
+        strategy_id: str,
+        approved_by: str = "",
+        version: str | None = None,
+    ) -> object:
+        """Freeze a strategy as an ApprovedStrategy snapshot.
+
+        Creates an immutable ApprovedStrategy from the current StrategyMeta,
+        sets the lifecycle to APPROVED, marks it as active, and persists.
+
+        Args:
+            strategy_id: Strategy to approve.
+            approved_by: Person or system approving the strategy.
+            version: Freeze version string (default: "v" + today).
+
+        Returns:
+            ApprovedStrategy instance.
+
+        Raises:
+            KeyError: If strategy is not registered.
+            ValueError: If strategy has no weights set in metadata.
+        """
+        from qp.strategy.approved import ApprovedStrategy
+
+        if strategy_id not in self._strategies and strategy_id not in self._lifecycles:
+            raise KeyError(f"Strategy '{strategy_id}' not registered")
+
+        meta = self._metadata.get(strategy_id, StrategyMeta())
+        if not meta.weights:
+            raise ValueError(
+                f"Strategy '{strategy_id}' has no weights in metadata. "
+                f"Set meta.weights before approving."
+            )
+
+        if version is None:
+            from datetime import UTC, datetime
+            version = "v" + datetime.now(UTC).strftime("%Y%m%d")
+
+        approved = ApprovedStrategy.from_strategy_meta(
+            strategy_id=strategy_id,
+            version=version,
+            approved_by=approved_by,
+            meta=meta,
+        )
+
+        self._approved[strategy_id] = approved.to_dict()
+        self._active_versions[strategy_id] = True
+        self.set_lifecycle(strategy_id, StrategyLifecycle.APPROVED)
+        self._save()
+
+        return approved
+
+    def load_active(self) -> list[object]:
+        """Return all active ApprovedStrategy snapshots.
+
+        Can be called without strategy instances loaded (e.g., from WebUI
+        or Daily Pipeline before registration).  Reads from in-memory
+        approved dict (populated by _load() at init).
+
+        Returns:
+            List of ApprovedStrategy instances for active strategies.
+        """
+        from qp.strategy.approved import ApprovedStrategy
+
+        results: list[object] = []
+        for sid, approved_raw in self._approved.items():
+            if self._active_versions.get(sid, False):
+                with contextlib.suppress(TypeError, KeyError):
+                    results.append(ApprovedStrategy.from_dict(
+                        cast_dict(approved_raw)
+                    ))
+        return results
+
+    def load_active_as_meta(self) -> list[StrategyMeta]:
+        """Return StrategyMeta for all active APPROVED strategies.
+
+        Convenience for Daily Pipeline — returns StrategyMeta with frozen
+        weights/parameters ready for strategy construction.
+
+        Returns:
+            List of StrategyMeta for active, approved strategies.
+        """
+        results: list[StrategyMeta] = []
+        for sid, lifecycle in self._lifecycles.items():
+            if lifecycle == StrategyLifecycle.APPROVED and self._active_versions.get(sid, False):
+                meta = self._metadata.get(sid)
+                if meta and meta.weights:
+                    results.append(meta)
+        return results
+
+    def get_approved(self, strategy_id: str) -> object | None:
+        """Get an ApprovedStrategy snapshot by ID.
+
+        Args:
+            strategy_id: Strategy to retrieve.
+
+        Returns:
+            ApprovedStrategy instance, or None if not approved.
+        """
+        from qp.strategy.approved import ApprovedStrategy
+
+        approved_raw = self._approved.get(strategy_id)
+        if approved_raw is None:
+            return None
+        try:
+            return ApprovedStrategy.from_dict(cast_dict(approved_raw))
+        except (TypeError, KeyError):
+            return None
+
+    def deactivate(self, strategy_id: str) -> None:
+        """Deactivate an approved strategy.
+
+        Sets the active flag to False and reverts lifecycle to
+        BACKTEST_PASSED.  The approved snapshot is preserved for audit.
+
+        Args:
+            strategy_id: Strategy to deactivate.
+
+        Raises:
+            KeyError: If strategy is not registered.
+        """
+        if strategy_id not in self._strategies and strategy_id not in self._lifecycles:
+            raise KeyError(f"Strategy '{strategy_id}' not registered")
+
+        self._active_versions[strategy_id] = False
+        self.set_lifecycle(strategy_id, StrategyLifecycle.BACKTEST_PASSED)
+        self._save()
 
     def get_by_owner(self, owner: str) -> list[str]:
         """List strategy IDs owned by a specific person/team."""

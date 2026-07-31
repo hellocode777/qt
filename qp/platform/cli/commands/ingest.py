@@ -89,12 +89,17 @@ def cmd_run() -> int:
     print()
 
     demo = "--demo" in sys.argv
+    skip_fetch = "--skip-fetch" in sys.argv
     # Default: fetch last 5 days (Sina, fast with progress).
     # Full backfill via `qp ingest 2015-01-01`.
     recent_start = (date.today() - timedelta(days=5)).isoformat()
     context = PipelineContext(
         pipeline_name="daily",
-        parameters={"demo": demo, "start_date": recent_start} if demo else {"start_date": recent_start},
+        parameters={
+            "demo": demo,
+            "skip_fetch": skip_fetch,
+            "start_date": recent_start,
+        },
     )
     pipeline = DailyPipeline()
     result = pipeline.run(context)

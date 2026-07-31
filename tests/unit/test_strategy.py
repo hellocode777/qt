@@ -2540,3 +2540,446 @@ class TestStrategyRegistry:
         registry.register(strategy, meta=meta)
         retrieved_meta = registry.get_meta("simple_rank_v1.0")
         assert retrieved_meta.owner == "test_team"
+
+    # ── StrategyMeta frozen snapshot (ADR-031) ──
+
+    def test_meta_frozen_snapshot_roundtrip(self) -> None:
+        """StrategyMeta with frozen weights/params survives to_dict→from_dict."""
+        from qp.strategy.registry import StrategyMeta
+
+        meta = StrategyMeta(
+            strategy_version="v20260731",
+            owner="researcher",
+            weights={"Amplitude_5D": -0.252, "Momentum_3M": -0.202},
+            parameters={"top_n": 10, "rebalance": 20, "industry_neutral": True},
+            backtest_ic=0.08,
+            backtest_sharpe=1.03,
+            backtest_max_dd=8.9,
+            backtest_excess_return=11.18,
+        )
+        d = meta.to_dict()
+        restored = StrategyMeta.from_dict(d)
+
+        assert restored.weights == {"Amplitude_5D": -0.252, "Momentum_3M": -0.202}
+        assert restored.parameters == {"top_n": 10, "rebalance": 20, "industry_neutral": True}
+        assert restored.backtest_ic == pytest.approx(0.08)
+        assert restored.backtest_sharpe == pytest.approx(1.03)
+        assert restored.backtest_max_dd == pytest.approx(8.9)
+        assert restored.backtest_excess_return == pytest.approx(11.18)
+        assert restored.strategy_version == "v20260731"
+        assert restored.owner == "researcher"
+
+    def test_meta_frozen_snapshot_defaults(self) -> None:
+        """StrategyMeta without frozen fields defaults to empty/false/zero."""
+        from qp.strategy.registry import StrategyMeta
+
+        meta = StrategyMeta()
+        assert meta.weights == {}
+        assert meta.parameters == {}
+        assert meta.backtest_ic == 0.0
+        assert meta.backtest_sharpe == 0.0
+        assert meta.backtest_max_dd == 0.0
+        assert meta.backtest_excess_return == 0.0
+
+    def test_meta_weights_type_safety(self) -> None:
+        """from_dict coerces weight values to float."""
+        from qp.strategy.registry import StrategyMeta
+
+        d = {"weights": {"F1": 1, "F2": "0.5"}}
+        meta = StrategyMeta.from_dict(d)
+        assert meta.weights == {"F1": 1.0, "F2": 0.5}
+        assert isinstance(list(meta.weights.values())[0], float)
+
+    def test_register_with_frozen_meta(self) -> None:
+        """Registry persists frozen meta fields via _save/_load."""
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        meta = StrategyMeta(
+            weights={"Factor_A": -0.15},
+            parameters={"top_n": 8},
+            backtest_sharpe=0.95,
+        )
+        strategy = SimpleRankStrategy(top_n=8)
+        registry.register(strategy, meta=meta)
+
+        # Verify in-memory
+        retrieved = registry.get_meta("simple_rank_v1.0")
+        assert retrieved.weights == {"Factor_A": -0.15}
+        assert retrieved.parameters == {"top_n": 8}
+        assert retrieved.backtest_sharpe == pytest.approx(0.95)
+
+        # Verify persistence roundtrip — new registry instance reads from disk
+        registry2 = StrategyRegistry()
+        assert "simple_rank_v1.0" in registry2.list_strategies()
+        meta2 = registry2.get_meta("simple_rank_v1.0")
+        assert meta2.weights == {"Factor_A": -0.15}
+        assert meta2.backtest_sharpe == pytest.approx(0.95)
+
+    def test_approved_lifecycle(self) -> None:
+        """APPROVED lifecycle is recognized as active."""
+        from qp.shared.types import StrategyLifecycle
+        from qp.strategy.registry import StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        strategy = SimpleRankStrategy(top_n=5)
+        registry.register(strategy, lifecycle=StrategyLifecycle.APPROVED)
+
+        assert registry.get_lifecycle("simple_rank_v1.0") == StrategyLifecycle.APPROVED
+        active = registry.get_active()
+        assert len(active) == 1
+        assert active[0] is strategy
+
+
+# ══════════════════════════════════════════════════════════════════
+# ApprovedStrategy — ADR-031 Step 2
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestApprovedStrategy:
+    """Frozen, immutable strategy snapshot — ADR-031 Step 2."""
+
+    def test_construction(self) -> None:
+        """Basic construction and attribute access."""
+        from datetime import UTC, datetime
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        now = datetime.now(UTC)
+        s = ApprovedStrategy(
+            strategy_id="momentum_vol_full",
+            version="v20260731",
+            approved_at=now,
+            approved_by="researcher",
+            weights={"Amplitude_5D": -0.252, "Momentum_3M": -0.202},
+            parameters={"top_n": 10, "rebalance": 20},
+            backtest_summary={"ic": 0.08, "sharpe": 1.03, "max_dd": 8.9},
+            validation_report_id="multifactor_20260731_095738",
+        )
+
+        assert s.strategy_id == "momentum_vol_full"
+        assert s.version == "v20260731"
+        assert s.approved_by == "researcher"
+        assert s.weights == {"Amplitude_5D": -0.252, "Momentum_3M": -0.202}
+        assert s.backtest_summary["ic"] == 0.08
+        assert s.factor_count == 2
+
+    def test_frozen_immutable(self) -> None:
+        """ApprovedStrategy is frozen — attribute mutation raises."""
+        from datetime import UTC, datetime
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        s = ApprovedStrategy(
+            strategy_id="test",
+            version="v1",
+            approved_at=datetime.now(UTC),
+            approved_by="me",
+        )
+        with pytest.raises(Exception):  # FrozenInstanceError or AttributeError
+            s.strategy_id = "hacked"  # type: ignore[misc]
+
+    def test_serialization_roundtrip(self) -> None:
+        """to_dict → from_dict preserves all fields."""
+        from datetime import UTC, datetime
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        now = datetime.now(UTC)
+        original = ApprovedStrategy(
+            strategy_id="momentum_vol_full",
+            version="v20260731",
+            approved_at=now,
+            approved_by="researcher",
+            weights={"F1": -0.25, "F2": 0.15},
+            parameters={"top_n": 10, "industry_neutral": True},
+            backtest_summary={"ic": 0.08, "sharpe": 1.03, "max_dd": 8.9},
+            validation_report_id="exp_001",
+            meta={"note": "first freeze"},
+        )
+        d = original.to_dict()
+        restored = ApprovedStrategy.from_dict(d)
+
+        assert restored.strategy_id == original.strategy_id
+        assert restored.version == original.version
+        assert restored.approved_by == original.approved_by
+        assert restored.weights == original.weights
+        assert restored.parameters == original.parameters
+        assert restored.backtest_summary == original.backtest_summary
+        assert restored.validation_report_id == original.validation_report_id
+        assert restored.meta == original.meta
+
+    def test_json_roundtrip(self) -> None:
+        """to_json → from_json preserves all fields."""
+        from datetime import UTC, datetime
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        original = ApprovedStrategy(
+            strategy_id="test",
+            version="v1",
+            approved_at=datetime.now(UTC),
+            approved_by="me",
+            weights={"F1": -0.1},
+        )
+        json_str = original.to_json()
+        restored = ApprovedStrategy.from_json(json_str)
+
+        assert restored.strategy_id == "test"
+        assert restored.weights == {"F1": -0.1}
+
+    def test_defaults(self) -> None:
+        """Minimal construction — defaults are reasonable."""
+        from datetime import UTC, datetime
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        s = ApprovedStrategy(
+            strategy_id="minimal",
+            version="v0",
+            approved_at=datetime.now(UTC),
+            approved_by="auto",
+        )
+        assert s.weights == {}
+        assert s.parameters == {}
+        assert s.backtest_summary == {}
+        assert s.validation_report_id == ""
+        assert s.factor_count == 0
+        assert s.top_n == 10  # default
+
+    def test_from_strategy_meta(self) -> None:
+        """from_strategy_meta extracts frozen fields from StrategyMeta."""
+        from qp.strategy.approved import ApprovedStrategy
+        from qp.strategy.registry import StrategyMeta
+
+        meta = StrategyMeta(
+            strategy_version="v20260731",
+            weights={"Amplitude_5D": -0.252, "Volatility_20D": 0.22},
+            parameters={"top_n": 10, "rebalance": 20, "industry_neutral": True},
+            backtest_ic=0.08,
+            backtest_sharpe=1.03,
+            backtest_max_dd=8.9,
+            backtest_excess_return=11.18,
+        )
+
+        approved = ApprovedStrategy.from_strategy_meta(
+            strategy_id="momentum_vol_full",
+            version="v20260731",
+            approved_by="researcher",
+            meta=meta,
+            validation_report_id="exp_001",
+        )
+
+        assert approved.strategy_id == "momentum_vol_full"
+        assert approved.weights == {"Amplitude_5D": -0.252, "Volatility_20D": 0.22}
+        assert approved.backtest_summary["ic"] == pytest.approx(0.08)
+        assert approved.backtest_summary["sharpe"] == pytest.approx(1.03)
+        assert approved.backtest_summary["max_dd"] == pytest.approx(8.9)
+        assert approved.backtest_summary["excess_return"] == pytest.approx(11.18)
+        assert approved.top_n == 10
+        assert approved.rebalance_freq == 20
+        assert approved.is_industry_neutral is True
+
+    def test_convenience_properties(self) -> None:
+        """top_n, rebalance_freq, is_industry_neutral work correctly."""
+        from datetime import UTC, datetime
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        s = ApprovedStrategy(
+            strategy_id="test",
+            version="v1",
+            approved_at=datetime.now(UTC),
+            approved_by="me",
+            parameters={
+                "top_n": 15,
+                "rebalance": 30,
+                "industry_neutral": False,
+            },
+        )
+        assert s.top_n == 15
+        assert s.rebalance_freq == 30
+        assert s.is_industry_neutral is False
+
+    def test_describe(self) -> None:
+        """describe() produces a human-readable summary."""
+        from datetime import UTC, datetime
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        s = ApprovedStrategy(
+            strategy_id="momentum_vol_full",
+            version="v20260731",
+            approved_at=datetime.now(UTC),
+            approved_by="researcher",
+            weights={"F1": -0.25, "F2": 0.15},
+            parameters={"top_n": 10, "rebalance": 20},
+            backtest_summary={"ic": 0.08, "sharpe": 1.03},
+        )
+        desc = s.describe()
+        assert "momentum_vol_full" in desc
+        assert "v20260731" in desc
+        assert "F1: -0.250" in desc
+        assert "IC=" in desc
+        assert "Sharpe=" in desc
+
+
+# ══════════════════════════════════════════════════════════════════
+# Registry Approved workflow — ADR-031 Step 3
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestRegistryApprovedWorkflow:
+    """Approve → persist → load_active → deactivate lifecycle."""
+
+    def test_approve_creates_snapshot(self) -> None:
+        """approve() creates ApprovedStrategy and sets APPROVED lifecycle."""
+        from qp.shared.types import StrategyLifecycle
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        meta = StrategyMeta(
+            weights={"F1": -0.25, "F2": 0.15},
+            parameters={"top_n": 10, "rebalance": 20},
+            backtest_sharpe=1.03,
+            backtest_ic=0.08,
+        )
+        strategy = SimpleRankStrategy(top_n=10)
+        registry.register(strategy, meta=meta)
+
+        approved = registry.approve("simple_rank_v1.0", approved_by="researcher")
+
+        from qp.strategy.approved import ApprovedStrategy
+
+        assert isinstance(approved, ApprovedStrategy)
+        assert approved.strategy_id == "simple_rank_v1.0"
+        assert approved.weights == {"F1": -0.25, "F2": 0.15}
+        assert approved.approved_by == "researcher"
+        assert registry.get_lifecycle("simple_rank_v1.0") == StrategyLifecycle.APPROVED
+
+    def test_approve_requires_weights(self) -> None:
+        """approve() raises if strategy meta has no weights."""
+        from qp.strategy.registry import StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        strategy = SimpleRankStrategy(top_n=5, strategy_id="test_no_weights_v1")
+        registry.register(strategy)
+
+        with pytest.raises(ValueError, match="weights"):
+            registry.approve("test_no_weights_v1", approved_by="me")
+
+    def test_load_active_after_approve(self) -> None:
+        """load_active() returns approved snapshots after approve()."""
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        meta = StrategyMeta(
+            weights={"F1": -0.1},
+            parameters={"top_n": 5},
+        )
+        registry.register(SimpleRankStrategy(top_n=5), meta=meta)
+        registry.approve("simple_rank_v1.0", approved_by="researcher")
+
+        active = registry.load_active()
+        assert len(active) == 1
+        assert active[0].strategy_id == "simple_rank_v1.0"  # type: ignore[union-attr]
+
+    def test_load_active_as_meta(self) -> None:
+        """load_active_as_meta() returns StrategyMeta for active approved strategies."""
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        meta = StrategyMeta(
+            weights={"F1": -0.1},
+            parameters={"top_n": 5},
+        )
+        registry.register(SimpleRankStrategy(top_n=5), meta=meta)
+        registry.approve("simple_rank_v1.0", approved_by="researcher")
+
+        metas = registry.load_active_as_meta()
+        assert len(metas) == 1
+        assert metas[0].weights == {"F1": -0.1}
+        assert metas[0].parameters == {"top_n": 5}
+
+    def test_deactivate(self) -> None:
+        """deactivate() reverts lifecycle and marks inactive."""
+        from qp.shared.types import StrategyLifecycle
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        meta = StrategyMeta(weights={"F1": -0.1})
+        registry.register(SimpleRankStrategy(top_n=5), meta=meta)
+        registry.approve("simple_rank_v1.0", approved_by="me")
+
+        registry.deactivate("simple_rank_v1.0")
+
+        assert registry.get_lifecycle("simple_rank_v1.0") == StrategyLifecycle.BACKTEST_PASSED
+        active = registry.load_active()
+        assert len(active) == 0
+        # Snapshot still exists for audit
+        assert registry.get_approved("simple_rank_v1.0") is not None
+
+    def test_get_approved(self) -> None:
+        """get_approved() returns snapshot or None."""
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry()
+        meta = StrategyMeta(weights={"F1": -0.1})
+        registry.register(SimpleRankStrategy(top_n=5), meta=meta)
+        registry.approve("simple_rank_v1.0", approved_by="me")
+
+        snap = registry.get_approved("simple_rank_v1.0")
+        assert snap is not None
+        assert snap.strategy_id == "simple_rank_v1.0"  # type: ignore[union-attr]
+
+        assert registry.get_approved("nonexistent") is None
+
+    def test_persistence_roundtrip(self) -> None:
+        """Approve → new Registry instance → load_active still works."""
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        # Register and approve
+        registry = StrategyRegistry()
+        meta = StrategyMeta(
+            weights={"F1": -0.25},
+            parameters={"top_n": 10, "rebalance": 20},
+            backtest_sharpe=1.03,
+        )
+        strategy = SimpleRankStrategy(top_n=10)
+        registry.register(strategy, meta=meta)
+        registry.approve("simple_rank_v1.0", approved_by="researcher")
+
+        # New instance reads from disk
+        registry2 = StrategyRegistry()
+        active = registry2.load_active()
+        assert len(active) == 1
+        assert active[0].strategy_id == "simple_rank_v1.0"  # type: ignore[union-attr]
+        assert active[0].weights == {"F1": -0.25}  # type: ignore[union-attr]
+        assert active[0].backtest_summary["sharpe"] == pytest.approx(1.03)  # type: ignore[union-attr]
+
+    def test_register_preserves_disk_metadata(self) -> None:
+        """Registering after disk-load preserves existing metadata."""
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        # First process: register, set weights, approve
+        registry = StrategyRegistry()
+        meta = StrategyMeta(weights={"F1": -0.5})
+        registry.register(SimpleRankStrategy(top_n=5), meta=meta)
+        registry.approve("simple_rank_v1.0", approved_by="me")
+
+        # Second process: re-register with strategy instance
+        registry2 = StrategyRegistry()
+        registry2.register(SimpleRankStrategy(top_n=5))  # no meta passed
+        # Should preserve weights from disk
+        meta2 = registry2.get_meta("simple_rank_v1.0")
+        assert meta2.weights == {"F1": -0.5}
