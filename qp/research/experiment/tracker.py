@@ -185,6 +185,16 @@ class ExperimentTracker(BaseExperimentTracker):
             record.status = status
             self._save_record(record)
 
+    def save_record(self, record: ExperimentRecord) -> None:
+        """Save a pre-built ExperimentRecord to the tracker.
+
+        This is the public API for persisting records built externally
+        (e.g. by ExperimentRunner). Prefer :meth:`log_experiment` for
+        simple cases — it builds the record from raw dicts.
+        """
+        self._save_record(record)
+        self._index[record.config.experiment_id] = record
+
     def delete(self, experiment_id: str) -> bool:
         """Delete an experiment record."""
         if experiment_id not in self._index:
@@ -225,12 +235,25 @@ class ExperimentTracker(BaseExperimentTracker):
                 continue
 
     def _deserialize(self, data: dict[str, Any]) -> ExperimentRecord | None:
-        """Reconstruct ExperimentRecord from JSON dict."""
+        """Reconstruct ExperimentRecord from JSON dict.
+
+        Only deserializes valid experiment records — files missing the
+        ``config`` key (e.g. GateResult JSON) are silently skipped.
+        """
         try:
-            cfg_data = data.get("config", {})
+            # Guard: must have a top-level "config" with a non-empty experiment_id
+            cfg_data = data.get("config")
+            if not isinstance(cfg_data, dict):
+                return None
+            experiment_id = data.get("experiment_id") or cfg_data.get("experiment_id", "")
+            if not experiment_id:
+                return None
+
             config = ExperimentConfig(
                 experiment_id=data.get("experiment_id", cfg_data.get("experiment_id", "")),
                 description=cfg_data.get("description", ""),
+                strategy_name=cfg_data.get("strategy_name", ""),
+                model_mode=cfg_data.get("model_mode", False),
                 dataset_version=cfg_data.get("dataset_version", ""),
                 features=cfg_data.get("features", []),
                 model_params=cfg_data.get("model_params", {}),
@@ -254,6 +277,7 @@ class ExperimentTracker(BaseExperimentTracker):
                 out_of_sample_ic=met_data.get("out_of_sample_ic", 0.0),
                 sharpe_ratio=met_data.get("sharpe_ratio", 0.0),
                 max_drawdown_pct=met_data.get("max_drawdown_pct", 0.0),
+                excess_return_pct=met_data.get("excess_return_pct", 0.0),
                 annual_return_pct=met_data.get("annual_return_pct", 0.0),
                 annual_volatility_pct=met_data.get("annual_volatility_pct", 0.0),
                 total_return_pct=met_data.get("total_return_pct", 0.0),

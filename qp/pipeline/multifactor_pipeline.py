@@ -118,7 +118,7 @@ class MultiFactorPipeline(BasePipeline):
         sell_buffer: int = int(params.get("sell_buffer_rank", 5))
         industry_neutral: bool = params.get("industry_neutral", False)
         orthogonalize: bool = params.get("orthogonalize", False)
-        dataset: str = params.get("dataset", "daily_price_main")
+        dataset: str = params.get("dataset", "daily_price_latest")
         strategy_name: str = params.get("strategy", "default")
         skip_gate: bool = params.get("skip_gate", False)
         model_mode: bool = params.get("model_mode", False)
@@ -192,6 +192,13 @@ class MultiFactorPipeline(BasePipeline):
             logger.error("数据获取失败: {}", e)
             result.status = PipelineStatus.FAILED
             result.errors.append(f"数据获取失败: {e}")
+            return result
+
+        if not price_data:
+            logger.error("数据为空 — 请检查数据集名称是否正确 (--dataset)")
+            logger.error("可用数据集: qp data 命令或查看 data/dataset/registry.json")
+            result.status = PipelineStatus.FAILED
+            result.errors.append("数据为空 — 数据集不存在或无数据")
             return result
 
         total_rows = sum(df.height for df in price_data.values())
@@ -615,6 +622,7 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["sharpe"] = bt["sharpe"]
         result.metrics["max_dd_pct"] = bt["max_dd_pct"]
         result.metrics["final_equity"] = bt["final_equity"]
+        result.metrics["n_trading_days"] = float(bt["n_trading_days"])
         result.metrics["n_trades"] = float(bt["n_trades"])
         result.metrics["total_cost"] = bt["total_cost"]
         result.metrics["stop_loss_hits"] = float(bt.get("stop_loss_hits", 0))
@@ -928,32 +936,43 @@ class MultiFactorPipeline(BasePipeline):
 
         # Resolve Gold path: try DatasetRegistry first, fallback to glob latest parquet
         gold_path = ""
+        registry = DatasetRegistry(base_dir="data/dataset")
         try:
-            registry = DatasetRegistry(base_dir="data/dataset")
             entry = registry.resolve(dataset, require_exists=True)
             gold_path = entry["path"]
             logger.info("    📂 Gold (Registry): {} (v{})", dataset, entry["version"])
         except KeyError:
-            # Fallback: glob the latest {dataset}_*.parquet from data/dataset/
             from pathlib import Path as _Path
 
-            pattern = f"data/dataset/{dataset}_*.parquet"
-            candidates = sorted(_Path().glob(pattern), reverse=True)
-            # Also check exact match without version suffix (e.g. daily_price_latest.parquet)
-            exact_path = _Path(f"data/dataset/{dataset}.parquet")
-            if exact_path.exists():
-                candidates.insert(0, exact_path)
-            for candidate in candidates:
-                if candidate.exists():
-                    gold_path = str(candidate)
-                    logger.info("    📂 Gold (direct): {}", candidate.name)
-                    break
-            else:
-                logger.error(
-                    "Gold 数据集未找到。请先运行 qp data fetch (glob pattern: {})",
-                    pattern,
-                )
-                return {}
+            # Fallback 1: "daily_price_latest" → "daily_price" @ "latest"
+            if dataset.endswith("_latest"):
+                base_name = dataset[: -len("_latest")]
+                try:
+                    entry = registry.resolve(base_name, version="latest", require_exists=True)
+                    gold_path = entry["path"]
+                    logger.info("    📂 Gold (Registry→latest): {} → {}@latest", dataset, base_name)
+                except KeyError:
+                    pass
+
+            # Fallback 2: direct file search
+            if not gold_path:
+                pattern = f"data/dataset/{dataset}_*.parquet"
+                candidates = sorted(_Path().glob(pattern), reverse=True)
+                # Also check exact match without version suffix (e.g. daily_price_latest.parquet)
+                exact_path = _Path(f"data/dataset/{dataset}.parquet")
+                if exact_path.exists():
+                    candidates.insert(0, exact_path)
+                for candidate in candidates:
+                    if candidate.exists():
+                        gold_path = str(candidate)
+                        logger.info("    📂 Gold (direct): {}", candidate.name)
+                        break
+                else:
+                    logger.error(
+                        "Gold 数据集未找到。请先运行 qp data fetch (glob pattern: {})",
+                        pattern,
+                    )
+                    return {}
 
         df_all = pl.read_parquet(gold_path)
 
@@ -1263,6 +1282,17 @@ class MultiFactorPipeline(BasePipeline):
 
         tracker = ExperimentTracker()
         experiment_id = f"multifactor_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
+
+        # Compute annualized metrics from backtest results
+        total_ret = float(result.metrics.get("total_return_pct", 0.0))
+        sharpe = float(result.metrics.get("sharpe", 0.0))
+        n_trading_days = int(result.metrics.get("n_trading_days", 0))
+        n_years = n_trading_days / 252 if n_trading_days > 0 else 0
+
+        # CAGR: (1 + total_ret)^(1/n_years) - 1
+        annual_ret = (((1 + total_ret / 100) ** (1 / n_years)) - 1) * 100 if n_years > 0 else 0.0
+        annual_vol = abs(annual_ret / sharpe) if sharpe != 0 and annual_ret != 0 else 0.0
+
         tracker.log_experiment(
             experiment_id=experiment_id,
             config={
@@ -1284,12 +1314,15 @@ class MultiFactorPipeline(BasePipeline):
             metrics={
                 "ic_mean": float(result.metrics.get("ic_mean", 0.0)),
                 "ic_ir": float(result.metrics.get("ic_ir", 0.0)),
-                "sharpe_ratio": float(result.metrics.get("sharpe", 0.0)),
+                "ic_t_stat": float(result.metrics.get("ic_t_stat", 0.0)),
+                "sharpe_ratio": sharpe,
                 "max_drawdown_pct": float(result.metrics.get("max_dd_pct", 0.0)),
-                "total_return_pct": float(result.metrics.get("total_return_pct", 0.0)),
+                "total_return_pct": total_ret,
                 "excess_return_pct": float(result.metrics.get("excess_return_pct", 0.0)),
-                "annual_return_pct": 0.0,
-                "annual_volatility_pct": 0.0,
+                "annual_return_pct": round(annual_ret, 2),
+                "annual_volatility_pct": round(annual_vol, 2),
+                "n_days": n_trading_days,
+                "n_trades": int(result.metrics.get("n_trades", 0)),
             },
             lineage_graph={
                 "dataset": f"{dataset}@{start_date}",

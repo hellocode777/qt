@@ -6,46 +6,41 @@ import sys
 
 def cmd_experiment_compare() -> int:
     """Compare recent experiments side-by-side."""
-    import json
-    from pathlib import Path
+    from qp.research.experiment import ExperimentTracker
 
-    exp_dir = Path("data/experiments")
-    if not exp_dir.exists():
-        print("无实验目录")
-        return 1
+    tracker = ExperimentTracker()
+    records = tracker.list_experiments()
 
-    # Collect experiment metrics from JSON files
+    if not records:
+        print("无实验记录")
+        return 0
+
+    # Build comparison rows from tracker records
+    import math
+
     experiments = []
-    for f in sorted(exp_dir.glob("multifactor_*.json"), reverse=True):
-        try:
-            data = json.loads(f.read_text())
-            cfg = data.get("config", {})
-            metrics = data.get("metrics", {})
-
-            experiments.append(
-                {
-                    "id": data.get("experiment_id", f.stem),
-                    "strategy": cfg.get("strategy_name", "?"),
-                    "n_factors": len(cfg.get("features", [])),
-                    "model": "ML" if cfg.get("model_mode") else "线性",
-                    "ic_mean": metrics.get("ic_mean", float("nan")),
-                    "ic_ir": metrics.get("ic_ir", float("nan")),
-                    "sharpe": metrics.get("sharpe_ratio", float("nan")),
-                    "total_return": metrics.get("total_return_pct", float("nan")),
-                    "max_dd": metrics.get("max_drawdown_pct", float("nan")),
-                    "excess_return": metrics.get("excess_return_pct", float("nan")),
-                    "status": data.get("status", "?"),
-                }
-            )
-        except (json.JSONDecodeError, KeyError):
-            continue
+    for r in records:
+        cfg = r.config
+        m = r.metrics
+        experiments.append(
+            {
+                "id": cfg.experiment_id,
+                "strategy": cfg.strategy_name or "?",
+                "n_factors": len(cfg.features),
+                "model": "ML" if cfg.model_mode else "线性",
+                "ic_mean": m.ic_mean,
+                "ic_ir": m.ic_ir,
+                "sharpe": m.sharpe_ratio,
+                "total_return": m.total_return_pct,
+                "max_dd": m.max_drawdown_pct,
+                "excess_return": m.excess_return_pct,
+                "status": r.status.value,
+            }
+        )
 
     if not experiments:
         print("无实验记录")
         return 0
-
-    # Print comparison table
-    import math
 
     def _fmt(val: float, suffix: str = "", width: int = 7) -> str:
         if val is None or (isinstance(val, float) and math.isnan(val)):
@@ -67,7 +62,6 @@ def cmd_experiment_compare() -> int:
 
     print()
     print(f"共 {len(experiments)} 个实验, 显示最近 20 个")
-    print("  ? = 旧格式实验 (缺少 strategy_name/excess_return)")
     return 0
 
 
@@ -155,23 +149,22 @@ def cmd_experiment_list() -> int:
     return 0
 
 
-def cmd_experiment_show() -> int:
+def cmd_experiment_show(experiment_id: str | None = None) -> int:
     """Show experiment details."""
-    if len(sys.argv) < 3:
+    if not experiment_id:
         print("用法: qp experiment show <experiment_id>")
         return 1
 
     from qp.research.experiment import ExperimentTracker
 
-    exp_id = sys.argv[2]
     tracker = ExperimentTracker()
-    record = tracker.get(exp_id)
+    record = tracker.get(experiment_id)
 
     if record is None:
-        print(f"实验 {exp_id} 未找到 / Experiment not found")
+        print(f"实验 {experiment_id} 未找到 / Experiment not found")
         return 1
 
-    print(f"=== 实验详情 / Experiment: {exp_id} ===")
+    print(f"=== 实验详情 / Experiment: {experiment_id} ===")
     print()
     print(f"  状态 / Status:       {record.status.value}")
     print(f"  创建时间 / Created:   {record.config.created_at.isoformat()}")
@@ -225,7 +218,6 @@ def cmd_experiment_run() -> int:
         print("    --rebalance 20               Rebalance frequency (days)", file=sys.stderr)
         print("    --industry-neutral           Enable industry neutralization", file=sys.stderr)
         print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
-        print("    --dataset daily_price_main   Gold dataset name", file=sys.stderr)
         print(
             "    --score-band 60-80          Score percentile band (Q4 sweet spot)",
             "    --score-band auto            Auto-search all bands and compare",
@@ -287,10 +279,14 @@ def cmd_experiment_run() -> int:
             params["strategy"] = args[i]
         elif arg.startswith("--quality-filter="):
             params["quality_filter"] = arg.split("=", 1)[1].lower() in ("true", "1", "yes")
+        elif arg == "--quality-filter" and i + 1 < len(args):
+            i += 1
+            params["quality_filter"] = args[i].lower() in ("true", "1", "yes")
         elif arg.startswith("--quality-min-roe="):
             params["quality_min_roe"] = float(arg.split("=", 1)[1])
-        elif arg.startswith("--dataset="):
-            params["dataset"] = arg.split("=", 1)[1]
+        elif arg == "--quality-min-roe" and i + 1 < len(args):
+            i += 1
+            params["quality_min_roe"] = float(args[i])
         elif arg.startswith("--score-band="):
             params["score_band"] = arg.split("=", 1)[1]
         elif arg == "--score-band" and i + 1 < len(args):
@@ -368,15 +364,13 @@ def cmd_experiment_run() -> int:
 
     return 0
 
-def cmd_experiment_validate() -> int:
+def cmd_experiment_validate(experiment_id: str | None = None) -> int:
     """Validate an experiment against Layer 5 Gate criteria."""
-    if len(sys.argv) < 4:
+    if not experiment_id:
         print("qp experiment validate <experiment_id>", file=sys.stderr)
         print("  Loads a completed experiment and runs the full Layer 5", file=sys.stderr)
         print("  Validation Gate, printing a structured report.", file=sys.stderr)
         return 1
-
-    experiment_id = sys.argv[3]
 
     from qp.research.experiment.tracker import ExperimentTracker
 

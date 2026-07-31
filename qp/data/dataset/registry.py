@@ -88,8 +88,7 @@ class DatasetRegistry:
             if entry is None:
                 raise KeyError(f"Dataset not found: {key}")
             if require_exists:
-                path = Path(str(entry["path"]))
-                full_path = path if path.is_absolute() else self._base_dir / path
+                full_path = _resolve_file_path(entry, self._base_dir)
                 if not full_path.exists():
                     raise KeyError(f"Dataset file not found: {full_path} (registry entry: {key})")
             return entry
@@ -105,8 +104,7 @@ class DatasetRegistry:
 
         # Skip entries whose file doesn't exist
         for _key, entry in matching:
-            path = Path(str(entry["path"]))
-            full_path = path if path.is_absolute() else self._base_dir / path
+            full_path = _resolve_file_path(entry, self._base_dir)
             if full_path.exists():
                 return entry
 
@@ -124,8 +122,7 @@ class DatasetRegistry:
         removed = 0
         stale_keys: list[str] = []
         for key, entry in self._entries.items():
-            path = Path(str(entry["path"]))
-            full_path = path if path.is_absolute() else self._base_dir / path
+            full_path = _resolve_file_path(entry, self._base_dir)
             if not full_path.exists():
                 stale_keys.append(key)
 
@@ -231,3 +228,32 @@ class DatasetRegistry:
     def __contains__(self, name: str) -> bool:
         matching = [v for v in self._entries.values() if v["name"] == name]
         return len(matching) > 0
+
+
+# ------------------------------------------------------------------
+# Internal helpers
+# ------------------------------------------------------------------
+
+
+def _resolve_file_path(entry: dict[str, object], base_dir: str | Path) -> Path:
+    """Resolve the real file path for a registry entry.
+
+    Handles the case where the stored path already includes the
+    ``base_dir`` prefix (e.g. ``data/dataset/daily_price_latest.parquet``
+    stored with ``base_dir="data/dataset"``).
+    """
+    from pathlib import Path as _P
+
+    base = _P(str(base_dir))
+    path = _P(str(entry.get("path", "")))
+    if path.is_absolute():
+        return path
+    # Try as-is first (may already include base_dir relative to CWD)
+    if path.exists():
+        return path
+    # Fallback: prepend base_dir
+    joined = base / path
+    if joined.exists():
+        return joined
+    # Neither exists — return the joined version for caller to handle
+    return joined

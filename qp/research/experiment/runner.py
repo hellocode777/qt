@@ -82,10 +82,7 @@ class ExperimentRunner:
             tags=tags or [],
         )
 
-        # Compute evaluation metrics
-        metrics = self._evaluate(feature_df, price_df, experiment_id)
-
-        # Build lineage
+        # Build initial lineage
         lineage = LineageGraph(
             dataset_name="daily_price",
             dataset_version=dataset_version,
@@ -95,17 +92,23 @@ class ExperimentRunner:
             strategy_id=experiment_id,
         )
 
+        # Phase 1: Register as CREATED
         record = ExperimentRecord(
             config=config,
-            metrics=metrics,
+            metrics=ExperimentMetrics(experiment_id=experiment_id),
             lineage=lineage,
-            status=ExperimentStatus.COMPLETED,
-            completed_at=datetime.now(UTC),
+            status=ExperimentStatus.CREATED,
         )
+        self._tracker.save_record(record)
 
-        # Save to tracker
-        self._tracker._save_record(record)
-        self._tracker._index[experiment_id] = record
+        # Phase 2: Compute evaluation metrics
+        metrics = self._evaluate(feature_df, price_df, experiment_id)
+
+        # Phase 3: Mark COMPLETED
+        record.metrics = metrics
+        record.status = ExperimentStatus.COMPLETED
+        record.completed_at = datetime.now(UTC)
+        self._tracker.save_record(record)
 
         return record
 
