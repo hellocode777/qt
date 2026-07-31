@@ -7,6 +7,7 @@ and data source health.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -109,10 +110,8 @@ class DataQualityService:
         qr: Any = None
         report_path = Path("data/reports") / f"data_quality_{today_str}.json"
         if report_path.exists():
-            try:
+            with contextlib.suppress(Exception):
                 qr = json.loads(report_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
 
         # 4. Fallback: if no today data from parquet, try report
         if today_rows == 0 and qr:

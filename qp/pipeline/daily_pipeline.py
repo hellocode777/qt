@@ -280,6 +280,8 @@ class DailyPipeline(BasePipeline):
             alloc_method = context.parameters.get("allocator", "equal_weight")
             today = date.today()
             run_id_short = context.run_id[:8] if context.run_id else "unknown"
+            # V2.1: 调仓日 = 每月前5个自然日（近似每月第一个交易周）
+            is_rebalance_day = today.day <= 5
 
             # ================================================================
             # Step 0: System state check (#8 fix)
@@ -354,6 +356,8 @@ class DailyPipeline(BasePipeline):
             result.metadata["dataset_version"] = lineage_snapshot.dataset_version
 
             # ================================================================
+            result.metadata["is_rebalance_day"] = str(is_rebalance_day)
+
             # Step 5: Market regime detection
             # ================================================================
             regime_label = "neutral"
@@ -542,6 +546,7 @@ class DailyPipeline(BasePipeline):
                         "pipeline_run_id": context.run_id,
                         "quality_gate": "BLOCKED",
                         "avg_validation_score": str(avg_validation_score),
+                        "is_rebalance_day": str(is_rebalance_day),
                     },
                 )
                 json_path = package.to_json()
@@ -742,10 +747,10 @@ class DailyPipeline(BasePipeline):
                 result.metrics["estimated_cost_pct"] = round(total_impact / total_capital * 100, 4)
 
             # ================================================================
-            # Step 12: Capital allocation (Layer 8 engine)
+            # Step 12: Capital allocation (Layer 8 engine) — only on rebalance day
             # ================================================================
             orders: list[Order] = []
-            if not filtered_signals.is_empty():
+            if is_rebalance_day and not filtered_signals.is_empty():
                 # Build candidates DataFrame for CapitalAllocator
                 # CapitalAllocator expects pandas with columns:
                 #   [symbol, alpha_score, risk_cluster, max_weight_limit,
@@ -826,8 +831,6 @@ class DailyPipeline(BasePipeline):
             holdings: dict[str, int | float] = {}
             cost_basis: dict[str, float] = {}
             current_prices: dict[str, float] = {}
-            # V2.1: rebalance day = first trading day of month (or forced)
-            is_rebalance_day = today.day <= 5  # Approximate: first week of month
             TARGET_TOP_N = effective_top_n if effective_top_n > 0 else 10
             SELL_BUFFER_RANK = TARGET_TOP_N * 2  # V2.1: Buy Top10, Buffer 11-20, Sell >20
 
@@ -858,6 +861,18 @@ class DailyPipeline(BasePipeline):
                             if sym in holdings:
                                 current_prices[sym] = float(row["close"])
 
+                    # Build volume data for liquidity risk check
+                    volume_data: dict[str, list[float]] = {}
+                    if not prices.is_empty() and "volume" in prices.columns:
+                        for sym in holdings:
+                            sym_vol = (
+                                prices.filter(pl.col("symbol") == sym)
+                                .sort("trade_date", descending=True)
+                                .head(20)  # 20-day lookback for avg volume
+                            )
+                            if not sym_vol.is_empty():
+                                volume_data[sym] = sym_vol["volume"].to_list()
+
                     # ── V2.1: Per-symbol exit signal collector ──
                     # {symbol: {reasons: set, details: list, priority: Priority}}
                     exit_map: dict[str, dict[str, Any]] = {}
@@ -881,6 +896,7 @@ class DailyPipeline(BasePipeline):
                             prices=current_prices,
                             cost_basis=cost_basis,
                             date_str=today.isoformat(),
+                            volume_data=volume_data if volume_data else None,
                         )
                         for es in risk_signals:
                             for r in es.reasons:
@@ -911,6 +927,49 @@ class DailyPipeline(BasePipeline):
                                 # In buffer zone — hold, don't sell
                                 pass
                         result.metrics["rank_exit_checked"] = len(active_positions)
+
+                    # ── 第三类：Sector overconcentration — 行业超配退出 (仅调仓日) ──
+                    if is_rebalance_day and active_positions:
+                        try:
+                            from qp.portfolio.industry import IndustryMapper
+
+                            im = IndustryMapper()
+                            SECTOR_OVERWEIGHT_THRESHOLD = 0.40  # 单一行业超配阈值
+
+                            # Group active positions by sector
+                            sector_positions: dict[str, list] = {}
+                            for pos in active_positions:
+                                industry = im.get_sector(pos.symbol)
+                                sector_positions.setdefault(industry, []).append(pos)
+
+                            # Compute total portfolio value
+                            total_value = sum(
+                                pos.shares * current_prices.get(pos.symbol, 0)
+                                for pos in active_positions
+                            )
+                            if total_value > 0:
+                                for sector, sps in sector_positions.items():
+                                    sector_value = sum(
+                                        p.shares * current_prices.get(p.symbol, 0)
+                                        for p in sps
+                                    )
+                                    sector_wt = sector_value / total_value
+                                    if sector_wt > SECTOR_OVERWEIGHT_THRESHOLD:
+                                        # Flag ALL positions in overweight sector for review
+                                        for p in sps:
+                                            _add_exit(
+                                                p.symbol,
+                                                TradeReason.SECTOR_OVERWEIGHT,
+                                                f"行业「{sector}」超配 {sector_wt:.0%} (阈值 {SECTOR_OVERWEIGHT_THRESHOLD:.0%})",
+                                                Priority.LOW,
+                                            )
+                                        logger.info(
+                                            "Sector exit: {} overweight at {:.0%} ({} symbols)",
+                                            sector, sector_wt, len(sps),
+                                        )
+                            result.metrics["sector_exit_checked"] = len(sector_positions)
+                        except Exception as exc:
+                            logger.debug("Sector exit check skipped: {}", exc)
 
                     # ── 第三类：Fundamental deterioration (仅调仓日) ──
                     if is_rebalance_day and active_positions and fundamental_data:
@@ -1009,12 +1068,13 @@ class DailyPipeline(BasePipeline):
             )
 
             # Generate DecisionReport via DecisionEngine
+            # V2.1: Portfolio Manager only runs on rebalance days → BUY only on 调仓日
             decision_report = DecisionReport(
                 report_id=f"dr-{run_id_short}",
                 strategy_id="multi_strategy_ensemble",
                 total_capital=total_capital,
             )
-            if not filtered_signals.is_empty() and not prices.is_empty():
+            if is_rebalance_day and not filtered_signals.is_empty() and not prices.is_empty():
                 # Use only latest price per symbol (avoid stale historical prices)
                 latest_prices = (
                     prices.sort("trade_date", descending=True)
@@ -1032,6 +1092,10 @@ class DailyPipeline(BasePipeline):
                     )
                 except Exception as exc:
                     logger.warning("DecisionEngine failed: {}", exc)
+            elif not is_rebalance_day:
+                logger.info(
+                    "非调仓日 — 跳过 BUY 信号生成 (Only Risk/Rank Exit runs daily)"
+                )
 
             # P3.1: Append exit engine SELL recommendations
             if sell_recommendations:
@@ -1063,6 +1127,7 @@ class DailyPipeline(BasePipeline):
                     "pipeline_run_id": context.run_id,
                     "allocator_used": str(result.metadata.get("allocator_used", "equal_weight")),
                     "strategy_health_count": str(len(strategy_health_data)),
+                    "is_rebalance_day": str(is_rebalance_day),
                 },
             )
 

@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-30T14:10:16.979481+00:00",
+  "updated_at": "2026-07-31T00:16:15.383558+00:00",
   "base_dir": "data/dataset",
   "entries": {
     "daily_price@2026-07-27": {
@@ -40,21 +40,21 @@
       "version": "latest",
       "path": "data/dataset/daily_price_latest.parquet",
       "metadata": {
-        "start_date": "2015-01-05",
-        "end_date": "2026-07-30",
-        "rows": 7185285,
-        "symbols": 3051,
-        "sha256": "20ab3e00d38bf5bf",
-        "updated_at": "2026-07-30T10:12:52.189309+00:00",
+        "start_date": "2026-07-27",
+        "end_date": "2026-07-31",
+        "rows": 15375,
+        "symbols": 3075,
+        "sha256": "7d7b85d7fa7576d3",
+        "updated_at": "2026-07-31T00:14:31.904854+00:00",
         "status": "READY",
         "validation": {
           "passed": 7,
           "failed": 0
         },
-        "pipeline_run_id": "938ad0080c6c",
-        "source": "sina"
+        "pipeline_run_id": "bb426f79b9a4",
+        "source": "demo"
       },
-      "registered_at": "2026-07-30T10:12:52.189340+00:00"
+      "registered_at": "2026-07-31T00:14:31.904871+00:00"
     },
     "test_ds@2026-07-30": {
       "name": "test_ds",
@@ -82,6 +82,33 @@
         "version": "2026-07-30"
       },
       "registered_at": "2026-07-30T14:10:16.979468+00:00"
+    },
+    "test_ds@2026-07-31": {
+      "name": "test_ds",
+      "version": "2026-07-31",
+      "path": "data/dataset/test_ds_2026-07-31.parquet",
+      "metadata": {
+        "name": "test_ds",
+        "owner": "me",
+        "source": "demo",
+        "schema": {
+          "trade_date": "date",
+          "symbol": "str"
+        },
+        "frequency": "daily",
+        "primary_key": [
+          "trade_date",
+          "symbol"
+        ],
+        "timezone": "Asia/Shanghai",
+        "coverage_start": "2024-01-01",
+        "coverage_end": "2024-01-05",
+        "pit_confidence": "high",
+        "update_policy": "daily_append",
+        "validation_rules": [],
+        "version": "2026-07-31"
+      },
+      "registered_at": "2026-07-31T00:16:15.383545+00:00"
     }
   }
 }

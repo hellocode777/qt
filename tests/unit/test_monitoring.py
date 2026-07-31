@@ -1574,8 +1574,8 @@ class TestStrategyHealthLogger:
     """Test StrategyHealthLogger persistence and health computation."""
 
     def test_record_and_check_basic(self, tmp_path) -> None:
-        from qp.monitoring.strategy_health_logger import StrategyHealthLogger, MONITORING_DIR
-        import os
+
+        from qp.monitoring.strategy_health_logger import MONITORING_DIR, StrategyHealthLogger
         original_dir = str(MONITORING_DIR)
         try:
             # Redirect to temp dir
@@ -1603,8 +1603,9 @@ class TestStrategyHealthLogger:
             mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
 
     def test_persistence_across_runs(self, tmp_path) -> None:
-        import qp.monitoring.strategy_health_logger as mod
         from pathlib import Path
+
+        import qp.monitoring.strategy_health_logger as mod
 
         original_dir = str(mod.MONITORING_DIR)
         try:
@@ -1662,7 +1663,7 @@ class TestStrategyHealthLogger:
 
     def test_health_to_dict(self) -> None:
         from qp.monitoring.strategy_health_logger import StrategyHealthLogger
-        from qp.monitoring.strategy_monitor import StrategyHealth, HealthLevel
+        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
 
         health = StrategyHealth(
             strategy_id="test",
@@ -1758,6 +1759,7 @@ class TestStrategyHealthPipelineIntegration:
     def test_health_saved_to_parquet(self, tmp_path) -> None:
         """Verify health records are persisted to parquet."""
         import polars as pl
+
         import qp.monitoring.strategy_health_logger as mod
 
         original_dir = str(mod.MONITORING_DIR)
@@ -1766,7 +1768,7 @@ class TestStrategyHealthPipelineIntegration:
             mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
 
             logger = mod.StrategyHealthLogger()
-            h = logger.record_and_check(
+            logger.record_and_check(
                 strategy_id="persist_check",
                 date="2026-07-30",
                 n_signals=8,
@@ -1787,6 +1789,7 @@ class TestStrategyHealthPipelineIntegration:
     def test_signals_saved_to_parquet(self, tmp_path) -> None:
         """Verify signal records are persisted for history loading."""
         import polars as pl
+
         import qp.monitoring.strategy_health_logger as mod
 
         original_dir = str(mod.MONITORING_DIR)
@@ -1909,7 +1912,6 @@ class TestStrategyHealthReport:
 
     def test_trend_computation_improving(self) -> None:
         from qp.monitoring.strategy_health_report import (
-            StrategyHealthReport,
             _compute_trend,
         )
         from qp.monitoring.strategy_monitor import StrategyHealth
@@ -2216,6 +2218,7 @@ class TestAlphaDecayDetector:
 
     def test_top_n_symbols_with_rank_column(self) -> None:
         import polars as pl
+
         from qp.portfolio.alpha_decay import top_n_symbols
 
         df = pl.DataFrame({
@@ -2227,6 +2230,7 @@ class TestAlphaDecayDetector:
 
     def test_top_n_symbols_with_score_column(self) -> None:
         import polars as pl
+
         from qp.portfolio.alpha_decay import top_n_symbols
 
         df = pl.DataFrame({
@@ -2238,6 +2242,7 @@ class TestAlphaDecayDetector:
 
     def test_top_n_symbols_empty(self) -> None:
         import polars as pl
+
         from qp.portfolio.alpha_decay import top_n_symbols
 
         assert top_n_symbols(None, top_n=10) == set()
@@ -2250,11 +2255,14 @@ class TestAlphaDecayDetector:
             pass
 
         p1 = MockPos()
-        p1.symbol = "A"; p1.is_active = True
+        p1.symbol = "A"
+        p1.is_active = True
         p2 = MockPos()
-        p2.symbol = "B"; p2.is_active = True
+        p2.symbol = "B"
+        p2.is_active = True
         p3 = MockPos()
-        p3.symbol = "C"; p3.is_active = False  # Inactive
+        p3.symbol = "C"
+        p3.is_active = False  # Inactive
 
         detector = AlphaDecayDetector()
         exits = detector.check(
@@ -2270,6 +2278,7 @@ class TestFundamentalExitDetector:
 
     def test_roe_decline_triggers_exit(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:
@@ -2293,6 +2302,7 @@ class TestFundamentalExitDetector:
 
     def test_stable_fundamentals_no_signal(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:
@@ -2314,6 +2324,7 @@ class TestFundamentalExitDetector:
 
     def test_revenue_growth_negative(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:
@@ -2336,6 +2347,7 @@ class TestFundamentalExitDetector:
 
     def test_net_profit_decline(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:
@@ -2358,6 +2370,7 @@ class TestFundamentalExitDetector:
 
     def test_debt_ratio_increase(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:
@@ -2379,6 +2392,7 @@ class TestFundamentalExitDetector:
 
     def test_insufficient_data_no_signal(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:
@@ -2413,6 +2427,7 @@ class TestFundamentalExitDetector:
 
     def test_inactive_position_skipped(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:
@@ -2433,6 +2448,7 @@ class TestFundamentalExitDetector:
 
     def test_multiple_deterioration_reasons(self) -> None:
         import polars as pl
+
         from qp.portfolio.exit_signals import FundamentalExitDetector
 
         class MockPos:

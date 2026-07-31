@@ -1295,7 +1295,7 @@ class TestPositionLedger:
 
             ledger = mod.PositionLedger()
             p1 = ledger.open("A", 10.0, 100, decision_id="dp-x")
-            p2 = ledger.open("B", 20.0, 200, decision_id="dp-x")
+            ledger.open("B", 20.0, 200, decision_id="dp-x")
             ledger.close(p1.position_id, 12.0)
 
             active = ledger.get_active()
@@ -1386,9 +1386,9 @@ class TestPositionLedger:
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
 
     def test_open_from_decision(self, tmp_path) -> None:
+        import qp.decision.position_ledger as mod
         from qp.decision.decision_package import DecisionPackage
         from qp.decision.models import TradeRecommendation
-        import qp.decision.position_ledger as mod
 
         original_dir = str(mod.POSITIONS_DIR)
         try:
