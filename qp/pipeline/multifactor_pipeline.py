@@ -1280,30 +1280,42 @@ class MultiFactorPipeline(BasePipeline):
             # Check for rebalance signals on this date
             day_signals = signals.filter(pl.col("date") == d_str)
             if not day_signals.is_empty():
-                # Liquidate remaining positions (risk exits already handled)
                 positions_df = broker.get_positions()
                 n_positions_before = len(positions_df)
-                if not positions_df.empty:
+
+                # ── Phase 1: Sell only SELL-signaled stocks ──
+                # Previous behaviour liquidated ALL positions, but
+                # generate_rebalance_signals only emits BUY for *new*
+                # Top-N entries (not re-buys of existing holdings).
+                # Selling everything → 0 buy candidates on later rebalances
+                # because the "bought" set never resets.
+                sells = day_signals.filter(pl.col("signal") == "sell")
+                sell_symbols: set[str] = set(sells["symbol"].to_list())
+                n_sells_submitted = 0
+                if sell_symbols and not positions_df.empty:
                     for _, row in positions_df.iterrows():
-                        shares = int(float(row["shares"]))  # type: ignore[arg-type]
-                        if shares > 0:
-                            broker.submit_order(
-                                {
-                                    "symbol": str(row["symbol"]),
-                                    "side": "SELL",
-                                    "quantity": shares,
-                                    "order_type": "market",
-                                }
-                            )
+                        sym = str(row["symbol"])
+                        if sym in sell_symbols:
+                            shares = int(float(row["shares"]))  # type: ignore[arg-type]
+                            if shares > 0:
+                                broker.submit_order(
+                                    {
+                                        "symbol": sym,
+                                        "side": "SELL",
+                                        "quantity": shares,
+                                        "order_type": "market",
+                                    }
+                                )
+                                n_sells_submitted += 1
 
                 # Execute sells immediately to free up cash for buy orders
-                # (otherwise submit_order(BUY) fails cash check because
-                #  liquidation proceeds haven't been realized yet)
-                sell_trades = broker.execute_pending()
-                total_trades += len(sell_trades)
-                for st in sell_trades:
-                    if st.side == "SELL":
-                        total_sell_value += float(st.price) * st.shares
+                sell_trades: list[Any] = []
+                if n_sells_submitted > 0:
+                    sell_trades = broker.execute_pending()
+                    total_trades += len(sell_trades)
+                    for st in sell_trades:
+                        if st.side == "SELL":
+                            total_sell_value += float(st.price) * st.shares
 
                 # Clamp negative cash (rounding residual from prior buys)
                 cash_now = broker.get_cash()
@@ -1314,21 +1326,23 @@ class MultiFactorPipeline(BasePipeline):
                     )
                     broker._cash = 0.0
 
-                # Buy new top-N positions (equal weight)
+                # ── Phase 2: Buy BUY-signaled stocks ──
                 buys = day_signals.filter(pl.col("signal") == "buy")
                 buy_symbols = buys["symbol"].to_list()
+                n_after_sells = len(broker.get_positions())
+                target_n = n_after_sells + len(buy_symbols)
                 logger.debug(
-                    "   🔄 {} 调仓: {}持仓→{}卖出→{}买入候选 (现金¥{:,.0f})",
+                    "   🔄 {} 调仓: {}持仓→{}卖出→{}买入→目标{}只 (现金¥{:,.0f})",
                     d_str,
                     n_positions_before,
                     len(sell_trades),
                     len(buy_symbols),
+                    target_n,
                     broker.get_cash(),
                 )
                 if buy_symbols:
                     current_equity = broker.get_equity()
-                    n_positions = len(buy_symbols)
-                    per_stock = current_equity / n_positions
+                    per_stock = current_equity / max(target_n, 1)
 
                     for sym in buy_symbols:
                         px = price_map.get(sym, 0.0)
