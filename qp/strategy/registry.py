@@ -170,13 +170,14 @@ class StrategyRegistry:
         # → ValueError if lineage is incomplete
     """
 
-    def __init__(self) -> None:
+    def __init__(self, registry_path: Path | str | None = None) -> None:
         self._strategies: dict[str, BaseStrategy] = {}
         self._lifecycles: dict[str, StrategyLifecycle] = {}
         self._metadata: dict[str, StrategyMeta] = {}
         self._approved: dict[str, object] = {}  # ApprovedStrategy snapshots (ADR-031)
         self._active_versions: dict[str, bool] = {}  # Which versions are active
         self._lineage_registry: LineageRegistry | None = None
+        self._registry_file: Path = Path(registry_path) if registry_path else _REGISTRY_FILE
         self._load()
 
     # ------------------------------------------------------------------
@@ -185,10 +186,10 @@ class StrategyRegistry:
 
     def _load(self) -> None:
         """Load lifecycle, metadata, and approved snapshots from disk."""
-        if not _REGISTRY_FILE.exists():
+        if not self._registry_file.exists():
             return
         try:
-            data = json.loads(_REGISTRY_FILE.read_text())
+            data = json.loads(self._registry_file.read_text())
             for sid, entry in data.get("strategies", {}).items():
                 lifecycle_raw = entry.get("lifecycle", "research")
                 try:
@@ -221,8 +222,8 @@ class StrategyRegistry:
                 entry["approved"] = self._approved[sid]
             data[sid] = entry
         try:
-            _REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _REGISTRY_FILE.write_text(json.dumps(
+            self._registry_file.parent.mkdir(parents=True, exist_ok=True)
+            self._registry_file.write_text(json.dumps(
                 {"strategies": data}, ensure_ascii=False, indent=2,
             ))
         except OSError:

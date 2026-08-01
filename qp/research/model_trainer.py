@@ -586,8 +586,9 @@ class WalkForwardScorer:
         valid = np.isfinite(predictions) & np.isfinite(targets)
         if valid.sum() < 5:
             return 0.0
-        corr, _ = spearmanr(predictions[valid], targets[valid])
-        return float(corr)
+        result: Any = spearmanr(predictions[valid], targets[valid])
+        corr: float = float(result.statistic if hasattr(result, 'statistic') else result[0])
+        return corr
 
     @property
     def latest_model_id(self) -> str:

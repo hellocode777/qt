@@ -2678,7 +2678,7 @@ class TestApprovedStrategy:
             approved_at=datetime.now(UTC),
             approved_by="me",
         )
-        with pytest.raises(Exception):  # FrozenInstanceError or AttributeError
+        with pytest.raises((TypeError, AttributeError, ValueError)):
             s.strategy_id = "hacked"  # type: ignore[misc]
 
     def test_serialization_roundtrip(self) -> None:
