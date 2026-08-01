@@ -1,7 +1,7 @@
-# QP (Quant Platform) 使用指南
+# QP (Quant Platform) 用户指南
 
 > 个人量化研究与投资决策操作系统
-> 更新日期：2026-07-23
+> 更新日期：2026-08-01
 
 ---
 
@@ -10,17 +10,20 @@
 1. [快速开始](#1-快速开始)
 2. [环境诊断](#2-环境诊断)
 3. [数据获取](#3-数据获取)
-4. [核心工作流](#4-核心工作流)
-5. [组合与风控](#5-组合与风控)
-6. [监控体系](#6-监控体系)
-7. [模型管理](#7-模型管理)
-8. [实验追踪与知识库](#8-实验追踪与知识库)
-9. [模拟交易](#9-模拟交易)
-10. [自动化调度](#10-自动化调度)
-11. [全命令速查表](#11-全命令速查表)
-12. [典型工作流](#12-典型工作流)
-13. [配置说明](#13-配置说明)
-14. [项目架构](#14-项目架构)
+4. [投资策略规则](#4-投资策略规则)
+5. [核心工作流](#5-核心工作流)
+6. [组合与风控](#6-组合与风控)
+7. [监控体系](#7-监控体系)
+8. [模型管理](#8-模型管理)
+9. [实验追踪与知识库](#9-实验追踪与知识库)
+10. [模拟交易](#10-模拟交易)
+11. [自动化调度](#11-自动化调度)
+12. [全命令速查表](#12-全命令速查表)
+13. [典型工作流](#13-典型工作流)
+14. [配置说明](#14-配置说明)
+15. [项目架构](#15-项目架构)
+16. [开发命令](#16-开发命令)
+17. [故障排查](#17-故障排查)
 
 ---
 
@@ -90,9 +93,91 @@ uv run qp ingest 2024-01-01 2024-12-31
 
 ---
 
-## 4. 核心工作流
+## 4. 投资策略规则
 
-### 4.1 端到端每日管道
+> 以下规则是 QP 平台的「交易宪法」(V2.1 Final)，所有买卖信号均由此派生。
+
+### 4.1 核心原则
+
+| 原则 | 含义 |
+|------|------|
+| **Model Driven** | 一切投资决策由模型驱动，Alpha 来自截面排序而非价格走势 |
+| **Risk First** | 风险控制优先于 Alpha — 策略负责机会，风控负责生存 |
+| **Stateless Decision** | 每次调仓都是全新评估，历史持仓/止损不影响当前决策 |
+| **Human in the Loop** | 平台生成建议，最终交易由投资者确认执行 |
+
+### 4.2 买入规则
+
+| 项目 | 规则 |
+|------|------|
+| 买入标的 | 调仓日进入 Target Portfolio 的 Top N 股票 |
+| 默认持仓数 | Top 10 |
+| 买入时间 | 仅调仓日（每月前 5 个自然日） |
+| 建仓方式 | 按目标权重一次性建仓 |
+
+**明确不采用**：固定止盈（切断动量 Alpha）、最大持仓天数（人为规则）、Score 硬阈值（不同市场阶段不可比）。
+
+### 4.3 卖出规则（三类，不同时间维度）
+
+#### 第一类：Rank Exit（Alpha 消失，仅调仓日）
+
+```
+Rank ≤ Top10   →  买入 / 保持持仓
+Rank 11~20     →  继续持有（Buffer 区）
+Rank > 20      →  卖出
+```
+
+Buffer 机制降低换手率：排名下降不代表 Alpha 完全失效。
+
+#### 第二类：Risk Exit（风险退出，每日必检）
+
+| 风险 | 执行 |
+|------|------|
+| Stop Loss（-10%） | 次日开盘卖出 |
+| ST / *ST | 次日开盘卖出 |
+| 退市风险 | 次日开盘卖出 |
+| 长期停牌 | 标记冻结 |
+| 流动性风险 | 人工确认 |
+
+风险不等调仓日 — 即使模型给第一名，触发风险立即退出。
+
+#### 第三类：Portfolio Exit（组合调整，仅调仓日）
+
+| 场景 | 处理 |
+|------|------|
+| 权重超限 | 减仓至目标权重 |
+| 行业超配 > 40% | 降低行业仓位 |
+| 基本面恶化 | 标记退出 |
+
+### 4.4 退出信号优先级
+
+```
+CRITICAL  → ST, 退市
+HIGH      → Stop Loss (-10%)
+MEDIUM    → 流动性风险, 停牌
+LOW       → Rank Drop, 权重调整
+```
+
+同一天多信号 → 合并为一条卖出建议（保留所有 reason tag 用于归因分析）。
+
+### 4.5 模块职责
+
+```
+Strategy Engine (每日)    → 回答：「今天最值得持有哪些股票？」
+Risk Manager    (每日)    → 回答：「哪些股票必须离开？」
+Portfolio Manager (调仓日) → 回答：「今天需要如何调整组合？」
+Decision Layer  (调仓日+) → 人工审核与执行
+```
+
+### 4.6 止损后又涨回来怎么办？
+
+系统不会因为发生过止损就永久排除某只股票。每次调仓都是一次全新评估 — 如果股票重新满足 Alpha 条件，正常重新买入。**止损管理的是未知风险，不是预测未来。**
+
+---
+
+## 5. 核心工作流
+
+### 5.1 端到端每日管道
 
 一步完成：数据 → 特征 → 策略 → 报告。
 
@@ -121,7 +206,7 @@ is_rebalance_day = today.day <= 5
 
 > **为什么？** 每月集中调仓一次，减少频繁交易带来的冲击成本和印花税损耗。月中只做风控止损，让 Alpha 有足够时间发酵。
 
-### 4.2 多因子实验（核心回测命令）
+### 5.2 多因子实验（核心回测命令）
 
 ```bash
 # 基础回测：线性加权策略（10 因子）
@@ -158,17 +243,23 @@ uv run qp experiment run multifactor \
 | `--skip-gate` | 跳过验证门禁 | 关闭 |
 | `--symbols <codes>` | 自定义股票池 | 全部主板 |
 | `--dataset <name>` | 数据集名称 | `daily_price_main` |
+| `--resume <id>` | 从快照复现实验（权重冻结） | — |
+| `--score-band auto` | 自动搜索最优分位区间 | — |
+| `--debug` | 启用 DEBUG 日志 | 关闭 |
 
-### 4.3 策略回测（Broker 模拟）
+### 5.3 影子模拟（Shadow Trading）
 
 ```bash
-uv run qp backtest run                        # 默认策略 simple_rank_v1.0
-uv run qp backtest run simple_rank_v1.0       # 指定策略
+# 运行今日影子模拟
+uv run qp simulation shadow run
+
+# 查看影子组合绩效
+uv run qp simulation shadow summary
 ```
 
-输出包含：总收益、年化收益、夏普比率、最大回撤、交易成本明细。
+影子模拟与实盘持仓同步，用于在不影响实盘的情况下评估策略调整。
 
-### 4.4 验证门禁
+### 5.4 验证门禁
 
 ```bash
 uv run qp validate                             # 全阶段检查
@@ -179,7 +270,7 @@ uv run qp validate --json                       # 机器可读输出
 
 可用阶段：`research` | `backtest_passed` | `paper_trading` | `shadow_production` | `production`
 
-### 4.5 生成交易建议
+### 5.5 生成交易建议
 
 人工执行前的最后一步。默认加载今天的 DecisionPackage。
 
@@ -202,9 +293,9 @@ DecisionPackage 包含：
 
 ---
 
-## 5. 组合与风控
+## 6. 组合与风控
 
-### 5.1 投资组合 KPI 仪表盘
+### 6.1 投资组合 KPI 仪表盘
 
 ```bash
 uv run qp portfolio report
@@ -219,7 +310,7 @@ uv run qp portfolio report
 - 仓位优化：最大夏普比率优化结果，Top 5 持仓
 - KPI 仪表盘：夏普、最大回撤、超额占比目标 vs 实际
 
-### 5.2 风控分析
+### 6.2 风控分析
 
 ```bash
 uv run qp portfolio risk
@@ -232,9 +323,9 @@ uv run qp portfolio risk
 
 ---
 
-## 6. 监控体系
+## 7. 监控体系
 
-### 6.1 每日一键检查
+### 7.1 每日一键检查
 
 ```bash
 uv run qp monitor check
@@ -307,7 +398,7 @@ NORMAL → WARNING → HALT_BUY → FULL_STOP
 - `data/monitoring/retrain_signals.parquet` — 需要重训时写入信号
 - `data/knowledge/failure_analysis/` — 触发 PAUSE_BUY 以上时自动归档
 
-### 6.2 系统状态查询
+### 7.2 系统状态查询
 
 ```bash
 # Python 一行查看当前状态
@@ -327,7 +418,7 @@ print(mgr.stats())
 | STOPPED | 全停 | ❌ | ✅ |
 | RECOVERY | 恢复中 | 渐进 | ✅ |
 
-### 6.3 查看健康历史
+### 7.3 查看健康历史
 
 ```bash
 # 最近 90 天健康日志
@@ -347,13 +438,13 @@ for s in l.load_history(days=30).iter_rows(named=True):
 "
 ```
 
-### 6.4 市场状态检测
+### 7.4 市场状态检测
 
 ```bash
 uv run qp monitor regime
 ```
 
-### 6.5 告警通道测试
+### 7.5 告警通道测试
 
 ```bash
 uv run qp monitor alert-test
@@ -363,7 +454,7 @@ uv run qp monitor alert-test
 
 ---
 
-## 7. 模型管理
+## 8. 模型管理
 
 ```bash
 # 列出所有已注册模型
@@ -379,7 +470,7 @@ uv run qp retrain simple_rank_v1.0
 
 ---
 
-## 8. 实验追踪与知识库
+## 9. 实验追踪与知识库
 
 ```bash
 # 列出所有实验
@@ -398,7 +489,7 @@ uv run qp knowledge search "最大回撤"
 
 ---
 
-## 9. 模拟交易（Paper Trading）
+## 10. 模拟交易（Paper Trading）
 
 新策略在真金白银之前，必须通过 30 天模拟交易验证。
 
@@ -428,7 +519,7 @@ uv run qp paper status simple_rank_v1.0
 
 ---
 
-## 10. 自动化调度
+## 11. 自动化调度
 
 四个定时任务串起来，构成完整的**每日投资决策自动化闭环**：
 
@@ -473,7 +564,7 @@ uv run qp paper status simple_rank_v1.0
 qp decide --review
 ```
 
-### 10.1 启动与停止
+### 11.1 启动与停止
 
 ```bash
 # 启动
@@ -505,7 +596,7 @@ tail -f logs/$(date +%F)/email_report.log
 
 > 每个 Job 写入当天日期子目录，每天一个新文件，自动清理 7 天前的旧目录。
 
-### 10.2 五任务时间表
+### 11.2 五任务时间表
 
 | 时间 | Job | 执行内容 | watchdog |
 |------|-----|----------|----------|
@@ -515,7 +606,7 @@ tail -f logs/$(date +%F)/email_report.log
 | 18:00 | `daily_pipeline` | DailyPipeline: 数据→特征→策略→风控→DecisionPackage | `data/monitoring/watchdog/daily_pipeline.ping` |
 | 18:30 | `email_report` | 发送今日 DecisionPackage 邮件 | `data/monitoring/watchdog/email_report.ping` |
 
-### 10.3 监控 Scheduler 本身
+### 11.3 监控 Scheduler 本身
 
 ```bash
 # 检查各 Job 最近执行时间
@@ -525,7 +616,7 @@ ls -la data/monitoring/watchdog/
 find data/monitoring/watchdog/ -mmin +1440 -name "*.ping"
 ```
 
-### 10.4 数据文件位置
+### 11.4 数据文件位置
 
 ```bash
 logs/
@@ -557,37 +648,55 @@ data/
 
 ---
 
-## 11. 全命令速查表
+## 12. 全命令速查表
 
 ### 系统
 
 | 命令 | 说明 |
 |------|------|
-| `qp scheduler start` | 启动后台定时调度器 |
 | `qp version` | 显示版本号 |
 | `qp doctor` | 环境诊断 |
 | `qp --help` | 帮助信息 |
 | `qp pipeline list` | 列出已注册管道 |
+| `qp scheduler start` | 启动后台定时调度器 |
 
 ### 数据
 
 | 命令 | 说明 |
 |------|------|
 | `qp data fetch [--start=] [--end=] [--batch=] [--skip-etl]` | 全量主板数据拉取 |
+| `qp fundamental` | 拉取基本面数据 |
 | `qp ingest [start] [end] [--demo]` | 数据摄入（支持 Demo） |
 | `qp run daily [--demo]` | 端到端每日管道 |
 
-### 研究
+### 实验与研究
 
 | 命令 | 说明 |
 |------|------|
-| `qp experiment run multifactor [选项]` | 多因子实验 |
+| `qp experiment run multifactor [选项]` | 多因子实验（线性加权 / ML） |
+| `qp experiment run multifactor --resume <id>` | 从快照复现实验 |
+| `qp experiment run multifactor --compare` | 批量策略对比 |
 | `qp experiment list` | 列出所有实验 |
 | `qp experiment show <id>` | 实验详情 |
+| `qp experiment compare` | 对比最近实验 |
+| `qp experiment validate <id>` | 验证指定实验 |
+| `qp experiment clean --keep 20` | 清理旧实验 |
 | `qp model list` | 列出模型 |
 | `qp model show <id>` | 模型详情 |
 | `qp retrain [strategy] [--dry-run]` | 模型重训 |
-uv run qp experiment run multifactor --strategy momentum_vol_full --start 2024-01-01 --debug
+
+### 策略生命周期
+
+| 命令 | 说明 |
+|------|------|
+| `qp strategy list` | 列出所有策略 |
+| `qp strategy approve <id>` | 批准策略上线 |
+| `qp strategy deactivate <id>` | 下线策略 |
+| `qp proposal create --strategy <id> --target <stage>` | 创建策略审批提案 |
+| `qp proposal list` | 列出所有提案 |
+| `qp proposal show <id>` | 查看提案详情 |
+| `qp proposal approve <id>` | 批准提案 |
+| `qp proposal reject <id>` | 驳回提案 |
 
 ### 组合
 
@@ -596,23 +705,24 @@ uv run qp experiment run multifactor --strategy momentum_vol_full --start 2024-0
 | `qp portfolio report` | KPI 仪表盘 |
 | `qp portfolio risk` | 风控分析 |
 
+### 模拟交易
+
+| 命令 | 说明 |
+|------|------|
+| `qp paper start [strategy]` | 启动 30 天模拟交易 |
+| `qp paper status [strategy]` | 模拟交易状态 |
+| `qp simulation shadow run` | 运行影子模拟 |
+| `qp simulation shadow summary` | 影子组合绩效摘要 |
+
 ### 决策
 
 | 命令 | 说明 |
 |------|------|
-| `qp decide [--force\|--review\|--history\|--show]` | 加载/审核决策包 |
-| `qp paper start [strategy]` | 启动模拟交易 |
-| `qp paper status [strategy]` | 模拟交易状态 |
-
-### 实验
-
-| 命令 | 说明 |
-|------|------|
-| `qp experiment run multifactor [选项]` | 多因子实验 |
-| `qp experiment run multifactor --strategy v1,v2 --compare` | 批量对比 |
-| `qp experiment list [--strategy X] [--min-sharpe 0.3]` | 筛选实验 |
-| `qp experiment show <id>` | 实验详情 |
-| `qp experiment clean --keep 20 [--dry-run]` | 清理旧实验 |
+| `qp decide` | 加载今天的决策包 |
+| `qp decide --force` | 重跑管道生成新决策包 |
+| `qp decide --review` | 交互式人工审核 |
+| `qp decide --history` | 列出历史决策 |
+| `qp decide --show <id>` | 查看指定决策包 |
 
 ### 监控
 
@@ -629,17 +739,17 @@ uv run qp experiment run multifactor --strategy momentum_vol_full --start 2024-0
 | `qp knowledge stats` | 知识库统计 |
 | `qp knowledge search <query>` | 全文搜索 |
 
-### 调度
+### 调度（systemd）
 
 | 命令 | 说明 |
 |------|------|
-| `qp scheduler start` | 启动后台调度器（前景进程） |
-| `systemctl status qp-scheduler` | 查看 systemd 服务状态 |
+| `systemctl start qp-scheduler` | 启动调度器 |
+| `systemctl status qp-scheduler` | 查看服务状态 |
 | `journalctl -u qp-scheduler -f` | 实时日志 |
 
 ---
 
-## 12. 典型工作流
+## 13. 典型工作流
 
 ### 自动化（推荐：systemd 常驻）
 
@@ -719,18 +829,18 @@ sudo systemctl start qp-scheduler   # 启动（已配置开机自启）
 
 ---
 
-## 13. 配置说明
+## 14. 配置说明
 
 配置文件优先级：**CLI 参数 > 环境变量 > config.toml > 默认值**
 
-### 12.1 配置文件
+### 14.1 配置文件
 
 从模板复制：
 ```bash
 cp config.toml.example config.toml
 ```
 
-### 12.2 关键配置项
+### 14.2 关键配置项
 
 ```toml
 [runtime]
@@ -772,7 +882,7 @@ model_decay_ic_ratio = 0.5
 provider = "simulated"
 ```
 
-### 12.3 环境变量
+### 14.3 环境变量
 
 ```bash
 export QP_ENV=production
@@ -787,9 +897,9 @@ export TELEGRAM_BOT_TOKEN=xxx
 
 ---
 
-## 14. 项目架构
+## 15. 项目架构
 
-### 14.1 十二层架构
+### 15.1 十二层架构
 
 ```
 Layer 1:  platform/     — 运行时基础（配置、日志、CLI、调度、存储、管道）
@@ -806,7 +916,7 @@ Layer 11: (monitoring)  — 系统状态机、RetrainSignal、Watchdog
 Layer 12: (knowledge)   — 策略版本树、失败聚类分析、黑名单规则生成
 ```
 
-### 13.2 目录结构
+### 15.2 目录结构
 
 ```
 qp/
@@ -838,7 +948,7 @@ qp/
 └── shared/            # 共享模块（协议、类型、常量、异常）
 ```
 
-### 13.3 核心设计原则
+### 15.3 核心设计原则
 
 - **决策辅助系统**，非自动交易 — 系统产出建议，人执行决策
 - **混合架构** — DataFrame 管道做数据/研究，Domain Model 做组合/决策
@@ -848,7 +958,7 @@ qp/
 - **单入口 CLI** — 所有操作通过 `qp` 命令
 - **禁止** `print()`、裸 `except:`、`utils/` 目录
 
-### 14.4 当前策略
+### 15.4 当前策略
 
 | 策略 | ID | 类型 |
 |------|-----|------|
@@ -872,7 +982,7 @@ qp/
 
 ---
 
-## 15. 开发命令
+## 16. 开发命令
 
 ```bash
 # 代码格式化
@@ -892,7 +1002,7 @@ uv run pytest -x -q                        # 快速模式
 
 ---
 
-## 16. 故障排查
+## 17. 故障排查
 
 ### 数据文件不存在
 
@@ -916,27 +1026,6 @@ cp config.toml.example config.toml
 uv run qp experiment run multifactor --model --start 2024-01-01 --end 2026-07-01
 ```
 
-shuai@ZS-K-C3:~/workspace/qt$ uv run qp web start --host 127.0.0.1 --port 8080 &
 ---
 
-*关联文档：`docs/rule.md` | `docs/gap_analysis.md` | `CLAUDE.md`*
-
-
-
---resume 功能通了。
-
-用法：
-
-# 复现已有实验（自动从快照加载数据，权重冻结）
-uv run qp experiment run multifactor --resume multifactor_20260801_021636
-
-# 也可以手动覆盖区间（但数据还是用快照）
-uv run qp experiment run multifactor --resume multifactor_20260801_021636 --end 2025-07-03
-
-工作原理：
-1. 从 data/experiments/<id>.json 读取原始配置（策略、区间、权重）
-2. 从 data/experiments/<id>/price_data.parquet 加载原始数据快照
-3. 权重冻结，跳过优化 — 用和当初一模一样的权重
-4. 不会覆盖 Registry（避免污染现有策略）
-
-注意：只有快照功能上线后（刚刚加的）的实验才有 price_data.parquet，之前的实验（如昨天的 095738）无法复现。
+*关联文档：`docs/constitution/constitution-v4.2.md` | `CLAUDE.md`*
