@@ -52,7 +52,7 @@
         {{ "%.2f"|format(mt.sharpe_ratio or 0) }}
       </td>
       <td class="font-mono">{{ "%.4f"|format(mt.ic_mean or 0) }}</td>
-      <td style="font-size: 12px;">{{ m.created_at[:19] if m.created_at else '—' }}</td>
+      <td style="font-size: 12px;">{{ m.created_at | beijing_time if m.created_at else '—' }}</td>
     </tr>
     {% endfor %}
   </tbody>

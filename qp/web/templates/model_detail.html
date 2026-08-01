@@ -39,7 +39,7 @@
   </div>
   <div class="card" style="text-align: center; padding: 14px;">
     <div style="font-size: 11px; color: var(--c-muted);">创建时间</div>
-    <div style="font-size: 14px; font-weight: 700;">{{ model.created_at[:19] if model.created_at else '—' }}</div>
+    <div style="font-size: 14px; font-weight: 700;">{{ model.created_at | beijing_time if model.created_at else '—' }}</div>
   </div>
 </div>
 

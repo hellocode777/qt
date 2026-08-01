@@ -125,13 +125,42 @@
     "recommendations": []
   },
   "human_review": {
-    "reviewed": false,
-    "reviewer": "",
+    "reviewed": true,
+    "reviewer": "webui",
     "notes": "",
-    "executed": false,
-    "execution_time": "",
-    "status": "pending",
-    "status_history": []
+    "executed": true,
+    "execution_time": "2026-07-31T15:37:31.367498+00:00",
+    "status": "closed",
+    "status_history": [
+      {
+        "from_status": "pending",
+        "to_status": "approved",
+        "timestamp": "2026-07-31T15:37:28.718947+00:00",
+        "actor": "webui",
+        "notes": ""
+      },
+      {
+        "from_status": "approved",
+        "to_status": "partially_executed",
+        "timestamp": "2026-07-31T15:37:29.871888+00:00",
+        "actor": "system",
+        "notes": ""
+      },
+      {
+        "from_status": "partially_executed",
+        "to_status": "monitoring",
+        "timestamp": "2026-07-31T15:37:31.367498+00:00",
+        "actor": "system",
+        "notes": ""
+      },
+      {
+        "from_status": "monitoring",
+        "to_status": "closed",
+        "timestamp": "2026-07-31T15:37:33.487442+00:00",
+        "actor": "system",
+        "notes": ""
+      }
+    ]
   },
   "metadata": {
     "pipeline_run_id": "cecd97a96cc9",

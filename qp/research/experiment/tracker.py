@@ -249,8 +249,16 @@ class ExperimentTracker(BaseExperimentTracker):
             if not experiment_id:
                 return None
 
+            # Parse created_at from stored JSON (fall back to now() if missing)
+            created_at_raw = cfg_data.get("created_at") or data.get("created_at")
+            try:
+                created_at = datetime.fromisoformat(created_at_raw) if created_at_raw else datetime.now(UTC)
+            except (ValueError, TypeError):
+                created_at = datetime.now(UTC)
+
             config = ExperimentConfig(
                 experiment_id=data.get("experiment_id", cfg_data.get("experiment_id", "")),
+                created_at=created_at,
                 description=cfg_data.get("description", ""),
                 strategy_name=cfg_data.get("strategy_name", ""),
                 model_mode=cfg_data.get("model_mode", False),

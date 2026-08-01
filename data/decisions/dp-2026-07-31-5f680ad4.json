@@ -480,13 +480,21 @@
     "recommendations": []
   },
   "human_review": {
-    "reviewed": false,
-    "reviewer": "",
+    "reviewed": true,
+    "reviewer": "webui",
     "notes": "",
     "executed": false,
     "execution_time": "",
-    "status": "pending",
-    "status_history": []
+    "status": "rejected",
+    "status_history": [
+      {
+        "from_status": "pending",
+        "to_status": "rejected",
+        "timestamp": "2026-08-01T01:09:22.871441+00:00",
+        "actor": "webui",
+        "notes": ""
+      }
+    ]
   },
   "metadata": {
     "pipeline_run_id": "5f680ad4c6c5",

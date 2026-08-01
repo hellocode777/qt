@@ -69,7 +69,7 @@
             {% endif %}
           </td>
           <td>{{ p.proposed_by }}</td>
-          <td style="font-size: 12px;">{{ p.created_at[:19] }}</td>
+          <td style="font-size: 12px;">{{ p.created_at | beijing_time }}</td>
         </tr>
         {% endfor %}
       </tbody>

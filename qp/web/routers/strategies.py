@@ -10,6 +10,7 @@ from typing import Any
 
 import polars as pl
 from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
 from loguru import logger
 
 from qp.web.routers._templates import templates
@@ -64,7 +65,9 @@ async def strategy_detail(request: Request, strategy_id: str) -> Any:
         from qp.strategy.registry import StrategyRegistry
 
         registry = StrategyRegistry()
-        if strategy_id in registry._strategies:
+        # Check both in-memory instances and disk-loaded metadata
+        sids = registry.list_strategies()
+        if strategy_id in sids:
             m = registry.get_meta(strategy_id)
             meta["version"] = m.strategy_version if m else "?"
             meta["owner"] = m.owner if m else "?"
@@ -101,12 +104,35 @@ async def strategy_detail(request: Request, strategy_id: str) -> Any:
     except Exception:
         pass
 
+    # Check backtest metrics for display
+    backtest: dict[str, Any] = {}
+    try:
+        from qp.strategy.registry import StrategyRegistry
+
+        registry2 = StrategyRegistry()
+        approved = registry2.get_approved(strategy_id)
+        if approved is not None and hasattr(approved, "backtest_summary"):
+            backtest = dict(approved.backtest_summary)  # type: ignore[call-overload]
+        elif strategy_id in registry2.list_strategies():
+            m = registry2.get_meta(strategy_id)
+            if m.backtest_ic:
+                backtest = {
+                    "ic": m.backtest_ic,
+                    "sharpe": m.backtest_sharpe,
+                    "max_dd": m.backtest_max_dd,
+                    "excess_return": m.backtest_excess_return,
+                }
+    except Exception:
+        pass
+
     return templates.TemplateResponse(
         request=request,
         name="strategy_detail.html",
         context={
             "strategy_id": strategy_id,
             "meta": meta,
+            "backtest": backtest,
+            "has_backtest": len(backtest) > 0,
             "health_records": health_records,
             "health_dates": health_dates,
             "health_scores": health_scores,
@@ -116,3 +142,34 @@ async def strategy_detail(request: Request, strategy_id: str) -> Any:
             "page_title": f"Strategy {strategy_id} — QP Decision Center",
         },
     )
+
+
+# ── POST actions (ADR-031) ──────────────────────────────────────
+
+
+@router.post("/strategies/{strategy_id}/approve")
+async def strategy_approve(request: Request, strategy_id: str) -> Any:
+    """Approve a strategy — set lifecycle to APPROVED."""
+    try:
+        from qp.strategy.registry import StrategyRegistry
+
+        registry = StrategyRegistry()
+        registry.approve(strategy_id, approved_by="webui")
+    except Exception as exc:
+        logger.warning("Approve {} failed: {}", strategy_id, exc)
+
+    return RedirectResponse(url=f"/strategies/{strategy_id}", status_code=303)
+
+
+@router.post("/strategies/{strategy_id}/deactivate")
+async def strategy_deactivate(request: Request, strategy_id: str) -> Any:
+    """Deactivate a strategy — revert to BACKTEST_PASSED."""
+    try:
+        from qp.strategy.registry import StrategyRegistry
+
+        registry = StrategyRegistry()
+        registry.deactivate(strategy_id)
+    except Exception as exc:
+        logger.warning("Deactivate {} failed: {}", strategy_id, exc)
+
+    return RedirectResponse(url=f"/strategies/{strategy_id}", status_code=303)

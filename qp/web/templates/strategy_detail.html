@@ -23,6 +23,63 @@
 </div>
 {% endif %}
 
+<!-- Backtest Summary (ADR-031) -->
+{% if has_backtest %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header"><span>&#128202; 回测摘要 Backtest Summary</span></div>
+  <div class="card-body">
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+      <div style="text-align: center;">
+        <div style="font-size: 24px; font-weight: 700; color: var(--blue);">{{ "%.3f"|format(backtest.ic) }}</div>
+        <div style="font-size: 11px; color: var(--c-muted);">Rank IC</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 24px; font-weight: 700; color: {% if backtest.sharpe >= 1.0 %}var(--green){% else %}var(--amber){% endif %};">{{ "%.2f"|format(backtest.sharpe) }}</div>
+        <div style="font-size: 11px; color: var(--c-muted);">Sharpe</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 24px; font-weight: 700; color: {% if backtest.max_dd <= 15 %}var(--green){% else %}var(--red){% endif %};">{{ "%.1f"|format(backtest.max_dd) }}%</div>
+        <div style="font-size: 11px; color: var(--c-muted);">Max DD</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 24px; font-weight: 700; color: {% if backtest.excess_return > 0 %}var(--green){% else %}var(--red){% endif %};">{{ "%+.1f"|format(backtest.excess_return) }}%</div>
+        <div style="font-size: 11px; color: var(--c-muted);">超额收益</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Approve / Deactivate (ADR-031) -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header"><span>&#9878; 操作 Actions</span></div>
+  <div class="card-body">
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <form method="post" action="/strategies/{{ strategy_id }}/approve" style="margin: 0;">
+        <button type="submit"
+                style="padding: 8px 18px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; background: #2e7d32; color: #fff;"
+                {% if meta.lifecycle == 'approved' %}disabled style="opacity:0.4;cursor:not-allowed;"{% endif %}>
+          &#10003; Approve 冻结上线
+        </button>
+      </form>
+      <form method="post" action="/strategies/{{ strategy_id }}/deactivate" style="margin: 0;">
+        <button type="submit"
+                style="padding: 8px 18px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; background: #c62828; color: #fff;"
+                {% if meta.lifecycle != 'approved' %}disabled style="opacity:0.4;cursor:not-allowed;"{% endif %}>
+          &#10007; Deactivate 下线
+        </button>
+      </form>
+      <span style="font-size: 12px; color: var(--c-muted);">
+        {% if meta.lifecycle == 'approved' %}
+          当前状态: <span class="badge badge-green">APPROVED</span> — 已被 Daily Pipeline 自动加载
+        {% else %}
+          当前状态: <span class="badge">{{ meta.lifecycle }}</span> — 需要 Approve 才能被 Daily Pipeline 加载
+        {% endif %}
+      </span>
+    </div>
+  </div>
+</div>
+
 <!-- Health Trend Chart -->
 {% if has_health %}
 <div class="card" style="margin-bottom: 20px;">
@@ -93,7 +150,7 @@
           <td>{{ p.target_lifecycle }}</td>
           <td>{% if p.status == 'approved' %}<span class="badge badge-green">已批准</span>{% elif p.status == 'rejected' %}<span class="badge badge-red">已驳回</span>{% else %}<span class="badge">{{ p.status }}</span>{% endif %}</td>
           <td>{{ p.proposed_by }}</td>
-          <td style="font-size: 12px;">{{ p.created_at[:19] }}</td>
+          <td style="font-size: 12px;">{{ p.created_at | beijing_time }}</td>
         </tr>
         {% endfor %}
       </tbody>

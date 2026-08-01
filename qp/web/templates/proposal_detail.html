@@ -36,7 +36,7 @@
         <tr><td style="color: var(--c-muted); padding: 4px 0;">策略 Strategy</td><td><code>{{ proposal.strategy_id }}</code></td></tr>
         <tr><td style="color: var(--c-muted); padding: 4px 0;">目标状态 Target</td><td><strong>{{ proposal.target_lifecycle }}</strong></td></tr>
         <tr><td style="color: var(--c-muted); padding: 4px 0;">提议人 Proposed by</td><td>{{ proposal.proposed_by }}</td></tr>
-        <tr><td style="color: var(--c-muted); padding: 4px 0;">创建时间 Created</td><td>{{ proposal.created_at[:19] }}</td></tr>
+        <tr><td style="color: var(--c-muted); padding: 4px 0;">创建时间 Created</td><td>{{ proposal.created_at | beijing_time }}</td></tr>
         {% if proposal.reviewer %}
         <tr><td style="color: var(--c-muted); padding: 4px 0;">审核人 Reviewer</td><td>{{ proposal.reviewer }}</td></tr>
         <tr><td style="color: var(--c-muted); padding: 4px 0;">审核时间 Reviewed</td><td>{{ proposal.reviewed_at[:19] }}</td></tr>

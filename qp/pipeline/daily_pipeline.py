@@ -11,6 +11,7 @@ Backtest has been REMOVED — it belongs in the experiment pipeline.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from datetime import UTC, date, datetime
 from typing import Any
@@ -41,7 +42,7 @@ from qp.strategy.ensemble.ensemble_engine import EnsembleEngine, UniversePolicy
 from qp.strategy.ensemble.weighting import WeightEngine, WeightMethod
 from qp.strategy.market_regime import MarketRegimeDetector
 from qp.strategy.multifactor import MultiFactorStrategy
-from qp.strategy.registry import StrategyMeta, StrategyRegistry
+from qp.strategy.registry import StrategyRegistry
 
 
 def _load_price_data() -> tuple[dict[str, pl.DataFrame], pl.DataFrame]:
@@ -411,28 +412,70 @@ class DailyPipeline(BasePipeline):
             registry = StrategyRegistry()
             registered_ids: list[str] = []
 
-            validated_strategies: list[str] = [
-                "momentum_vol_full",  # IC=0.08, Sharpe=1.03, Gate=PASSED
-            ]
+            # ADR-031: discover strategies from Registry (auto-populated by
+            # experiments that passed Gate).  Weights are read from Registry
+            # metadata, NOT from StrategyConfig — the Registry is the single
+            # source of truth for frozen production weights.
+            validated_strategies: list[str] = []
+
+            # 1. APPROVED strategies (explicitly frozen)
+            for sid in registry.list_strategies():
+                try:
+                    if registry.get_lifecycle(sid) == StrategyLifecycle.APPROVED:
+                        validated_strategies.append(sid)
+                except KeyError:
+                    pass
+
+            # 2. RESEARCH strategies with weights + backtest (auto-registered
+            #    by experiments, awaiting manual approve)
+            if not validated_strategies:
+                for sid in registry.list_strategies():
+                    try:
+                        meta = registry.get_meta(sid)
+                        if meta.weights and meta.backtest_ic:
+                            validated_strategies.append(sid)
+                    except KeyError:
+                        pass
+
+            # 3. Fallback: hardcoded (initial bootstrap before any experiment)
+            if not validated_strategies:
+                validated_strategies = [
+                    "momentum_vol_full",
+                ]
             today_str = today.isoformat()
 
             from qp.strategy.config import get_strategy_config
             from qp.strategy.multifactor import compute_today_signals
 
             logger.info(
-                "Daily pipeline — experiment-validated strategies: {}",
+                "Daily pipeline — loaded from Registry: {}",
                 ", ".join(validated_strategies),
             )
 
             for strategy_name in validated_strategies:
                 try:
-                    cfg = get_strategy_config(strategy_name)
-                    weights = dict(cfg.factors)
+                    # ADR-031: read frozen weights from Registry first,
+                    # fall back to StrategyConfig for parameters
+                    registry_meta = registry.get_meta(strategy_name)
+                    weights = dict(registry_meta.weights) if registry_meta.weights else {}
+
+                    if not weights:
+                        # Fallback: no weights in Registry yet → read from config
+                        cfg = get_strategy_config(strategy_name)
+                        weights = dict(cfg.factors)
 
                     logger.info(
-                        "   {} — {} factors (today-only scoring)",
-                        strategy_name, len(weights),
+                        "   {} — {} factors (today-only scoring{})",
+                        strategy_name,
+                        len(weights),
+                        " [from Registry]" if registry_meta.weights else " [from Config]",
                     )
+
+                    # Parameters: try Registry first, then config
+                    params = dict(registry_meta.parameters) if registry_meta.parameters else {}
+                    industry_neutral = params.get("industry_neutral", True)
+                    if not isinstance(industry_neutral, bool):
+                        industry_neutral = True
 
                     # Fast path: compute only today's scores, not full history
                     today_scores = compute_today_signals(
@@ -440,7 +483,7 @@ class DailyPipeline(BasePipeline):
                         weights=weights,
                         today=today_str,
                         top_n=effective_top_n,
-                        industry_neutral=cfg.industry_neutral,
+                        industry_neutral=industry_neutral,
                     )
 
                     # Build strategy from today-only scores (avoids 90s init)
@@ -449,20 +492,15 @@ class DailyPipeline(BasePipeline):
                         today_scores=today_scores,
                         top_n=effective_top_n,
                     )
-                    # Store frozen weights + params in metadata (ADR-031)
-                    strategy_meta = StrategyMeta(
-                        weights=dict(weights),
-                        parameters={
-                            "top_n": effective_top_n,
-                            "rebalance": cfg.rebalance_freq,
-                            "industry_neutral": cfg.industry_neutral,
-                            "orthogonalize": cfg.orthogonalize,
-                        },
-                    )
+                    # Merge weights into metadata (preserve backtest fields from experiment)
+                    if not registry_meta.weights:
+                        registry_meta.weights = dict(weights)
+                        with contextlib.suppress(KeyError):
+                            registry.set_meta(strategy_name, registry_meta)
                     registry.register(
                         multifactor,
                         lifecycle=StrategyLifecycle.RESEARCH,
-                        meta=strategy_meta,
+                        meta=registry_meta,
                     )
                     registered_ids.append(multifactor.strategy_id)
                 except Exception as exc:

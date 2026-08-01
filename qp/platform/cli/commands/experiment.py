@@ -224,6 +224,7 @@ def cmd_experiment_run() -> int:
             file=sys.stderr,
         )
         print("    --debug                     Enable DEBUG-level logging", file=sys.stderr)
+        print("    --resume <experiment_id>    Reproduce experiment from snapshot", file=sys.stderr)
         return 1
 
     pipeline_name = sys.argv[3]
@@ -276,6 +277,11 @@ def cmd_experiment_run() -> int:
             params["orthogonalize"] = True
         elif arg == "--skip-gate":
             params["skip_gate"] = True
+        elif arg.startswith("--resume="):
+            params["resume"] = arg.split("=", 1)[1]
+        elif arg == "--resume" and i + 1 < len(args):
+            i += 1
+            params["resume"] = args[i]
         elif arg == "--model":
             params["model_mode"] = True
         elif arg == "--compare":
@@ -317,6 +323,60 @@ def cmd_experiment_run() -> int:
             colorize=True,
         )
         _loguru_logger.debug("🐛 Debug mode enabled")
+
+    # ── Resume/Reproduce mode ──
+    resume_id = str(params.get("resume", ""))
+    if resume_id:
+        import json as _json
+        from pathlib import Path as _Path
+
+        exp_json = _Path("data/experiments") / f"{resume_id}.json"
+        if not exp_json.exists():
+            print(f"实验记录不存在: {exp_json}", file=sys.stderr)
+            return 1
+
+        with open(exp_json, encoding="utf-8") as _fh:
+            exp_data = _json.load(_fh)
+
+        exp_cfg: dict[str, object] = exp_data.get("config", {})  # type: ignore[assignment]
+        snapshot_file = _Path("data/experiments") / resume_id / "price_data.parquet"
+        if not snapshot_file.exists():
+            print(f"实验快照不存在: {snapshot_file}", file=sys.stderr)
+            print("该实验可能是在快照功能上线前运行的，无法复现。", file=sys.stderr)
+            return 1
+
+        # Auto-fill params from experiment record (CLI args override)
+        for key, param_key in [
+            ("strategy_name", "strategy"),
+            ("train_start", "start_date"),
+            ("train_end", "end_date"),
+            ("top_n", "top_n"),
+            ("rebalance_freq", "rebalance_freq"),
+        ]:
+            if param_key not in params and exp_cfg.get(key):
+                params[param_key] = exp_cfg[key]
+
+        # Extract frozen weights from model_params (weighted_linear) or factors
+        frozen_wt: dict[str, float] = {}
+        model_params_raw = exp_cfg.get("model_params", {})
+        if isinstance(model_params_raw, dict):
+            for k, v in model_params_raw.items():
+                frozen_wt[str(k)] = float(v)  # type: ignore[arg-type]
+        if not frozen_wt and isinstance(exp_data.get("metrics", {}).get("feature_importance"), dict):
+            for k, v in exp_data["metrics"]["feature_importance"].items():
+                frozen_wt[str(k)] = float(v)
+
+        params["data_snapshot"] = str(snapshot_file)
+        params["freeze_weights"] = frozen_wt
+        # Use the original experiment's dataset label for the lineage record
+        params["dataset"] = str(exp_cfg.get("dataset_version", "daily_price_latest"))
+
+        print(f"📸 复现实验: {resume_id}")
+        print(f"   策略: {params.get('strategy')}")
+        print(f"   区间: {params.get('start_date')} → {params.get('end_date')}")
+        print(f"   权重: {frozen_wt}")
+        print(f"   快照: {snapshot_file}")
+        print()
 
     strategy_val = str(params.get("strategy", ""))
     strategies: list[str] = []

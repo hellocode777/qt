@@ -63,7 +63,7 @@
         {{ "%+.1f"|format(m.annual_return_pct or 0) }}%
       </td>
       <td class="font-mono">{{ "%.4f"|format(m.ic_mean or 0) }}</td>
-      <td style="font-size: 12px;">{{ (e.config or {}).get('created_at', '')[:19] or e.get('created_at', '')[:19] }}</td>
+      <td style="font-size: 12px;">{{ ((e.config or {}).get('created_at', '') or e.get('created_at', '')) | beijing_time }}</td>
     </tr>
     {% endfor %}
   </tbody>

@@ -27,8 +27,8 @@ class LayeredTestResult:
     quantile_counts: dict[int, int]
     top_bottom_spread: float  # Q_top - Q_bottom mean return (Q5 - Q1, >0 = correct)
     spread_t_stat: float  # t-stat of spread significance
-    monotonicity_t_stat: float  # regression of returns on quantile rank
-    is_monotonic: bool  # monotonicity_t_stat ≥ 2.0 AND direction correct
+    monotonicity_t_stat: float  # Spearman rho (rank corr of returns on quantile rank)
+    is_monotonic: bool  # Spearman rho ≥ 0.8 AND direction correct
     direction_correct: bool  # higher score → higher return
     n_days: int
 
@@ -50,7 +50,7 @@ class LayeredTestResult:
         dir_status = "↑" if self.direction_correct else "↓ REVERSED"
         return (
             f"{status} Q{self.n_quantiles}-Q1 spread={self.top_bottom_spread:+.4f} "
-            f"| t_spread={self.spread_t_stat:.2f} | t_mono={self.monotonicity_t_stat:.2f} "
+            f"| t_spread={self.spread_t_stat:.2f} | rho_mono={self.monotonicity_t_stat:.2f} "
             f"| dir={dir_status} | N={self.n_days}d"
         )
 
@@ -167,28 +167,26 @@ def compute_layered_returns(
     else:
         spread_t = 0.0
 
-    # Monotonicity: regress quantile mean returns on quantile rank
-    q_ranks = np.array(list(range(1, n_quantiles + 1)))
+    # Monotonicity: Spearman rank correlation between quantile ranks and returns.
+    # Robust to magnitude outliers (e.g. one Q with anomalous return) — unlike
+    # OLS on 5 points which breaks with a single outlier.
+    q_ranks = np.array(list(range(1, n_quantiles + 1)), dtype=np.float64)
     q_rets = np.array([quantile_returns[q] for q in range(1, n_quantiles + 1)])
     if n_quantiles >= 3 and np.std(q_rets) > 0:
-        # Simple OLS slope t-stat
-        X = np.column_stack([np.ones(n_quantiles), q_ranks])
-        try:
-            beta = np.linalg.lstsq(X, q_rets, rcond=None)[0]
-            residuals = q_rets - X @ beta
-            se = np.sqrt(np.sum(residuals**2) / (n_quantiles - 2))
-            se_beta = se / np.sqrt(np.sum((q_ranks - q_ranks.mean()) ** 2))
-            mono_t = abs(beta[1]) / se_beta if se_beta > 0 else 0.0
-        except np.linalg.LinAlgError:
-            mono_t = 0.0
-            beta = np.array([0.0, 0.0])
+        # Spearman = Pearson on ranks
+        rank_ranks = q_ranks  # Already 1..5, no ties
+        rank_rets_arr = np.argsort(np.argsort(q_rets)).astype(np.float64) + 1.0
+        rho = np.corrcoef(rank_ranks, rank_rets_arr)[0, 1]
+        if np.isnan(rho):
+            rho = 0.0
+        rho = float(rho)
     else:
-        mono_t = 0.0
-        beta = np.array([0.0, 0.0])
+        rho = 0.0
 
-    # Direction check: for long-only strategy, higher scores must → higher returns
-    # Q1 = lowest scores, Q5 = highest scores → slope should be positive
-    direction_correct = bool(beta[1] > 0)
+    # Direction check: positive spread (QN - Q1 > 0) → higher score → higher return.
+    # Uses actual spread, not Spearman rho — middle-quantile inversions (e.g. Q2
+    # anomalous return) don't invalidate top-bottom separation.
+    direction_correct = bool(spread > 0)
 
     return LayeredTestResult(
         n_quantiles=n_quantiles,
@@ -196,8 +194,8 @@ def compute_layered_returns(
         quantile_counts=quantile_total_count,
         top_bottom_spread=round(spread, 6),
         spread_t_stat=round(spread_t, 2),
-        monotonicity_t_stat=round(mono_t, 2),
-        is_monotonic=mono_t >= 2.0 and direction_correct,
+        monotonicity_t_stat=round(rho, 4),
+        is_monotonic=rho >= 0.8 and direction_correct,
         direction_correct=direction_correct,
         n_days=n_days,
     )
