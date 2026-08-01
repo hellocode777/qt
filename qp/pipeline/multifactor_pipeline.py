@@ -651,7 +651,7 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Stage 5: Backtest (Layer 7 SimulatedBroker) ──
         logger.info("[5/6] 回测 (SimulatedBroker, 信号日调仓)...")
-        bt = self._compute_backtest(signals, price_data)
+        bt = self._compute_backtest(signals, price_data, scores=scores, top_n=top_n)
         logger.info("   总收益:    {:+.2f}%", bt["total_return_pct"])
         logger.info("   年化夏普:  {:.2f}", bt["sharpe"])
         logger.info("   最大回撤:  {:.2f}%", bt["max_dd_pct"])
@@ -1159,11 +1159,14 @@ class MultiFactorPipeline(BasePipeline):
         signals: pl.DataFrame,
         price_data: dict[str, pl.DataFrame],
         initial_capital: float = 1_000_000,
+        scores: pl.DataFrame | None = None,
+        top_n: int = 10,
     ) -> dict[str, Any]:
         """Broker-based backtest via Layer 7 SimulatedBroker.
 
         On each trading day: mark positions to market via broker.set_prices().
-        On signal days: liquidate all → buy new top-N → execute via broker.
+        On rebalance days: compute target portfolio from scores, sell stocks
+        not in target, buy new entries with equal-weight allocation.
 
         Uses SimulatedBroker for realistic execution with slippage and cost
         tracking, replacing the previous hand-rolled dict loop (ADR-029).
@@ -1277,25 +1280,33 @@ class MultiFactorPipeline(BasePipeline):
                             if TradeReason.STOP_LOSS in rx.reasons:  # type: ignore[truthy-function]
                                 stop_loss_hits += 1
 
-            # Check for rebalance signals on this date
-            day_signals = signals.filter(pl.col("date") == d_str)
-            if not day_signals.is_empty():
+            # Check for rebalance day (use scores if available, else signals)
+            is_rebalance = False
+            day_target: list[str] = []
+            if scores is not None and not scores.is_empty():
+                day_scores = scores.filter(pl.col("trade_date") == d_str)
+                if not day_scores.is_empty():
+                    is_rebalance = True
+                    day_scores = day_scores.sort("score", descending=True)
+                    day_target = day_scores["symbol"].to_list()[:top_n]
+            elif not signals.filter(pl.col("date") == d_str).is_empty():
+                is_rebalance = True
+
+            if is_rebalance and day_target:
                 positions_df = broker.get_positions()
                 n_positions_before = len(positions_df)
+                target_set: set[str] = set(day_target)
+                held_set: set[str] = {
+                    str(row["symbol"]) for _, row in positions_df.iterrows()
+                } if not positions_df.empty else set()
 
-                # ── Phase 1: Sell only SELL-signaled stocks ──
-                # Previous behaviour liquidated ALL positions, but
-                # generate_rebalance_signals only emits BUY for *new*
-                # Top-N entries (not re-buys of existing holdings).
-                # Selling everything → 0 buy candidates on later rebalances
-                # because the "bought" set never resets.
-                sells = day_signals.filter(pl.col("signal") == "sell")
-                sell_symbols: set[str] = set(sells["symbol"].to_list())
+                # ── Phase 1: Sell stocks NOT in target ──
                 n_sells_submitted = 0
-                if sell_symbols and not positions_df.empty:
+                to_sell = held_set - target_set
+                if to_sell and not positions_df.empty:
                     for _, row in positions_df.iterrows():
                         sym = str(row["symbol"])
-                        if sym in sell_symbols:
+                        if sym in to_sell:
                             shares = int(float(row["shares"]))  # type: ignore[arg-type]
                             if shares > 0:
                                 broker.submit_order(
@@ -1308,7 +1319,7 @@ class MultiFactorPipeline(BasePipeline):
                                 )
                                 n_sells_submitted += 1
 
-                # Execute sells immediately to free up cash for buy orders
+                # Execute sells immediately
                 sell_trades: list[Any] = []
                 if n_sells_submitted > 0:
                     sell_trades = broker.execute_pending()
@@ -1317,32 +1328,34 @@ class MultiFactorPipeline(BasePipeline):
                         if st.side == "SELL":
                             total_sell_value += float(st.price) * st.shares
 
-                # Clamp negative cash (rounding residual from prior buys)
+                # Clamp negative cash
                 cash_now = broker.get_cash()
                 if cash_now < 0:
                     logger.debug(
-                        "   ⚠ 现金负数 {:.0f} → 补正为 0 (买入成本舍入残留)",
-                        cash_now,
+                        "   ⚠ 现金负数 {:.0f} → 补正为 0", cash_now,
                     )
                     broker._cash = 0.0
 
-                # ── Phase 2: Buy BUY-signaled stocks ──
-                buys = day_signals.filter(pl.col("signal") == "buy")
-                buy_symbols = buys["symbol"].to_list()
-                n_after_sells = len(broker.get_positions())
-                target_n = n_after_sells + len(buy_symbols)
+                # ── Phase 2: Buy target stocks we don't hold ──
+                after_sells = {
+                    str(row["symbol"]) for _, row in broker.get_positions().iterrows()
+                } if not broker.get_positions().empty else set()
+                new_buys = target_set - after_sells
+                buy_symbols = [s for s in day_target if s in new_buys]
+                n_after = len(after_sells)
+                target_total = len(target_set)
                 logger.debug(
                     "   🔄 {} 调仓: {}持仓→{}卖出→{}买入→目标{}只 (现金¥{:,.0f})",
                     d_str,
                     n_positions_before,
                     len(sell_trades),
                     len(buy_symbols),
-                    target_n,
+                    target_total,
                     broker.get_cash(),
                 )
                 if buy_symbols:
                     current_equity = broker.get_equity()
-                    per_stock = current_equity / max(target_n, 1)
+                    per_stock = current_equity / max(target_total, 1)
 
                     for sym in buy_symbols:
                         px = price_map.get(sym, 0.0)
