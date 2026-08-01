@@ -682,8 +682,39 @@ DataPipeline ──→ FeaturePipeline ──→ Price Data ──→ Today Sign
 
 ---
 
-## 下一步
+## 全部完成 ✅
 
-1. **Phase 5**: 融合 `使用指南.md` + `量化投资买卖规则说明书.md` → 新 `user_guide.md`
-2. **追踪第二条工作流**: `qp experiment run multifactor` 调用链 (实验 → 训练 → 评估 → Gate → 注册)
-3. **快速归档**: `5_` ~ `8_` 层级文档如果确认是设计文档则归档
+### 文档重建完成清单
+
+| # | 阶段 | 内容 | 状态 |
+|---|------|------|------|
+| 1 | Phase 0 | 现状摸底（70+ → 5） | ✅ |
+| 2 | Phase 1 | 代码地图 + CLI 地图 | ✅ |
+| 3 | Phase 2 | 15 模块地图 | ✅ |
+| 4 | Phase 3 | 文档可信度验证 | ✅ |
+| 5 | Phase 4 | `qp run daily` 13 步调用链 | ✅ |
+| 6 | Phase 5 | `user_guide.md` | ✅ |
+| 7 | Phase 6 | `developer_guide.md` + 11 DP + 10 TDR + 3 impl + constitution | ✅ |
+| 8 | — | `api.md` | ✅ |
+| 9 | — | 归档 63 份过期/空壳文档 | ✅ |
+| 10 | — | 修复 pyright + 6 test failures | ✅ |
+| 11 | — | WebUI 健康记录去重 | ✅ |
+
+### 实验管道调用链（追加）
+
+```
+qp experiment run multifactor [options]
+  └── cmd_experiment_run() → MultifactorPipeline.run()
+       ├── [Stage 1]   _fetch_data() or _load_snapshot()     # 数据获取
+       ├── [Stage 2]   _run_full_strategy() or factor_pipeline()  # 因子/策略
+       ├── [Stage 3]   evaluate_factor_ic()                  # Rank IC
+       ├── [Stage 3.5] _compute_factor_ic_attribution()      # 因子归因
+       ├── [Stage 3.6] _optimize_weights_from_ic()           # 权重优化
+       ├── [Gate]      compute_layered_returns() + IC Gate   # 门禁
+       ├── [Stage 4]   generate_rebalance_signals()          # 信号（legacy）
+       ├── [Stage 5]   _compute_backtest()                   # 回测
+       ├── [Stage 6]   _benchmark_return()                   # 基准对比
+       ├── [Snapshot]  price_data → data/experiments/{id}/   # 数据快照
+       ├── [Record]    ExperimentTracker.log_experiment()    # 实验记录
+       └── [Register]  StrategyRegistry (if gate_passed)     # 自动注册
+```

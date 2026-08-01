@@ -270,12 +270,21 @@ class StrategyHealthLogger:
             new_df.write_parquet(str(signal_path))
 
     def _append_row(self, row: dict[str, Any]) -> None:
-        """Append a health row to the strategy_health.parquet."""
+        """Append or upsert a health row to strategy_health.parquet.
+
+        Deduplicates by (strategy_id, date): if a record already exists
+        for the same strategy on the same date, it is replaced.
+        """
+        sid = row.get("strategy_id", "")
+        dt = row.get("date", "")
         new_df = pl.DataFrame([row])
         if HEALTH_PARQUET.exists():
             try:
                 existing = pl.read_parquet(str(HEALTH_PARQUET))
-                combined = pl.concat([existing, new_df], how="diagonal_relaxed")
+                # Remove existing entry for this (strategy_id, date)
+                mask = (existing["strategy_id"] != sid) | (existing["date"] != dt)
+                filtered = existing.filter(mask)
+                combined = pl.concat([filtered, new_df], how="diagonal_relaxed")
                 combined.write_parquet(str(HEALTH_PARQUET))
             except Exception:
                 new_df.write_parquet(str(HEALTH_PARQUET))
