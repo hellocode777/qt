@@ -10,7 +10,12 @@
       &nbsp;|&nbsp;
       生命周期: <span class="badge badge-blue">{{ meta.lifecycle or 'unknown' }}</span>
       &nbsp;|&nbsp;
-      版本: {{ meta.version or '?' }}
+      版本: {% if meta.version and meta.version.startswith('multifactor_') %}
+        <a href="/experiments/{{ meta.version }}" style="color: var(--blue);">{{ meta.version }}</a>
+        <span style="font-size: 11px; color: var(--c-muted);">(来源实验)</span>
+      {% else %}
+        {{ meta.version or '?' }}
+      {% endif %}
       &nbsp;|&nbsp;
       负责人: {{ meta.owner or '?' }}
     </div>

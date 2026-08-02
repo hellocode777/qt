@@ -26,7 +26,12 @@
     </div>
     <div class="card-body" style="font-size: 13px;">
       <div style="display: flex; gap: 16px; margin-bottom: 6px;">
-        <span class="c-muted">版本:</span> <span>{{ s.version }}</span>
+        <span class="c-muted">版本:</span>
+        {% if s.version and s.version.startswith('multifactor_') %}
+        <a href="/experiments/{{ s.version }}" style="color: var(--blue);">{{ s.version }}</a>
+        {% else %}
+        <span>{{ s.version }}</span>
+        {% endif %}
         <span class="c-muted">负责人:</span> <span>{{ s.owner }}</span>
       </div>
       {% if s.description %}
