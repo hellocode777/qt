@@ -1220,12 +1220,16 @@ class MultiFactorPipeline(BasePipeline):
         risk_exit_hits = 0
         min_equity = initial_capital
         min_date = str(all_dates[0]) if all_dates else ""
+        rebalance_freq = 20  # match generate_rebalance_signals default
+        trading_day_idx = 0
 
         # Track cost basis per symbol (for stop loss calculation)
         cost_basis: dict[str, float] = {}
 
         for d in all_dates:
             d_str = str(d)
+            is_rebalance_day = (trading_day_idx % rebalance_freq == 0)
+            trading_day_idx += 1
 
             # Build price & ADV maps for this trading day
             day_prices = all_prices.filter(pl.col("trade_date") == d)
@@ -1243,6 +1247,9 @@ class MultiFactorPipeline(BasePipeline):
 
             # ═══ V2.1 Risk Exit (每日检查) ═══
             positions_df = broker.get_positions()
+            # Filter zero-share stale entries (broker keeps them after full sell)
+            if not positions_df.empty:
+                positions_df = positions_df[positions_df["shares"] > 0]
             if not positions_df.empty:
                 holdings: dict[str, int | float] = {}
                 prices_for_risk: dict[str, float] = {}
@@ -1280,31 +1287,41 @@ class MultiFactorPipeline(BasePipeline):
                             if TradeReason.STOP_LOSS in rx.reasons:  # type: ignore[truthy-function]
                                 stop_loss_hits += 1
 
-            # Check for rebalance day (use scores if available, else signals)
-            is_rebalance = False
+            # Check for rebalance day
             day_target: list[str] = []
-            if scores is not None and not scores.is_empty():
+            day_scores_sorted: pl.DataFrame | None = None
+            if is_rebalance_day and scores is not None and not scores.is_empty():
                 day_scores = scores.filter(pl.col("trade_date") == d_str)
                 if not day_scores.is_empty():
-                    is_rebalance = True
-                    day_scores = day_scores.sort("score", descending=True)
-                    day_target = day_scores["symbol"].to_list()[:top_n]
-            elif not signals.filter(pl.col("date") == d_str).is_empty():
-                is_rebalance = True
+                    day_scores_sorted = day_scores.sort("score", descending=True)
+                    day_target = day_scores_sorted["symbol"].to_list()[:top_n]
 
-            if is_rebalance and day_target:
+            if is_rebalance_day and day_target and day_scores_sorted is not None:
                 positions_df = broker.get_positions()
-                n_positions_before = len(positions_df)
+                # Only count positions with actual shares (broker keeps
+                # zero-share entries after a full sell — filter them out).
+                live_positions = positions_df[
+                    positions_df["shares"] > 0
+                ] if not positions_df.empty else positions_df
+                n_positions_before = len(live_positions)
                 target_set: set[str] = set(day_target)
                 held_set: set[str] = {
-                    str(row["symbol"]) for _, row in positions_df.iterrows()
-                } if not positions_df.empty else set()
+                    str(row["symbol"]) for _, row in live_positions.iterrows()
+                } if not live_positions.empty else set()
 
-                # ── Phase 1: Sell stocks NOT in target ──
+                # ── Sell buffer: held stocks in rank [top_n, top_n*2) stay ──
+                # V2.1: Buy Top-N, Buffer 11-20 (hold), Sell >20
+                buffer_n = top_n * 2
+                buffer_zone: set[str] = set(
+                    day_scores_sorted["symbol"].to_list()[top_n:buffer_n]
+                ) if day_scores_sorted.height > top_n else set()
+
+                # ── Phase 1: Sell stocks NOT in target AND NOT in buffer ──
                 n_sells_submitted = 0
-                to_sell = held_set - target_set
-                if to_sell and not positions_df.empty:
-                    for _, row in positions_df.iterrows():
+                keep_set = target_set | buffer_zone
+                to_sell = held_set - keep_set
+                if to_sell and not live_positions.empty:
+                    for _, row in live_positions.iterrows():
                         sym = str(row["symbol"])
                         if sym in to_sell:
                             shares = int(float(row["shares"]))  # type: ignore[arg-type]
@@ -1337,9 +1354,11 @@ class MultiFactorPipeline(BasePipeline):
                     broker._cash = 0.0
 
                 # ── Phase 2: Buy target stocks we don't hold ──
+                after_df = broker.get_positions()
+                after_df = after_df[after_df["shares"] > 0] if not after_df.empty else after_df
                 after_sells = {
-                    str(row["symbol"]) for _, row in broker.get_positions().iterrows()
-                } if not broker.get_positions().empty else set()
+                    str(row["symbol"]) for _, row in after_df.iterrows()
+                } if not after_df.empty else set()
                 new_buys = target_set - after_sells
                 buy_symbols = [s for s in day_target if s in new_buys]
                 n_after = len(after_sells)
