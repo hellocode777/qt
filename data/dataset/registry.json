@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-08-01T10:17:20.269666+00:00",
+  "updated_at": "2026-08-02T01:06:15.515797+00:00",
   "base_dir": "data/dataset",
   "entries": {
     "daily_price@latest": {
@@ -75,7 +75,34 @@
         "validation_rules": [],
         "version": "2026-08-01"
       },
-      "registered_at": "2026-08-01T10:17:20.269653+00:00"
+      "registered_at": "2026-08-01T13:57:12.004883+00:00"
+    },
+    "test_ds@2026-08-02": {
+      "name": "test_ds",
+      "version": "2026-08-02",
+      "path": "data/dataset/test_ds_2026-08-02.parquet",
+      "metadata": {
+        "name": "test_ds",
+        "owner": "me",
+        "source": "demo",
+        "schema": {
+          "trade_date": "date",
+          "symbol": "str"
+        },
+        "frequency": "daily",
+        "primary_key": [
+          "trade_date",
+          "symbol"
+        ],
+        "timezone": "Asia/Shanghai",
+        "coverage_start": "2024-01-01",
+        "coverage_end": "2024-01-05",
+        "pit_confidence": "high",
+        "update_policy": "daily_append",
+        "validation_rules": [],
+        "version": "2026-08-02"
+      },
+      "registered_at": "2026-08-02T01:06:15.515778+00:00"
     }
   }
 }
