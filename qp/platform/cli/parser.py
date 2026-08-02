@@ -531,12 +531,25 @@ def strategy_list() -> None:
 @click.argument("strategy_id")
 @click.option("--by", type=str, default="", help="Approver name")
 @click.option("--version", type=str, default=None, help="Freeze version string")
-def strategy_approve(strategy_id: str, by: str, version: str | None) -> None:
+@click.option(
+    "--from-experiment", "from_experiment",
+    type=str, default=None,
+    help="Load weights & metrics from this experiment_id",
+)
+def strategy_approve(
+    strategy_id: str,
+    by: str,
+    version: str | None,
+    from_experiment: str | None,
+) -> None:
     """Freeze a strategy as an ApprovedStrategy snapshot."""
     from qp.platform.cli.commands.strategy import cmd_strategy_approve
 
     raise SystemExit(cmd_strategy_approve(
-        strategy_id=strategy_id, approved_by=by, version=version,
+        strategy_id=strategy_id,
+        approved_by=by,
+        version=version,
+        from_experiment=from_experiment,
     ))
 
 

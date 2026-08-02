@@ -11,26 +11,89 @@ def cmd_strategy_approve(
     strategy_id: str,
     approved_by: str = "",
     version: str | None = None,
+    from_experiment: str | None = None,
 ) -> int:
     """Freeze a registered strategy as an ApprovedStrategy snapshot.
 
+    Args:
+        strategy_id: Strategy to approve.
+        approved_by: Name of the approver.
+        version: Optional version string override.
+        from_experiment: If set, load weights + backtest metrics from
+            this experiment_id instead of the current Registry metadata.
+
     The strategy must already be registered with weights, parameters,
-    and backtest metrics in its StrategyMeta.
+    and backtest metrics in its StrategyMeta (unless --from-experiment
+    is used, in which case those are loaded from the experiment record).
     """
-    from qp.strategy.registry import StrategyRegistry
+    import json
+    from pathlib import Path
+
+    from qp.shared.types import StrategyLifecycle
+    from qp.strategy.registry import StrategyMeta, StrategyRegistry
 
     registry = StrategyRegistry()
 
-    # Check that the strategy exists
-    try:
-        registry.get_lifecycle(strategy_id)
-    except KeyError:
-        print(f"❌ 策略 '{strategy_id}' 未注册 / Strategy not registered")
-        print("   先运行 qp run daily 注册策略，或 qp experiment run 验证策略")
-        return 1
+    # ── Load weights & metrics from experiment if specified ──
+    if from_experiment:
+        exp_path = Path("data/experiments") / f"{from_experiment}.json"
+        if not exp_path.exists():
+            print(f"❌ 实验 '{from_experiment}' 不存在 / Experiment not found")
+            print(f"   {exp_path}")
+            return 1
+
+        with open(exp_path, encoding="utf-8") as f:
+            exp_data = json.load(f)
+
+        exp_cfg = exp_data.get("config", {})
+        exp_met = exp_data.get("metrics", {})
+        exp_weights = exp_cfg.get("model_params", {})
+
+        if not exp_weights:
+            print(f"❌ 实验 '{from_experiment}' 没有 model_params / No weights in experiment")
+            return 1
+
+        exp_strategy = exp_cfg.get("strategy_name", strategy_id)
+        if exp_strategy != strategy_id:
+            print(f"⚠️  实验策略 '{exp_strategy}' ≠ 目标策略 '{strategy_id}'")
+            print("   继续使用实验权重, 但请确认这是你想要的")
+
+        # Build/update StrategyMeta from experiment data
+        try:
+            meta = registry.get_meta(strategy_id)
+        except KeyError:
+            meta = StrategyMeta()
+        meta.weights = dict(exp_weights)
+        meta.backtest_ic = float(exp_met.get("ic_mean", 0))
+        meta.backtest_sharpe = float(exp_met.get("sharpe_ratio", 0))
+        meta.backtest_max_dd = float(exp_met.get("max_drawdown_pct", 0))
+        meta.backtest_excess_return = float(exp_met.get("excess_return_pct", 0))
+        meta.strategy_version = version or from_experiment
+        meta.owner = approved_by or meta.owner
+
+        # Ensure strategy is registered in the in-memory registry
+        if strategy_id not in registry.list_strategies():
+            registry._lifecycles[strategy_id] = StrategyLifecycle.RESEARCH
+
+        # Write updated meta to registry before approve
+        registry.set_meta(strategy_id, meta)
+        registry._save()
+
+        print(f"📋 从实验加载: {from_experiment}")
+        print(f"   权重: {len(exp_weights)} 因子")
+        print(f"   IC: {meta.backtest_ic:.4f}  Sharpe: {meta.backtest_sharpe:.2f}")
+    else:
+        # Check that the strategy exists
+        try:
+            registry.get_lifecycle(strategy_id)
+        except KeyError:
+            print(f"❌ 策略 '{strategy_id}' 未注册 / Strategy not registered")
+            print("   先运行 qp run daily 注册策略，或 qp experiment run 验证策略")
+            return 1
+
+        meta = registry.get_meta(strategy_id)
 
     # Check that it has weights
-    meta = registry.get_meta(strategy_id)
     if not meta.weights:
         print(f"❌ 策略 '{strategy_id}' 没有因子权重 / Strategy has no weights")
         print("   设置 meta.weights 后再 approve")
