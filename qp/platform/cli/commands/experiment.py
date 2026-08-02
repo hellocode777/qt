@@ -239,6 +239,20 @@ def cmd_experiment_run() -> int:
     # Parse options
     from loguru import logger as _loguru_logger
 
+    # Default to INFO unless --debug is passed (loguru defaults to DEBUG)
+    _loguru_logger.remove()
+    _loguru_logger.add(
+        sys.stderr,
+        level="INFO",
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name: <32}</cyan> | "
+            "<level>{message}</level>"
+        ),
+        colorize=True,
+    )
+
     from qp.pipeline.multifactor_pipeline import MultiFactorPipeline
     from qp.platform.pipeline.context import PipelineContext
 
