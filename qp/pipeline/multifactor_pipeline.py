@@ -1567,6 +1567,7 @@ class MultiFactorPipeline(BasePipeline):
                 "annual_volatility_pct": round(annual_vol, 2),
                 "n_days": n_trading_days,
                 "n_trades": int(result.metrics.get("n_trades", 0)),
+                "turnover_pct": float(result.metrics.get("turnover_pct", 0.0)),
             },
             lineage_graph={
                 "dataset": f"{dataset}@{start_date}",
