@@ -29,6 +29,7 @@ Thumbs.db
 
 # Project
 *.parquet
+*.ping
 *.db
 *.duckdb
 *.sqlite
