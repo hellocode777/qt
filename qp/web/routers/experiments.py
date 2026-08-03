@@ -378,12 +378,33 @@ async def experiment_trades(request: Request, experiment_id: str) -> Any:
     """Show trade details (buy/sell per rebalance) for an experiment."""
     trades = _reconstruct_trades(experiment_id)
 
+    # Load real backtest data if available (saved by pipeline since 2026-08-03+)
+    exp_dir = Path("data/experiments") / experiment_id
+    equity_json = ""
+    has_real_nav = False
+
+    nav_path = exp_dir / "daily_nav.parquet"
+    if nav_path.exists():
+        try:
+            nav_df = pl.read_parquet(str(nav_path))
+            if not nav_df.is_empty():
+                nav_records = nav_df.sort("date").to_dicts()
+                equity_json = json.dumps([
+                    {"date": str(r["date"])[:10], "equity": r["equity"]}
+                    for r in nav_records
+                ])
+                has_real_nav = True
+        except Exception:
+            pass
+
     return templates.TemplateResponse(
         request=request,
         name="experiment_trades.html",
         context={
             "experiment_id": experiment_id,
             "trades": trades,
+            "equity_json": equity_json,
+            "has_real_nav": has_real_nav,
             "has_trades": len(trades.get("rebalance_periods", [])) > 0,
             "page_title": f"Trade Details — {experiment_id}",
         },

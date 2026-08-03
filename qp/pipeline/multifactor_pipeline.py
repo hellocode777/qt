@@ -702,7 +702,6 @@ class MultiFactorPipeline(BasePipeline):
         snapshot_dir = _Path("data/experiments") / experiment_id
         try:
             snapshot_dir.mkdir(parents=True, exist_ok=True)
-            snapshot_path = snapshot_dir / "price_data.parquet"
 
             # Save full price data (not just close) so experiment can be reproduced
             full_parts: list[pl.DataFrame] = []
@@ -711,8 +710,26 @@ class MultiFactorPipeline(BasePipeline):
                     full_parts.append(_df)
             if full_parts:
                 snapshot_df = pl.concat(full_parts)
-                snapshot_df.write_parquet(str(snapshot_path))
-                logger.info("📸 数据快照已保存: {} ({} 行)", snapshot_path, snapshot_df.height)
+                snapshot_df.write_parquet(str(snapshot_dir / "price_data.parquet"))
+
+            # Save daily NAV (equity curve) for WebUI charting
+            daily_equity_list = bt.get("daily_equity", [])
+            daily_dates = bt.get("daily_dates", [])
+            if daily_equity_list and len(daily_equity_list) == len(daily_dates):
+                nav_df = pl.DataFrame({
+                    "date": daily_dates,
+                    "equity": [round(e, 2) for e in daily_equity_list],
+                })
+                nav_df.write_parquet(str(snapshot_dir / "daily_nav.parquet"))
+                logger.info("📈 每日净值已保存: {} 行", nav_df.height)
+
+            # Save trade log for WebUI trade detail
+            trade_log_df = bt.get("trade_log")
+            if trade_log_df is not None and not trade_log_df.is_empty():
+                trade_log_df.write_parquet(str(snapshot_dir / "trade_log.parquet"))
+                logger.info("📋 交易日志已保存: {} 笔", trade_log_df.height)
+
+            logger.info("📸 数据快照已保存: {}", snapshot_dir)
         except Exception as _exc:
             logger.debug("数据快照保存失败 (非致命): {}", _exc)
 
@@ -1471,6 +1488,10 @@ class MultiFactorPipeline(BasePipeline):
             "total_stamp_tax": round(broker.total_stamp_tax, 2),
             "total_slippage": round(broker.total_slippage, 2),
             "turnover_pct": turnover_pct,
+            # Persisted for WebUI equity curve
+            "daily_equity": daily_equity,
+            "daily_dates": [str(d) for d in all_dates],
+            "trade_log": broker.get_trade_log(),
         }
 
     @staticmethod
