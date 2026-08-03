@@ -61,3 +61,80 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('htmx:configRequest', () => {
   // Ready for future headers
 });
+
+// ---------------------------------------------------------------------------
+// Equity curve chart (simulation page)
+// ---------------------------------------------------------------------------
+function initEquityChart() {
+  const canvas = document.getElementById('equityChart');
+  if (!canvas) return;
+
+  // Avoid re-initializing an existing chart
+  if (canvas._chart) {
+    canvas._chart.destroy();
+  }
+
+  const el = document.getElementById('equity-data');
+  if (!el) return;
+
+  let rawData;
+  try {
+    rawData = JSON.parse(el.textContent || '[]');
+  } catch {
+    return;
+  }
+  if (!rawData || rawData.length === 0) return;
+
+  const labels = rawData.map(d => d.date);
+  const equity = rawData.map(d => d.total_equity);
+  const marketValue = rawData.map(d => d.market_value);
+
+  canvas._chart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '总权益 Total Equity',
+          data: equity,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.05)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          borderWidth: 2,
+        },
+        {
+          label: '持仓市值 Market Value',
+          data: marketValue,
+          borderColor: '#10b981',
+          borderDash: [4, 3],
+          tension: 0.3,
+          pointRadius: 1,
+          borderWidth: 1.5,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.dataset.label + ': ¥' + Number(ctx.raw).toLocaleString()
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: { callback: v => '¥' + (v / 10000).toFixed(0) + '万' }
+        }
+      }
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initEquityChart);
+document.addEventListener('htmx:afterSettle', initEquityChart);
