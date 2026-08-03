@@ -25,7 +25,7 @@
     <span>&#128200; 权益曲线 Equity Curve</span>
   </div>
   <div class="card-body">
-    <canvas id="equityChart" style="max-height: 300px;"></canvas>
+    <div style="height: 300px;"><canvas id="equityChart"></canvas></div>
   </div>
 </div>
 
@@ -102,6 +102,14 @@
 </div>
 
 <script type="application/json" id="equity-data">{{ equity_data | safe }}</script>
+<script>
+  // Ensure initEquityChart runs after cockpit.js has loaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEquityChart);
+  } else {
+    initEquityChart();
+  }
+</script>
 
 {% endif %}
 
