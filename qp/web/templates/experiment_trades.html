@@ -27,7 +27,7 @@
 <div class="card" style="margin-bottom: 20px;">
   <div class="card-header">
     <span>&#128200; 收益曲线 Equity Curve</span>
-    <span class="c-muted" style="font-size: 12px;">等权 Top-{{ trades.top_n }} vs 等权全市场</span>
+    <span class="c-muted" style="font-size: 12px;">等权 Top-{{ trades.top_n }} 每次调仓净值</span>
   </div>
   <div class="card-body">
     <div style="position:relative;height:280px;">
@@ -62,7 +62,7 @@
   var ph = H - pad.top - pad.bottom;
 
   var vals = [];
-  rawData.forEach(function(d) { vals.push(d.equity); vals.push(d.benchmark); });
+  rawData.forEach(function(d) { vals.push(d.equity); });
   var minV = Math.min.apply(null, vals), maxV = Math.max.apply(null, vals);
   var range = maxV - minV || 1000;
   minV -= range * 0.1; maxV += range * 0.1;
@@ -89,12 +89,6 @@
       ctx.fillText(d.date, x(i), pad.top + ph + 20);
   });
 
-  // Benchmark (grey)
-  ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
-  ctx.beginPath();
-  rawData.forEach(function(d, i) { var py = y(d.benchmark); if (i===0) ctx.moveTo(x(i),py); else ctx.lineTo(x(i),py); });
-  ctx.stroke(); ctx.setLineDash([]);
-
   // Equity (blue)
   ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2.5;
   ctx.beginPath();
@@ -113,13 +107,7 @@
   var lx = pad.left, ly = 8;
   ctx.fillStyle = '#2563eb'; ctx.fillRect(lx, ly, 14, 3);
   ctx.fillStyle = '#374151'; ctx.font = '12px sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('策略 Top-10', lx + 20, ly + 5);
-
-  lx += 110;
-  ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
-  ctx.beginPath(); ctx.moveTo(lx, ly+2); ctx.lineTo(lx+14, ly+2); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = '#374151';
-  ctx.fillText('等权基准', lx + 20, ly + 5);
+  ctx.fillText('策略净值', lx + 20, ly + 5);
 
   // Hover
   var tip = document.getElementById('chart-tooltip');
@@ -137,7 +125,7 @@
       tip.style.display = 'block';
       tip.style.left = Math.min(nearest.ix + 12, W - 200) + 'px';
       tip.style.top = Math.max(0, nearest.iy - 55) + 'px';
-      tip.innerHTML = '<strong>' + nearest.d.date + '</strong><br>策略: ¥' + Number(nearest.d.equity).toLocaleString() + '<br>基准: ¥' + Number(nearest.d.benchmark).toLocaleString();
+      tip.innerHTML = '<strong>' + nearest.d.date + '</strong><br>净值: ¥' + Number(nearest.d.equity).toLocaleString();
     } else { tip.style.display = 'none'; }
   });
   canvas.addEventListener('mouseleave', function() { tip.style.display = 'none'; });
