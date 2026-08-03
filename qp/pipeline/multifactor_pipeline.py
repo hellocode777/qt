@@ -706,7 +706,7 @@ class MultiFactorPipeline(BasePipeline):
             # Save full price data (not just close) so experiment can be reproduced
             full_parts: list[pl.DataFrame] = []
             for _code, _df in price_data.items():
-                if _df is not None and not _df.is_empty():
+                if _df is not None and not _df.is_empty() and "trade_date" in _df.columns:
                     full_parts.append(_df)
             if full_parts:
                 snapshot_df = pl.concat(full_parts)
@@ -715,7 +715,7 @@ class MultiFactorPipeline(BasePipeline):
             # Save daily NAV (equity curve) for WebUI charting
             daily_equity_list = bt.get("daily_equity", [])
             daily_dates = bt.get("daily_dates", [])
-            if daily_equity_list and len(daily_equity_list) == len(daily_dates):
+            if daily_equity_list and daily_dates and len(daily_equity_list) == len(daily_dates):
                 nav_df = pl.DataFrame({
                     "date": daily_dates,
                     "equity": [round(e, 2) for e in daily_equity_list],
@@ -731,7 +731,7 @@ class MultiFactorPipeline(BasePipeline):
 
             logger.info("📸 数据快照已保存: {}", snapshot_dir)
         except Exception as _exc:
-            logger.debug("数据快照保存失败 (非致命): {}", _exc)
+            logger.warning("数据快照保存失败 (非致命): {} | {}", type(_exc).__name__, _exc)
 
         self._record_experiment(
             result=result,
@@ -1768,7 +1768,7 @@ def _flatten_price_data_for_backtest(
     parts: list[pl.DataFrame] = []
     for code, df in price_data.items():
         if df is not None and not df.is_empty():
-            if "close" not in df.columns:
+            if "close" not in df.columns or "trade_date" not in df.columns:
                 continue
             cols = ["trade_date", "close"]
             if "volume" in df.columns:

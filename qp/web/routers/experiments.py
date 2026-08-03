@@ -394,8 +394,8 @@ async def experiment_trades(request: Request, experiment_id: str) -> Any:
                     for r in nav_records
                 ])
                 has_real_nav = True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to load daily_nav {}: {}", nav_path, exc)
 
     return templates.TemplateResponse(
         request=request,
