@@ -9,6 +9,7 @@ GET "/simulation" — Shadow portfolio overview with:
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -32,6 +33,16 @@ async def shadow_dashboard(request: Request) -> Any:
     trading_days = len(history)
     total_return = summary.get("total_return", 0)
 
+    # Build equity curve data for Chart.js
+    equity_data = [
+        {
+            "date": h["date"],
+            "total_equity": h["total_equity"],
+            "market_value": h.get("market_value", 0),
+        }
+        for h in history
+    ]
+
     logger.info("Shadow dashboard: {} days, return={:.2%}", trading_days, total_return)
 
     return templates.TemplateResponse(
@@ -43,6 +54,7 @@ async def shadow_dashboard(request: Request) -> Any:
             "trading_days": trading_days,
             "total_return": total_return,
             "total_return_fmt": f"{total_return:+.2%}",
+            "equity_data": json.dumps(equity_data),
             "has_data": len(history) > 0,
             "page_title": "Shadow Production — QP Decision Center",
         },
