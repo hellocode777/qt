@@ -18,12 +18,13 @@
 9. [实验追踪与知识库](#9-实验追踪与知识库)
 10. [模拟交易](#10-模拟交易)
 11. [自动化调度](#11-自动化调度)
-12. [全命令速查表](#12-全命令速查表)
-13. [典型工作流](#13-典型工作流)
-14. [配置说明](#14-配置说明)
-15. [项目架构](#15-项目架构)
-16. [开发命令](#16-开发命令)
-17. [故障排查](#17-故障排查)
+12. [Web 决策中心](#12-web-决策中心)
+13. [全命令速查表](#13-全命令速查表)
+14. [典型工作流](#14-典型工作流)
+15. [配置说明](#15-配置说明)
+16. [项目架构](#16-项目架构)
+17. [开发命令](#17-开发命令)
+18. [故障排查](#18-故障排查)
 
 ---
 
@@ -648,7 +649,88 @@ data/
 
 ---
 
-## 12. 全命令速查表
+## 12. Web 决策中心
+
+QP 提供一个只读的 Web 仪表盘，用于可视化投资决策、持仓和监控状态。
+
+### 12.1 手动启动
+
+```bash
+uv run qp web start
+```
+
+打开浏览器访问 **http://localhost:8080**。
+
+启动选项：
+
+```bash
+# 指定端口和绑定地址
+uv run qp web start --port 9000 --host 127.0.0.1
+
+# 开发模式（代码变更自动重载）
+uv run qp web start --reload
+```
+
+> 默认绑定 `0.0.0.0:8080`（监听所有网络接口），日志中会显示 `http://localhost:8080`。
+
+### 12.2 开机自启（systemd 用户服务）
+
+Web 服务通过 systemd 用户服务实现开机自启，无需 root 权限。
+
+**服务文件**：`~/.config/systemd/user/qp-web.service`
+
+```ini
+[Unit]
+Description=QP Decision Center Web Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/shuai/workspace/qt
+ExecStart=/home/shuai/.local/bin/uv run qp web start
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+RestartSec=5
+Environment="PATH=/home/shuai/.local/bin:/usr/local/bin:/usr/bin:/bin"
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=qp-web
+
+[Install]
+WantedBy=default.target
+```
+
+**启用与日常管理**：
+
+```bash
+# 开启 linger（允许未登录时启动用户服务，只需执行一次）
+loginctl enable-linger $USER
+
+# 启用并启动服务
+systemctl --user daemon-reload
+systemctl --user enable qp-web.service
+systemctl --user start qp-web.service
+
+# 查看状态
+systemctl --user status qp-web
+
+# 重启 / 停止
+systemctl --user restart qp-web
+systemctl --user stop qp-web
+
+# 查看日志
+journalctl --user -u qp-web -f
+```
+
+**关键特性**：
+- 开机自动启动，无需登录
+- 崩溃后 5 秒自动重启（`Restart=on-failure`）
+- 日志写入 systemd journal，`journalctl --user -u qp-web` 查看
+
+---
+
+## 13. 全命令速查表
 
 ### 系统
 
@@ -657,6 +739,7 @@ data/
 | `qp version` | 显示版本号 |
 | `qp doctor` | 环境诊断 |
 | `qp --help` | 帮助信息 |
+| `qp web start [--port] [--host] [--reload]` | 启动 Web 决策中心 |
 | `qp pipeline list` | 列出已注册管道 |
 | `qp scheduler start` | 启动后台定时调度器 |
 
@@ -749,7 +832,7 @@ data/
 
 ---
 
-## 13. 典型工作流
+## 14. 典型工作流
 
 ### 自动化（推荐：systemd 常驻）
 
@@ -829,7 +912,7 @@ sudo systemctl start qp-scheduler   # 启动（已配置开机自启）
 
 ---
 
-## 14. 配置说明
+## 15. 配置说明
 
 配置文件优先级：**CLI 参数 > 环境变量 > config.toml > 默认值**
 
@@ -897,7 +980,7 @@ export TELEGRAM_BOT_TOKEN=xxx
 
 ---
 
-## 15. 项目架构
+## 16. 项目架构
 
 ### 15.1 十二层架构
 
@@ -982,7 +1065,7 @@ qp/
 
 ---
 
-## 16. 开发命令
+## 17. 开发命令
 
 ```bash
 # 代码格式化
@@ -1002,7 +1085,7 @@ uv run pytest -x -q                        # 快速模式
 
 ---
 
-## 17. 故障排查
+## 18. 故障排查
 
 ### 数据文件不存在
 

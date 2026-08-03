@@ -44,7 +44,8 @@ def cmd_web_start() -> int:
 
     logger.info("=" * 56)
     logger.info("  QP Decision Center — Investment Decision Cockpit")
-    logger.info("  URL:    http://{}:{}", host, port)
+    display_host = "localhost" if host in ("0.0.0.0", "::") else host
+    logger.info("  URL:    http://{}:{}", display_host, port)
     logger.info("  Mode:   {}", "development (auto-reload)" if reload else "production")
     logger.info("  READ-ONLY — investment logic is computed by QP pipelines")
     logger.info("=" * 56)
