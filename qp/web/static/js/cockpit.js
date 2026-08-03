@@ -67,83 +67,138 @@ document.addEventListener('htmx:configRequest', () => {
 // ---------------------------------------------------------------------------
 function initEquityChart() {
   try {
-    const canvas = document.getElementById('equityChart');
+    var canvas = document.getElementById('equityChart');
     if (!canvas) return;
 
-    // Avoid re-initializing an existing chart
-    if (canvas._chart) {
-      canvas._chart.destroy();
-      canvas._chart = null;
-    }
+    // Avoid re-initializing
+    if (canvas._drawn) return;
+    canvas._drawn = true;
 
-    const el = document.getElementById('equity-data');
+    var el = document.getElementById('equity-data');
     if (!el) return;
 
-    let rawData;
-    try {
-      rawData = JSON.parse(el.textContent || '[]');
-    } catch {
-      return;
-    }
+    var rawData;
+    try { rawData = JSON.parse(el.textContent || '[]'); } catch(e) { return; }
     if (!rawData || rawData.length === 0) return;
 
-    var labels = rawData.map(function(d) { return d.date; });
-    var equity = rawData.map(function(d) { return d.total_equity; });
-    var marketValue = rawData.map(function(d) { return d.market_value; });
+    // Set canvas resolution
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.parentElement.getBoundingClientRect();
+    var W = rect.width;
+    var H = rect.height || 300;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
 
-    // With only 1 data point, use larger point radius so it's visible
-    var isSinglePoint = rawData.length === 1;
+    // Layout
+    var pad = { top: 20, right: 20, bottom: 40, left: 60 };
+    var pw = W - pad.left - pad.right;
+    var ph = H - pad.top - pad.bottom;
 
-    canvas._chart = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: '总权益 Total Equity',
-            data: equity,
-            borderColor: '#2563eb',
-            backgroundColor: 'rgba(37, 99, 235, 0.1)',
-            fill: isSinglePoint ? false : true,
-            tension: 0.3,
-            pointRadius: isSinglePoint ? 6 : 2,
-            pointHoverRadius: 8,
-            borderWidth: 2,
-          },
-          {
-            label: '持仓市值 Market Value',
-            data: marketValue,
-            borderColor: '#10b981',
-            borderDash: [4, 3],
-            tension: 0.3,
-            pointRadius: isSinglePoint ? 5 : 1,
-            pointHoverRadius: 7,
-            borderWidth: 1.5,
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        interaction: { intersect: false, mode: 'index' },
-        plugins: {
-          legend: { position: 'top' },
-          tooltip: {
-            callbacks: {
-              label: function(ctx) { return ctx.dataset.label + ': ¥' + Number(ctx.raw).toLocaleString(); }
-            }
-          }
-        },
-        scales: {
-          x: { display: true },
-          y: {
-            display: true,
-            ticks: { callback: function(v) { return '¥' + (v / 10000).toFixed(0) + '万'; } }
-          }
-        }
+    // Compute value range
+    var vals = [];
+    rawData.forEach(function(d) {
+      vals.push(d.total_equity);
+      vals.push(d.market_value);
+    });
+    var minV = Math.min.apply(null, vals);
+    var maxV = Math.max.apply(null, vals);
+    var range = maxV - minV || maxV * 0.02 || 1000;
+    minV -= range * 0.1;
+    maxV += range * 0.1;
+
+    function x(i) { return pad.left + (i / Math.max(rawData.length - 1, 1)) * pw; }
+    function y(v) { return pad.top + ph - ((v - minV) / (maxV - minV)) * ph; }
+
+    // Background
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines (Y axis)
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1;
+    var nGrid = 4;
+    for (var g = 0; g <= nGrid; g++) {
+      var gy = pad.top + (g / nGrid) * ph;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, gy);
+      ctx.lineTo(W - pad.right, gy);
+      ctx.stroke();
+
+      var gv = maxV - (g / nGrid) * (maxV - minV);
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('¥' + (gv / 10000).toFixed(1) + '万', pad.left - 6, gy + 4);
+    }
+
+    // X labels
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#6b7280';
+    rawData.forEach(function(d, i) {
+      if (rawData.length <= 7 || i % Math.ceil(rawData.length / 7) === 0 || i === rawData.length - 1) {
+        ctx.fillText(d.date, x(i), pad.top + ph + 20);
       }
     });
+
+    // Draw line: Total Equity
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    rawData.forEach(function(d, i) {
+      var py = y(d.total_equity);
+      if (i === 0) ctx.moveTo(x(i), py);
+      else ctx.lineTo(x(i), py);
+    });
+    ctx.stroke();
+
+    // Draw line: Market Value (dashed)
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    rawData.forEach(function(d, i) {
+      var py = y(d.market_value);
+      if (i === 0) ctx.moveTo(x(i), py);
+      else ctx.lineTo(x(i), py);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw points
+    rawData.forEach(function(d, i) {
+      var r = rawData.length === 1 ? 5 : 3;
+
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.arc(x(i), y(d.total_equity), r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.arc(x(i), y(d.market_value), r - 1, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Legend
+    var lx = pad.left;
+    var ly = 8;
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(lx, ly, 12, 12);
+    ctx.fillStyle = '#374151';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('总权益 Total Equity', lx + 16, ly + 11);
+
+    lx += 140;
+    ctx.fillStyle = '#10b981';
+    ctx.fillRect(lx, ly, 12, 12);
+    ctx.fillStyle = '#374151';
+    ctx.fillText('持仓市值 Market Value', lx + 16, ly + 11);
+
   } catch (e) {
     console.error('initEquityChart:', e);
   }
