@@ -121,7 +121,21 @@ class ShadowLedger:
 
         dp = DecisionPackage.load_latest()
         if dp is None:
-            return {"date": date_str, "status": "no_decision", "daily_pnl": 0.0}
+            # Record a "no decision" snapshot so the Web UI has history to show
+            snapshot = {
+                "date": date_str,
+                "n_positions": 0,
+                "market_value": 0,
+                "cash": self._capital,
+                "realized_pnl": 0,
+                "unrealized_pnl": 0,
+                "total_equity": self._capital,
+                "decision_id": "N/A",
+                "n_buys": 0,
+                "n_sells": 0,
+            }
+            self._save_daily(snapshot)
+            return snapshot
 
         # Load price data for mark-to-market
         prices = self._load_prices(date_str)

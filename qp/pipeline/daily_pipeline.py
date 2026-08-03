@@ -1016,45 +1016,6 @@ class DailyPipeline(BasePipeline):
                 logger.warning("Exit Engine check skipped: {}", exc)
 
             # ================================================================
-            # Step 12.8: Shadow Production — daily paper trading (Shadow Production)
-            # ================================================================
-            shadow_equity = total_capital
-            shadow_n_positions = 0
-            try:
-                from qp.simulation.shadow_ledger import ShadowLedger
-
-                shadow = ShadowLedger()
-                shadow_result = shadow.run_daily(today.isoformat())
-                shadow_equity = shadow_result.get("total_equity", total_capital)
-                shadow_n_positions = shadow_result.get("n_positions", 0)
-                result.metrics["shadow_equity"] = round(shadow_equity, 2)
-                result.metadata["shadow_pnl"] = str(shadow_result.get("unrealized_pnl", 0))
-                logger.info(
-                    "Shadow: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
-                    shadow_equity,
-                    shadow_result.get("unrealized_pnl", 0),
-                    shadow_n_positions,
-                )
-            except Exception as exc:
-                logger.warning("Shadow production skipped: {}", exc)
-
-            # Step 12.9: Record portfolio NAV for KPI tracking
-            # ================================================================
-            try:
-                from qp.portfolio.nav_ledger import NAVLedger
-
-                nav_ledger = NAVLedger()
-                nav_ledger.record_daily(
-                    date=today.isoformat(),
-                    total_value=shadow_equity,
-                    cash=total_capital * 0.05,  # ~5% cash buffer
-                    n_positions=shadow_n_positions,
-                )
-                result.metrics["nav_history_days"] = nav_ledger.row_count()
-            except Exception as exc:
-                logger.debug("NAV recording skipped: {}", exc)
-
-            # ================================================================
             # Step 13: Build DecisionPackage
             # ================================================================
             package_id = f"dp-{today.isoformat()}-{run_id_short}"
@@ -1149,6 +1110,45 @@ class DailyPipeline(BasePipeline):
             result.metadata["decision_package_id"] = package_id
             result.metadata["decision_package_json"] = str(json_path)
             result.metadata["decision_package_md"] = str(md_path)
+
+            # ================================================================
+            # Step 13.1: Shadow Production — daily paper trading (Shadow Production)
+            # ================================================================
+            shadow_equity = total_capital
+            shadow_n_positions = 0
+            try:
+                from qp.simulation.shadow_ledger import ShadowLedger
+
+                shadow = ShadowLedger()
+                shadow_result = shadow.run_daily(today.isoformat())
+                shadow_equity = shadow_result.get("total_equity", total_capital)
+                shadow_n_positions = shadow_result.get("n_positions", 0)
+                result.metrics["shadow_equity"] = round(shadow_equity, 2)
+                result.metadata["shadow_pnl"] = str(shadow_result.get("unrealized_pnl", 0))
+                logger.info(
+                    "Shadow: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
+                    shadow_equity,
+                    shadow_result.get("unrealized_pnl", 0),
+                    shadow_n_positions,
+                )
+            except Exception as exc:
+                logger.warning("Shadow production skipped: {}", exc)
+
+            # Step 13.2: Record portfolio NAV for KPI tracking
+            # ================================================================
+            try:
+                from qp.portfolio.nav_ledger import NAVLedger
+
+                nav_ledger = NAVLedger()
+                nav_ledger.record_daily(
+                    date=today.isoformat(),
+                    total_value=shadow_equity,
+                    cash=total_capital * 0.05,  # ~5% cash buffer
+                    n_positions=shadow_n_positions,
+                )
+                result.metrics["nav_history_days"] = nav_ledger.row_count()
+            except Exception as exc:
+                logger.debug("NAV recording skipped: {}", exc)
 
             # ================================================================
             # Artifacts
