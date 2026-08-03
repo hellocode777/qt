@@ -87,7 +87,13 @@
           </td>
           <td>¥{{ "%.0f"|format(h.realized_pnl) }}</td>
           <td><strong>¥{{ "%.0f"|format(h.total_equity) }}</strong></td>
-          <td><a href="/decisions/{{ h.decision_id }}" style="font-size: 12px; color: var(--blue);">{{ h.decision_id }}</a></td>
+          <td>
+            {% if h.decision_id and h.decision_id != "N/A" %}
+            <a href="/decisions/{{ h.decision_id }}" style="font-size: 12px; color: var(--blue);">{{ h.decision_id[:32] }}{% if h.decision_id|length > 32 %}…{% endif %}</a>
+            {% else %}
+            <span style="color: var(--c-muted);">—</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

@@ -140,21 +140,12 @@ class ShadowLedger:
         # Load price data for mark-to-market
         prices = self._load_prices(date_str)
 
-        # 1. Mark existing positions to market
-        active = self._load_active()
-        daily_pnl = 0.0
-        for pos in active:
-            px = prices.get(pos.symbol, pos.entry_price)
-            if px > 0:
-                unrealized = (px - pos.entry_price) * pos.shares
-                daily_pnl += unrealized
-
-        # 2. Execute SELL recommendations
+        # 1. Execute SELL recommendations first (before mark-to-market)
         sell_recs = [r for r in dp.report.recommendations if r.action == "SELL"]
         for rec in sell_recs:
             self._close_position(rec.symbol, rec.estimated_price, rec.reason, date_str)
 
-        # 3. Execute BUY recommendations (skip if already have active position)
+        # 2. Execute BUY recommendations (skip if already have active position)
         active_symbols = {p.symbol for p in self._load_active()}
         new_positions = 0
         for rec in dp.report.buys:
@@ -173,8 +164,17 @@ class ShadowLedger:
             self._save_position(pos)
             new_positions += 1
 
-        # 4. Record daily snapshot
+        # 3. Mark-to-market: compute unrealized PnL from CURRENT active positions
         active_after = self._load_active()
+        daily_pnl = 0.0
+        cost_basis = 0.0
+        for pos in active_after:
+            px = prices.get(pos.symbol, pos.entry_price)
+            if px > 0:
+                unrealized = (px - pos.entry_price) * pos.shares
+                daily_pnl += unrealized
+            cost_basis += pos.entry_price * pos.shares
+
         total_value = sum(
             p.shares * max(prices.get(p.symbol, p.entry_price), 0)
             for p in active_after
@@ -182,14 +182,17 @@ class ShadowLedger:
         closed = self._load_closed()
         realized_pnl = sum(p.pnl for p in closed)
 
+        # Cash = initial capital + realized gains - cost basis of active positions
+        cash = self._capital + realized_pnl - cost_basis
+
         snapshot = {
             "date": date_str,
             "n_positions": len(active_after),
             "market_value": total_value,
-            "cash": self._capital - total_value,
+            "cash": cash,
             "realized_pnl": realized_pnl,
             "unrealized_pnl": daily_pnl,
-            "total_equity": self._capital + realized_pnl + daily_pnl,
+            "total_equity": cash + total_value,
             "decision_id": dp.package_id,
             "n_buys": dp.report.n_buys,
             "n_sells": dp.report.n_sells,

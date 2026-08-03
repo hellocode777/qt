@@ -1116,6 +1116,7 @@ class DailyPipeline(BasePipeline):
             # ================================================================
             shadow_equity = total_capital
             shadow_n_positions = 0
+            shadow_cash = total_capital
             try:
                 from qp.simulation.shadow_ledger import ShadowLedger
 
@@ -1123,6 +1124,7 @@ class DailyPipeline(BasePipeline):
                 shadow_result = shadow.run_daily(today.isoformat())
                 shadow_equity = shadow_result.get("total_equity", total_capital)
                 shadow_n_positions = shadow_result.get("n_positions", 0)
+                shadow_cash = shadow_result.get("cash", shadow_equity)
                 result.metrics["shadow_equity"] = round(shadow_equity, 2)
                 result.metadata["shadow_pnl"] = str(shadow_result.get("unrealized_pnl", 0))
                 logger.info(
@@ -1143,7 +1145,7 @@ class DailyPipeline(BasePipeline):
                 nav_ledger.record_daily(
                     date=today.isoformat(),
                     total_value=shadow_equity,
-                    cash=total_capital * 0.05,  # ~5% cash buffer
+                    cash=shadow_cash,
                     n_positions=shadow_n_positions,
                 )
                 result.metrics["nav_history_days"] = nav_ledger.row_count()
