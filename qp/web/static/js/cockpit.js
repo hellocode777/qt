@@ -91,6 +91,9 @@ function initEquityChart() {
     var equity = rawData.map(function(d) { return d.total_equity; });
     var marketValue = rawData.map(function(d) { return d.market_value; });
 
+    // With only 1 data point, use larger point radius so it's visible
+    var isSinglePoint = rawData.length === 1;
+
     canvas._chart = new Chart(canvas, {
       type: 'line',
       data: {
@@ -100,10 +103,11 @@ function initEquityChart() {
             label: '总权益 Total Equity',
             data: equity,
             borderColor: '#2563eb',
-            backgroundColor: 'rgba(37, 99, 235, 0.05)',
-            fill: true,
+            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+            fill: isSinglePoint ? false : true,
             tension: 0.3,
-            pointRadius: 2,
+            pointRadius: isSinglePoint ? 6 : 2,
+            pointHoverRadius: 8,
             borderWidth: 2,
           },
           {
@@ -112,7 +116,8 @@ function initEquityChart() {
             borderColor: '#10b981',
             borderDash: [4, 3],
             tension: 0.3,
-            pointRadius: 1,
+            pointRadius: isSinglePoint ? 5 : 1,
+            pointHoverRadius: 7,
             borderWidth: 1.5,
           }
         ]
@@ -120,6 +125,7 @@ function initEquityChart() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false,
         interaction: { intersect: false, mode: 'index' },
         plugins: {
           legend: { position: 'top' },
@@ -130,7 +136,9 @@ function initEquityChart() {
           }
         },
         scales: {
+          x: { display: true },
           y: {
+            display: true,
             ticks: { callback: function(v) { return '¥' + (v / 10000).toFixed(0) + '万'; } }
           }
         }
