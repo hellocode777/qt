@@ -36,7 +36,12 @@ Thumbs.db
 config.toml
 !config.toml.example
 
-# Logs
+# Runtime data (auto-generated)
+data/decisions/
+data/positions/
+data/reports/
+data/dataset/registry.json
+data/monitoring/watchdog/
 *.log
 logs/
 
