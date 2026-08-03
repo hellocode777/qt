@@ -256,6 +256,64 @@ def _reconstruct_trades(experiment_id: str) -> dict[str, Any]:
         "rebalance_freq": rebalance_freq,
     }
 
+    # Build timeline heatmap data (symbol × period matrix)
+    all_symbols: list[str] = []
+    symbol_periods: dict[str, dict[str, Any]] = {}
+    for p in rebalance_periods:
+        for b in p.get("buys", []):
+            sym = b["symbol"]
+            if sym not in all_symbols:
+                all_symbols.append(sym)
+            if sym not in symbol_periods:
+                symbol_periods[sym] = {"count": 0, "first": p["date"], "last": p["date"]}
+            symbol_periods[sym]["count"] += 1
+            symbol_periods[sym]["last"] = p["date"]
+
+    # Sort by appearance count (most held first)
+    all_symbols.sort(key=lambda s: symbol_periods.get(s, {}).get("count", 0), reverse=True)
+
+    # Build period-by-period status for each top symbol
+    timeline_symbols = all_symbols[:30]
+    timeline_periods = rebalance_periods[-12:]  # Last 12 periods
+    timeline_rows: list[dict[str, Any]] = []
+    for sym in timeline_symbols:
+        cells: list[str] = []
+        info = symbol_periods.get(sym, {})
+        first_date = info.get("first", "")
+        last_date = info.get("last", "")
+        for p in timeline_periods:
+            p_date = p["date"]
+            is_buy = any(b["symbol"] == sym for b in p.get("buys", []))
+            is_sell = any(s["symbol"] == sym for s in p.get("sells", []))
+            is_held = first_date <= p_date <= last_date and not is_sell
+            if is_buy:
+                cells.append("buy")
+            elif is_sell:
+                cells.append("sell")
+            elif is_held:
+                cells.append("hold")
+            else:
+                cells.append("none")
+        timeline_rows.append({
+            "symbol": sym,
+            "count": symbol_periods.get(sym, {}).get("count", 0),
+            "cells": cells,
+        })
+
+    # Compute turnover stats
+    total_buys = sum(p.get("n_buys", 0) for p in rebalance_periods)
+    total_sells = sum(p.get("n_sells", 0) for p in rebalance_periods)
+    avg_hold = sum(v["count"] for v in symbol_periods.values()) / max(len(symbol_periods), 1)
+
+    result.update({
+        "timeline_symbols": timeline_rows,
+        "timeline_dates": [p["date"][-5:] for p in timeline_periods],
+        "total_buys": total_buys,
+        "total_sells": total_sells,
+        "n_symbols_traded": len(all_symbols),
+        "avg_hold_periods": round(avg_hold, 1),
+    })
+
     # Cache result
     exp_dir.mkdir(parents=True, exist_ok=True)
     try:

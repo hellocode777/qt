@@ -8,6 +8,7 @@
     <div class="meta">
       <a href="/experiments/{{ experiment_id }}" style="color: var(--blue);">&larr; 返回实验</a>
       &nbsp;|&nbsp; {{ experiment_id }}
+      &nbsp;|&nbsp; Top-{{ trades.top_n }} / {{ trades.rebalance_freq }}D 调仓
     </div>
   </div>
 </div>
@@ -18,84 +19,142 @@
   <h2>暂无交易明细</h2>
   <p>{{ trades.get("error", "无可用数据") }}</p>
 </div>
+
 {% else %}
 
-<!-- Summary -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 20px;">
+<!-- ── Stats Cards ── -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px;">
   <div class="card" style="text-align: center; padding: 12px;">
-    <div style="font-size: 11px; color: var(--c-muted);">调仓周期</div>
-    <div style="font-size: 24px; font-weight: 700;">{{ trades.rebalance_freq }}D</div>
+    <div style="font-size: 11px; color: var(--c-muted);">累计买入</div>
+    <div style="font-size: 24px; font-weight: 700; color: var(--green);">{{ trades.total_buys }}</div>
   </div>
   <div class="card" style="text-align: center; padding: 12px;">
-    <div style="font-size: 11px; color: var(--c-muted);">持仓数 Top-N</div>
-    <div style="font-size: 24px; font-weight: 700;">{{ trades.top_n }}</div>
+    <div style="font-size: 11px; color: var(--c-muted);">累计卖出</div>
+    <div style="font-size: 24px; font-weight: 700; color: var(--red);">{{ trades.total_sells }}</div>
   </div>
   <div class="card" style="text-align: center; padding: 12px;">
-    <div style="font-size: 11px; color: var(--c-muted);">因子数</div>
-    <div style="font-size: 24px; font-weight: 700;">{{ trades.n_features }}</div>
+    <div style="font-size: 11px; color: var(--c-muted);">涉及股票</div>
+    <div style="font-size: 24px; font-weight: 700;">{{ trades.n_symbols_traded }}</div>
   </div>
   <div class="card" style="text-align: center; padding: 12px;">
     <div style="font-size: 11px; color: var(--c-muted);">调仓次数</div>
     <div style="font-size: 24px; font-weight: 700;">{{ trades.total_periods }}</div>
   </div>
+  <div class="card" style="text-align: center; padding: 12px;">
+    <div style="font-size: 11px; color: var(--c-muted);">平均持有期</div>
+    <div style="font-size: 24px; font-weight: 700;">{{ trades.avg_hold_periods }}次</div>
+  </div>
 </div>
 
-<!-- Rebalance Periods -->
-{% for period in trades.rebalance_periods|reverse %}
-<div class="card" style="margin-bottom: 16px;">
+<!-- ── Holding Timeline Heatmap ── -->
+<div class="card" style="margin-bottom: 20px;">
   <div class="card-header">
-    <span>&#128197; {{ period.date }}</span>
-    <span style="font-size: 12px; color: var(--c-muted);">
-      &#128228; 买入 {{ period.n_buys }} &nbsp;
-      &#128229; 卖出 {{ period.n_sells }} &nbsp;
-      &#128204; 持有 {{ period.n_hold }}
+    <span>&#128203; 持仓热力图 Holding Timeline</span>
+    <span class="c-muted" style="font-size: 12px;">◆ 买入 &nbsp; ● 持有 &nbsp; ◇ 卖出 &nbsp; 只看前30只</span>
+  </div>
+  <div class="card-body" style="overflow-x: auto; padding: 12px;">
+    <table style="font-size: 11px; border-collapse: collapse; white-space: nowrap; width: 100%;">
+      <thead>
+        <tr>
+          <th style="text-align: left; min-width: 60px;">股票</th>
+          <th style="text-align: center; padding: 0 6px;">次</th>
+          {% for d in trades.timeline_dates %}
+          <th style="text-align: center; padding: 0 3px; font-size: 9px; font-weight: 400; color: var(--c-muted);">{{ d }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in trades.timeline_symbols %}
+        <tr>
+          <td style="font-weight: 600; font-size: 12px;"><code>{{ row.symbol }}</code></td>
+          <td style="text-align: center; color: var(--c-muted);">{{ row.count }}</td>
+          {% for cell in row.cells %}
+          <td style="text-align: center; padding: 2px 4px; font-size: 10px;
+            {% if cell == 'buy' %}color: #16a34a; font-weight: 700;{% endif %}
+            {% if cell == 'hold' %}color: #3b82f6;{% endif %}
+            {% if cell == 'sell' %}color: #dc2626;{% endif %}
+            {% if cell == 'none' %}color: #e5e7eb;{% endif %}
+          ">{% if cell == 'buy' %}◆{% elif cell == 'sell' %}◇{% elif cell == 'hold' %}●{% else %}·{% endif %}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Latest Rebalance (highlighted) ── -->
+{% set latest_periods = trades.rebalance_periods|reverse|list %}
+{% set latest = latest_periods[0] %}
+<div class="card" style="margin-bottom: 20px; border-left: 3px solid var(--blue);">
+  <div class="card-header">
+    <span>&#128197; 最新调仓 {{ latest.date }}</span>
+    <span style="font-size: 12px;">
+      <span style="color: var(--green);">&#9650; {{ latest.n_buys }}</span> &nbsp;
+      <span style="color: var(--red);">&#9660; {{ latest.n_sells }}</span> &nbsp;
+      <span style="color: var(--c-muted);">&#128204; {{ latest.n_hold }}</span>
     </span>
   </div>
   <div class="card-body" style="padding: 0;">
-    {% if period.buys %}
-    <table class="data-table" style="margin-bottom: 0;">
-      <thead>
-        <tr>
-          <th style="color: var(--green);">&#9650; 买入 BUY</th>
-          <th>价格</th>
-          <th>得分 Score</th>
-          <th>排名 Rank</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for b in period.buys %}
-        <tr>
-          <td><code>{{ b.symbol }}</code></td>
-          <td>¥{{ "%.2f"|format(b.price) }}</td>
-          <td class="font-mono">{{ "%.4f"|format(b.score) }}</td>
-          <td><span style="color: var(--green); font-weight: 600;">#{{ b.rank }}</span></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-
-    {% if period.sells %}
-    <table class="data-table" style="margin-top: 0;">
-      <thead>
-        <tr>
-          <th style="color: var(--red);">&#9660; 卖出 SELL</th>
-          <th>价格</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for s in period.sells %}
-        <tr>
-          <td><code>{{ s.symbol }}</code></td>
-          <td>¥{{ "%.2f"|format(s.price) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--c-border);">
+      <div style="background: var(--c-bg); padding: 12px;">
+        <div style="font-weight: 700; color: var(--green); margin-bottom: 8px;">&#9650; 买入 BUY（Top-{{ trades.top_n }}）</div>
+        {% if latest.buys %}
+        <table class="data-table" style="font-size: 13px;">
+          <thead><tr><th>代码</th><th>价格</th><th>得分</th><th>排名</th></tr></thead>
+          {% for b in latest.buys %}
+          <tr>
+            <td><code>{{ b.symbol }}</code></td>
+            <td>¥{{ "%.2f"|format(b.price) }}</td>
+            <td class="font-mono">{{ "%.4f"|format(b.score) }}</td>
+            <td><span style="color: var(--green); font-weight: 700;">#{{ b.rank }}</span></td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}<div class="c-muted" style="font-size: 13px;">无新增</div>{% endif %}
+      </div>
+      <div style="background: var(--c-bg); padding: 12px;">
+        <div style="font-weight: 700; color: var(--red); margin-bottom: 8px;">&#9660; 卖出 SELL（退出 Top-{{ trades.top_n }}）</div>
+        {% if latest.sells %}
+        <table class="data-table" style="font-size: 13px;">
+          <thead><tr><th>代码</th><th>价格</th></tr></thead>
+          {% for s in latest.sells %}
+          <tr><td><code>{{ s.symbol }}</code></td><td>¥{{ "%.2f"|format(s.price) }}</td></tr>
+          {% endfor %}
+        </table>
+        {% else %}<div class="c-muted" style="font-size: 13px;">无卖出</div>{% endif %}
+      </div>
+    </div>
   </div>
 </div>
-{% endfor %}
+
+<!-- ── Historical Table ── -->
+<div class="card">
+  <div class="card-header"><span>&#128336; 历史调仓记录</span></div>
+  <div class="card-body" style="padding: 0;">
+    <table class="data-table">
+      <thead>
+        <tr><th>日期</th><th style="color: var(--green);">买</th><th style="color: var(--red);">卖</th><th>持</th><th style="text-align: left;">买入标的</th><th style="text-align: left;">卖出标的</th></tr>
+      </thead>
+      {% for p in latest_periods %}
+      <tr>
+        <td style="font-weight: 600;">{{ p.date }}</td>
+        <td style="color: var(--green); font-weight: 700;">{{ p.n_buys }}</td>
+        <td style="color: var(--red); font-weight: 700;">{{ p.n_sells }}</td>
+        <td>{{ p.n_hold }}</td>
+        <td style="font-size: 12px; max-width: 300px;">
+          {% for b in p.buys[:8] %}<code style="font-size: 11px;">{{ b.symbol }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% if p.buys|length > 8 %}<span class="c-muted"> +{{ p.buys|length - 8 }}</span>{% endif %}
+        </td>
+        <td style="font-size: 12px; max-width: 300px;">
+          {% for s in p.sells[:8] %}<code style="font-size: 11px;">{{ s.symbol }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% if p.sells|length > 8 %}<span class="c-muted"> +{{ p.sells|length - 8 }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
 
 {% endif %}
 
