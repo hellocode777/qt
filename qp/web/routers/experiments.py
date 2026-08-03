@@ -312,7 +312,6 @@ def _reconstruct_trades(experiment_id: str) -> dict[str, Any]:
         "total_sells": total_sells,
         "n_symbols_traded": len(all_symbols),
         "avg_hold_periods": round(avg_hold, 1),
-        "equity_curve": _compute_equity_curve(rebalance_periods, price_wide, top_n),
     })
 
     # Cache result
@@ -374,108 +373,10 @@ def _compute_feature_proxy(
     return 0.0
 
 
-def _compute_equity_curve(
-    rebalance_periods: list[dict[str, Any]],
-    price_wide: pl.DataFrame,
-    top_n: int,
-) -> list[dict[str, Any]]:
-    """Compute portfolio equity at each rebalance date.
-
-    Uses equal-weight allocation across Top-N holdings. Returns a list of
-    {{date, equity, benchmark}} dicts for Chart.js rendering.
-    """
-    import statistics
-
-    if not rebalance_periods:
-        return []
-
-    # Get all symbols from price data for benchmark
-    price_cols = [c for c in price_wide.columns if c != "trade_date"]
-
-    # Build date lookup (date objects → index)
-    date_list = price_wide["trade_date"].to_list()
-    date_to_idx: dict[str, int] = {}
-    for i, d in enumerate(date_list):
-        date_to_idx[str(d)] = i
-
-    points: list[dict[str, Any]] = []
-    holdings: dict[str, float] = {}  # symbol -> shares
-    initial_capital = 1_000_000.0
-    base_avg_price: float | None = None
-
-    for period in rebalance_periods:
-        date_str = period["date"]
-        if date_str not in date_to_idx:
-            continue
-
-        row_idx = date_to_idx[date_str]
-
-        # Sell: remove from holdings, record proceeds
-        for s in period.get("sells", []):
-            sym = s["symbol"]
-            holdings.pop(sym, None)
-
-        # Buy: allocate equal weight to new positions
-        buys = period.get("buys", [])
-        if buys:
-            weight_per_stock = 1.0 / top_n
-            for b in buys:
-                sym = b["symbol"]
-                px = b["price"]
-                if px > 0 and sym in price_cols:
-                    holdings[sym] = (initial_capital * weight_per_stock) / px
-
-        # Mark to market
-        total_value = 0.0
-        for sym, shares in holdings.items():
-            try:
-                px = float(price_wide[sym][row_idx] or 0)
-            except Exception:
-                px = 0.0
-            total_value += shares * px
-
-        # Benchmark: average price of all stocks, normalized to start at ¥1M
-        bench_value = 0.0
-        valid_prices = []
-        for c in price_cols:
-            try:
-                v = float(price_wide[c][row_idx] or 0)
-                if v > 0:
-                    valid_prices.append(v)
-            except Exception:
-                continue
-        if valid_prices:
-            if base_avg_price is None:
-                base_avg_price = statistics.mean(valid_prices)
-                bench_value = float(initial_capital)
-            elif base_avg_price > 0:
-                bench_value = statistics.mean(valid_prices) / base_avg_price * initial_capital
-
-        points.append({
-            "date": date_str,
-            "equity": round(total_value, 0),
-            "benchmark": round(bench_value, 0) if not points else round(
-                bench_value, 0
-            ),
-        })
-
-    # Normalize: start both at initial_capital
-    if points:
-        first_equity = points[0]["equity"]
-        if first_equity > 0:
-            scale = initial_capital / first_equity
-            for p in points:
-                p["equity"] = round(p["equity"] * scale, 0)
-
-    return points
-
-
 @router.get("/experiments/{experiment_id}/trades")
 async def experiment_trades(request: Request, experiment_id: str) -> Any:
     """Show trade details (buy/sell per rebalance) for an experiment."""
     trades = _reconstruct_trades(experiment_id)
-
-    equity_json = json.dumps(trades.get("equity_curve", []))
 
     return templates.TemplateResponse(
         request=request,
@@ -483,7 +384,6 @@ async def experiment_trades(request: Request, experiment_id: str) -> Any:
         context={
             "experiment_id": experiment_id,
             "trades": trades,
-            "equity_json": equity_json,
             "has_trades": len(trades.get("rebalance_periods", [])) > 0,
             "page_title": f"Trade Details — {experiment_id}",
         },
