@@ -5,7 +5,11 @@
 <div class="page-header">
   <div>
     <h1>{{ experiment_id }}</h1>
-    <div class="meta"><a href="/experiments" style="color: var(--blue);">&larr; 返回实验列表</a></div>
+    <div class="meta">
+      <a href="/experiments" style="color: var(--blue);">&larr; 返回实验列表</a>
+      &nbsp;|&nbsp;
+      <a href="/experiments/{{ experiment_id }}/trades" style="color: var(--blue);">&#128200; 交易明细 Trade Details</a>
+    </div>
   </div>
 </div>
 

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>交易明细 / Trade Details</h1>
+    <div class="meta">
+      <a href="/experiments/{{ experiment_id }}" style="color: var(--blue);">&larr; 返回实验</a>
+      &nbsp;|&nbsp; {{ experiment_id }}
+    </div>
+  </div>
+</div>
+
+{% if not has_trades %}
+<div class="empty-state">
+  <div class="icon">&#128200;</div>
+  <h2>暂无交易明细</h2>
+  <p>{{ trades.get("error", "无可用数据") }}</p>
+</div>
+{% else %}
+
+<!-- Summary -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 20px;">
+  <div class="card" style="text-align: center; padding: 12px;">
+    <div style="font-size: 11px; color: var(--c-muted);">调仓周期</div>
+    <div style="font-size: 24px; font-weight: 700;">{{ trades.rebalance_freq }}D</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 12px;">
+    <div style="font-size: 11px; color: var(--c-muted);">持仓数 Top-N</div>
+    <div style="font-size: 24px; font-weight: 700;">{{ trades.top_n }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 12px;">
+    <div style="font-size: 11px; color: var(--c-muted);">因子数</div>
+    <div style="font-size: 24px; font-weight: 700;">{{ trades.n_features }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 12px;">
+    <div style="font-size: 11px; color: var(--c-muted);">调仓次数</div>
+    <div style="font-size: 24px; font-weight: 700;">{{ trades.total_periods }}</div>
+  </div>
+</div>
+
+<!-- Rebalance Periods -->
+{% for period in trades.rebalance_periods|reverse %}
+<div class="card" style="margin-bottom: 16px;">
+  <div class="card-header">
+    <span>&#128197; {{ period.date }}</span>
+    <span style="font-size: 12px; color: var(--c-muted);">
+      &#128228; 买入 {{ period.n_buys }} &nbsp;
+      &#128229; 卖出 {{ period.n_sells }} &nbsp;
+      &#128204; 持有 {{ period.n_hold }}
+    </span>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    {% if period.buys %}
+    <table class="data-table" style="margin-bottom: 0;">
+      <thead>
+        <tr>
+          <th style="color: var(--green);">&#9650; 买入 BUY</th>
+          <th>价格</th>
+          <th>得分 Score</th>
+          <th>排名 Rank</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in period.buys %}
+        <tr>
+          <td><code>{{ b.symbol }}</code></td>
+          <td>¥{{ "%.2f"|format(b.price) }}</td>
+          <td class="font-mono">{{ "%.4f"|format(b.score) }}</td>
+          <td><span style="color: var(--green); font-weight: 600;">#{{ b.rank }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if period.sells %}
+    <table class="data-table" style="margin-top: 0;">
+      <thead>
+        <tr>
+          <th style="color: var(--red);">&#9660; 卖出 SELL</th>
+          <th>价格</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in period.sells %}
+        <tr>
+          <td><code>{{ s.symbol }}</code></td>
+          <td>¥{{ "%.2f"|format(s.price) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
+{% endblock %}
