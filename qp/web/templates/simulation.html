@@ -103,12 +103,85 @@
 
 <script type="application/json" id="equity-data">{{ equity_data | safe }}</script>
 <script>
-  // Ensure initEquityChart runs after cockpit.js has loaded
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initEquityChart);
-  } else {
-    initEquityChart();
+(function() {
+  var canvas = document.getElementById('equityChart');
+  if (!canvas) return;
+  var el = document.getElementById('equity-data');
+  if (!el) return;
+  var rawData = JSON.parse(el.textContent || '[]');
+  if (!rawData.length) return;
+
+  var dpr = window.devicePixelRatio || 1;
+  var parent = canvas.parentElement;
+  var W = parent.clientWidth || 800;
+  var H = parent.clientHeight || 300;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var pad = {top:20, right:20, bottom:40, left:60};
+  var pw = W - pad.left - pad.right;
+  var ph = H - pad.top - pad.bottom;
+
+  var vals = [];
+  rawData.forEach(function(d) { vals.push(d.total_equity); vals.push(d.market_value); });
+  var minV = Math.min.apply(null, vals), maxV = Math.max.apply(null, vals);
+  var range = maxV - minV || maxV * 0.02 || 1000;
+  minV -= range * 0.15; maxV += range * 0.15;
+
+  function x(i) { return pad.left + (i / Math.max(rawData.length - 1, 1)) * pw; }
+  function y(v) { return pad.top + ph - ((v - minV) / (maxV - minV)) * ph; }
+
+  // BG
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 1;
+  for (var g = 0; g <= 4; g++) {
+    var gy = pad.top + (g/4)*ph;
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(W - pad.right, gy); ctx.stroke();
+    var gv = maxV - (g/4)*(maxV - minV);
+    ctx.fillStyle = '#6b7280'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText('¥' + (gv/10000).toFixed(1) + '万', pad.left - 6, gy + 4);
   }
+
+  // X labels
+  ctx.textAlign = 'center'; ctx.fillStyle = '#6b7280';
+  rawData.forEach(function(d, i) {
+    if (rawData.length <= 7 || i % Math.ceil(rawData.length/7) === 0 || i === rawData.length - 1)
+      ctx.fillText(d.date, x(i), pad.top + ph + 20);
+  });
+
+  // Total Equity line
+  ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  rawData.forEach(function(d, i) { var py = y(d.total_equity); if (i===0) ctx.moveTo(x(i),py); else ctx.lineTo(x(i),py); });
+  ctx.stroke();
+
+  // Market Value dashed line
+  ctx.strokeStyle = '#10b981'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
+  ctx.beginPath();
+  rawData.forEach(function(d, i) { var py = y(d.market_value); if (i===0) ctx.moveTo(x(i),py); else ctx.lineTo(x(i),py); });
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Points
+  var r = rawData.length === 1 ? 5 : 3;
+  rawData.forEach(function(d, i) {
+    ctx.fillStyle = '#2563eb'; ctx.beginPath(); ctx.arc(x(i), y(d.total_equity), r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.arc(x(i), y(d.market_value), r-1, 0, Math.PI*2); ctx.fill();
+  });
+
+  // Legend
+  ctx.fillStyle = '#2563eb'; ctx.fillRect(pad.left, 8, 12, 12);
+  ctx.fillStyle = '#374151'; ctx.font = '12px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('总权益 Total Equity', pad.left + 16, 19);
+  ctx.fillStyle = '#10b981'; ctx.fillRect(pad.left + 140, 8, 12, 12);
+  ctx.fillStyle = '#374151';
+  ctx.fillText('持仓市值 Market Value', pad.left + 156, 19);
+})();
 </script>
 
 {% endif %}
