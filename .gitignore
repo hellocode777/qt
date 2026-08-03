@@ -40,6 +40,7 @@ config.toml
 data/decisions/
 data/positions/
 data/reports/
+data/experiments/*/
 data/dataset/registry.json
 data/monitoring/watchdog/
 *.log
