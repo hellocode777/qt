@@ -1119,7 +1119,7 @@ class DailyPipeline(BasePipeline):
             try:
                 from qp.simulation.shadow_ledger import ShadowLedger
 
-                shadow = ShadowLedger()
+                shadow = ShadowLedger(initial_capital=total_capital)
                 shadow_result = shadow.run_daily(today.isoformat())
                 shadow_equity = shadow_result.get("total_equity", total_capital)
                 shadow_n_positions = shadow_result.get("n_positions", 0)
