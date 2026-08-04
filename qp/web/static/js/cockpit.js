@@ -470,6 +470,21 @@ var QPCharts = (function () {
       else ctx.lineTo(lx, ly);
     }
     ctx.stroke();
+
+    // ── Hover tooltip ──
+    canvas._qpData = { dates: dates, dd: dd, pad: pad, vr: { min: yMin, max: yMax }, n: dd.length };
+    canvas.addEventListener('mousemove', function (ev) {
+      var d = canvas._qpData;
+      if (!d) return;
+      var rect = canvas.getBoundingClientRect();
+      var mx = ev.clientX - rect.left;
+      var idx = Math.round((mx - d.pad.left) / (W - d.pad.left - d.pad.right) * (d.n - 1));
+      idx = Math.max(0, Math.min(d.n - 1, idx));
+      var html = '<b>' + d.dates[idx].substring(0, 10) + '</b><br>' +
+        '回撤: ' + (-d.dd[idx]).toFixed(2) + '%';
+      _showTooltip(ev, html);
+    });
+    canvas.addEventListener('mouseleave', _hideTooltip);
   }
 
   // -----------------------------------------------------------------------
