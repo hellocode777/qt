@@ -461,7 +461,7 @@ class ExperimentService:
 
     @staticmethod
     def _record_to_dict(record: Any) -> dict[str, Any]:
-        """Convert ExperimentRecord to template-friendly dict."""
+        """Convert ExperimentRecord to template-friendly nested dict."""
         cfg = record.config
         met = record.metrics
         lin = record.lineage
@@ -469,26 +469,40 @@ class ExperimentService:
         return {
             "experiment_id": cfg.experiment_id,
             "description": cfg.description,
-            "strategy_name": cfg.strategy_name,
             "status": record.status.value
             if hasattr(record.status, "value")
             else str(record.status),
             "created_at": str(cfg.created_at)[:19] if cfg.created_at else "",
             "completed_at": str(record.completed_at)[:19] if record.completed_at else "",
-            # Key metrics
-            "ic_mean": met.ic_mean,
-            "ic_ir": met.ic_ir,
-            "sharpe_ratio": met.sharpe_ratio,
-            "max_drawdown_pct": met.max_drawdown_pct,
-            "excess_return_pct": met.excess_return_pct,
-            "annual_return_pct": met.annual_return_pct,
-            "turnover_pct": met.turnover_pct,
-            # Config
-            "features": cfg.features,
-            "model_params": cfg.model_params,
-            "dataset_version": cfg.dataset_version,
-            "tags": cfg.tags,
-            # Lineage
-            "model_algo": lin.model_algo,
-            "strategy_id": lin.strategy_id,
+            # Nested config block (matches experiment_detail.html)
+            "config": {
+                "strategy_name": cfg.strategy_name,
+                "model_mode": cfg.model_mode,
+                "features": cfg.features,
+                "model_params": cfg.model_params,
+                "dataset_version": cfg.dataset_version,
+                "train_start": cfg.train_start,
+                "train_end": cfg.train_end,
+                "tags": cfg.tags,
+            },
+            # Nested metrics block (matches experiment_detail.html)
+            "metrics": {
+                "ic_mean": met.ic_mean,
+                "ic_ir": met.ic_ir,
+                "ic_t_stat": met.ic_t_stat,
+                "sharpe_ratio": met.sharpe_ratio,
+                "max_drawdown_pct": met.max_drawdown_pct,
+                "excess_return_pct": met.excess_return_pct,
+                "annual_return_pct": met.annual_return_pct,
+                "annual_volatility_pct": met.annual_volatility_pct,
+                "total_return_pct": met.total_return_pct,
+                "turnover_pct": met.turnover_pct,
+                "n_days": met.n_days,
+            },
+            # Nested lineage block
+            "lineage": {
+                "model_algo": lin.model_algo,
+                "strategy_id": lin.strategy_id,
+                "dataset": f"{lin.dataset_name}@{lin.dataset_version}" if lin.dataset_name else "",
+            },
         }
