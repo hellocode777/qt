@@ -121,7 +121,11 @@ class Position:
             status = PositionState(int(status_raw))
         else:
             try:
-                status = PositionState[status_raw] if status_raw.isupper() else PositionState(int(status_raw))
+                status = (
+                    PositionState[status_raw]
+                    if status_raw.isupper()
+                    else PositionState(int(status_raw))
+                )
             except (KeyError, ValueError):
                 status = PositionState.HOLDING
 
@@ -246,14 +250,19 @@ class PositionLedger:
         pos.exit_date = exit_date
         pos.exit_reason = exit_reason
         pos.pnl = (exit_price - pos.entry_price) * pos.shares
-        pos.pnl_pct = (exit_price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
+        pos.pnl_pct = (
+            (exit_price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
+        )
         if notes:
             pos.notes = pos.notes + "; " + notes if pos.notes else notes
 
         self._save(pos)
         logger.info(
             "Position closed: {} PnL=¥{:.2f} ({:.2%}) reason={}",
-            position_id, pos.pnl, pos.pnl_pct, exit_reason,
+            position_id,
+            pos.pnl,
+            pos.pnl_pct,
+            exit_reason,
         )
         return pos
 
@@ -427,6 +436,7 @@ class PositionLedger:
             positions.append(pos)
         logger.info(
             "Bulk opened {} positions from {}",
-            len(positions), decision_package.package_id,
+            len(positions),
+            decision_package.package_id,
         )
         return positions

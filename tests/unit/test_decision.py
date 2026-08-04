@@ -270,9 +270,13 @@ class TestDecisionStatus:
     def test_requires_human_action(self) -> None:
         assert DecisionStatus.PENDING.requires_human_action is True
         assert DecisionStatus.MODIFIED.requires_human_action is True
-        for s in (DecisionStatus.APPROVED, DecisionStatus.REJECTED,
-                  DecisionStatus.PARTIALLY_EXECUTED, DecisionStatus.MONITORING,
-                  DecisionStatus.CLOSED):
+        for s in (
+            DecisionStatus.APPROVED,
+            DecisionStatus.REJECTED,
+            DecisionStatus.PARTIALLY_EXECUTED,
+            DecisionStatus.MONITORING,
+            DecisionStatus.CLOSED,
+        ):
             assert s.requires_human_action is False, f"{s} should not require human action"
 
 
@@ -335,8 +339,10 @@ class TestTransition:
 
     def test_returns_new_status_and_record(self) -> None:
         new_status, record = transition(
-            DecisionStatus.PENDING, DecisionStatus.APPROVED,
-            actor="测试员", notes="测试",
+            DecisionStatus.PENDING,
+            DecisionStatus.APPROVED,
+            actor="测试员",
+            notes="测试",
         )
         assert new_status == DecisionStatus.APPROVED
         assert isinstance(record, StatusTransition)
@@ -395,8 +401,7 @@ class TestModify:
     """Test modify convenience function."""
 
     def test_from_pending(self) -> None:
-        new_status, _ = modify(DecisionStatus.PENDING, reviewer="王五",
-                               notes="移除603986")
+        new_status, _ = modify(DecisionStatus.PENDING, reviewer="王五", notes="移除603986")
         assert new_status == DecisionStatus.MODIFIED
 
     def test_from_approved_raises(self) -> None:
@@ -412,8 +417,7 @@ class TestMarkExecuted:
         assert new_status == DecisionStatus.PARTIALLY_EXECUTED
 
     def test_from_partially_to_monitoring(self) -> None:
-        new_status, _ = mark_executed(DecisionStatus.PARTIALLY_EXECUTED,
-                                      notes="全部成交")
+        new_status, _ = mark_executed(DecisionStatus.PARTIALLY_EXECUTED, notes="全部成交")
         assert new_status == DecisionStatus.MONITORING
 
     def test_from_pending_raises(self) -> None:
@@ -477,8 +481,9 @@ class TestHappyPath:
         s, _ = approve(s, reviewer="张三")
         assert s == DecisionStatus.APPROVED
 
-        s, _ = transition(DecisionStatus.APPROVED, DecisionStatus.MONITORING,
-                          actor="system", notes="批量全部成交")
+        s, _ = transition(
+            DecisionStatus.APPROVED, DecisionStatus.MONITORING, actor="system", notes="批量全部成交"
+        )
         assert s == DecisionStatus.MONITORING
 
 
@@ -782,7 +787,9 @@ class TestDecisionServiceTransitions:
         )
         # Also patch index update to no-op
         monkeypatch.setattr(
-            DecisionPackage, "update_index", lambda self: None,
+            DecisionPackage,
+            "update_index",
+            lambda self: None,
         )
 
         svc = DecisionService()
@@ -1188,24 +1195,34 @@ class TestPosition:
         from qp.decision.position_ledger import Position
         from qp.shared.types import PositionState
 
-        p = Position(symbol="600519", entry_price=100.0, shares=500,
-                      status=PositionState.CLOSED, exit_price=110.0)
+        p = Position(
+            symbol="600519",
+            entry_price=100.0,
+            shares=500,
+            status=PositionState.CLOSED,
+            exit_price=110.0,
+        )
         assert p.realized_pnl == 5000.0  # (110-100)*500
 
     def test_realized_pnl_when_active(self) -> None:
         from qp.decision.position_ledger import Position
 
-        p = Position(symbol="600519", entry_price=100.0, shares=500,
-                      exit_price=110.0)  # Active, not closed
+        p = Position(
+            symbol="600519", entry_price=100.0, shares=500, exit_price=110.0
+        )  # Active, not closed
         assert p.realized_pnl == 0.0  # Not realized until closed
 
     def test_to_dict_from_dict_round_trip(self) -> None:
         from qp.decision.position_ledger import Position
 
         p = Position(
-            position_id="P-00001", symbol="600519",
-            entry_date="2026-07-30", entry_price=1450.0, shares=100,
-            strategy_id="momentum_v1.0", decision_id="dp-test-001",
+            position_id="P-00001",
+            symbol="600519",
+            entry_date="2026-07-30",
+            entry_price=1450.0,
+            shares=100,
+            strategy_id="momentum_v1.0",
+            decision_id="dp-test-001",
         )
         d = p.to_dict()
         p2 = Position.from_dict(d)
@@ -1237,9 +1254,9 @@ class TestPositionLedger:
             mod.POSITIONS_INDEX = tmp_path / "index.json"
 
             ledger = mod.PositionLedger()
-            pos = ledger.open("600519", 1450.0, 100,
-                              strategy_id="momentum_v1.0",
-                              decision_id="dp-test-001")
+            pos = ledger.open(
+                "600519", 1450.0, 100, strategy_id="momentum_v1.0", decision_id="dp-test-001"
+            )
 
             assert pos.position_id.startswith("P-")
             assert pos.symbol == "600519"
@@ -1338,7 +1355,7 @@ class TestPositionLedger:
 
             ledger = mod.PositionLedger()
             ledger.open("A", 10.0, 100, decision_id="dp-x")  # 1000
-            ledger.open("B", 20.0, 50, decision_id="dp-x")   # 1000
+            ledger.open("B", 20.0, 50, decision_id="dp-x")  # 1000
 
             assert ledger.total_active_value() == 2000.0
         finally:
@@ -1400,16 +1417,27 @@ class TestPositionLedger:
             dp = DecisionPackage(package_id="dp-bulk-test", date="2026-07-30")
             dp.approve(reviewer="测试")
             dp.report.recommendations = [
-                TradeRecommendation(symbol="600519", action="BUY",
-                                    estimated_price=1450.0, quantity_shares=100,
-                                    target_weight_pct=10.0, strategy="momentum_v1.0",
-                                    reason="排名 #1"),
-                TradeRecommendation(symbol="000001", action="BUY",
-                                    estimated_price=12.5, quantity_shares=1000,
-                                    target_weight_pct=8.0, strategy="value_v1.0",
-                                    reason="排名 #2"),
-                TradeRecommendation(symbol="000002", action="SELL",
-                                    estimated_price=50.0, quantity_shares=0),
+                TradeRecommendation(
+                    symbol="600519",
+                    action="BUY",
+                    estimated_price=1450.0,
+                    quantity_shares=100,
+                    target_weight_pct=10.0,
+                    strategy="momentum_v1.0",
+                    reason="排名 #1",
+                ),
+                TradeRecommendation(
+                    symbol="000001",
+                    action="BUY",
+                    estimated_price=12.5,
+                    quantity_shares=1000,
+                    target_weight_pct=8.0,
+                    strategy="value_v1.0",
+                    reason="排名 #2",
+                ),
+                TradeRecommendation(
+                    symbol="000002", action="SELL", estimated_price=50.0, quantity_shares=0
+                ),
             ]
 
             ledger = mod.PositionLedger()

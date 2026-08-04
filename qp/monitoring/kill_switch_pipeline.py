@@ -217,9 +217,7 @@ class KillSwitchPipeline(BasePipeline):
         ref_window = getattr(context, "psi_reference_window", "training_period")
 
         if psi >= 0.25:
-            alerts.append(
-                f"PSI {psi:.3f} ≥ 0.25 vs {ref_window} — significant feature drift"
-            )
+            alerts.append(f"PSI {psi:.3f} ≥ 0.25 vs {ref_window} — significant feature drift")
 
         return psi, alerts
 

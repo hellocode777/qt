@@ -389,18 +389,14 @@ def _validate_data_gate(
             n = df["symbol"].n_unique()
             drift = abs(n - prev_symbols) / prev_symbols
             if drift > 0.05:
-                errors.append(
-                    f"Symbol drift {drift:.1%}: {prev_symbols} → {n}"
-                )
+                errors.append(f"Symbol drift {drift:.1%}: {prev_symbols} → {n}")
         if existing_path is None or not existing_path.exists():
             prev_rows = registry_meta.get("rows", 0)
             if prev_rows > 0:
                 n_rows = df.height
                 row_drift = abs(n_rows - prev_rows) / prev_rows
                 if row_drift > 0.30:
-                    errors.append(
-                        f"Cold-start row drift {row_drift:.1%}: {prev_rows} → {n_rows}"
-                    )
+                    errors.append(f"Cold-start row drift {row_drift:.1%}: {prev_rows} → {n_rows}")
 
     return errors
 

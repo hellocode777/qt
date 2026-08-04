@@ -167,13 +167,15 @@ class HumanReview:
         )
 
         self.status = to_status.value
-        self.status_history.append({
-            "from_status": record.from_status.value,
-            "to_status": record.to_status.value,
-            "timestamp": record.timestamp,
-            "actor": record.actor,
-            "notes": record.notes,
-        })
+        self.status_history.append(
+            {
+                "from_status": record.from_status.value,
+                "to_status": record.to_status.value,
+                "timestamp": record.timestamp,
+                "actor": record.actor,
+                "notes": record.notes,
+            }
+        )
 
         # Update legacy compat fields
         if to_status in (DecisionStatus.APPROVED, DecisionStatus.MODIFIED):
@@ -186,8 +188,7 @@ class HumanReview:
             self.reviewed = True
             if actor:
                 self.reviewer = actor
-        elif to_status in (DecisionStatus.PARTIALLY_EXECUTED,
-                           DecisionStatus.MONITORING):
+        elif to_status in (DecisionStatus.PARTIALLY_EXECUTED, DecisionStatus.MONITORING):
             self.executed = True
             self.execution_time = record.timestamp
 
@@ -431,13 +432,15 @@ class DecisionPackage:
                 hr_status = "pending"
             # Create a synthetic initial entry for the audit trail
             if hr_status != "pending":
-                hr_history = [{
-                    "from_status": "pending",
-                    "to_status": hr_status,
-                    "timestamp": hr_data.get("execution_time", hr_data.get("generated_at", "")),
-                    "actor": hr_data.get("reviewer", ""),
-                    "notes": "Migrated from legacy format",
-                }]
+                hr_history = [
+                    {
+                        "from_status": "pending",
+                        "to_status": hr_status,
+                        "timestamp": hr_data.get("execution_time", hr_data.get("generated_at", "")),
+                        "actor": hr_data.get("reviewer", ""),
+                        "notes": "Migrated from legacy format",
+                    }
+                ]
         human_review = HumanReview(
             reviewed=hr_data.get("reviewed", False),
             reviewer=hr_data.get("reviewer", ""),
@@ -776,9 +779,16 @@ class DecisionPackage:
                     health_str = "—"
                 if report:
                     trend = report.get("trend", "?")
-                    trend_icon = {"improving": "📈", "stable": "➡️", "declining": "📉", "unknown": "❓"}.get(trend, "?")
+                    trend_icon = {
+                        "improving": "📈",
+                        "stable": "➡️",
+                        "declining": "📉",
+                        "unknown": "❓",
+                    }.get(trend, "?")
                     rec = report.get("recommendation", "?")
-                    rec_icon = {"healthy": "✅", "needs_retrain": "⚠️", "not_approved": "❌"}.get(rec, "?")
+                    rec_icon = {"healthy": "✅", "needs_retrain": "⚠️", "not_approved": "❌"}.get(
+                        rec, "?"
+                    )
                 else:
                     trend_icon = "—"
                     rec_icon = "—"
@@ -797,8 +807,16 @@ class DecisionPackage:
                     if failed:
                         lines.append(f"**{sid}** — {len(failed)}/{len(rules)} rules failed:")
                         for r in failed:
-                            threshold_str = f" (threshold: {r.get('threshold')})" if r.get("threshold") is not None else ""
-                            actual_str = f" actual: {r.get('actual_value')}" if r.get("actual_value") is not None else ""
+                            threshold_str = (
+                                f" (threshold: {r.get('threshold')})"
+                                if r.get("threshold") is not None
+                                else ""
+                            )
+                            actual_str = (
+                                f" actual: {r.get('actual_value')}"
+                                if r.get("actual_value") is not None
+                                else ""
+                            )
                             detail_str = f" — {r.get('detail')}" if r.get("detail") else ""
                             lines.append(
                                 f"  - ❌ {r.get('rule_name', '?')}: "
@@ -812,10 +830,12 @@ class DecisionPackage:
                 if report:
                     rec_label = report.get("recommendation_label", "")
                     signal_summary = report.get("signal_summary", "")
-                    lines.extend([
-                        f"**{sid}**: {rec_label}",
-                        f"  - 信号: {signal_summary}",
-                    ])
+                    lines.extend(
+                        [
+                            f"**{sid}**: {rec_label}",
+                            f"  - 信号: {signal_summary}",
+                        ]
+                    )
                     alerts = report.get("alerts", [])
                     if alerts:
                         for a in alerts:

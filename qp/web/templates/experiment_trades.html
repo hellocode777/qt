@@ -22,72 +22,30 @@
 
 {% else %}
 
-<!-- ── Equity Curve (SVG, works everywhere) ── -->
+<!-- ── Equity Curve (Canvas via QPCharts) ── -->
 {% if has_real_nav and equity_json %}
 <div class="card" style="margin-bottom: 20px; border-left: 3px solid var(--blue);">
   <div class="card-header">
-    <span>&#128200; 每日收益曲线 Daily Equity Curve</span>
+    <span>&#128200; 每日净值曲线 Daily Equity Curve</span>
     <span class="c-muted" style="font-size: 12px;">真实回测数据 · 初始 ¥1M</span>
   </div>
-  <div class="card-body" id="equity-card">
-    <div id="equity-spark" style="width:100%;height:280px;position:relative;overflow:hidden;font-size:10px;font-family:monospace;"></div>
+  <div class="card-body" style="position:relative;">
+    <canvas id="experiment-equity-chart" style="width:100%;height:300px;"></canvas>
   </div>
 </div>
+
+<!-- ── Drawdown Curve ── -->
+<div class="card" style="margin-bottom: 20px; border-left: 3px solid var(--red);">
+  <div class="card-header">
+    <span>&#128201; 回撤曲线 Drawdown</span>
+    <span class="c-muted" style="font-size: 12px;">最大回撤基于策略净值</span>
+  </div>
+  <div class="card-body" style="position:relative;">
+    <canvas id="experiment-dd-chart" style="width:100%;height:150px;"></canvas>
+  </div>
+</div>
+
 <script type="application/json" id="equity-data">{{ equity_json | safe }}</script>
-<script>
-(function() {
-  var el = document.getElementById('equity-data');
-  var container = document.getElementById('equity-spark');
-  if (!el || !container) return;
-  var rawData = JSON.parse(el.textContent || '[]');
-  if (!rawData.length) return;
-
-  var H = 270, padB = 28, padT = 8, padL = 55;
-  var vals = rawData.map(function(d) { return d.equity; });
-  var minV = Math.min.apply(null, vals), maxV = Math.max.apply(null, vals);
-  var range = (maxV - minV) || 1000;
-  minV -= range * 0.06; maxV += range * 0.06;
-  var ph = H - padT - padB;
-  var scaleY = ph / (maxV - minV);
-
-  // Get actual container width
-  var cw = container.clientWidth || 800;
-  var chartW = cw - padL - 45;
-  var chartH = H - padT - padB;
-
-  // Draw as simple bars (sparkline)
-  var n = rawData.length;
-  var maxBars = Math.min(n, 200);
-  var barStep = Math.max(1, Math.floor(n / maxBars));
-
-  var barsHTML = '';
-  for (var i = 0; i < n; i += barStep) {
-    var d = rawData[i];
-    var h = Math.max(1, (d.equity - minV) / (maxV - minV) * chartH);
-    barsHTML += '<div style="position:absolute;bottom:' + padB + 'px;left:' + (padL + i / n * chartW) + 'px;height:' + Math.round(h) + 'px;width:3px;background:#2563eb;"></div>';
-  }
-
-  // Y-axis labels
-  var yHTML = '';
-  for (var g = 0; g <= 4; g++) {
-    var gv = maxV - (g/4) * (maxV - minV);
-    var top = padT + (g/4) * chartH;
-    yHTML += '<div style="position:absolute;right:4px;top:' + (top - 6) + 'px;color:#9ca3af;font-size:10px;">¥' + (gv/10000).toFixed(1) + '万</div>';
-  }
-
-  // Date label (first and last)
-  var firstDate = rawData[0].date.substring(0, 10);
-  var lastDate = rawData[n-1].date.substring(0, 10);
-
-  container.innerHTML =
-    '<div style="width:100%;height:100%;position:relative;border-bottom:1px solid #e5e7eb;">' +
-      yHTML +
-      barsHTML +
-      '<div style="position:absolute;bottom:2px;left:' + padL + 'px;color:#9ca3af;font-size:9px;">' + firstDate + '</div>' +
-      '<div style="position:absolute;bottom:2px;right:45px;color:#9ca3af;font-size:9px;">' + lastDate + '</div>' +
-    '</div>';
-})();
-</script>
 {% endif %}
 
 <!-- ── Stats Cards ── -->

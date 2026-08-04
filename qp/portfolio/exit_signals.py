@@ -130,19 +130,21 @@ class FundamentalExitDetector:
         if roe_now is not None and roe_prev is not None and roe_prev > 0:
             decline = (roe_prev - roe_now) / roe_prev
             if decline >= self.config.roe_decline_pct:
-                reasons.append(
-                    f"ROE 从 {roe_prev:.1%} 降至 {roe_now:.1%} (下降 {decline:.0%})"
-                )
+                reasons.append(f"ROE 从 {roe_prev:.1%} 降至 {roe_now:.1%} (下降 {decline:.0%})")
 
         # ── Revenue growth contraction ──
         rev_growth = _safe_float(latest.get("revenue_growth"))
         if rev_growth is not None and rev_growth < self.config.revenue_growth_threshold:
-            reasons.append(f"营收增速 {rev_growth:.1%} (阈值 {self.config.revenue_growth_threshold:.0%})")
+            reasons.append(
+                f"营收增速 {rev_growth:.1%} (阈值 {self.config.revenue_growth_threshold:.0%})"
+            )
 
         # ── Net profit decline ──
         np_growth = _safe_float(latest.get("net_profit_growth"))
         if np_growth is not None and np_growth < self.config.net_profit_growth_threshold:
-            reasons.append(f"净利润增速 {np_growth:.1%} (阈值 {self.config.net_profit_growth_threshold:.0%})")
+            reasons.append(
+                f"净利润增速 {np_growth:.1%} (阈值 {self.config.net_profit_growth_threshold:.0%})"
+            )
 
         # ── Debt ratio increase ──
         debt_now = _safe_float(latest.get("debt_ratio"))

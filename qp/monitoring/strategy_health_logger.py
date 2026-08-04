@@ -198,9 +198,7 @@ class StrategyHealthLogger:
             return []
 
         filtered = (
-            df.filter(pl.col("strategy_id") == strategy_id)
-            .sort("date")
-            .tail(self._window_days)
+            df.filter(pl.col("strategy_id") == strategy_id).sort("date").tail(self._window_days)
         )
 
         records: list[SignalRecord] = []

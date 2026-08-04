@@ -1,4 +1,5 @@
 """CLI command handlers for the "experiment" group."""
+
 from __future__ import annotations
 
 import sys
@@ -100,7 +101,8 @@ def cmd_experiment_list() -> int:
     # Apply filters
     if strategy_filter:
         records = [
-            r for r in records
+            r
+            for r in records
             if r.config.strategy_name and strategy_filter in r.config.strategy_name
         ]
     if min_sharpe != float("-inf"):
@@ -376,7 +378,9 @@ def cmd_experiment_run() -> int:
         if isinstance(model_params_raw, dict):
             for k, v in model_params_raw.items():
                 frozen_wt[str(k)] = float(v)  # type: ignore[arg-type]
-        if not frozen_wt and isinstance(exp_data.get("metrics", {}).get("feature_importance"), dict):
+        if not frozen_wt and isinstance(
+            exp_data.get("metrics", {}).get("feature_importance"), dict
+        ):
             for k, v in exp_data["metrics"]["feature_importance"].items():
                 frozen_wt[str(k)] = float(v)
 
@@ -406,25 +410,29 @@ def cmd_experiment_run() -> int:
         for strat in strategies:
             strat_params = dict(params)
             strat_params["strategy"] = strat
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"  运行策略: {strat}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             ctx = PipelineContext(pipeline_name="multifactor_experiment", parameters=strat_params)
             pipeline = MultiFactorPipeline()
             result = pipeline.run(ctx)
-            all_results.append({
-                "strategy": strat,
-                "status": result.status.value,
-                "metrics": dict(result.metrics),
-            })
+            all_results.append(
+                {
+                    "strategy": strat,
+                    "status": result.status.value,
+                    "metrics": dict(result.metrics),
+                }
+            )
             if result.status.value != "success":
                 print(f"  ⚠ {strat} 失败: {result.errors}")
 
         # Print comparison table
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("  批量实验对比 / Batch Comparison")
-        print(f"{'='*60}")
-        print(f"{'策略':>24s} {'状态':>8s} {'IC':>7s} {'IC_IR':>6s} {'Sharpe':>7s} {'收益':>8s} {'回撤':>7s}")
+        print(f"{'=' * 60}")
+        print(
+            f"{'策略':>24s} {'状态':>8s} {'IC':>7s} {'IC_IR':>6s} {'Sharpe':>7s} {'收益':>8s} {'回撤':>7s}"
+        )
         print("-" * 75)
         for r in all_results:
             m: dict[str, float] = r["metrics"]  # type: ignore[misc]
@@ -460,6 +468,7 @@ def cmd_experiment_run() -> int:
                 logger.info("  {}: {:.1f}", k, v)
 
     return 0
+
 
 def cmd_experiment_validate(experiment_id: str | None = None) -> int:
     """Validate an experiment against Layer 5 Gate criteria."""
@@ -643,4 +652,3 @@ def cmd_experiment_clean() -> int:
 
     print(f"\n已删除 {deleted}/{len(to_delete)} 个旧实验文件")
     return 0
-

@@ -30,9 +30,9 @@ from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
 class HealthRecommendation(StrEnum):
     """What the Decision Layer should do with this strategy."""
 
-    HEALTHY = "healthy"           # 健康 — 正常使用
+    HEALTHY = "healthy"  # 健康 — 正常使用
     NEEDS_RETRAIN = "needs_retrain"  # 需重训 — 降低权重或暂停使用
-    NOT_APPROVED = "not_approved"    # 不可用 — 不应参与决策
+    NOT_APPROVED = "not_approved"  # 不可用 — 不应参与决策
 
 
 def _compute_recommendation(

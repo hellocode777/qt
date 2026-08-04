@@ -85,16 +85,24 @@ def _build_index_df(price_data: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     frames = []
     for pdf in price_data.values():
-        if pdf is not None and not pdf.is_empty() and date_col in pdf.columns and "close" in pdf.columns:
+        if (
+            pdf is not None
+            and not pdf.is_empty()
+            and date_col in pdf.columns
+            and "close" in pdf.columns
+        ):
             frames.append(pdf.select([date_col, "close"]))
 
     if not frames:
         return pl.DataFrame()
 
     all_closes = pl.concat(frames, how="vertical")
-    result = all_closes.group_by(date_col).agg(
-        pl.col("close").mean().alias("close")
-    ).sort(date_col).rename({date_col: "date"})
+    result = (
+        all_closes.group_by(date_col)
+        .agg(pl.col("close").mean().alias("close"))
+        .sort(date_col)
+        .rename({date_col: "date"})
+    )
 
     return result
 
@@ -129,8 +137,6 @@ def _load_fundamental_data() -> dict[str, pl.DataFrame]:
                 result[str(sym)] = sub.with_columns(pl.col("report_date").alias("publish_date"))
 
     return result
-
-
 
 
 def _build_lineage_snapshot(price_data: dict[str, pl.DataFrame]) -> LineageSnapshot:
@@ -302,6 +308,7 @@ class DailyPipeline(BasePipeline):
                     # Compute actual annualized vol from price data
                     if not index_df.is_empty() and "close" in index_df.columns:
                         import numpy as np
+
                         closes = index_df["close"].to_numpy().astype(np.float64)
                         if len(closes) > 20:
                             log_ret = np.diff(np.log(closes[-252:]))
@@ -485,7 +492,8 @@ class DailyPipeline(BasePipeline):
                 )
                 logger.warning(
                     "⛔ Quality Gate: regime={} confidence={:.0%} → 跳过今日交易",
-                    regime_label, regime_confidence,
+                    regime_label,
+                    regime_confidence,
                 )
                 package_id = f"dp-{today.isoformat()}-{run_id_short}"
                 quality_regime = RegimeContext(
@@ -557,9 +565,7 @@ class DailyPipeline(BasePipeline):
                         n_buys=n_buys,
                         n_sells=0,
                     )
-                    strategy_health_data[sid] = (
-                        StrategyHealthLogger.health_to_dict(health)
-                    )
+                    strategy_health_data[sid] = StrategyHealthLogger.health_to_dict(health)
                     result.metrics[f"health_score_{sid}"] = round(health.health_score, 1)
 
                 result.metadata["strategy_health_count"] = str(len(strategy_health_data))
@@ -578,15 +584,14 @@ class DailyPipeline(BasePipeline):
                     if sid in strategy_health_data:
                         # Load history for trend analysis
                         try:
-                            hist_health = [
-                                health_logger.load_latest_health(sid)
-                            ]
+                            hist_health = [health_logger.load_latest_health(sid)]
                             hist_health = [h for h in hist_health if h is not None]
                         except Exception:
                             hist_health = []
                         # Build current health from dict
                         hd = strategy_health_data[sid]
                         from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+
                         current = StrategyHealth(
                             strategy_id=sid,
                             health_level=HealthLevel(hd["health_level"]),
@@ -700,12 +705,16 @@ class DailyPipeline(BasePipeline):
                     if result_item.alerts:
                         logger.warning(
                             "Online monitor [{}]: level={}, alerts={}",
-                            sid, result_item.level, result_item.alerts,
+                            sid,
+                            result_item.level,
+                            result_item.alerts,
                         )
                     else:
                         logger.debug(
                             "Online monitor [{}]: level={}, score={:.0f}",
-                            sid, result_item.level, result_item.health_score,
+                            sid,
+                            result_item.level,
+                            result_item.health_score,
                         )
                 # Merge into validation results for DecisionPackage
                 for sid, health in online_health.items():
@@ -845,9 +854,9 @@ class DailyPipeline(BasePipeline):
 
                     # Build current price lookup
                     if not prices.is_empty():
-                        latest_prices = prices.sort(
-                            "trade_date", descending=True
-                        ).unique(subset=["symbol"], keep="first")
+                        latest_prices = prices.sort("trade_date", descending=True).unique(
+                            subset=["symbol"], keep="first"
+                        )
                         for row in latest_prices.iter_rows(named=True):
                             sym = str(row["symbol"])
                             if sym in holdings:
@@ -872,7 +881,9 @@ class DailyPipeline(BasePipeline):
                     def _add_exit(sym: str, reason: str, detail: str, prio: Priority) -> None:
                         if sym not in exit_map:
                             exit_map[sym] = {
-                                "reasons": set(), "details": [], "priority": prio,
+                                "reasons": set(),
+                                "details": [],
+                                "priority": prio,
                             }
                         exit_map[sym]["reasons"].add(reason)
                         if detail:
@@ -893,7 +904,9 @@ class DailyPipeline(BasePipeline):
                         for es in risk_signals:
                             for r in es.reasons:
                                 _add_exit(
-                                    es.symbol, r, es.detail,
+                                    es.symbol,
+                                    r,
+                                    es.detail,
                                     es.priority,
                                 )
                         result.metrics["risk_exit_signals"] = len(risk_signals)
@@ -942,8 +955,7 @@ class DailyPipeline(BasePipeline):
                             if total_value > 0:
                                 for sector, sps in sector_positions.items():
                                     sector_value = sum(
-                                        p.shares * current_prices.get(p.symbol, 0)
-                                        for p in sps
+                                        p.shares * current_prices.get(p.symbol, 0) for p in sps
                                     )
                                     sector_wt = sector_value / total_value
                                     if sector_wt > SECTOR_OVERWEIGHT_THRESHOLD:
@@ -957,7 +969,9 @@ class DailyPipeline(BasePipeline):
                                             )
                                         logger.info(
                                             "Sector exit: {} overweight at {:.0%} ({} symbols)",
-                                            sector, sector_wt, len(sps),
+                                            sector,
+                                            sector_wt,
+                                            len(sps),
                                         )
                             result.metrics["sector_exit_checked"] = len(sector_positions)
                         except Exception as exc:
@@ -994,8 +1008,10 @@ class DailyPipeline(BasePipeline):
                                 reason="; ".join(sorted(info["reasons"])),
                                 risk_warnings=info["details"],
                                 confidence=(
-                                    0.95 if info["priority"] in (Priority.CRITICAL, Priority.HIGH)
-                                    else 0.70 if info["priority"] == Priority.MEDIUM
+                                    0.95
+                                    if info["priority"] in (Priority.CRITICAL, Priority.HIGH)
+                                    else 0.70
+                                    if info["priority"] == Priority.MEDIUM
                                     else 0.55
                                 ),
                                 strategy="risk_exit"
@@ -1007,7 +1023,8 @@ class DailyPipeline(BasePipeline):
                     if exit_map:
                         logger.info(
                             "Exit Engine (V2.1): {} symbols → {} merged SELL signals",
-                            len(exit_map), len(sell_recommendations),
+                            len(exit_map),
+                            len(sell_recommendations),
                         )
                         result.metrics["exit_signals_total"] = len(sell_recommendations)
                         result.metadata["rebalance_day"] = str(is_rebalance_day)
@@ -1047,9 +1064,8 @@ class DailyPipeline(BasePipeline):
             )
             if is_rebalance_day and not filtered_signals.is_empty() and not prices.is_empty():
                 # Use only latest price per symbol (avoid stale historical prices)
-                latest_prices = (
-                    prices.sort("trade_date", descending=True)
-                    .unique(subset=["symbol"], keep="first")
+                latest_prices = prices.sort("trade_date", descending=True).unique(
+                    subset=["symbol"], keep="first"
                 )
                 try:
                     engine = DecisionEngine()
@@ -1064,9 +1080,7 @@ class DailyPipeline(BasePipeline):
                 except Exception as exc:
                     logger.warning("DecisionEngine failed: {}", exc)
             elif not is_rebalance_day:
-                logger.info(
-                    "非调仓日 — 跳过 BUY 信号生成 (Only Risk/Rank Exit runs daily)"
-                )
+                logger.info("非调仓日 — 跳过 BUY 信号生成 (Only Risk/Rank Exit runs daily)")
 
             # P3.1: Append exit engine SELL recommendations
             if sell_recommendations:

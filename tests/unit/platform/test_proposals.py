@@ -9,7 +9,6 @@ from qp.platform.proposals.store import PROPOSALS_DIR, PROPOSALS_INDEX, Proposal
 
 
 class TestStrategyProposal:
-
     def test_create_from_fields(self) -> None:
         prop = StrategyProposal(
             strategy_id="momentum_v1.0",
@@ -64,7 +63,6 @@ class TestStrategyProposal:
 
 
 class TestProposalStore:
-
     def test_create_and_get(self, tmp_path: Path) -> None:
         """Create a proposal and retrieve it."""
         _redirect_store(tmp_path)

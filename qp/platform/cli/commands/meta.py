@@ -1,4 +1,5 @@
 """CLI command handlers for the "meta" group."""
+
 from __future__ import annotations
 
 import sys
@@ -52,6 +53,7 @@ def cmd_doctor() -> int:
     print()
     print("=== All checks passed ===")
     return 0
+
 
 def cmd_help() -> int:
     """Print help message."""
@@ -134,4 +136,3 @@ def cmd_help() -> int:
     print("  qp paper status                Show paper trading progress")
     print("  qp retrain [strategy] --dry-run Run monthly model retrain")
     return 0
-

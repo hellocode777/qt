@@ -223,9 +223,13 @@ class StrategyRegistry:
             data[sid] = entry
         try:
             self._registry_file.parent.mkdir(parents=True, exist_ok=True)
-            self._registry_file.write_text(json.dumps(
-                {"strategies": data}, ensure_ascii=False, indent=2,
-            ))
+            self._registry_file.write_text(
+                json.dumps(
+                    {"strategies": data},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
         except OSError:
             pass
 
@@ -531,6 +535,7 @@ class StrategyRegistry:
 
         if version is None:
             from datetime import UTC, datetime
+
             version = "v" + datetime.now(UTC).strftime("%Y%m%d")
 
         approved = ApprovedStrategy.from_strategy_meta(
@@ -563,9 +568,7 @@ class StrategyRegistry:
         for sid, approved_raw in self._approved.items():
             if self._active_versions.get(sid, False):
                 with contextlib.suppress(TypeError, KeyError):
-                    results.append(ApprovedStrategy.from_dict(
-                        cast_dict(approved_raw)
-                    ))
+                    results.append(ApprovedStrategy.from_dict(cast_dict(approved_raw)))
         return results
 
     def load_active_as_meta(self) -> list[StrategyMeta]:

@@ -1,4 +1,5 @@
 """CLI command handlers for the "data cmd" group."""
+
 from __future__ import annotations
 
 import sys
@@ -49,4 +50,3 @@ def cmd_data_fetch() -> int:
             if mb:
                 print(f"  {tier.capitalize()}: {mb:.0f} MB")
     return 0 if result.status.value == "success" else 1
-

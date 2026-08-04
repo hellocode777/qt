@@ -1,4 +1,5 @@
 """CLI command handlers for the "validate" group."""
+
 from __future__ import annotations
 
 import sys
@@ -153,4 +154,3 @@ def cmd_validate() -> int:
             print("All checks passed — strategy may proceed to the next stage.")
 
     return 0 if result.status.value == "success" else 1
-

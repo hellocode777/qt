@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test: send today's DecisionPackage as email."""
+
 import json
 from pathlib import Path
 
@@ -31,10 +32,12 @@ if not email.is_configured:
 
 mgr = AlertManager()
 mgr.add_channel(email)
-mgr.send(Alert(
-    severity=AlertSeverity.INFO,
-    title=f"[TEST] QP 每日投资决策 — {dp_path.stem}",
-    message=body,
-    source="manual_test",
-))
+mgr.send(
+    Alert(
+        severity=AlertSeverity.INFO,
+        title=f"[TEST] QP 每日投资决策 — {dp_path.stem}",
+        message=body,
+        source="manual_test",
+    )
+)
 print("\n✅ Sent! Check zhangs_shuai777@163.com")

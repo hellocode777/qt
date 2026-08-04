@@ -170,9 +170,9 @@ class DataQualityService:
             "quality_checks": quality_checks,
             "data_hash": data_hash,
             "pipeline_run_id": pipeline_run_id,
-            "all_checks_pass": all(
-                v == "pass" for v in quality_checks.values()
-            ) if quality_checks else False,
+            "all_checks_pass": all(v == "pass" for v in quality_checks.values())
+            if quality_checks
+            else False,
         }
 
     # ------------------------------------------------------------------

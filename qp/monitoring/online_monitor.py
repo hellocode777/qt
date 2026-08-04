@@ -240,9 +240,7 @@ class OnlineSignalMonitor:
             return 0.0
 
         # Get recent signal dates (last window entries by unique date)
-        dates = (
-            history.select("date").unique().sort("date").tail(window)["date"].to_list()
-        )
+        dates = history.select("date").unique().sort("date").tail(window)["date"].to_list()
         if len(dates) < 5:
             return 0.0
 
@@ -305,7 +303,10 @@ class OnlineSignalMonitor:
     # ── Persistence ────────────────────────────────────────────
 
     def _save_signal_snapshot(
-        self, strategy_id: str, date_str: str, signals_df: pl.DataFrame,
+        self,
+        strategy_id: str,
+        date_str: str,
+        signals_df: pl.DataFrame,
     ) -> None:
         """Append today's signals to the signal history parquet."""
         if signals_df is None or signals_df.is_empty():
@@ -335,9 +336,7 @@ class OnlineSignalMonitor:
     def _load_signal_history(self, strategy_id: str) -> pl.DataFrame | None:
         """Load signal history for a strategy."""
         if self._signal_history is not None:
-            return self._signal_history.filter(
-                pl.col("strategy_id") == strategy_id
-            )
+            return self._signal_history.filter(pl.col("strategy_id") == strategy_id)
         if not _ONLINE_SIGNAL_PARQUET.exists():
             return None
         try:
@@ -366,18 +365,16 @@ class OnlineSignalMonitor:
             pass
 
     def load_health_history(
-        self, strategy_id: str, days: int = 30,
+        self,
+        strategy_id: str,
+        days: int = 30,
     ) -> list[dict[str, Any]]:
         """Load recent health records for a strategy."""
         if not _ONLINE_HEALTH_PARQUET.exists():
             return []
         try:
             df = pl.read_parquet(str(_ONLINE_HEALTH_PARQUET))
-            result = (
-                df.filter(pl.col("strategy_id") == strategy_id)
-                .sort("date")
-                .tail(days)
-            )
+            result = df.filter(pl.col("strategy_id") == strategy_id).sort("date").tail(days)
             return result.to_dicts()
         except OSError:
             return []

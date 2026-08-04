@@ -20,8 +20,6 @@ def _isolate_strategy_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     fd, tmp_name = tempfile.mkstemp(suffix=".json")
     os.close(fd)
     tmp_path = Path(tmp_name)
-    monkeypatch.setattr(
-        "qp.strategy.registry._REGISTRY_FILE", tmp_path
-    )
+    monkeypatch.setattr("qp.strategy.registry._REGISTRY_FILE", tmp_path)
     yield
     tmp_path.unlink(missing_ok=True)

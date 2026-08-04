@@ -1236,7 +1236,9 @@ class TestRetrainSignal:
         from qp.monitoring.retrain_signal import RetrainAction, evaluate_retrain_need
 
         signal = evaluate_retrain_need(
-            rolling_ic=0.008, training_ic=0.035, psi_value=0.05,
+            rolling_ic=0.008,
+            training_ic=0.035,
+            psi_value=0.05,
         )
         assert signal.action == RetrainAction.REDUCE_WEIGHT
         assert signal.trigger == "IC_DECAY"
@@ -1258,7 +1260,9 @@ class TestRetrainSignal:
         from qp.monitoring.retrain_signal import RetrainAction, evaluate_retrain_need
 
         signal = evaluate_retrain_need(
-            psi_value=0.05, rolling_ic=0.03, training_ic=0.035,
+            psi_value=0.05,
+            rolling_ic=0.03,
+            training_ic=0.035,
             current_regime="LIQUIDITY_CRUNCH",
         )
         assert signal.action == RetrainAction.MONITOR
@@ -1339,11 +1343,15 @@ class TestVersionTree:
             tree = StrategyVersionTree(filepath=f"{tmpdir}/version_tree.json")
             tree.register_version("test_strategy", "v1.0", changelog="Root")
             tree.register_version(
-                "test_strategy", "v2.0", parent_version="v1.0",
+                "test_strategy",
+                "v2.0",
+                parent_version="v1.0",
                 changelog="Added reversal factors",
             )
             tree.register_version(
-                "test_strategy", "v2.1", parent_version="v2.0",
+                "test_strategy",
+                "v2.1",
+                parent_version="v2.0",
                 changelog="Fixed sign bug",
             )
             lineage = tree.get_lineage("test_strategy")
@@ -1375,8 +1383,11 @@ class TestVersionTree:
             tree = StrategyVersionTree(filepath=f"{tmpdir}/version_tree.json")
             tree.register_version("s", "v1.0", ic_mean=0.020, sharpe=0.30)
             tree.register_version(
-                "s", "v2.0", parent_version="v1.0",
-                ic_mean=0.028, sharpe=0.45,
+                "s",
+                "v2.0",
+                parent_version="v1.0",
+                ic_mean=0.028,
+                sharpe=0.45,
             )
             diff = tree.diff("s", "v1.0", "v2.0")
             assert diff["ic_delta"] == pytest.approx(0.008)
@@ -1576,10 +1587,12 @@ class TestStrategyHealthLogger:
     def test_record_and_check_basic(self, tmp_path) -> None:
 
         from qp.monitoring.strategy_health_logger import MONITORING_DIR, StrategyHealthLogger
+
         original_dir = str(MONITORING_DIR)
         try:
             # Redirect to temp dir
             import qp.monitoring.strategy_health_logger as mod
+
             mod.MONITORING_DIR = tmp_path
             mod.HEALTH_PARQUET = tmp_path / "strategy_health.parquet"
 
@@ -1599,6 +1612,7 @@ class TestStrategyHealthLogger:
         finally:
             # Restore
             import qp.monitoring.strategy_health_logger as mod
+
             mod.MONITORING_DIR = Path(original_dir)
             mod.HEALTH_PARQUET = Path(original_dir) / "strategy_health.parquet"
 
@@ -1838,9 +1852,15 @@ class TestStrategyHealthPipelineIntegration:
         d = StrategyHealthLogger.health_to_dict(health)
 
         required = [
-            "health_level", "health_score", "avg_daily_signals",
-            "signal_consistency", "weekly_turnover_pct", "current_drawdown_pct",
-            "days_since_last_signal", "alerts", "summary",
+            "health_level",
+            "health_score",
+            "avg_daily_signals",
+            "signal_consistency",
+            "weekly_turnover_pct",
+            "current_drawdown_pct",
+            "days_since_last_signal",
+            "alerts",
+            "summary",
         ]
         for field in required:
             assert field in d, f"Missing field: {field}"
@@ -1918,8 +1938,7 @@ class TestStrategyHealthReport:
 
         # Scores: 40, 55, 70, 85, 92 — clearly improving
         history = [
-            StrategyHealth(strategy_id="t", health_score=s)
-            for s in [40.0, 55.0, 70.0, 85.0, 92.0]
+            StrategyHealth(strategy_id="t", health_score=s) for s in [40.0, 55.0, 70.0, 85.0, 92.0]
         ]
         trend = _compute_trend(history)
         assert trend == "improving"
@@ -1930,8 +1949,7 @@ class TestStrategyHealthReport:
 
         # Scores: 95, 88, 75, 60, 45 — clearly declining
         history = [
-            StrategyHealth(strategy_id="t", health_score=s)
-            for s in [95.0, 88.0, 75.0, 60.0, 45.0]
+            StrategyHealth(strategy_id="t", health_score=s) for s in [95.0, 88.0, 75.0, 60.0, 45.0]
         ]
         trend = _compute_trend(history)
         assert trend == "declining"
@@ -1941,8 +1959,7 @@ class TestStrategyHealthReport:
         from qp.monitoring.strategy_monitor import StrategyHealth
 
         history = [
-            StrategyHealth(strategy_id="t", health_score=s)
-            for s in [80.0, 81.0, 79.0, 80.5, 80.0]
+            StrategyHealth(strategy_id="t", health_score=s) for s in [80.0, 81.0, 79.0, 80.5, 80.0]
         ]
         trend = _compute_trend(history)
         assert trend == "stable"
@@ -1960,9 +1977,16 @@ class TestStrategyHealthReport:
         d = report.to_dict()
 
         required = [
-            "strategy_id", "recommendation", "recommendation_label",
-            "health_score", "health_level", "trend", "trend_icon",
-            "signal_summary", "alerts", "details",
+            "strategy_id",
+            "recommendation",
+            "recommendation_label",
+            "health_score",
+            "health_level",
+            "trend",
+            "trend_icon",
+            "signal_summary",
+            "alerts",
+            "details",
         ]
         for field in required:
             assert field in d, f"Missing: {field}"
@@ -1994,8 +2018,7 @@ class TestStrategyHealthReport:
 
         # Declining history
         history = [
-            StrategyHealth(strategy_id="t", health_score=s)
-            for s in [90.0, 80.0, 70.0, 60.0, 50.0]
+            StrategyHealth(strategy_id="t", health_score=s) for s in [90.0, 80.0, 70.0, 60.0, 50.0]
         ]
         health = StrategyHealth(
             strategy_id="t",
@@ -2037,7 +2060,7 @@ class TestExitEnginePipelineIntegration:
             # Create active positions
             ledger = ledgermod.PositionLedger()
             ledger.open("600519", 1450.0, 100, decision_id="dp-001")  # Not in loss
-            ledger.open("000001", 14.0, 1000, decision_id="dp-001")   # -14% → stop loss
+            ledger.open("000001", 14.0, 1000, decision_id="dp-001")  # -14% → stop loss
 
             # Current prices: 600519 at 1500 (profit), 000001 at 12.0 (loss -14%)
             prices = {"600519": 1500.0, "000001": 12.0}
@@ -2221,10 +2244,12 @@ class TestAlphaDecayDetector:
 
         from qp.portfolio.alpha_decay import top_n_symbols
 
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C", "D", "E", "F"],
-            "rank": [1, 2, 3, 4, 5, 6],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "D", "E", "F"],
+                "rank": [1, 2, 3, 4, 5, 6],
+            }
+        )
         result = top_n_symbols(df, top_n=3)
         assert result == {"A", "B", "C"}
 
@@ -2233,10 +2258,12 @@ class TestAlphaDecayDetector:
 
         from qp.portfolio.alpha_decay import top_n_symbols
 
-        df = pl.DataFrame({
-            "symbol": ["X", "Y", "Z", "W"],
-            "aggregated_score": [0.9, 0.7, 0.5, 0.3],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["X", "Y", "Z", "W"],
+                "aggregated_score": [0.9, 0.7, 0.5, 0.3],
+            }
+        )
         result = top_n_symbols(df, top_n=2)
         assert result == {"X", "Y"}
 
@@ -2286,10 +2313,12 @@ class TestFundamentalExitDetector:
             is_active = True
 
         # ROE declining from 25% to 15% → 40% decline
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30", "2026-03-31"],
-            "ROE": [0.15, 0.25],
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30", "2026-03-31"],
+                "ROE": [0.15, 0.25],
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(
@@ -2310,10 +2339,12 @@ class TestFundamentalExitDetector:
             is_active = True
 
         # Stable ROE
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30", "2026-03-31"],
-            "ROE": [0.18, 0.19],
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30", "2026-03-31"],
+                "ROE": [0.18, 0.19],
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(
@@ -2331,11 +2362,13 @@ class TestFundamentalExitDetector:
             symbol = "000002"
             is_active = True
 
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30", "2026-03-31"],
-            "ROE": [0.10, 0.10],
-            "revenue_growth": [-0.15, 0.05],
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30", "2026-03-31"],
+                "ROE": [0.10, 0.10],
+                "revenue_growth": [-0.15, 0.05],
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(
@@ -2354,11 +2387,13 @@ class TestFundamentalExitDetector:
             symbol = "000003"
             is_active = True
 
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30", "2026-03-31"],
-            "ROE": [0.10, 0.10],
-            "net_profit_growth": [-0.25, 0.08],
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30", "2026-03-31"],
+                "ROE": [0.10, 0.10],
+                "net_profit_growth": [-0.25, 0.08],
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(
@@ -2377,10 +2412,12 @@ class TestFundamentalExitDetector:
             symbol = "000004"
             is_active = True
 
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30", "2026-03-31"],
-            "debt_ratio": [0.70, 0.50],  # 40% increase
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30", "2026-03-31"],
+                "debt_ratio": [0.70, 0.50],  # 40% increase
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(
@@ -2399,10 +2436,12 @@ class TestFundamentalExitDetector:
             symbol = "000005"
             is_active = True
 
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30"],
-            "ROE": [0.05],
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30"],
+                "ROE": [0.05],
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(
@@ -2434,10 +2473,12 @@ class TestFundamentalExitDetector:
             symbol = "000007"
             is_active = False
 
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30", "2026-03-31"],
-            "ROE": [0.05, 0.20],
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30", "2026-03-31"],
+                "ROE": [0.05, 0.20],
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(
@@ -2456,11 +2497,13 @@ class TestFundamentalExitDetector:
             is_active = True
 
         # Both ROE decline AND negative revenue growth
-        fund = pl.DataFrame({
-            "report_date": ["2026-06-30", "2026-03-31"],
-            "ROE": [0.10, 0.20],
-            "revenue_growth": [-0.12, 0.05],
-        })
+        fund = pl.DataFrame(
+            {
+                "report_date": ["2026-06-30", "2026-03-31"],
+                "ROE": [0.10, 0.20],
+                "revenue_growth": [-0.12, 0.05],
+            }
+        )
 
         detector = FundamentalExitDetector()
         exits = detector.check(

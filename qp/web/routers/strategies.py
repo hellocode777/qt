@@ -35,13 +35,15 @@ async def strategies_list(request: Request) -> Any:
             except Exception:
                 lifecycle = "unknown"
 
-            strategies.append({
-                "strategy_id": sid,
-                "lifecycle": lifecycle,
-                "version": meta.strategy_version if meta else "?",
-                "owner": meta.owner if meta else "?",
-                "description": meta.description if meta else "",
-            })
+            strategies.append(
+                {
+                    "strategy_id": sid,
+                    "lifecycle": lifecycle,
+                    "version": meta.strategy_version if meta else "?",
+                    "owner": meta.owner if meta else "?",
+                    "description": meta.description if meta else "",
+                }
+            )
     except Exception as exc:
         logger.warning("Strategy list error: {}", exc)
 

@@ -200,21 +200,36 @@ class TestRetrainSignalE2E:
             logger = RetrainSignalLogger(base_dir=tmpdir)
 
             # Log multiple signals
-            logger.log(RetrainSignal(
-                date="2026-07-25", strategy_name="test_v1",
-                trigger="PSI_DRIFT", action=RetrainAction.SCHEDULE_RETRAIN,
-                psi_value=0.30, message="PSI drift detected",
-            ))
-            logger.log(RetrainSignal(
-                date="2026-07-26", strategy_name="test_v1",
-                trigger="IC_DECAY", action=RetrainAction.REDUCE_WEIGHT,
-                rolling_ic=0.008, message="IC decay",
-            ))
-            logger.log(RetrainSignal(
-                date="2026-07-27", strategy_name="test_v1",
-                trigger="PSI_DRIFT", action=RetrainAction.MONITOR,
-                psi_value=0.12, message="Mild drift",
-            ))
+            logger.log(
+                RetrainSignal(
+                    date="2026-07-25",
+                    strategy_name="test_v1",
+                    trigger="PSI_DRIFT",
+                    action=RetrainAction.SCHEDULE_RETRAIN,
+                    psi_value=0.30,
+                    message="PSI drift detected",
+                )
+            )
+            logger.log(
+                RetrainSignal(
+                    date="2026-07-26",
+                    strategy_name="test_v1",
+                    trigger="IC_DECAY",
+                    action=RetrainAction.REDUCE_WEIGHT,
+                    rolling_ic=0.008,
+                    message="IC decay",
+                )
+            )
+            logger.log(
+                RetrainSignal(
+                    date="2026-07-27",
+                    strategy_name="test_v1",
+                    trigger="PSI_DRIFT",
+                    action=RetrainAction.MONITOR,
+                    psi_value=0.12,
+                    message="Mild drift",
+                )
+            )
 
             # Query
             history = logger.load_history(days=30)
@@ -227,7 +242,9 @@ class TestRetrainSignalE2E:
         from qp.monitoring.retrain_signal import RetrainAction, evaluate_retrain_need
 
         signal = evaluate_retrain_need(
-            psi_value=0.05, rolling_ic=0.03, training_ic=0.035,
+            psi_value=0.05,
+            rolling_ic=0.03,
+            training_ic=0.035,
             current_regime="LIQUIDITY_CRUNCH",
         )
         assert signal.action == RetrainAction.MONITOR
@@ -318,8 +335,7 @@ class TestKillSwitchTriggersE2E:
         for cls, expected_priority in triggers:
             instance = cls()  # type: ignore[call-arg]
             assert instance.priority == expected_priority, (
-                f"{cls.__name__}: expected priority {expected_priority}, "
-                f"got {instance.priority}"
+                f"{cls.__name__}: expected priority {expected_priority}, got {instance.priority}"
             )
 
 
@@ -395,16 +411,41 @@ class TestSchedulerJobRegistration:
 
         scheduler = QPScheduler(timezone="Asia/Shanghai")
 
-        scheduler.add_job(Job(name="data_fetch", task=lambda: None,
-                              trigger=CronTrigger(day="1-5", hour="8", minute="0")))
-        scheduler.add_job(Job(name="monitor_check", task=lambda: None,
-                              trigger=CronTrigger(day="1-5", hour="9", minute="7")))
-        scheduler.add_job(Job(name="retrain_notify", task=lambda: None,
-                              trigger=CronTrigger(day="1-5", hour="9", minute="17")))
-        scheduler.add_job(Job(name="pre_close_check", task=lambda: None,
-                              trigger=CronTrigger(day="1-5", hour="16", minute="53")))
-        scheduler.add_job(Job(name="daily_pipeline", task=lambda: None,
-                              trigger=CronTrigger(day="1-5", hour="17", minute="57")))
+        scheduler.add_job(
+            Job(
+                name="data_fetch",
+                task=lambda: None,
+                trigger=CronTrigger(day="1-5", hour="8", minute="0"),
+            )
+        )
+        scheduler.add_job(
+            Job(
+                name="monitor_check",
+                task=lambda: None,
+                trigger=CronTrigger(day="1-5", hour="9", minute="7"),
+            )
+        )
+        scheduler.add_job(
+            Job(
+                name="retrain_notify",
+                task=lambda: None,
+                trigger=CronTrigger(day="1-5", hour="9", minute="17"),
+            )
+        )
+        scheduler.add_job(
+            Job(
+                name="pre_close_check",
+                task=lambda: None,
+                trigger=CronTrigger(day="1-5", hour="16", minute="53"),
+            )
+        )
+        scheduler.add_job(
+            Job(
+                name="daily_pipeline",
+                task=lambda: None,
+                trigger=CronTrigger(day="1-5", hour="17", minute="57"),
+            )
+        )
 
         jobs = scheduler.list_jobs()
         assert "data_fetch" in jobs

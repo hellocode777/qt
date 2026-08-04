@@ -126,7 +126,9 @@ def cmd_strategy_approved_list() -> int:
         print("(empty) — 暂无已批准策略 / No approved strategies")
         return 0
 
-    print(f"{'Strategy ID':<28s} {'Version':<14s} {'Approved By':<16s} {'Factors':<8s} {'Sharpe':<8s}")
+    print(
+        f"{'Strategy ID':<28s} {'Version':<14s} {'Approved By':<16s} {'Factors':<8s} {'Sharpe':<8s}"
+    )
     print("-" * 80)
     for s in active:
         from qp.strategy.approved import ApprovedStrategy

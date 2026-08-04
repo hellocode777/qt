@@ -64,8 +64,7 @@ class Application:
 
         self.lifecycle.transition_to(RuntimeState.READY)
         self.context.logger.info(
-            f"Runtime ready (env={self.context.environment}, "
-            f"v{self.context.version})",
+            f"Runtime ready (env={self.context.environment}, v{self.context.version})",
             module="runtime",
         )
 
@@ -86,9 +85,7 @@ class Application:
                 self.context.scheduler.stop()
                 self.context.logger.info("Scheduler stopped", module="runtime")
             except Exception as e:
-                self.context.logger.error(
-                    f"Error stopping scheduler: {e}", module="runtime"
-                )
+                self.context.logger.error(f"Error stopping scheduler: {e}", module="runtime")
 
         # Close storage if connected
         if self.context.storage_factory is not None:
@@ -97,9 +94,7 @@ class Application:
                 storage.close()
                 self.context.logger.info("Storage closed", module="runtime")
             except Exception as e:
-                self.context.logger.error(
-                    f"Error closing storage: {e}", module="runtime"
-                )
+                self.context.logger.error(f"Error closing storage: {e}", module="runtime")
 
         self.lifecycle.transition_to(RuntimeState.TERMINATED)
         self.context.logger.info("Runtime terminated", module="runtime")
@@ -125,17 +120,13 @@ class Application:
 
         def _handle_signal(signum: int, frame: Any) -> None:
             sig_name = signal.Signals(signum).name
-            self.context.logger.info(
-                f"Received {sig_name}, shutting down...", module="runtime"
-            )
+            self.context.logger.info(f"Received {sig_name}, shutting down...", module="runtime")
             shutdown_flag["done"] = True
 
         original_term = signal.signal(signal.SIGTERM, _handle_signal)
         original_int = signal.signal(signal.SIGINT, _handle_signal)
 
-        self.context.logger.info(
-            "Runtime running (press Ctrl+C to stop)", module="runtime"
-        )
+        self.context.logger.info("Runtime running (press Ctrl+C to stop)", module="runtime")
 
         try:
             while not shutdown_flag["done"]:

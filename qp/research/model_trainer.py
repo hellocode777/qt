@@ -587,7 +587,7 @@ class WalkForwardScorer:
         if valid.sum() < 5:
             return 0.0
         result: Any = spearmanr(predictions[valid], targets[valid])
-        corr: float = float(result.statistic if hasattr(result, 'statistic') else result[0])
+        corr: float = float(result.statistic if hasattr(result, "statistic") else result[0])
         return corr
 
     @property

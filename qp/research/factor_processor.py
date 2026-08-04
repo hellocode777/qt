@@ -556,8 +556,11 @@ def neutralize_cross_section_ols(
 
     # Build risk matrix
     risk_matrix, risk_cols = _build_risk_matrix(
-        symbols, industry_map, market_cap_map,
-        volatility_map=volatility_map, amount_map=amount_map,
+        symbols,
+        industry_map,
+        market_cap_map,
+        volatility_map=volatility_map,
+        amount_map=amount_map,
         min_stocks_per_industry=min_stocks_per_industry,
     )
 
@@ -970,8 +973,9 @@ def factor_pipeline(
         has_industries = industry_map is not None and len(set(industry_map.values())) > 1
         has_market_cap = market_cap_map is not None and len(market_cap_map) > 0
 
-        if neutralize_method == "ols" and (has_industries or has_market_cap
-                                             or volatility_map or amount_map):
+        if neutralize_method == "ols" and (
+            has_industries or has_market_cap or volatility_map or amount_map
+        ):
             # OLS regression residual: strip Size + Vol + Amount + Industry
             factor_df_neutral = neutralize_factors_ols(
                 df,

@@ -26,14 +26,18 @@ async def models_list(request: Request) -> Any:
 
         registry = ModelRegistry()
         for m in registry.list_models():
-            models.append({
-                "model_id": m.model_id if hasattr(m, "model_id") else str(m),
-                "stage": str(m.stage.value) if hasattr(m, "stage") and m.stage else "?",
-                "strategy_id": m.strategy_id if hasattr(m, "strategy_id") else "",
-                "features": ", ".join(m.features[:3]) if hasattr(m, "features") and m.features else "",
-                "created_at": m.created_at if hasattr(m, "created_at") else "",
-                "metrics": m.metrics if hasattr(m, "metrics") else {},
-            })
+            models.append(
+                {
+                    "model_id": m.model_id if hasattr(m, "model_id") else str(m),
+                    "stage": str(m.stage.value) if hasattr(m, "stage") and m.stage else "?",
+                    "strategy_id": m.strategy_id if hasattr(m, "strategy_id") else "",
+                    "features": ", ".join(m.features[:3])
+                    if hasattr(m, "features") and m.features
+                    else "",
+                    "created_at": m.created_at if hasattr(m, "created_at") else "",
+                    "metrics": m.metrics if hasattr(m, "metrics") else {},
+                }
+            )
     except Exception as exc:
         logger.warning("Model list error: {}", exc)
 

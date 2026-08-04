@@ -110,9 +110,7 @@ class AlphaDecayDetector:
                 if rank is None:
                     detail_parts.append(f"跌出 Top-{self.config.top_n}")
                 else:
-                    detail_parts.append(
-                        f"排名 #{rank} (阈值 Top-{self.config.top_n})"
-                    )
+                    detail_parts.append(f"排名 #{rank} (阈值 Top-{self.config.top_n})")
                 detail_parts.append(f"持仓成本 ¥{pos.entry_price:.2f}")
 
                 exits.append(

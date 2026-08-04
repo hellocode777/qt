@@ -39,7 +39,7 @@ class TestComputeValuation:
                     date(2024, 6, 30),
                     date(2024, 9, 30),
                     date(2024, 12, 31),
-                    date(2025, 3, 31),   # future — publish_date > last trade
+                    date(2025, 3, 31),  # future — publish_date > last trade
                 ],
                 "publish_date": [
                     date(2024, 4, 1),
@@ -47,9 +47,9 @@ class TestComputeValuation:
                     date(2024, 8, 1),
                     date(2024, 11, 1),
                     date(2025, 3, 1),
-                    date(2025, 5, 1),    # after last trade date → invisible
+                    date(2025, 5, 1),  # after last trade date → invisible
                 ],
-                "EPS":  [1.0, 1.2, 1.5, 1.8, 2.0, 2.5],
+                "EPS": [1.0, 1.2, 1.5, 1.8, 2.0, 2.5],
                 "NAV": [10.0, 10.2, 10.5, 10.8, 11.0, 11.5],
                 "cashflow_per_share": [0.0] * 6,
             }
@@ -81,15 +81,13 @@ class TestComputeValuation:
 
     def test_no_report_published_before_first_trade_date(self) -> None:
         """Trade dates before any publish_date → PE/PB not computed."""
-        price_df = pl.DataFrame(
-            {"trade_date": [date(2020, 1, 15)], "close": [20.0]}
-        )
+        price_df = pl.DataFrame({"trade_date": [date(2020, 1, 15)], "close": [20.0]})
         fund_df = pl.DataFrame(
             {
                 "report_date": [date(2020, 3, 31), date(2020, 6, 30)],
                 "publish_date": [date(2020, 4, 30), date(2020, 8, 30)],
-                "EPS":  [0.5, 0.8],
-                "NAV":  [5.0, 5.3],
+                "EPS": [0.5, 0.8],
+                "NAV": [5.0, 5.3],
                 "cashflow_per_share": [0.0, 0.0],
             }
         )
@@ -100,15 +98,13 @@ class TestComputeValuation:
 
     def test_null_eps_nav_skipped(self) -> None:
         """Rows with null/zero EPS/NAV are excluded."""
-        price_df = pl.DataFrame(
-            {"trade_date": [date(2024, 6, 30)], "close": [30.0]}
-        )
+        price_df = pl.DataFrame({"trade_date": [date(2024, 6, 30)], "close": [30.0]})
         fund_df = pl.DataFrame(
             {
                 "report_date": [date(2024, 3, 31), date(2024, 6, 30)],
                 "publish_date": [date(2024, 4, 30), date(2024, 8, 30)],
-                "EPS":  [0.0, 3.0],    # 0.0 invalid (<= 0)
-                "NAV":  [None, 15.0],   # None skipped
+                "EPS": [0.0, 3.0],  # 0.0 invalid (<= 0)
+                "NAV": [None, 15.0],  # None skipped
                 "cashflow_per_share": [0.0, 0.0],
             }
         )
@@ -133,8 +129,8 @@ class TestComputeValuation:
             {
                 "report_date": [date(2023, 12, 31), date(2024, 3, 31)],
                 "publish_date": [date(2024, 3, 1), date(2024, 5, 15)],
-                "EPS":  [1.0, 1.5],
-                "NAV":  [8.0, 9.0],
+                "EPS": [1.0, 1.5],
+                "NAV": [8.0, 9.0],
                 "cashflow_per_share": [0.0, 0.0],
             }
         )
@@ -152,13 +148,23 @@ class TestComputeValuation:
 
     def test_empty_price_data(self) -> None:
         """Empty price DataFrame → None."""
-        result = _compute_valuation("X", pl.DataFrame(), pl.DataFrame({"report_date": [], "publish_date": [], "EPS": [], "NAV": [], "cashflow_per_share": []}))
+        result = _compute_valuation(
+            "X",
+            pl.DataFrame(),
+            pl.DataFrame(
+                {
+                    "report_date": [],
+                    "publish_date": [],
+                    "EPS": [],
+                    "NAV": [],
+                    "cashflow_per_share": [],
+                }
+            ),
+        )
         assert result is None
 
     def test_empty_fundamental_data(self) -> None:
         """Empty fundamental DataFrame → None."""
-        price_df = pl.DataFrame(
-            {"trade_date": [date(2024, 1, 1)], "close": [100.0]}
-        )
+        price_df = pl.DataFrame({"trade_date": [date(2024, 1, 1)], "close": [100.0]})
         result = _compute_valuation("Y", price_df, pl.DataFrame())
         assert result is None

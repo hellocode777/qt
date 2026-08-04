@@ -92,35 +92,25 @@ class ApprovedStrategy:
         weights_raw = data.get("weights", {})
         weights: dict[str, float] = {}
         if weights_raw:
-            weights = {
-                str(k): float(str(v))
-                for k, v in cast_dict(weights_raw).items()
-            }
+            weights = {str(k): float(str(v)) for k, v in cast_dict(weights_raw).items()}
 
         # Parse parameters
         params_raw = data.get("parameters", {})
         parameters: dict[str, object] = {}
         if params_raw:
-            parameters = {
-                str(k): v for k, v in cast_dict(params_raw).items()
-            }
+            parameters = {str(k): v for k, v in cast_dict(params_raw).items()}
 
         # Parse backtest_summary — coerce values to float
         bs_raw = data.get("backtest_summary", {})
         backtest_summary: dict[str, float] = {}
         if bs_raw:
-            backtest_summary = {
-                str(k): float(str(v))
-                for k, v in cast_dict(bs_raw).items()
-            }
+            backtest_summary = {str(k): float(str(v)) for k, v in cast_dict(bs_raw).items()}
 
         # Parse meta — coerce to str
         meta_raw = data.get("meta", {})
         meta: dict[str, str] = {}
         if meta_raw:
-            meta = {
-                str(k): str(v) for k, v in cast_dict(meta_raw).items()
-            }
+            meta = {str(k): str(v) for k, v in cast_dict(meta_raw).items()}
 
         return cls(
             strategy_id=str(data.get("strategy_id", "")),
@@ -137,9 +127,7 @@ class ApprovedStrategy:
     @classmethod
     def from_json(cls, json_str: str) -> ApprovedStrategy:
         """Deserialize from a JSON string."""
-        data: dict[str, object] = {
-            str(k): v for k, v in json.loads(json_str).items()
-        }
+        data: dict[str, object] = {str(k): v for k, v in json.loads(json_str).items()}
         return cls.from_dict(data)
 
     @classmethod
@@ -204,9 +192,7 @@ class ApprovedStrategy:
 
     def describe(self) -> str:
         """Human-readable summary of the frozen strategy."""
-        factor_list = ", ".join(
-            f"{k}: {v:+.3f}" for k, v in self.weights.items()
-        )
+        factor_list = ", ".join(f"{k}: {v:+.3f}" for k, v in self.weights.items())
         lines = [
             f"ApprovedStrategy: {self.strategy_id} (v{self.version})",
             f"  Approved by: {self.approved_by} @ {self.approved_at.isoformat()}",

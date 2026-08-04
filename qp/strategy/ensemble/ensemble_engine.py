@@ -148,9 +148,7 @@ class EnsembleEngine:
             all_symbols.update(df["symbol"].to_list())
 
         # Per-strategy weighted scores keyed by symbol
-        strategy_scores: dict[str, dict[str, float | None]] = {
-            sym: {} for sym in all_symbols
-        }
+        strategy_scores: dict[str, dict[str, float | None]] = {sym: {} for sym in all_symbols}
         for sid, df in aligned.items():
             w = weights.get(sid, 1.0 / max(len(aligned), 1))
             if w <= 0:

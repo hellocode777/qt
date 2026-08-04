@@ -22,8 +22,13 @@ from qp.research.evaluation.rank_ic import (
 class TestICRecord:
     def test_construction(self) -> None:
         rec = ICRecord(
-            ic_mean=0.05, ic_ir=0.8, ic_t_stat=3.0, ic_std=0.06,
-            ic_positive_pct=65.0, n_days=100, daily_ics=[0.03, 0.05, 0.07],
+            ic_mean=0.05,
+            ic_ir=0.8,
+            ic_t_stat=3.0,
+            ic_std=0.06,
+            ic_positive_pct=65.0,
+            n_days=100,
+            daily_ics=[0.03, 0.05, 0.07],
         )
         assert rec.ic_mean == 0.05
         assert rec.ic_ir == 0.8
@@ -31,18 +36,28 @@ class TestICRecord:
 
     def test_post_init_checks(self) -> None:
         rec = ICRecord(
-            ic_mean=0.05, ic_ir=0.8, ic_t_stat=3.0, ic_std=0.06,
-            ic_positive_pct=65.0, n_days=100, daily_ics=[],
+            ic_mean=0.05,
+            ic_ir=0.8,
+            ic_t_stat=3.0,
+            ic_std=0.06,
+            ic_positive_pct=65.0,
+            n_days=100,
+            daily_ics=[],
         )
-        assert rec.ic_mean_pass is True    # |0.05| >= 0.02
-        assert rec.ic_ir_pass is True      # 0.8 >= 0.3
+        assert rec.ic_mean_pass is True  # |0.05| >= 0.02
+        assert rec.ic_ir_pass is True  # 0.8 >= 0.3
         assert rec.ic_t_stat_pass is True  # 3.0 >= 2.0
         assert rec.all_pass is True
 
     def test_failing_checks(self) -> None:
         rec = ICRecord(
-            ic_mean=0.01, ic_ir=0.2, ic_t_stat=1.5, ic_std=0.05,
-            ic_positive_pct=50.0, n_days=30, daily_ics=[],
+            ic_mean=0.01,
+            ic_ir=0.2,
+            ic_t_stat=1.5,
+            ic_std=0.05,
+            ic_positive_pct=50.0,
+            n_days=30,
+            daily_ics=[],
         )
         assert rec.ic_mean_pass is False
         assert rec.ic_ir_pass is False
@@ -51,8 +66,13 @@ class TestICRecord:
 
     def test_to_dict(self) -> None:
         rec = ICRecord(
-            ic_mean=0.03, ic_ir=0.5, ic_t_stat=2.5, ic_std=0.04,
-            ic_positive_pct=60.0, n_days=50, daily_ics=[],
+            ic_mean=0.03,
+            ic_ir=0.5,
+            ic_t_stat=2.5,
+            ic_std=0.04,
+            ic_positive_pct=60.0,
+            n_days=50,
+            daily_ics=[],
         )
         d = rec.to_dict()
         assert d["ic_mean"] == 0.03
@@ -61,8 +81,13 @@ class TestICRecord:
 
     def test_summary(self) -> None:
         rec = ICRecord(
-            ic_mean=0.05, ic_ir=0.8, ic_t_stat=3.0, ic_std=0.06,
-            ic_positive_pct=65.0, n_days=100, daily_ics=[],
+            ic_mean=0.05,
+            ic_ir=0.8,
+            ic_t_stat=3.0,
+            ic_std=0.06,
+            ic_positive_pct=65.0,
+            n_days=100,
+            daily_ics=[],
         )
         s = rec.summary()
         assert "IC=" in s
@@ -114,20 +139,31 @@ class TestComputeRankIC:
 class TestComputeDailyICSeries:
     def test_returns_per_date_ics(self) -> None:
         # Use inferred date type, not Object cast
-        score_df = pl.DataFrame({
-            "trade_date": ["2026-01-15"] * 12 + ["2026-01-16"] * 12,
-            "symbol": [f"S{i}" for i in range(12)] * 2,
-            "score": [0.1 * i for i in range(12)] * 2,
-        }).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
+        score_df = pl.DataFrame(
+            {
+                "trade_date": ["2026-01-15"] * 12 + ["2026-01-16"] * 12,
+                "symbol": [f"S{i}" for i in range(12)] * 2,
+                "score": [0.1 * i for i in range(12)] * 2,
+            }
+        ).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
 
-        price_df = pl.DataFrame({
-            "trade_date": ["2026-01-15"] * 12 + ["2026-01-16"] * 12
-                          + ["2026-01-17"] * 12 + ["2026-01-18"] * 12
-                          + ["2026-01-19"] * 12 + ["2026-01-20"] * 12
-                          + ["2026-01-21"] * 12,
-            "symbol": [f"S{i}" for i in range(12)] * 7,
-            "close": [10.0 + i + int(d) * 0.1 for d in ["15", "16", "17", "18", "19", "20", "21"] for i in range(12)],
-        }).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
+        price_df = pl.DataFrame(
+            {
+                "trade_date": ["2026-01-15"] * 12
+                + ["2026-01-16"] * 12
+                + ["2026-01-17"] * 12
+                + ["2026-01-18"] * 12
+                + ["2026-01-19"] * 12
+                + ["2026-01-20"] * 12
+                + ["2026-01-21"] * 12,
+                "symbol": [f"S{i}" for i in range(12)] * 7,
+                "close": [
+                    10.0 + i + int(d) * 0.1
+                    for d in ["15", "16", "17", "18", "19", "20", "21"]
+                    for i in range(12)
+                ],
+            }
+        ).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
 
         series = compute_daily_ic_series(score_df, price_df, forward_days=1, min_stocks_per_day=10)
         assert len(series) >= 1
@@ -137,17 +173,21 @@ class TestComputeDailyICSeries:
             assert "n_stocks" in item
 
     def test_insufficient_stocks_returns_empty(self) -> None:
-        score_df = pl.DataFrame({
-            "trade_date": ["2026-01-15"] * 3,
-            "symbol": ["A", "B", "C"],
-            "score": [0.1, 0.2, 0.3],
-        }).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
+        score_df = pl.DataFrame(
+            {
+                "trade_date": ["2026-01-15"] * 3,
+                "symbol": ["A", "B", "C"],
+                "score": [0.1, 0.2, 0.3],
+            }
+        ).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
 
-        price_df = pl.DataFrame({
-            "trade_date": ["2026-01-15", "2026-01-16", "2026-01-17"] * 3,
-            "symbol": ["A", "B", "C"] * 3,
-            "close": [10.0, 11.0, 12.0, 20.0, 21.0, 22.0, 30.0, 31.0, 32.0],
-        }).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
+        price_df = pl.DataFrame(
+            {
+                "trade_date": ["2026-01-15", "2026-01-16", "2026-01-17"] * 3,
+                "symbol": ["A", "B", "C"] * 3,
+                "close": [10.0, 11.0, 12.0, 20.0, 21.0, 22.0, 30.0, 31.0, 32.0],
+            }
+        ).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
 
         series = compute_daily_ic_series(score_df, price_df, min_stocks_per_day=10)
         assert series == []
@@ -155,11 +195,13 @@ class TestComputeDailyICSeries:
 
 class TestEvaluateFactorIC:
     def test_full_evaluation(self) -> None:
-        score_df = pl.DataFrame({
-            "trade_date": ["2026-01-15"] * 12 + ["2026-01-16"] * 12,
-            "symbol": [f"S{i}" for i in range(12)] * 2,
-            "score": [0.1 * i for i in range(12)] * 2,
-        }).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
+        score_df = pl.DataFrame(
+            {
+                "trade_date": ["2026-01-15"] * 12 + ["2026-01-16"] * 12,
+                "symbol": [f"S{i}" for i in range(12)] * 2,
+                "score": [0.1 * i for i in range(12)] * 2,
+            }
+        ).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
 
         # Build price data with enough future dates
         symbols = [f"S{i}" for i in range(12)]
@@ -195,10 +237,18 @@ class TestComputeICDecay:
         rows_price = []
         for sym in symbols:
             for d_offset in range(30):
-                d_str = f"2026-01-{1 + d_offset:02d}" if d_offset < 30 else f"2026-02-{d_offset - 30:02d}"
-                rows_price.append({"trade_date": d_str, "symbol": sym, "close": 10.0 + float(d_offset)})
+                d_str = (
+                    f"2026-01-{1 + d_offset:02d}"
+                    if d_offset < 30
+                    else f"2026-02-{d_offset - 30:02d}"
+                )
+                rows_price.append(
+                    {"trade_date": d_str, "symbol": sym, "close": 10.0 + float(d_offset)}
+                )
                 if d_offset < 25:
-                    rows_score.append({"trade_date": d_str, "symbol": sym, "score": float(d_offset % 12) / 12.0})
+                    rows_score.append(
+                        {"trade_date": d_str, "symbol": sym, "score": float(d_offset % 12) / 12.0}
+                    )
 
         score_df = pl.DataFrame(rows_score).with_columns(
             pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d")

@@ -1,4 +1,5 @@
 """CLI command handlers for the "knowledge" group."""
+
 from __future__ import annotations
 
 import sys
@@ -75,4 +76,3 @@ def cmd_knowledge_search() -> int:
         print()
 
     return 0
-

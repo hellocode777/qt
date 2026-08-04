@@ -84,7 +84,10 @@ class DecisionService:
     # ------------------------------------------------------------------
 
     def approve(
-        self, package_id: str, reviewer: str = "", notes: str = "",
+        self,
+        package_id: str,
+        reviewer: str = "",
+        notes: str = "",
         create_positions: bool = True,
     ) -> dict[str, Any] | None:
         """Approve a decision (PENDING/MODIFIED → APPROVED).
@@ -111,17 +114,22 @@ class DecisionService:
                 positions = ledger.open_from_decision(pkg)
                 logger.info(
                     "Auto-created {} positions from {}",
-                    len(positions), package_id,
+                    len(positions),
+                    package_id,
                 )
             except Exception as e:
                 logger.warning(
                     "Failed to auto-create positions for {}: {}",
-                    package_id, e,
+                    package_id,
+                    e,
                 )
         return result
 
     def reject(
-        self, package_id: str, reviewer: str = "", notes: str = "",
+        self,
+        package_id: str,
+        reviewer: str = "",
+        notes: str = "",
     ) -> dict[str, Any] | None:
         """Reject a decision (PENDING → REJECTED, terminal)."""
         return self._transition(
@@ -132,7 +140,10 @@ class DecisionService:
         )
 
     def modify(
-        self, package_id: str, reviewer: str = "", notes: str = "",
+        self,
+        package_id: str,
+        reviewer: str = "",
+        notes: str = "",
     ) -> dict[str, Any] | None:
         """Mark a decision as modified (PENDING → MODIFIED)."""
         return self._transition(
@@ -143,7 +154,9 @@ class DecisionService:
         )
 
     def mark_executed(
-        self, package_id: str, notes: str = "",
+        self,
+        package_id: str,
+        notes: str = "",
     ) -> dict[str, Any] | None:
         """Mark trades as executed (APPROVED → PARTIALLY_EXECUTED → MONITORING).
 
@@ -158,7 +171,9 @@ class DecisionService:
         )
 
     def close(
-        self, package_id: str, notes: str = "",
+        self,
+        package_id: str,
+        notes: str = "",
     ) -> dict[str, Any] | None:
         """Close a decision (MONITORING → CLOSED, terminal)."""
         return self._transition(
@@ -423,9 +438,7 @@ class DecisionService:
                 "is_terminal": pkg.human_review.is_terminal,
                 "status_history": pkg.human_review.status_history,
                 # Allowed next transitions (for UI buttons)
-                "_next": sorted(
-                    s.value for s in _allowed_next(pkg.human_review.current_status)
-                ),
+                "_next": sorted(s.value for s in _allowed_next(pkg.human_review.current_status)),
             },
         }
 

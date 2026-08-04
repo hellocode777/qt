@@ -1,4 +1,5 @@
 """CLI command handlers for the "decide" group."""
+
 from __future__ import annotations
 
 import sys
@@ -473,7 +474,6 @@ def _execute_review_action(
         print(f"  备注: {notes}")
     print(f"  已保存至 / Saved to: {json_path}")
     return 0
-
 
 
 # ------------------------------------------------------------------

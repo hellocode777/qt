@@ -93,6 +93,7 @@ async def proposals_approve(
     logger.info("Proposal {} approved via WebUI", proposal_id)
     # Redirect back to detail
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url=f"/proposals/{proposal_id}", status_code=303)
 
 
@@ -118,6 +119,7 @@ async def proposals_reject(
 
     logger.info("Proposal {} rejected via WebUI", proposal_id)
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url=f"/proposals/{proposal_id}", status_code=303)
 
 
@@ -141,4 +143,5 @@ async def proposals_create(
 
     logger.info("Proposal {} created via WebUI", prop.proposal_id)
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url=f"/proposals/{prop.proposal_id}", status_code=303)

@@ -1,4 +1,5 @@
 """CLI command handlers for the "paper" group."""
+
 from __future__ import annotations
 
 import sys
@@ -82,4 +83,3 @@ def cmd_paper_status() -> int:
         print(f"  ⏳ 还剩 {remaining} 天完成评估 / {remaining} days remaining.")
     print()
     return 0
-

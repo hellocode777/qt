@@ -1,4 +1,5 @@
 """CLI command handlers for the "model" group."""
+
 from __future__ import annotations
 
 import sys
@@ -74,4 +75,3 @@ def cmd_model_show() -> int:
         print("    (none)")
 
     return 0
-

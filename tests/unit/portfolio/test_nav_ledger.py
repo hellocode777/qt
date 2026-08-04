@@ -8,7 +8,6 @@ from qp.portfolio.nav_ledger import NAV_DIR, NAV_PARQUET, NAVLedger
 
 
 class TestNAVLedger:
-
     def test_record_and_load(self, tmp_path: Path) -> None:
         """Record daily NAVs and load them back sorted by date."""
         original_dir = str(NAV_DIR)
@@ -16,6 +15,7 @@ class TestNAVLedger:
         try:
             # Redirect to tmp
             import qp.portfolio.nav_ledger as mod
+
             mod.NAV_DIR = tmp_path / "portfolio"
             mod.NAV_PARQUET = mod.NAV_DIR / "nav_history.parquet"
 
@@ -35,6 +35,7 @@ class TestNAVLedger:
     def test_idempotent_record(self, tmp_path: Path) -> None:
         """Recording the same date twice replaces the old value."""
         import qp.portfolio.nav_ledger as mod
+
         mod.NAV_DIR = tmp_path / "portfolio"
         mod.NAV_PARQUET = mod.NAV_DIR / "nav_history.parquet"
 
@@ -53,6 +54,7 @@ class TestNAVLedger:
     def test_get_latest(self, tmp_path: Path) -> None:
         """get_latest returns most recent record."""
         import qp.portfolio.nav_ledger as mod
+
         mod.NAV_DIR = tmp_path / "portfolio"
         mod.NAV_PARQUET = mod.NAV_DIR / "nav_history.parquet"
 
@@ -74,6 +76,7 @@ class TestNAVLedger:
     def test_empty_history(self, tmp_path: Path) -> None:
         """Empty history returns empty DataFrame."""
         import qp.portfolio.nav_ledger as mod
+
         mod.NAV_DIR = tmp_path / "portfolio"
         mod.NAV_PARQUET = mod.NAV_DIR / "nav_history.parquet"
 
@@ -90,6 +93,7 @@ class TestNAVLedger:
     def test_with_positions_and_decision(self, tmp_path: Path) -> None:
         """Record with optional metadata fields."""
         import qp.portfolio.nav_ledger as mod
+
         mod.NAV_DIR = tmp_path / "portfolio"
         mod.NAV_PARQUET = mod.NAV_DIR / "nav_history.parquet"
 

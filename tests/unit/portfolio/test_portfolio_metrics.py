@@ -8,20 +8,22 @@ from qp.portfolio.metrics import PortfolioMetrics
 
 
 class TestPortfolioMetrics:
-
     def test_steady_growth(self) -> None:
         """A steadily growing NAV (~0.15% daily with noise) produces positive metrics."""
         import random
+
         random.seed(42)
         nav = [100_000.0]
         for _ in range(1, 253):  # 1 year of trading days
             ret = 0.0015 + random.gauss(0, 0.002)
             nav.append(nav[-1] * (1 + ret))
 
-        df = pl.DataFrame({
-            "date": [f"2026-{i:03d}" for i in range(1, 254)],
-            "total_nav": nav,
-        })
+        df = pl.DataFrame(
+            {
+                "date": [f"2026-{i:03d}" for i in range(1, 254)],
+                "total_nav": nav,
+            }
+        )
 
         m = PortfolioMetrics.from_nav(df)
         # ~0.15% daily * 252 ≈ positive annual return
@@ -35,10 +37,12 @@ class TestPortfolioMetrics:
 
     def test_flat_nav(self) -> None:
         """Flat NAV produces near-zero metrics."""
-        df = pl.DataFrame({
-            "date": ["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05"],
-            "total_nav": [100_000.0] * 5,
-        })
+        df = pl.DataFrame(
+            {
+                "date": ["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05"],
+                "total_nav": [100_000.0] * 5,
+            }
+        )
 
         m = PortfolioMetrics.from_nav(df)
         assert m.annualized_return_pct == 0.0
@@ -48,10 +52,12 @@ class TestPortfolioMetrics:
     def test_drawdown_detection(self) -> None:
         """A V-shaped NAV correctly reports max drawdown."""
         # Start at 100, drop to 80, recover to 110
-        df = pl.DataFrame({
-            "date": ["D1", "D2", "D3", "D4", "D5"],
-            "total_nav": [100.0, 90.0, 80.0, 95.0, 110.0],
-        })
+        df = pl.DataFrame(
+            {
+                "date": ["D1", "D2", "D3", "D4", "D5"],
+                "total_nav": [100.0, 90.0, 80.0, 95.0, 110.0],
+            }
+        )
 
         m = PortfolioMetrics.from_nav(df)
         # Max DD: (100-80)/100 = 20%
@@ -61,10 +67,12 @@ class TestPortfolioMetrics:
 
     def test_insufficient_data(self) -> None:
         """Fewer than 5 rows → zero metrics, n_days preserved."""
-        df = pl.DataFrame({
-            "date": ["D1", "D2"],
-            "total_nav": [100.0, 101.0],
-        })
+        df = pl.DataFrame(
+            {
+                "date": ["D1", "D2"],
+                "total_nav": [100.0, 101.0],
+            }
+        )
 
         m = PortfolioMetrics.from_nav(df)
         assert m.sharpe_ratio == 0.0
@@ -80,10 +88,12 @@ class TestPortfolioMetrics:
 
     def test_to_dict(self) -> None:
         """to_dict returns all expected keys."""
-        df = pl.DataFrame({
-            "date": ["D1", "D2", "D3", "D4", "D5"],
-            "total_nav": [100.0, 101.0, 102.0, 101.0, 103.0],
-        })
+        df = pl.DataFrame(
+            {
+                "date": ["D1", "D2", "D3", "D4", "D5"],
+                "total_nav": [100.0, 101.0, 102.0, 101.0, 103.0],
+            }
+        )
 
         m = PortfolioMetrics.from_nav(df)
         d = m.to_dict()
@@ -103,24 +113,29 @@ class TestPortfolioMetrics:
     def test_rating(self) -> None:
         """rating() returns qualitative labels."""
         # Insufficient data
-        df = pl.DataFrame({
-            "date": ["D1"],
-            "total_nav": [100.0],
-        })
+        df = pl.DataFrame(
+            {
+                "date": ["D1"],
+                "total_nav": [100.0],
+            }
+        )
         m = PortfolioMetrics.from_nav(df)
         assert "不足" in m.rating()
 
         # Good Sharpe — steady growth with small realistic noise
         import random
+
         random.seed(42)
         nav = [100_000.0]
         for _ in range(253):
             ret = 0.0015 + random.gauss(0, 0.003)  # ~0.15% daily with noise
             nav.append(nav[-1] * (1 + ret))
-        df = pl.DataFrame({
-            "date": [f"D{i}" for i in range(254)],
-            "total_nav": nav,
-        })
+        df = pl.DataFrame(
+            {
+                "date": [f"D{i}" for i in range(254)],
+                "total_nav": nav,
+            }
+        )
         m = PortfolioMetrics.from_nav(df)
         assert "优秀" in m.rating() or "良好" in m.rating() or "一般" in m.rating()
 
@@ -136,14 +151,18 @@ class TestPortfolioMetrics:
         for _ in range(1, 100):
             bench_nav.append(bench_nav[-1] * 1.0010)
 
-        port_df = pl.DataFrame({
-            "date": [f"D{i}" for i in range(100)],
-            "total_nav": port_nav,
-        })
-        bench_df = pl.DataFrame({
-            "date": [f"D{i}" for i in range(100)],
-            "total_nav": bench_nav,
-        })
+        port_df = pl.DataFrame(
+            {
+                "date": [f"D{i}" for i in range(100)],
+                "total_nav": port_nav,
+            }
+        )
+        bench_df = pl.DataFrame(
+            {
+                "date": [f"D{i}" for i in range(100)],
+                "total_nav": bench_nav,
+            }
+        )
 
         m = PortfolioMetrics.from_nav(port_df, benchmark_df=bench_df)
         # Portfolio outperforms → alpha should be positive
@@ -152,14 +171,18 @@ class TestPortfolioMetrics:
 
     def test_benchmark_with_insufficient_data(self) -> None:
         """Benchmark with few rows doesn't crash."""
-        port_df = pl.DataFrame({
-            "date": ["D1", "D2", "D3", "D4", "D5"],
-            "total_nav": [100.0, 101.0, 102.0, 103.0, 104.0],
-        })
-        bench_df = pl.DataFrame({
-            "date": ["D1"],
-            "total_nav": [100.0],
-        })
+        port_df = pl.DataFrame(
+            {
+                "date": ["D1", "D2", "D3", "D4", "D5"],
+                "total_nav": [100.0, 101.0, 102.0, 103.0, 104.0],
+            }
+        )
+        bench_df = pl.DataFrame(
+            {
+                "date": ["D1"],
+                "total_nav": [100.0],
+            }
+        )
 
         m = PortfolioMetrics.from_nav(port_df, benchmark_df=bench_df)
         assert m.sharpe_ratio != 0.0  # Portfolio metrics still computed

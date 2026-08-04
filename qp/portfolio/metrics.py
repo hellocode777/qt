@@ -93,9 +93,14 @@ class PortfolioMetrics:
         n = len(daily_returns)
         if n == 0:
             return PortfolioMetrics(
-                sharpe_ratio=0.0, max_drawdown_pct=0.0,
-                annualized_return_pct=0.0, annualized_volatility_pct=0.0,
-                calmar_ratio=0.0, alpha_pct=0.0, total_return_pct=0.0, n_days=0,
+                sharpe_ratio=0.0,
+                max_drawdown_pct=0.0,
+                annualized_return_pct=0.0,
+                annualized_volatility_pct=0.0,
+                calmar_ratio=0.0,
+                alpha_pct=0.0,
+                total_return_pct=0.0,
+                n_days=0,
             )
 
         # Mean & std of daily returns
@@ -106,7 +111,7 @@ class PortfolioMetrics:
 
         # Annualize (252 trading days)
         ann_ret = mean_ret * 252
-        ann_vol = std_ret * (252 ** 0.5)
+        ann_vol = std_ret * (252**0.5)
 
         # Sharpe
         sharpe = (ann_ret - risk_free_rate) / ann_vol if ann_vol > 0 else 0.0
@@ -144,9 +149,7 @@ class PortfolioMetrics:
             bench_returns: list[float] = []
             for i in range(1, len(bench_nav)):
                 if bench_nav[i - 1] > 0:
-                    bench_returns.append(
-                        (bench_nav[i] - bench_nav[i - 1]) / bench_nav[i - 1]
-                    )
+                    bench_returns.append((bench_nav[i] - bench_nav[i - 1]) / bench_nav[i - 1])
                 else:
                     bench_returns.append(0.0)
             # Align lengths
@@ -158,10 +161,15 @@ class PortfolioMetrics:
                 mean_p = statistics.mean(port_slice)
                 mean_b = statistics.mean(bench_slice)
                 # beta via covariance
-                cov = sum(
-                    (port_slice[i] - mean_p) * (bench_slice[i] - mean_b)
-                    for i in range(common_n)
-                ) / (common_n - 1) if common_n > 1 else 0.0
+                cov = (
+                    sum(
+                        (port_slice[i] - mean_p) * (bench_slice[i] - mean_b)
+                        for i in range(common_n)
+                    )
+                    / (common_n - 1)
+                    if common_n > 1
+                    else 0.0
+                )
                 var_b = statistics.variance(bench_slice) if common_n > 1 else 1.0
                 beta = cov / var_b if var_b > 0 else 1.0
                 alpha = (mean_p - risk_free_rate / 252) - beta * (mean_b - risk_free_rate / 252)
@@ -169,9 +177,7 @@ class PortfolioMetrics:
 
                 bench_first = bench_nav[0] if bench_nav else 1.0
                 bench_last = bench_nav[-1] if bench_nav else 1.0
-                benchmark_ret = (
-                    (bench_last - bench_first) / bench_first if bench_first > 0 else 0.0
-                )
+                benchmark_ret = (bench_last - bench_first) / bench_first if bench_first > 0 else 0.0
 
         return PortfolioMetrics(
             sharpe_ratio=round(sharpe, 4),

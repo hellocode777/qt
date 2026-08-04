@@ -1,4 +1,5 @@
 """CLI command handlers for the "portfolio" group."""
+
 from __future__ import annotations
 
 # ------------------------------------------------------------------
@@ -267,4 +268,3 @@ def cmd_portfolio_risk() -> int:
     print("  相关性阈值 / Corr Threshold:  0.7")
 
     return 0
-

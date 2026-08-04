@@ -58,5 +58,7 @@ def cmd_shadow_summary() -> int:
     if positions:
         print(f"\n  当前持仓 ({len(positions)} 只):")
         for p in positions[:10]:
-            print(f"    {p['symbol']:<8s} {p['shares']:>6d}股 @¥{p['entry_price']:.2f} | {p['strategy']}")
+            print(
+                f"    {p['symbol']:<8s} {p['shares']:>6d}股 @¥{p['entry_price']:.2f} | {p['strategy']}"
+            )
     return 0

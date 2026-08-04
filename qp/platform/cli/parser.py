@@ -472,10 +472,14 @@ def proposal_create(strategy: str, target: str, justification: str, by: str) -> 
     """Create a new strategy promotion proposal."""
     from qp.platform.cli.commands.proposal import cmd_proposal_create
 
-    raise SystemExit(cmd_proposal_create(
-        strategy_id=strategy, target=target,
-        justification=justification, proposed_by=by,
-    ))
+    raise SystemExit(
+        cmd_proposal_create(
+            strategy_id=strategy,
+            target=target,
+            justification=justification,
+            proposed_by=by,
+        )
+    )
 
 
 @proposal.command("approve")
@@ -532,8 +536,10 @@ def strategy_list() -> None:
 @click.option("--by", type=str, default="", help="Approver name")
 @click.option("--version", type=str, default=None, help="Freeze version string")
 @click.option(
-    "--from-experiment", "from_experiment",
-    type=str, default=None,
+    "--from-experiment",
+    "from_experiment",
+    type=str,
+    default=None,
     help="Load weights & metrics from this experiment_id",
 )
 def strategy_approve(
@@ -545,12 +551,14 @@ def strategy_approve(
     """Freeze a strategy as an ApprovedStrategy snapshot."""
     from qp.platform.cli.commands.strategy import cmd_strategy_approve
 
-    raise SystemExit(cmd_strategy_approve(
-        strategy_id=strategy_id,
-        approved_by=by,
-        version=version,
-        from_experiment=from_experiment,
-    ))
+    raise SystemExit(
+        cmd_strategy_approve(
+            strategy_id=strategy_id,
+            approved_by=by,
+            version=version,
+            from_experiment=from_experiment,
+        )
+    )
 
 
 @strategy.group()

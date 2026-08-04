@@ -22,7 +22,9 @@ def cmd_position_list() -> int:
         return 0
 
     total_value = ledger.total_active_value()
-    print(f"{'ID':<10s} {'Symbol':<10s} {'Entry':<12s} {'Price':>8s} {'Shares':>8s} {'Value':>12s} {'Strategy':<20s} {'Decision'}")
+    print(
+        f"{'ID':<10s} {'Symbol':<10s} {'Entry':<12s} {'Price':>8s} {'Shares':>8s} {'Value':>12s} {'Strategy':<20s} {'Decision'}"
+    )
     print("-" * 100)
     for p in active:
         print(
@@ -117,7 +119,11 @@ def cmd_position_pnl() -> int:
     print("═══ P&L 摘要 / P&L Summary ═══")
     print(f"  活跃持仓: {len(active)} (市值 ¥{total_value:,.0f})")
     print(f"  已平仓:   {len(closed)}")
-    print(f"  胜率:     {len(winning)}/{len(closed)} ({len(winning)/len(closed)*100:.0f}%)" if closed else "  胜率:     N/A")
+    print(
+        f"  胜率:     {len(winning)}/{len(closed)} ({len(winning) / len(closed) * 100:.0f}%)"
+        if closed
+        else "  胜率:     N/A"
+    )
     print(f"  已实现盈亏: ¥{total_pnl:,.0f}")
 
     if closed:
@@ -144,7 +150,9 @@ def cmd_position_history(limit: int = 30) -> int:
         print("(empty) — 暂无持仓记录")
         return 0
 
-    print(f"{'ID':<10s} {'Symbol':<10s} {'Status':<10s} {'Entry':<12s} {'Exit':<12s} {'PnL':>10s} {'Decision'}")
+    print(
+        f"{'ID':<10s} {'Symbol':<10s} {'Status':<10s} {'Entry':<12s} {'Exit':<12s} {'PnL':>10s} {'Decision'}"
+    )
     print("-" * 90)
     for p in history:
         status = p.status.name

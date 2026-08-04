@@ -1,4 +1,5 @@
 """CLI command handlers for the "retrain" group."""
+
 from __future__ import annotations
 
 import sys
@@ -65,4 +66,3 @@ def cmd_retrain() -> int:
 
     print()
     return 0
-

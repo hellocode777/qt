@@ -348,12 +348,9 @@ class MultiFactorPipeline(BasePipeline):
                 _log_weight_optimization(factor_weights, optimized_weights)
 
             # Re-run strategy with optimized weights (skip if unchanged, ML mode, or frozen)
-            _weights_changed = (
-                not freeze_weights
-                and any(
-                    abs(optimized_weights.get(k, 0) - factor_weights.get(k, 0)) > 0.01
-                    for k in set(list(optimized_weights) + list(factor_weights))
-                )
+            _weights_changed = not freeze_weights and any(
+                abs(optimized_weights.get(k, 0) - factor_weights.get(k, 0)) > 0.01
+                for k in set(list(optimized_weights) + list(factor_weights))
             )
             if use_full_strategy and (_weights_changed or not model_mode):
                 if model_mode:
@@ -715,11 +712,37 @@ class MultiFactorPipeline(BasePipeline):
             # Save daily NAV (equity curve) for WebUI charting
             daily_equity_list = bt.get("daily_equity", [])
             daily_dates = bt.get("daily_dates", [])
+            daily_benchmark_list = bt.get("daily_benchmark", [])
+            daily_drawdown_list = bt.get("daily_drawdown", [])
+            daily_return_pct_list = bt.get("daily_return_pct", [])
             if daily_equity_list and daily_dates and len(daily_equity_list) == len(daily_dates):
-                nav_df = pl.DataFrame({
-                    "date": daily_dates,
-                    "equity": [round(e, 2) for e in daily_equity_list],
-                })
+                n_rows = len(daily_dates)
+                nav_df = pl.DataFrame(
+                    {
+                        "date": daily_dates,
+                        "portfolio_value": pl.Series(
+                            [round(e, 2) for e in daily_equity_list], dtype=pl.Float64
+                        ),
+                        "benchmark_value": pl.Series(
+                            [round(b, 2) for b in daily_benchmark_list]
+                            if len(daily_benchmark_list) == n_rows
+                            else [0.0] * n_rows,
+                            dtype=pl.Float64,
+                        ),
+                        "daily_return": pl.Series(
+                            daily_return_pct_list
+                            if len(daily_return_pct_list) == n_rows
+                            else [0.0] * n_rows,
+                            dtype=pl.Float64,
+                        ),
+                        "drawdown": pl.Series(
+                            daily_drawdown_list
+                            if len(daily_drawdown_list) == n_rows
+                            else [0.0] * n_rows,
+                            dtype=pl.Float64,
+                        ),
+                    }
+                )
                 nav_df.write_parquet(str(snapshot_dir / "daily_nav.parquet"))
                 logger.info("📈 每日净值已保存: {} 行", nav_df.height)
 
@@ -790,7 +813,9 @@ class MultiFactorPipeline(BasePipeline):
 
                 logger.info(
                     "📋 策略权重+回测指标已写入 Registry: {} (IC={:.4f}, Sharpe={:.2f})",
-                    strategy_name, meta.backtest_ic, meta.backtest_sharpe,
+                    strategy_name,
+                    meta.backtest_ic,
+                    meta.backtest_sharpe,
                 )
             except Exception as exc:
                 logger.debug("自动写入 Registry 跳过: {}", exc)
@@ -1191,6 +1216,8 @@ class MultiFactorPipeline(BasePipeline):
         from qp.portfolio.risk_exit import RiskExitConfig, RiskExitManager, TradeReason
         from qp.simulation.broker import SimulatedBroker
 
+        _empty_curve: list[float] = []
+        _empty_dates: list[str] = []
         if signals.is_empty():
             return {
                 "total_return_pct": 0.0,
@@ -1202,6 +1229,11 @@ class MultiFactorPipeline(BasePipeline):
                 "total_cost": 0.0,
                 "stop_loss_hits": 0,
                 "turnover_pct": 0.0,
+                "daily_equity": _empty_curve,
+                "daily_dates": _empty_dates,
+                "daily_benchmark": _empty_curve,
+                "daily_drawdown": _empty_curve,
+                "daily_return_pct": _empty_curve,
             }
 
         broker = SimulatedBroker(initial_cash=initial_capital)
@@ -1220,6 +1252,11 @@ class MultiFactorPipeline(BasePipeline):
                 "total_cost": 0.0,
                 "stop_loss_hits": 0,
                 "turnover_pct": 0.0,
+                "daily_equity": _empty_curve,
+                "daily_dates": _empty_dates,
+                "daily_benchmark": _empty_curve,
+                "daily_drawdown": _empty_curve,
+                "daily_return_pct": _empty_curve,
             }
 
         # Build stock name map (ST detection)
@@ -1230,6 +1267,17 @@ class MultiFactorPipeline(BasePipeline):
 
         all_dates = sorted(all_prices["trade_date"].unique().to_list())
         daily_equity: list[float] = []
+        daily_benchmark: list[float] = []
+
+        # ── Benchmark baseline: equal-weight all-stocks buy-and-hold ──
+        base_avg_close = 0.0
+        if all_dates:
+            first_day_df = all_prices.filter(pl.col("trade_date") == all_dates[0])
+            if not first_day_df.is_empty():
+                base_avg_close = float(cast("float", first_day_df["close"].mean()))
+        if base_avg_close <= 0:
+            base_avg_close = 1.0
+
         total_trades = 0
         total_buy_value: float = 0.0
         total_sell_value: float = 0.0
@@ -1245,7 +1293,7 @@ class MultiFactorPipeline(BasePipeline):
 
         for d in all_dates:
             d_str = str(d)
-            is_rebalance_day = (trading_day_idx % rebalance_freq == 0)
+            is_rebalance_day = trading_day_idx % rebalance_freq == 0
             trading_day_idx += 1
 
             # Build price & ADV maps for this trading day
@@ -1317,21 +1365,27 @@ class MultiFactorPipeline(BasePipeline):
                 positions_df = broker.get_positions()
                 # Only count positions with actual shares (broker keeps
                 # zero-share entries after a full sell — filter them out).
-                live_positions = positions_df[
-                    positions_df["shares"] > 0
-                ] if not positions_df.empty else positions_df
+                live_positions = (
+                    positions_df[positions_df["shares"] > 0]
+                    if not positions_df.empty
+                    else positions_df
+                )
                 n_positions_before = len(live_positions)
                 target_set: set[str] = set(day_target)
-                held_set: set[str] = {
-                    str(row["symbol"]) for _, row in live_positions.iterrows()
-                } if not live_positions.empty else set()
+                held_set: set[str] = (
+                    {str(row["symbol"]) for _, row in live_positions.iterrows()}
+                    if not live_positions.empty
+                    else set()
+                )
 
                 # ── Sell buffer: held stocks in rank [top_n, top_n*2) stay ──
                 # V2.1: Buy Top-N, Buffer 11-20 (hold), Sell >20
                 buffer_n = top_n * 2
-                buffer_zone: set[str] = set(
-                    day_scores_sorted["symbol"].to_list()[top_n:buffer_n]
-                ) if day_scores_sorted.height > top_n else set()
+                buffer_zone: set[str] = (
+                    set(day_scores_sorted["symbol"].to_list()[top_n:buffer_n])
+                    if day_scores_sorted.height > top_n
+                    else set()
+                )
 
                 # ── Phase 1: Sell stocks NOT in target AND NOT in buffer ──
                 n_sells_submitted = 0
@@ -1366,16 +1420,19 @@ class MultiFactorPipeline(BasePipeline):
                 cash_now = broker.get_cash()
                 if cash_now < 0:
                     logger.debug(
-                        "   ⚠ 现金负数 {:.0f} → 补正为 0", cash_now,
+                        "   ⚠ 现金负数 {:.0f} → 补正为 0",
+                        cash_now,
                     )
                     broker._cash = 0.0
 
                 # ── Phase 2: Buy target stocks we don't hold ──
                 after_df = broker.get_positions()
                 after_df = after_df[after_df["shares"] > 0] if not after_df.empty else after_df
-                after_sells = {
-                    str(row["symbol"]) for _, row in after_df.iterrows()
-                } if not after_df.empty else set()
+                after_sells = (
+                    {str(row["symbol"]) for _, row in after_df.iterrows()}
+                    if not after_df.empty
+                    else set()
+                )
                 new_buys = target_set - after_sells
                 buy_symbols = [s for s in day_target if s in new_buys]
                 n_after = len(after_sells)
@@ -1431,6 +1488,14 @@ class MultiFactorPipeline(BasePipeline):
             eq_now = broker.get_equity()
             daily_equity.append(eq_now)
 
+            # ── Daily benchmark: equal-weight all-stocks ──
+            day_all = all_prices.filter(pl.col("trade_date") == d)
+            if not day_all.is_empty():
+                day_avg = float(cast("float", day_all["close"].mean()))
+                daily_benchmark.append(initial_capital * (day_avg / base_avg_close))
+            else:
+                daily_benchmark.append(daily_benchmark[-1] if daily_benchmark else initial_capital)
+
             if eq_now < min_equity:
                 min_equity = eq_now
                 min_date = d_str
@@ -1450,9 +1515,27 @@ class MultiFactorPipeline(BasePipeline):
 
         # Turnover: total sell value / average equity (cumulative, %)
         avg_equity = float(np.mean(daily_equity)) if daily_equity else initial_capital
-        turnover_pct = (
-            round(total_sell_value / avg_equity * 100, 2) if avg_equity > 0 else 0.0
-        )
+        turnover_pct = round(total_sell_value / avg_equity * 100, 2) if avg_equity > 0 else 0.0
+
+        # Daily returns and drawdown series (for WebUI equity curve)
+        daily_return_pct: list[float] = []
+        daily_drawdown: list[float] = []
+        running_max_eq = initial_capital
+        for i, eq in enumerate(daily_equity):
+            # Daily return (%)
+            if i == 0:
+                daily_return_pct.append(0.0)
+            else:
+                prev = daily_equity[i - 1]
+                daily_return_pct.append(round((eq / prev - 1) * 100, 4) if prev > 0 else 0.0)
+            # Drawdown from running max (%)
+            running_max_eq = max(running_max_eq, eq)
+            dd = (
+                round((running_max_eq - eq) / running_max_eq * 100, 2)
+                if running_max_eq > 0
+                else 0.0
+            )
+            daily_drawdown.append(dd)
 
         # Daily returns from equity curve
         daily_rets = [
@@ -1491,6 +1574,9 @@ class MultiFactorPipeline(BasePipeline):
             # Persisted for WebUI equity curve
             "daily_equity": daily_equity,
             "daily_dates": [str(d) for d in all_dates],
+            "daily_benchmark": daily_benchmark,
+            "daily_drawdown": daily_drawdown,
+            "daily_return_pct": daily_return_pct,
             "trade_log": broker.get_trade_log(),
         }
 
@@ -1671,7 +1757,11 @@ def _diagnose_quintile_profiles(
         pl.col("score").count().over("trade_date").alias("_n"),
     )
     merged = merged.with_columns(
-        (pl.col("_rank") / pl.col("_n") * n_quantiles).ceil().clip(1, n_quantiles).cast(pl.Int32).alias("quintile"),
+        (pl.col("_rank") / pl.col("_n") * n_quantiles)
+        .ceil()
+        .clip(1, n_quantiles)
+        .cast(pl.Int32)
+        .alias("quintile"),
     )
 
     # Aggregate per quintile
@@ -1725,7 +1815,11 @@ def _diagnose_quintile_profiles(
         q5_row = profile.filter(pl.col("quintile") == n_quantiles)
         logger.info("")
         logger.info("   📊 Q5/Q1 比值 (极值端风险暴露):")
-        for label, col in [("波动率", "avg_vol_20d"), ("成交额", "avg_amount"), ("换手率", "avg_turnover")]:
+        for label, col in [
+            ("波动率", "avg_vol_20d"),
+            ("成交额", "avg_amount"),
+            ("换手率", "avg_turnover"),
+        ]:
             if col in cols_have:
                 v1 = q1_row.select(pl.col(col)).item()
                 v5 = q5_row.select(pl.col(col)).item()

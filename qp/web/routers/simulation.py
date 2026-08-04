@@ -29,10 +29,17 @@ async def debug_chart() -> str:
     ledger = ShadowLedger()
     history = ledger.summary().get("history", [])
     import json
-    equity_data = json.dumps([
-        {"date": h["date"], "total_equity": h["total_equity"], "market_value": h.get("market_value", 0)}
-        for h in history
-    ])
+
+    equity_data = json.dumps(
+        [
+            {
+                "date": h["date"],
+                "total_equity": h["total_equity"],
+                "market_value": h.get("market_value", 0),
+            }
+            for h in history
+        ]
+    )
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Chart Debug</title></head>

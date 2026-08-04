@@ -69,7 +69,7 @@ async def portfolio(request: Request) -> Any:
         "total_value_fmt": f"¥{total_value:,.0f}",
         "closed_count": len(closed),
         "winning_count": len(winning),
-        "win_rate": f"{len(winning)/len(closed)*100:.0f}%" if closed else "N/A",
+        "win_rate": f"{len(winning) / len(closed) * 100:.0f}%" if closed else "N/A",
         "total_realized_pnl": total_pnl,
         "total_realized_pnl_fmt": f"¥{total_pnl:+,.0f}",
         "pnl_badge": "badge-green" if total_pnl >= 0 else "badge-red",
@@ -98,6 +98,7 @@ async def portfolio(request: Request) -> Any:
     nav_values: list[float] = []
     try:
         from qp.portfolio.nav_ledger import NAVLedger
+
         nav_ledger = NAVLedger()
         nav_dicts = nav_ledger.get_history_dicts(days=252)
         nav_dates = [d["date"] for d in nav_dicts]
@@ -107,7 +108,9 @@ async def portfolio(request: Request) -> Any:
 
     logger.info(
         "Portfolio: {} active, {} closed, PnL=¥{:.0f}",
-        len(active), len(closed), total_pnl,
+        len(active),
+        len(closed),
+        total_pnl,
     )
 
     return templates.TemplateResponse(

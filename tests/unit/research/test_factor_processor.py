@@ -66,8 +66,31 @@ class TestWinsorize:
 
     def test_percentile_method(self) -> None:
         # Default limits=0.05: with 20 values, top and bottom 1 are clipped
-        s = pl.Series("x", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5,
-                             5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 100.0])
+        s = pl.Series(
+            "x",
+            [
+                0.0,
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5,
+                3.0,
+                3.5,
+                4.0,
+                4.5,
+                5.0,
+                5.5,
+                6.0,
+                6.5,
+                7.0,
+                7.5,
+                8.0,
+                8.5,
+                9.0,
+                100.0,
+            ],
+        )
         result = winsorize(s, method="percentile")
         assert result.max() < 100.0
 
@@ -163,10 +186,12 @@ class TestAdjustDirection:
 class TestCombineFactors:
     def test_weighted_combination_returns_series(self) -> None:
         """combine_factors returns a pl.Series, not DataFrame."""
-        df = pl.DataFrame({
-            "Momentum_3M": [0.8, 0.5, 0.2],
-            "Volatility_20D": [0.3, 0.5, 0.7],
-        })
+        df = pl.DataFrame(
+            {
+                "Momentum_3M": [0.8, 0.5, 0.2],
+                "Volatility_20D": [0.3, 0.5, 0.7],
+            }
+        )
         weights = {"Momentum_3M": 0.6, "Volatility_20D": -0.4}
         result = combine_factors(df, weights, normalize_method="rank")
         assert isinstance(result, pl.Series)
@@ -204,10 +229,12 @@ class TestCombineFactors:
 
 class TestIndustryNeutralize:
     def test_basic_neutralization(self) -> None:
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C", "D"],
-            "factor_x": [0.5, 0.6, 0.9, 0.8],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C", "D"],
+                "factor_x": [0.5, 0.6, 0.9, 0.8],
+            }
+        )
         industry_map = {"A": "Tech", "B": "Tech", "C": "Finance", "D": "Finance"}
         result = industry_neutralize(df, industry_map)
         assert result.height == 4
@@ -217,10 +244,12 @@ class TestIndustryNeutralize:
         assert all(abs(v) < 0.15 for v in tech_vals)  # Nearly zero-mean
 
     def test_zero_strength_unchanged(self) -> None:
-        df = pl.DataFrame({
-            "symbol": ["A", "B", "C"],
-            "factor_x": [0.5, 0.6, 0.9],
-        })
+        df = pl.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "factor_x": [0.5, 0.6, 0.9],
+            }
+        )
         industry_map = {"A": "Tech", "B": "Tech", "C": "Finance"}
         result = industry_neutralize(df, industry_map, strength=0.0)
         assert result["factor_x"].to_list() == df["factor_x"].to_list()

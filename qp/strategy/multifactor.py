@@ -459,7 +459,10 @@ def generate_rebalance_signals(
             # First rebalance: buy all Top-N (skip chased)
             logger.debug(
                 "   🎯 首次调仓 {}: Top-{}={} | 防追高过滤={}",
-                date_str, _tn, current_top, len(skip_codes),
+                date_str,
+                _tn,
+                current_top,
+                len(skip_codes),
             )
             for j, code in enumerate(current_top):
                 if code in skip_codes:
@@ -834,9 +837,7 @@ class MultiFactorStrategy(BaseStrategy):
             self._industry_neutral = (
                 industry_neutral if industry_neutral is not None else cfg.industry_neutral
             )
-            self._orthogonalize = (
-                orthogonalize if orthogonalize is not None else cfg.orthogonalize
-            )
+            self._orthogonalize = orthogonalize if orthogonalize is not None else cfg.orthogonalize
             if weights is None:
                 weights = dict(cfg.factors)
         else:
@@ -1007,9 +1008,7 @@ def compute_today_signals(
             today_scores[code] = score
 
     if not today_scores:
-        return pl.DataFrame(
-            schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64}
-        )
+        return pl.DataFrame(schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64})
 
     # Build DataFrame, cross-sectionally rank
     result = pl.DataFrame(

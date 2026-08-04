@@ -1,4 +1,5 @@
 """CLI command handlers for the "monitor" group."""
+
 from __future__ import annotations
 
 
@@ -53,7 +54,9 @@ def cmd_monitor_check() -> int:
 
     print()
     print("── 特征漂移 / Drift ──")
-    print(f"  PSI:               {report.psi_value:.3f}" + (" ⚠" if report.psi_value >= 0.25 else ""))
+    print(
+        f"  PSI:               {report.psi_value:.3f}" + (" ⚠" if report.psi_value >= 0.25 else "")
+    )
 
     print()
     print("── 模型衰减 / Model Decay ──")
@@ -166,4 +169,3 @@ def cmd_monitor_alert_test() -> int:
     print()
     print("  告警测试完成 / Alert test complete.")
     return 0
-

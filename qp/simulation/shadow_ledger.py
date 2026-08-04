@@ -176,8 +176,7 @@ class ShadowLedger:
             cost_basis += pos.entry_price * pos.shares
 
         total_value = sum(
-            p.shares * max(prices.get(p.symbol, p.entry_price), 0)
-            for p in active_after
+            p.shares * max(prices.get(p.symbol, p.entry_price), 0) for p in active_after
         )
         closed = self._load_closed()
         realized_pnl = sum(p.pnl for p in closed)
@@ -201,7 +200,10 @@ class ShadowLedger:
 
         logger.info(
             "Shadow daily {}: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
-            date_str, snapshot["total_equity"], daily_pnl, len(active_after),
+            date_str,
+            snapshot["total_equity"],
+            daily_pnl,
+            len(active_after),
         )
 
         return snapshot
@@ -227,9 +229,7 @@ class ShadowLedger:
         active = self._load_active()
         closed = self._load_closed()
 
-        total_value = sum(
-            p.market_value for p in active
-        )
+        total_value = sum(p.market_value for p in active)
         total_pnl = sum(p.pnl for p in closed)
         winning = len([p for p in closed if p.pnl > 0])
 
@@ -248,7 +248,9 @@ class ShadowLedger:
             "realized_pnl": total_pnl,
             "realized_pnl_fmt": f"¥{total_pnl:+,.0f}",
             "closed_count": len(closed),
-            "win_rate": f"{winning}/{len(closed)} ({winning/len(closed)*100:.0f}%)" if closed else "N/A",
+            "win_rate": f"{winning}/{len(closed)} ({winning / len(closed) * 100:.0f}%)"
+            if closed
+            else "N/A",
             "total_return": total_return,
             "total_return_fmt": f"{total_return:+.2%}",
             "history": history,
@@ -325,13 +327,8 @@ class ShadowLedger:
             df = pl.read_parquet(str(price_path))
             if df.is_empty():
                 return {}
-            latest = df.sort("trade_date", descending=True).unique(
-                subset=["symbol"], keep="first"
-            )
-            return {
-                str(r["symbol"]): float(r["close"])
-                for r in latest.iter_rows(named=True)
-            }
+            latest = df.sort("trade_date", descending=True).unique(subset=["symbol"], keep="first")
+            return {str(r["symbol"]): float(r["close"]) for r in latest.iter_rows(named=True)}
         except Exception:
             return {}
 

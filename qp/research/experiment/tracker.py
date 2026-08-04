@@ -252,7 +252,9 @@ class ExperimentTracker(BaseExperimentTracker):
             # Parse created_at from stored JSON (fall back to now() if missing)
             created_at_raw = cfg_data.get("created_at") or data.get("created_at")
             try:
-                created_at = datetime.fromisoformat(created_at_raw) if created_at_raw else datetime.now(UTC)
+                created_at = (
+                    datetime.fromisoformat(created_at_raw) if created_at_raw else datetime.now(UTC)
+                )
             except (ValueError, TypeError):
                 created_at = datetime.now(UTC)
 
