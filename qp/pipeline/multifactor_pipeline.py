@@ -731,7 +731,7 @@ class MultiFactorPipeline(BasePipeline):
 
             logger.info("📸 数据快照已保存: {}", snapshot_dir)
         except Exception as _exc:
-            logger.warning("数据快照保存失败 (非致命): {} | {}", type(_exc).__name__, _exc)
+            logger.warning("数据快照保存失败 (非致命): {}", _exc)
 
         self._record_experiment(
             result=result,

@@ -3,21 +3,21 @@
     "momentum_vol_full": {
       "lifecycle": "research",
       "meta": {
-        "strategy_version": "multifactor_20260802_010158",
+        "strategy_version": "v20260803",
         "model_version": "",
         "feature_version": "",
         "feature_set": [],
         "rebalance_frequency": "daily",
         "rebalance_day": 0,
-        "owner": "me",
+        "owner": "experiment",
         "description": "",
         "tags": [],
         "weights": {
-          "Amplitude_5D": -0.25907911802853434,
-          "Volatility_20D": 0.23670557717250323,
-          "Momentum_3M": -0.20784695201037615,
-          "Volume_Concentration": -0.1867704280155642,
-          "Volume_Trend_10D": -0.10959792477302203
+          "Amplitude_5D": -0.25,
+          "Volatility_20D": 0.22,
+          "Momentum_3M": -0.2,
+          "Volume_Concentration": -0.19,
+          "Volume_Trend_10D": -0.14
         },
         "parameters": {
           "top_n": 10,
@@ -26,10 +26,10 @@
           "orthogonalize": true,
           "anti_chase": true
         },
-        "backtest_ic": 0.0675,
-        "backtest_sharpe": 1.13,
-        "backtest_max_dd": 11.04,
-        "backtest_excess_return": -7.200000000000003
+        "backtest_ic": 0.068,
+        "backtest_sharpe": 0.96,
+        "backtest_max_dd": 15.32,
+        "backtest_excess_return": -7.989999999999995
       },
       "active": true,
       "approved": {
