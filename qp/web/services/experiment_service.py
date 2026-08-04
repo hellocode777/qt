@@ -42,6 +42,7 @@ class ExperimentService:
 
     def list_recent(self, limit: int = 20) -> list[dict[str, Any]]:
         """List recent experiments with key metrics."""
+        self._tracker._load_index()  # refresh from disk (new experiments since startup)
         try:
             records = self._tracker.list_experiments()
         except Exception as e:
