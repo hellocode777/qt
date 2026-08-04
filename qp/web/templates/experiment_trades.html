@@ -50,14 +50,19 @@
   var ph = H - padT - padB;
   var scaleY = ph / (maxV - minV);
 
-  // Build SVG polyline
+  // Get actual container width
+  var cw = container.clientWidth || 800;
+  var chartW = cw - padL - 45;
+  var chartH = H - padT - padB;
+
+  // Build SVG polyline in pixel coordinates
   var step = Math.max(1, Math.floor(rawData.length / 800));
   var pts = '';
   rawData.forEach(function(d, i) {
     if (i % step === 0 || i === rawData.length - 1) {
-      var x = (i / Math.max(rawData.length - 1, 1)) * 100;
-      var y = (padT + (maxV - d.equity) * scaleY) / H * 100;
-      pts += x + ',' + y + ' ';
+      var px = (i / Math.max(rawData.length - 1, 1)) * chartW;
+      var py = padT + (maxV - d.equity) * scaleY;
+      pts += px + ',' + py + ' ';
     }
   });
 
@@ -65,15 +70,15 @@
   var yHTML = '';
   for (var g = 0; g <= 4; g++) {
     var gv = maxV - (g/4) * (maxV - minV);
-    var top = padT + (g/4) * ph - 6;
+    var top = padT + (g/4) * chartH - 6;
     yHTML += '<div style="position:absolute;right:4px;top:' + top + 'px;color:#9ca3af;font-size:10px;">¥' + (gv/10000).toFixed(1) + '万</div>';
   }
 
-  // Grid lines
+  // Grid lines (SVG pixel coords)
   var gridHTML = '';
   for (var g = 1; g <= 3; g++) {
-    var gy = (padT + (g/4) * ph) / H * 100;
-    gridHTML += '<line x1="0" y1="' + gy + '" x2="100" y2="' + gy + '" stroke="#e5e7eb" stroke-width="0.2" vector-effect="non-scaling-stroke"/>';
+    var gy = padT + (g/4) * chartH;
+    gridHTML += '<line x1="0" y1="' + gy + '" x2="' + chartW + '" y2="' + gy + '" stroke="#e5e7eb" stroke-width="1" vector-effect="non-scaling-stroke"/>';
   }
 
   // Date labels
@@ -81,8 +86,8 @@
   var labelStep = Math.max(1, Math.floor(rawData.length / 8));
   rawData.forEach(function(d, i) {
     if (i % labelStep === 0 || i === rawData.length - 1) {
-      var lx = padL + (i / (rawData.length - 1)) * (100 - padL/H * 2);
-      dateHTML += '<div style="position:absolute;bottom:2px;left:' + lx + '%;transform:translateX(-50%);color:#9ca3af;font-size:9px;white-space:nowrap;">' + d.date.substring(0, 10) + '</div>';
+      var lx = (i / (rawData.length - 1)) * chartW;
+      dateHTML += '<div style="position:absolute;bottom:2px;left:' + (padL + lx) + 'px;transform:translateX(-50%);color:#9ca3af;font-size:9px;white-space:nowrap;">' + d.date.substring(0, 10) + '</div>';
     }
   });
 
@@ -90,10 +95,10 @@
     '<div style="width:100%;height:100%;position:relative;">' +
       yHTML +
       dateHTML +
-      '<svg viewBox="0 0 100 100" preserveAspectRatio="none" ' +
-          'style="position:absolute;top:0;left:' + padL + 'px;right:45px;bottom:' + padB + 'px;">' +
+      '<svg width="' + chartW + '" height="' + chartH + '" ' +
+          'style="position:absolute;top:0;left:' + padL + 'px;">' +
         gridHTML +
-        '<polyline points="' + pts + '" fill="none" stroke="#2563eb" stroke-width="0.35" vector-effect="non-scaling-stroke"/>' +
+        '<polyline points="' + pts + '" fill="none" stroke="#2563eb" stroke-width="2"/>' +
       '</svg>' +
     '</div>';
 })();
