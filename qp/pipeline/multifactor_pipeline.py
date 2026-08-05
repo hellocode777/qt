@@ -139,6 +139,7 @@ class MultiFactorPipeline(BasePipeline):
             "lvr_vol_all_rev",
             "alpha_multi_factor_v1",
             "alpha_multi_factor_v2",
+            "alpha_ensemble_v2",
         )
 
         result = PipelineResult(
@@ -866,6 +867,10 @@ class MultiFactorPipeline(BasePipeline):
                 )
 
                 return run_alpha_multi_factor_v2
+            if name == "alpha_ensemble_v2":
+                import qp.strategy.strategies.ensemble_v2  # noqa: F401, F811 — registers config
+
+                return run_momentum_vol_full
             return run_momentum_vol_full
 
         run_func = _get_runner(strategy_name)
@@ -906,6 +911,25 @@ class MultiFactorPipeline(BasePipeline):
 
         # Run full strategy pipeline for signals + scores (with all filters)
         extra_overrides: dict[str, Any] = {}
+
+        # ── Regime detection (for Factor Layer v2 ensemble) ──
+        detected_regime = ""
+        if getattr(config, "use_regime_ensemble", False) and index_df is not None:
+            try:
+                from qp.strategy.market_regime import MarketRegimeDetector
+
+                detector = MarketRegimeDetector()
+                regime_result = detector.detect(index_df, price_data)
+                detected_regime = regime_result.regime
+                logger.info(
+                    "   市场状态: {} (置信度: {:.0%})",
+                    detected_regime,
+                    regime_result.confidence,
+                )
+                extra_overrides["regime"] = detected_regime
+            except Exception:
+                pass
+
         if score_band:
             parts = score_band.split("-")
             if len(parts) == 2:
@@ -1587,7 +1611,12 @@ class MultiFactorPipeline(BasePipeline):
         start: str,
         end: str,
     ) -> float:
-        """Equal-weight buy-and-hold return for comparison."""
+        """Equal-weight buy-and-hold return for comparison.
+
+        Caps individual stock returns at 1000% (11x) to limit the influence
+        of extreme penny-stock outliers while preserving the market signal.
+        Also filters stocks with initial price < 1.0 to exclude shell companies.
+        """
         total_ret = 0.0
         count = 0
         # Use all loaded stocks if no symbol filter
@@ -1600,8 +1629,11 @@ class MultiFactorPipeline(BasePipeline):
                 if not first.is_empty() and not last.is_empty():
                     px_first = float(first.head(1)["close"].item())
                     px_last = float(last.tail(1)["close"].item())
-                    if px_first > 0:
-                        total_ret += px_last / px_first - 1
+                    # Filter penny stocks (initial price < 1 yuan)
+                    if px_first >= 1.0:
+                        ret = px_last / px_first - 1
+                        # Cap extreme returns at 1000%
+                        total_ret += min(ret, 10.0)
                         count += 1
         return round(total_ret / count * 100, 2) if count > 0 else 0.0
 
@@ -1906,16 +1938,39 @@ def _compute_factor_ic_attribution(
         return []
 
     # Compute raw factor scores (no pipeline transformations)
+    # Filter to only factors that can be computed from available data:
+    # - Price/volume factors from OHLCV (no index_df needed for raw IC)
+    # - Fundamental factors if fundamental_data is available
+    # - Valuation factors if valuation_data is available
+    from qp.research.feature.compute import PRICE_VOLUME_FACTORS
+
+    attrib_weights = dict(factor_weights)
+    for fname in list(attrib_weights):
+        is_available = (
+            fname in PRICE_VOLUME_FACTORS
+            or (valuation_data and fname in {"PE_TTM", "PB", "PCF_OCF", "Dividend_Yield", "PS_TTM"})
+            or (fundamental_data and fname in {"ROE", "revenue_growth", "net_profit_growth", "gross_margin", "net_margin", "debt_ratio", "EPS", "NAV", "ROE_Level", "Profit_Stability", "Earnings_Quality", "Margin_Composite", "cashflow_per_share"})
+            or (extra_factors and fname in extra_factors)
+        )
+        # Residual_Momentum_3M requires index_df to compute
+        if fname == "Residual_Momentum_3M" and index_df is None:
+            is_available = False
+        if not is_available:
+            attrib_weights.pop(fname)
+    if not attrib_weights:
+        return []
+
     try:
         scores_result = compute_cross_sectional_scores(
             price_data=price_data,
-            weights=factor_weights,
+            weights=attrib_weights,
             valuation_data=valuation_data,
             fundamental_data=fundamental_data,
             industry_neutral=False,  # raw — no transformations
             orthogonalize=False,
             return_diagnostics=True,
             extra_factors=extra_factors,  # reuse from strategy run
+            index_df=index_df,
         )
     except Exception as e:
         logger.warning("   因子归因跳过: 无法计算原始因子得分 ({})", e)

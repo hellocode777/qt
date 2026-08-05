@@ -842,8 +842,9 @@ def factor_pipeline(
     return_diagnostics: bool = False,
     model_mode: bool = False,
     price_data: dict | None = None,
+    regime_weights: dict[str, dict[str, float]] | None = None,
+    regime_map: dict[str, str] | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]: ...
-
 
 def factor_pipeline(
     all_factors: dict[str, dict[str, dict[str, float]]],
@@ -863,6 +864,8 @@ def factor_pipeline(
     return_diagnostics: bool = False,
     model_mode: bool = False,
     price_data: dict | None = None,
+    regime_weights: dict[str, dict[str, float]] | None = None,
+    regime_map: dict[str, str] | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Complete factor processing pipeline.
 
@@ -877,6 +880,7 @@ def factor_pipeline(
     Args:
         all_factors: {date_str: {symbol: {factor_name: value}}}
         weights: {factor_name: weight}. Negative = penalize (e.g. Volatility).
+            Used as fallback when regime_weights/regime_map don't cover a date.
         normalize_method: "rank" (default) | "zscore" | "minmax".
         winsorize_method: "mad" (default) | "percentile" | None.
         industry_map: {symbol: industry_name}. Required for neutralization.
@@ -894,6 +898,11 @@ def factor_pipeline(
         ols_min_stocks_per_industry: Min stocks per industry for OLS.
         ols_min_samples: Min total stocks for OLS regression.
         return_diagnostics: If True, return (scores_df, diagnostics).
+        regime_weights: {regime_label: {factor_name: weight}}. Per-regime
+            factor weight overrides. Used together with regime_map.
+        regime_map: {date_str: regime_label}. Maps each trading date to
+            its detected market regime. When both this and regime_weights
+            are provided, each date uses its regime-specific weights.
 
     Returns:
         Polars DataFrame [trade_date, symbol, score] sorted by date+symbol,
@@ -944,6 +953,13 @@ def factor_pipeline(
         if not stock_factors:
             continue
 
+        # ── Regime-aware weight selection ──
+        date_weights = weights
+        if regime_weights and regime_map:
+            regime = regime_map.get(date_str)
+            if regime and regime in regime_weights:
+                date_weights = regime_weights[regime]
+
         # Build factor DataFrame for this cross-section
         symbols: list[str] = []
         rows: list[dict[str, float]] = []
@@ -991,7 +1007,7 @@ def factor_pipeline(
             factor_only = factor_df_neutral.select(factor_cols_neutral)
             scores = combine_factors(
                 factor_only,
-                weights,
+                date_weights,
                 normalize_method,
                 winsorize_method,
             )
@@ -1000,7 +1016,7 @@ def factor_pipeline(
             assert industry_map is not None  # guaranteed by has_industries guard
             scores = industry_group_score(
                 df,
-                weights,
+                date_weights,
                 industry_map,
                 normalize_method,
                 winsorize_method,
@@ -1011,7 +1027,7 @@ def factor_pipeline(
             factor_only = df.select(factor_cols)
             scores = combine_factors(
                 factor_only,
-                weights,
+                date_weights,
                 normalize_method,
                 winsorize_method,
             )

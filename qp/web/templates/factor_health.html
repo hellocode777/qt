@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <h2 class="mb-3">{{ title }}</h2>
+
+  {% if overview.is_empty %}
+  <div class="alert alert-info">
+    <strong>暂无数据</strong> — 因子健康数据尚未生成。运行 <code>qp monitor check</code> 后将自动记录。
+  </div>
+  {% else %}
+
+  <!-- Summary cards -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card bg-success text-white">
+        <div class="card-body text-center">
+          <h5 class="card-title">健康</h5>
+          <h2>{{ overview.n_healthy }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-warning text-dark">
+        <div class="card-body text-center">
+          <h5 class="card-title">预警</h5>
+          <h2>{{ overview.n_warning }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-danger text-white">
+        <div class="card-body text-center">
+          <h5 class="card-title">衰减</h5>
+          <h2>{{ overview.n_degraded }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark text-white">
+        <div class="card-body text-center">
+          <h5 class="card-title">失效</h5>
+          <h2>{{ overview.n_stale }}</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Factor table -->
+  <div class="card">
+    <div class="card-header">
+      <strong>因子健康总览</strong>
+      <span class="text-muted ms-2">共 {{ overview.n_factors }} 个因子</span>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>状态</th>
+            <th>因子</th>
+            <th class="text-end">IC₃₀</th>
+            <th class="text-end">IC₉₀</th>
+            <th class="text-end">IC IR</th>
+            <th class="text-end">衰减率/d</th>
+            <th class="text-end">IC占比</th>
+            <th>建议动作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in overview.factors %}
+          <tr>
+            <td>
+              <span class="badge {{ f.badge_class }}">{{ f.icon }} {{ f.stage_label }}</span>
+            </td>
+            <td>
+              <a href="/health/factors/{{ f.name }}"><strong>{{ f.name }}</strong></a>
+            </td>
+            <td class="text-end">
+              <span class="{{ 'text-danger' if f.ic_30d < 0 else 'text-success' }}">
+                {{ "%+.4f"|format(f.ic_30d) }}
+              </span>
+            </td>
+            <td class="text-end">{{ "%+.4f"|format(f.ic_90d) }}</td>
+            <td class="text-end">{{ "%.2f"|format(f.ic_ir) }}</td>
+            <td class="text-end">
+              <span class="{{ 'text-danger' if f.ic_decay_rate < 0 else 'text-success' }}">
+                {{ "%+.5f"|format(f.ic_decay_rate) }}
+              </span>
+            </td>
+            <td class="text-end">{{ "%.0f%%"|format(f.ic_ratio * 100) }}</td>
+            <td>
+              <small class="text-muted">{{ f.recommended_action[:60] if f.recommended_action else '—' }}</small>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

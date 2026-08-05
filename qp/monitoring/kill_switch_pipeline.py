@@ -26,6 +26,7 @@ from enum import StrEnum
 from typing import Any
 
 from qp.monitoring.alerts import AlertManager, AlertSeverity
+from qp.monitoring.factor_health_pipeline import FactorHealthPipeline, FactorHealthReport
 from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
 from qp.monitoring.regime import MarketRegimeEngine, RegimeResult
 from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
@@ -70,6 +71,7 @@ class MonitorReport:
     kill_switch_triggers: list[str] = field(default_factory=list)
     model_decay_stage: DecayStage = DecayStage.HEALTHY
     strategy_health: StrategyHealth | None = None
+    factor_health: FactorHealthReport | None = None
     psi_value: float = 0.0
     alerts: list[str] = field(default_factory=list)
     summary: str = ""
@@ -134,6 +136,9 @@ class KillSwitchPipeline(BasePipeline):
 
             # Step 3: Model decay
             report.model_decay_stage = self._check_model_decay(context)
+
+            # Step 3.5: Factor health (per-factor IC + decay)
+            report.factor_health = self._check_factor_health(context)
 
             # Step 4: Strategy health
             report.strategy_health = self._check_strategy_health(context)
@@ -239,6 +244,28 @@ class KillSwitchPipeline(BasePipeline):
         if monitor is None:
             return None
         return monitor.health_check()
+
+    def _check_factor_health(self, context: Any) -> FactorHealthReport | None:
+        """Check per-factor health (IC, decay, consistency).
+
+        Runs FactorHealthPipeline as a sub-step. Factor health data is
+        extracted from context.parameters["factor_daily_ics"] if available.
+        If no factor IC data is provided, returns None gracefully.
+        """
+        params = getattr(context, "parameters", {}) or {}
+        factor_ics = params.get("factor_daily_ics")
+        if not factor_ics:
+            # No factor IC data available — skip factor health check
+            return None
+
+        try:
+            pipeline = FactorHealthPipeline()
+            result = pipeline.run(context)
+            if result.status == PipelineStatus.SUCCESS:
+                return result.metadata.get("factor_health_report")  # type: ignore[return-value]
+        except Exception:
+            pass
+        return None
 
     def _check_kill_switch(self, context: Any) -> dict[str, Any]:
         """Evaluate all Kill Switch triggers including P0 safety triggers."""
@@ -348,6 +375,13 @@ class KillSwitchPipeline(BasePipeline):
                 return MonitorAction.PAUSE_BUY
             return MonitorAction.WATCH
 
+        # 3.5. Factor health — escalate if majority of factors are degraded
+        if report.factor_health and report.factor_health.has_degradation:
+            total = len(report.factor_health.factors)
+            degraded = report.factor_health.n_degraded + report.factor_health.n_stale
+            if total > 0 and degraded / total >= 0.50:
+                return MonitorAction.WATCH
+
         # 4. Regime context — logged but does NOT trigger kill switch (#4 fix)
         #    Market regime is information, not a risk event.
         #    LIQUIDITY_CRUNCH and STYLE_REVERSAL are noted in the summary
@@ -372,6 +406,9 @@ class KillSwitchPipeline(BasePipeline):
         if report.strategy_health and report.strategy_health.alerts:
             alerts.extend(report.strategy_health.alerts)
 
+        if report.factor_health and report.factor_health.alerts:
+            alerts.extend(report.factor_health.alerts)
+
         return alerts
 
     def _build_summary(self, report: MonitorReport) -> str:
@@ -386,6 +423,14 @@ class KillSwitchPipeline(BasePipeline):
 
         if report.strategy_health:
             parts.append(f"Health={report.strategy_health.health_score:.0f}")
+
+        if report.factor_health:
+            parts.append(
+                f"Factors={report.factor_health.n_healthy}H/"
+                f"{report.factor_health.n_warning}W/"
+                f"{report.factor_health.n_degraded}D/"
+                f"{report.factor_health.n_stale}S"
+            )
 
         return " | ".join(parts)
 

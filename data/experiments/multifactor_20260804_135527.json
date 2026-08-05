@@ -1,0 +1,77 @@
+{
+  "experiment_id": "multifactor_20260804_135527",
+  "status": "completed",
+  "created_at": "2026-08-04T13:55:27.515359+00:00",
+  "completed_at": "2026-08-04T13:55:27.515368+00:00",
+  "config": {
+    "experiment_id": "multifactor_20260804_135527",
+    "created_at": "2026-08-04T13:55:27.515359+00:00",
+    "description": "Multi-factor experiment: 5 factors, Top-10, rebalance=20d",
+    "strategy_name": "momentum_vol_full",
+    "model_mode": 0.0,
+    "dataset_version": "daily_price_latest@2023-06-01_2024-12-31",
+    "features": [
+      "Amplitude_5D",
+      "Volatility_20D",
+      "Momentum_3M",
+      "Volume_Concentration",
+      "Volume_Trend_10D"
+    ],
+    "model_params": {
+      "Amplitude_5D": -0.2476038338658147,
+      "Volatility_20D": 0.22108626198083067,
+      "Momentum_3M": -0.2073482428115016,
+      "Volume_Concentration": -0.20479233226837062,
+      "Volume_Trend_10D": -0.11916932907348243
+    },
+    "cv_folds": 5,
+    "purge_days": 20,
+    "embargo_days": 5,
+    "train_start": "2023-06-01",
+    "train_end": "2024-12-31",
+    "test_start": "",
+    "test_end": "",
+    "tags": [
+      "multifactor",
+      "top10",
+      "rebalance20d"
+    ],
+    "git_commit": ""
+  },
+  "metrics": {
+    "experiment_id": "multifactor_20260804_135527",
+    "in_sample_ic": 0.0,
+    "out_of_sample_ic": 0.0,
+    "ic_mean": 0.0733,
+    "ic_ir": 0.49,
+    "ic_t_stat": 7.85,
+    "sharpe_ratio": 0.46,
+    "max_drawdown_pct": 31.67,
+    "excess_return_pct": 10.05,
+    "annual_return_pct": 8.37,
+    "annual_volatility_pct": 18.19,
+    "total_return_pct": 13.1,
+    "turnover_pct": 701.09,
+    "n_days": 386,
+    "feature_importance": {},
+    "custom": {}
+  },
+  "lineage": {
+    "dataset": "daily_price_latest@2023-06-01",
+    "features": [
+      "Amplitude_5D",
+      "Volatility_20D",
+      "Momentum_3M",
+      "Volume_Concentration",
+      "Volume_Trend_10D"
+    ],
+    "feature_versions": {},
+    "label": "",
+    "model_id": "",
+    "model_algo": "weighted_linear",
+    "strategy_id": "multifactor_top10"
+  },
+  "artifacts": [],
+  "errors": [],
+  "gate_result": null
+}

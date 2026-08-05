@@ -1,0 +1,30 @@
+{
+  "name": "test_ds",
+  "owner": "me",
+  "source": "demo",
+  "schema": {
+    "trade_date": "date",
+    "symbol": "str"
+  },
+  "frequency": "daily",
+  "primary_key": [
+    "trade_date",
+    "symbol"
+  ],
+  "timezone": "Asia/Shanghai",
+  "coverage_start": "2024-01-01",
+  "coverage_end": "2024-01-05",
+  "pit_confidence": "high",
+  "update_policy": "daily_append",
+  "validation_rules": [],
+  "version": "2026-08-05",
+  "rows": 10,
+  "symbols": 2,
+  "columns": [
+    "symbol",
+    "trade_date",
+    "close",
+    "volume"
+  ],
+  "last_updated": "2026-08-04T22:12:18.622747+00:00"
+}

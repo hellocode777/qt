@@ -1,6 +1,6 @@
 {
   "strategies": {
-    "momentum_v1.0": {
+    "value_v1.0": {
       "lifecycle": "research",
       "meta": {
         "strategy_version": "1.0.0",
@@ -22,9 +22,9 @@
       "active": false
     },
     "momentum_vol_full": {
-      "lifecycle": "research",
+      "lifecycle": "approved",
       "meta": {
-        "strategy_version": "v20260803",
+        "strategy_version": "v20260804",
         "model_version": "",
         "feature_version": "",
         "feature_set": [],
@@ -47,23 +47,23 @@
           "orthogonalize": true,
           "anti_chase": true
         },
-        "backtest_ic": 0.068,
-        "backtest_sharpe": 0.96,
-        "backtest_max_dd": 15.32,
-        "backtest_excess_return": -7.989999999999995
+        "backtest_ic": 0.0733,
+        "backtest_sharpe": 0.46,
+        "backtest_max_dd": 31.67,
+        "backtest_excess_return": 10.05
       },
       "active": true,
       "approved": {
         "strategy_id": "momentum_vol_full",
-        "version": "v20260802",
-        "approved_at": "2026-08-02T11:34:33.615193+00:00",
-        "approved_by": "",
+        "version": "v20260804",
+        "approved_at": "2026-08-04T13:54:46.379011+00:00",
+        "approved_by": "webui",
         "weights": {
-          "Amplitude_5D": -0.25907911802853434,
-          "Volatility_20D": 0.23670557717250323,
-          "Momentum_3M": -0.20784695201037615,
-          "Volume_Concentration": -0.1867704280155642,
-          "Volume_Trend_10D": -0.10959792477302203
+          "Amplitude_5D": -0.25,
+          "Volatility_20D": 0.22,
+          "Momentum_3M": -0.2,
+          "Volume_Concentration": -0.19,
+          "Volume_Trend_10D": -0.14
         },
         "parameters": {
           "top_n": 10,
@@ -73,10 +73,10 @@
           "anti_chase": true
         },
         "backtest_summary": {
-          "ic": 0.0675,
-          "sharpe": 1.13,
-          "max_dd": 11.04,
-          "excess_return": -7.200000000000003
+          "ic": 0.068,
+          "sharpe": 0.96,
+          "max_dd": 15.32,
+          "excess_return": -7.989999999999995
         },
         "validation_report_id": "",
         "meta": {}
@@ -103,7 +103,7 @@
       },
       "active": false
     },
-    "value_v1.0": {
+    "momentum_v1.0": {
       "lifecycle": "research",
       "meta": {
         "strategy_version": "1.0.0",

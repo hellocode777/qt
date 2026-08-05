@@ -21,6 +21,7 @@ from qp.research.feature.momentum import (
     Momentum3MVolAdjusted,
     Momentum6M,
     Momentum20dFeature,  # backward-compatible alias
+    ResidualMomentum3M,
     ShortTermReversal5D,
     compute_momentum_factors,
 )
@@ -29,6 +30,14 @@ from qp.research.feature.money_flow import (
     ImpliedNetFlow,
     VolumeConcentration,
     compute_money_flow_factors,
+)
+from qp.research.feature.quality import (
+    EarningsQuality,
+    MarginComposite,
+    ProfitStability,
+    QUALITY_DESCRIPTIONS,
+    QUALITY_DIRECTIONS,
+    ROELevel,
 )
 from qp.research.feature.registry import FeatureRegistry
 from qp.research.feature.volatility import (
@@ -55,6 +64,7 @@ __all__ = [
     "Momentum3M",
     "Momentum6M",
     "Momentum3MVolAdjusted",
+    "ResidualMomentum3M",
     "Momentum20dFeature",  # backward-compatible
     # Volatility
     "Volatility20D",
@@ -70,6 +80,13 @@ __all__ = [
     "Amplitude5D",
     "VolumeConcentration",
     "ImpliedNetFlow",
+    # Quality
+    "ROELevel",
+    "ProfitStability",
+    "EarningsQuality",
+    "MarginComposite",
+    "QUALITY_DIRECTIONS",
+    "QUALITY_DESCRIPTIONS",
     # Batch computation
     "compute_all_factors",
     "compute_momentum_factors",

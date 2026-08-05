@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="mb-3">
+    <a href="/health/factors" class="btn btn-sm btn-outline-secondary">← 返回因子列表</a>
+  </div>
+
+  <h2>
+    {{ detail.icon }} {{ detail.factor_name }}
+    <span class="badge {{ detail.badge_class }} ms-2">{{ detail.stage_label }}</span>
+  </h2>
+
+  {% if detail.is_empty %}
+  <div class="alert alert-info">
+    <strong>暂无数据</strong> — 该因子的健康数据尚未生成。
+  </div>
+  {% else %}
+
+  <!-- Key metrics -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body text-center">
+          <small class="text-muted">IC₃₀ (30日滚动)</small>
+          <h4 class="{{ 'text-danger' if detail.ic_30d < 0 else 'text-success' }}">
+            {{ "%+.4f"|format(detail.ic_30d) }}
+          </h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body text-center">
+          <small class="text-muted">IC₉₀ (90日滚动)</small>
+          <h4 class="{{ 'text-danger' if detail.ic_90d < 0 else 'text-success' }}">
+            {{ "%+.4f"|format(detail.ic_90d) }}
+          </h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body text-center">
+          <small class="text-muted">IC₂₅₂ (252日滚动)</small>
+          <h4 class="{{ 'text-danger' if detail.ic_252d < 0 else 'text-success' }}">
+            {{ "%+.4f"|format(detail.ic_252d) }}
+          </h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-body text-center">
+          <small class="text-muted">IC IR</small>
+          <h4 class="{{ 'text-warning' if detail.ic_ir < 0.3 else 'text-success' }}">
+            {{ "%.2f"|format(detail.ic_ir) }}
+          </h4>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body">
+          <small class="text-muted">IC 均值 (全周期)</small>
+          <h5>{{ "%+.4f"|format(detail.ic_mean) }}</h5>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body">
+          <small class="text-muted">IC 衰减率 (每日)</small>
+          <h5 class="{{ 'text-danger' if detail.ic_decay_rate < 0 else 'text-success' }}">
+            {{ "%+.6f"|format(detail.ic_decay_rate) }}
+          </h5>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body text-center">
+          <small class="text-muted">IC > 0 占比</small>
+          <h5>{{ "%.1f%%"|format(detail.ic_positive_pct) }}</h5>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body text-center">
+          <small class="text-muted">IC 占比 (vs 参考)</small>
+          <h5>{{ "%.0f%%"|format(detail.ic_ratio * 100) }}</h5>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body text-center">
+          <small class="text-muted">评估天数</small>
+          <h5>{{ detail.n_days }}</h5>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recommended action -->
+  {% if detail.recommended_action %}
+  <div class="alert {{ 'alert-danger' if detail.stage in ('degraded', 'stale') else 'alert-warning' }}">
+    <strong>建议动作：</strong> {{ detail.recommended_action }}
+  </div>
+  {% endif %}
+
+  <!-- Summary -->
+  <div class="alert alert-secondary">
+    <strong>诊断：</strong> {{ detail.summary }}
+  </div>
+
+  <!-- Rolling IC Chart -->
+  {% if detail.chart_dates %}
+  <div class="card mb-4">
+    <div class="card-header"><strong>滚动 IC 趋势</strong></div>
+    <div class="card-body">
+      <canvas id="icChart" height="100"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- History table -->
+  {% if detail.history %}
+  <div class="card">
+    <div class="card-header">
+      <strong>近期记录</strong>
+      <span class="text-muted ms-2">最近 {{ detail.n_history }} 条</span>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>状态</th>
+            <th class="text-end">IC₃₀</th>
+            <th class="text-end">IC₉₀</th>
+            <th class="text-end">IC IR</th>
+            <th class="text-end">衰减率/d</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in detail.history %}
+          <tr>
+            <td>{{ h.date }}</td>
+            <td><span class="badge {{ h.badge_class }}">{{ h.stage_label }}</span></td>
+            <td class="text-end">{{ "%+.4f"|format(h.ic_30d) }}</td>
+            <td class="text-end">{{ "%+.4f"|format(h.ic_90d) }}</td>
+            <td class="text-end">{{ "%.2f"|format(h.ic_ir) }}</td>
+            <td class="text-end">{{ "%+.6f"|format(h.ic_decay_rate) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+
+{% if detail.chart_dates %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const ctx = document.getElementById("icChart").getContext("2d");
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: {{ detail.chart_dates | tojson }},
+      datasets: [
+        {
+          label: "IC₃₀ (30日滚动)",
+          data: {{ detail.chart_ic_30d | tojson }},
+          borderColor: "rgb(59, 130, 246)",
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: "IC₉₀ (90日滚动)",
+          data: {{ detail.chart_ic_90d | tojson }},
+          borderColor: "rgb(234, 179, 8)",
+          backgroundColor: "rgba(234, 179, 8, 0.1)",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "top" },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              return ctx.dataset.label + ": " + ctx.parsed.y.toFixed(4);
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 20 },
+        },
+        y: {
+          title: { display: true, text: "IC" },
+          grid: { color: "rgba(0,0,0,0.05)" },
+        },
+      },
+    },
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

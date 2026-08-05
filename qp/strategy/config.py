@@ -91,6 +91,10 @@ class StrategyConfig:
     # ── 行业中性化强度 ──
     industry_neutral_strength: float = 1.0
 
+    # ── Factor Layer v2（多来源 alpha ensemble）──
+    use_regime_ensemble: bool = False  # 启用 regime → layer weight 动态调整
+    factor_layers: dict | None = None  # 层配置，None=使用默认 FACTOR_LAYERS_V2
+
     # ── 最低历史数据要求 ──
     min_history: int = 60
 

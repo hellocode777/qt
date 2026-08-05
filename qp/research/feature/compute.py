@@ -72,7 +72,11 @@ def get_default_factor_weights() -> dict[str, float]:
     return dict.fromkeys(PRICE_VOLUME_FACTORS, w)
 
 
-def compute_all_factors(df: pl.DataFrame) -> pl.DataFrame:
+def compute_all_factors(
+    df: pl.DataFrame,
+    subset: list[str] | None = None,
+    index_df: pl.DataFrame | None = None,
+) -> pl.DataFrame:
     """Compute all price/volume factors for a single stock in one pass.
 
     Factors computed (15 total):
@@ -86,15 +90,23 @@ def compute_all_factors(df: pl.DataFrame) -> pl.DataFrame:
     Args:
         df: Single-stock DataFrame with [trade_date, open, high, low, close, volume].
             Must be sorted by trade_date ascending. Uses 'amount' if available.
+        subset: If provided, only drop rows where these specific columns are NaN.
+            This avoids the 121-day bottleneck from unused long-lookback factors
+            (e.g. Momentum_6M, Trend_MA120) when the caller only needs short-lookback
+            factors. When None (default), drops rows with NaN in ANY factor column
+            (backward-compatible behavior).
+        index_df: Optional index DataFrame with [trade_date, close] for
+            computing Residual_Momentum_3M. Passed through to
+            compute_momentum_factors.
 
     Returns:
         DataFrame with [trade_date] + all factor columns. Rows with NaN
-        in any factor are dropped (insufficient history).
+        in the relevant columns are dropped (insufficient history).
     """
     df = df.sort("trade_date")
 
     # Compute each category
-    momentum = compute_momentum_factors(df)
+    momentum = compute_momentum_factors(df, index_df=index_df)
     volatility = compute_volatility_factors(df)
     volume = compute_volume_factors(df)
     money_flow = compute_money_flow_factors(df)
@@ -104,4 +116,6 @@ def compute_all_factors(df: pl.DataFrame) -> pl.DataFrame:
     result = result.join(volume, on="trade_date", how="inner")
     result = result.join(money_flow, on="trade_date", how="inner")
 
+    if subset:
+        return result.drop_nulls(subset=subset)
     return result.drop_nulls()

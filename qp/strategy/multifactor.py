@@ -66,12 +66,18 @@ def compute_cross_sectional_scores(
     return_diagnostics: bool = False,
     model_mode: bool = False,
     extra_factors: dict[str, dict[str, dict[str, float]]] | None = None,
+    regime: str = "",
+    regime_weights: dict[str, dict[str, float]] | None = None,
+    regime_map: dict[str, str] | None = None,
+    index_df: pl.DataFrame | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Compute daily cross-sectional multi-factor scores for all stocks.
 
     Args:
         price_data: {code: DataFrame(date, open, high, low, close, volume)}.
         weights: {factor_name: weight}. Default: equal weight all available.
+            If regime is set and factor_layers is configured, weights are
+            dynamically computed from the FactorEnsemble.
         min_history: Minimum trading days required per stock.
         fundamental_data: {code: DataFrame(report_date, ROE, gross_margin, ...)}.
         valuation_data: {code: DataFrame(date, PE_TTM, PB, ...)}.
@@ -80,6 +86,10 @@ def compute_cross_sectional_scores(
         live_mode: Only score last N days (faster for production).
         live_lookback_dates: Days to keep in live mode.
         return_diagnostics: Return (scores, diagnostics) tuple.
+        model_mode: True = LightGBM, False = linear weighted.
+        extra_factors: Pre-computed derived factors.
+        regime: Market regime label. If non-empty and a FactorEnsemble is
+            configured, layer weights are adjusted per regime.
 
     Returns:
         Polars DataFrame [trade_date, symbol, score] sorted by date,
@@ -89,6 +99,25 @@ def compute_cross_sectional_scores(
 
     if weights is None:
         weights = get_default_factor_weights()
+
+    # ── Factor Layer v2: regime-aware ensemble weights ──
+    if regime:
+        try:
+            from qp.strategy.factor_layers import FactorEnsemble
+
+            ensemble = FactorEnsemble.from_config()
+            layer_weights = ensemble.get_layer_weights(regime)
+            ensemble_weights = ensemble.get_active_weights(
+                regime=regime, layer_overrides=layer_weights
+            )
+            if ensemble_weights:
+                # Merge: ensemble weights override defaults for ensemble factors,
+                # non-ensemble factors keep original weights
+                merged = dict(weights)
+                merged.update(ensemble_weights)
+                weights = merged
+        except ImportError:
+            pass
 
     fundamental_data = fundamental_data or {}
     valuation_data = valuation_data or {}
@@ -115,6 +144,11 @@ def compute_cross_sectional_scores(
         "debt_ratio",
         "EPS",
         "NAV",
+        "ROE_Level",
+        "Profit_Stability",
+        "Earnings_Quality",
+        "Margin_Composite",
+        "cashflow_per_share",
     }
 
     # Price/volume factors (computed from OHLCV)
@@ -135,7 +169,13 @@ def compute_cross_sectional_scores(
         df = df.sort("trade_date")
 
         # Compute all price/volume factors (vectorized, one pass)
-        factors = compute_all_factors(df)
+        # Only drop nulls for factors the strategy actually uses — avoids
+        # 121-day bottleneck from unused long-lookback factors.
+        factors = compute_all_factors(
+            df,
+            subset=list(price_factor_names) if price_factor_names else None,
+            index_df=index_df,
+        )
         if factors.is_empty():
             continue
 
@@ -257,6 +297,8 @@ def compute_cross_sectional_scores(
         neutralize_method="ols" if (industry_map or vol_map) else "median",
         orthogonalize=orthogonalize,
         return_diagnostics=return_diagnostics,
+        regime_weights=regime_weights,
+        regime_map=regime_map,
         model_mode=model_mode,
         price_data=price_data,
     )
@@ -562,6 +604,8 @@ def run_multifactor_strategy(
     orthogonalize: bool = False,
     regime_map: dict[str, str] | None = None,
     regime_positions: dict[str, int] | None = None,
+    regime_weights: dict[str, dict[str, float]] | None = None,
+    index_df: pl.DataFrame | None = None,
     return_diagnostics: bool = False,
     model_mode: bool = False,
     score_percentile_min: float | None = None,
@@ -634,6 +678,9 @@ def run_multifactor_strategy(
         return_diagnostics=return_diagnostics,
         model_mode=model_mode,
         extra_factors=extra_factors,
+        regime_weights=regime_weights,
+        regime_map=regime_map,
+        index_df=index_df,
     )
 
     diagnostics = None
@@ -993,7 +1040,10 @@ def compute_today_signals(
         df = df.sort("trade_date")
 
         # Only need factors from the most recent date
-        factors_df = compute_all_factors(df)
+        factors_df = compute_all_factors(
+            df,
+            subset=list(weights.keys()) if weights else None,
+        )
         if factors_df.is_empty() or factors_df.height < 1:
             continue
 

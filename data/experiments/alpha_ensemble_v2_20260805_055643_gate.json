@@ -1,0 +1,59 @@
+{
+  "strategy_id": "alpha_ensemble_v2",
+  "stage": "backtest_passed",
+  "decision": "research_only",
+  "score": 60.0,
+  "confidence": 0.6,
+  "timestamp": "2026-08-04T21:56:43.551196+00:00",
+  "data_integrity": "PASS",
+  "factor_validity": "PASS",
+  "portfolio_conversion": "FAIL",
+  "robustness": "NOT_RUN",
+  "cost_capacity": "NOT_RUN",
+  "rules": [
+    {
+      "rule_name": "rank_ic",
+      "status": "pass",
+      "score": 80,
+      "threshold": 0.02,
+      "actual_value": 0.0746,
+      "detail": "|IC|=0.0746"
+    },
+    {
+      "rule_name": "ic_ir",
+      "status": "pass",
+      "score": 80,
+      "threshold": 0.3,
+      "actual_value": 0.49,
+      "detail": "IC_IR=0.49"
+    },
+    {
+      "rule_name": "ic_t_stat",
+      "status": "pass",
+      "score": 80,
+      "threshold": 2.0,
+      "actual_value": 9.86,
+      "detail": "t=9.86"
+    },
+    {
+      "rule_name": "monotonicity",
+      "status": "fail",
+      "score": 30,
+      "threshold": 2.0,
+      "actual_value": 0.4,
+      "detail": "monotonicity t=0.40"
+    },
+    {
+      "rule_name": "spread",
+      "status": "fail",
+      "score": 30,
+      "threshold": 2.0,
+      "actual_value": 1.44,
+      "detail": "Q5-Q1 spread t=1.44"
+    }
+  ],
+  "recommendation": "策略 alpha_ensemble_v2 具有统计预测力 (IC=+0.0746, IR=0.49) 但分层收益不单调 (t=0.40)。建议: 研究 Q5 顶部塌陷原因或重新定义因子。",
+  "artifacts": [
+    "data/knowledge/research_debt/20260804-215643-alpha-ensemble-v2-gate-failure-gate-failure.md"
+  ]
+}

@@ -280,6 +280,36 @@ def run_momentum_vol_full(
         except Exception as e:
             logger.warning("市场状态检测失败: {}，跳过", e)
 
+    # ── Factor Layer v2: build regime-aware weights ──
+    regime_weights: dict[str, dict[str, float]] | None = None
+    if getattr(config, "use_regime_ensemble", False) and regime_map:
+        try:
+            from qp.strategy.factor_layers import FactorEnsemble
+
+            ensemble = FactorEnsemble.from_config(config.factor_layers)
+            regime_weights = {}
+            seen_regimes = set(regime_map.values())
+            for regime in seen_regimes:
+                lw = ensemble.get_layer_weights(regime)
+                regime_weights[regime] = ensemble.get_active_weights(
+                    regime=regime, layer_overrides=lw
+                )
+            # Log regime distribution
+            from collections import Counter
+            regime_counts = Counter(regime_map.values())
+            total_days = len(regime_map)
+            dist_parts = [
+                f"{r}:{c}/{total_days}({c/total_days:.0%})"
+                for r, c in regime_counts.most_common()
+            ]
+            logger.info(
+                "🎯 因子 Ensemble: {} 个状态 → 动态权重 | 分布: {}",
+                len(regime_weights),
+                " ".join(dist_parts),
+            )
+        except Exception as e:
+            logger.warning("因子 Ensemble 构建失败: {}，使用固定权重", e)
+
     # 3. 运行多因子策略（核心引擎）
     # Always request scores for IC analysis, even if diagnostics not needed
     # Extract score band overrides for inverted-U selection
@@ -304,6 +334,8 @@ def run_momentum_vol_full(
         holdings=holdings,
         regime_map=regime_map,
         regime_positions=config.regime_positions if regime_map else None,
+        regime_weights=regime_weights,
+        index_df=index_df,
         return_diagnostics=True,
         model_mode=config.model_mode,
         score_percentile_min=score_percentile_min,

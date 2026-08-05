@@ -5,6 +5,7 @@ Exports:
   - DriftMonitor (feature + prediction distribution drift)
   - ModelDecayDetector (rolling IC degradation)
   - ModelDecayLifecycle (decay → strategy lifecycle bridge)
+  - FactorHealthMonitor (per-factor IC + decay + crowding tracking)
   - MarketRegimeEngine (trend/ranging/volatility regime)
   - StrategyMonitor (signal frequency, turnover, drawdown tracking)
   - AlertManager + alert channels (Terminal, Log, Telegram)
@@ -27,6 +28,16 @@ from qp.monitoring.drift import (
     DriftReport,
     DriftResult,
     DriftSeverity,
+)
+from qp.monitoring.factor_health import (
+    FactorHealthMonitor,
+    FactorHealthStage,
+    FactorHealthStatus,
+)
+from qp.monitoring.factor_health_logger import FactorHealthLogger
+from qp.monitoring.factor_health_pipeline import (
+    FactorHealthPipeline,
+    FactorHealthReport,
 )
 from qp.monitoring.health_logger import (
     HealthRecord,
@@ -123,6 +134,13 @@ __all__ = [
     "MarketRegimeEngine",
     "Regime",
     "RegimeResult",
+    # Factor health
+    "FactorHealthMonitor",
+    "FactorHealthStage",
+    "FactorHealthStatus",
+    "FactorHealthLogger",
+    "FactorHealthPipeline",
+    "FactorHealthReport",
     # Health logger
     "HealthRecord",
     "SystemHealthLogger",
