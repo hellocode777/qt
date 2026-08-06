@@ -1,3 +1,5 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
+
 """Tests for qp.validation — Strategy Validation Gate checks.
 
 Covers all 14 check classes + RuleEngine integration:

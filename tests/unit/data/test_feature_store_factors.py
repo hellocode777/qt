@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """Tests for concrete factor/feature implementations."""
+
 
 from __future__ import annotations
 

@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false, reportIncompatibleMethodOverride=false
 """Tests for factor processor — the core cross-sectional transformation pipeline.
+
 
 Covers: winsorize, normalize, direction adjustment, factor combination.
 """

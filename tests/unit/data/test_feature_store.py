@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """Tests for qp.data.feature_store — Feature Store module."""
+
 
 from __future__ import annotations
 

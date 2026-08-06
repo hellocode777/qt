@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """Tests for Monitoring Layer — drift, decay, regime, kill switch."""
+
 
 from pathlib import Path
 

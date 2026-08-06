@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false, reportIncompatibleMethodOverride=false
 """Tests for critical pipeline paths — DailyPipeline, KillSwitchPipeline, MultiFactorPipeline.
+
 
 Previously test_pipeline.py only had 6 abstract tests (76 lines).
 This adds coverage for the actual production pipelines.

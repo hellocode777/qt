@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """Tests for NAVLedger — daily NAV tracking with Parquet persistence."""
+
 
 from __future__ import annotations
 
@@ -29,8 +31,8 @@ class TestNAVLedger:
             assert df["date"].to_list() == ["2026-07-01", "2026-07-02", "2026-07-03"]
             assert df["total_nav"].to_list() == [1_000_000.0, 1_010_000.0, 1_005_000.0]
         finally:
-            mod.NAV_DIR = Path(original_dir)
-            mod.NAV_PARQUET = Path(original_parquet)
+            mod.NAV_DIR = Path(original_dir)  # type: ignore[reportPossiblyUnboundVariable]
+            mod.NAV_PARQUET = Path(original_parquet)  # type: ignore[reportPossiblyUnboundVariable]
 
     def test_idempotent_record(self, tmp_path: Path) -> None:
         """Recording the same date twice replaces the old value."""

@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """Tests for Purged K-Fold — mandatory cross-validation per ADR-021.
+
 
 Verifies correct train/test split, purge logic, and edge cases.
 """

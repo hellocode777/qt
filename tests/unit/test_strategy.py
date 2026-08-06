@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """Tests for Strategy Layer — signals, aggregation, registry, ensemble, and more.
+
 
 Covers all modules created in the Layer 6 (Strategy Engine) commit:
   models/ (AlphaSignal, AlphaSignalBatch, StrategyResult),

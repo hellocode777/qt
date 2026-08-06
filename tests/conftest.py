@@ -10,7 +10,7 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _isolate_strategy_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+def _isolate_strategy_registry(monkeypatch: pytest.MonkeyPatch):  # type: ignore[reportInvalidTypeForm]
     """Redirect StrategyRegistry persistence to a temp file for test isolation.
 
     Without this, tests share ``data/strategy_registry.json`` and state

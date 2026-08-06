@@ -1,4 +1,6 @@
+# pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """End-to-end Factor Pipeline integration test (DP-002 X7).
+
 
 Validates the full Factor Pipeline flow:
   Compute → Refinery → Store → Health → Validation Gate → Registry
