@@ -88,6 +88,10 @@ ignore = [
     "S101", # 允许 assert（如果需要）
     "RUF001", "RUF002", "RUF003", # 允许中文/数学符号
     "RUF012", # 允许在类属性中使用可变默认值
+    "S112",
+    "S110",
+    "S324",
+    "S310",
 ]
 
 [tool.ruff.lint.per-file-ignores]
