@@ -119,7 +119,7 @@ def cross_sectional_rank(
 
     out = output_col or f"{value_col}_rank"
 
-    result = (
+    return (
         df.with_columns(
             pl.col(value_col)
             .rank("ordinal", descending=not ascending)
@@ -134,8 +134,6 @@ def cross_sectional_rank(
         )
         .drop("_rank_n")
     )
-
-    return result
 
 
 # ────────────────────────────────────────────────────────────────
@@ -179,7 +177,7 @@ def rolling_zscore(
 
     out = output_col or f"{value_col}_roll_z"
 
-    result = df.sort([symbol_col, date_col]).with_columns(
+    return df.sort([symbol_col, date_col]).with_columns(
         (
             (
                 pl.col(value_col)
@@ -188,15 +186,15 @@ def rolling_zscore(
                 )
             )
             / (
-                pl.col(value_col).rolling_std(window_size=window, min_samples=max(10, window // 4))
+                pl.col(value_col).rolling_std(
+                    window_size=window, min_samples=max(10, window // 4)
+                )
                 + epsilon
             )
         )
         .over(symbol_col)
         .alias(out)
     )
-
-    return result
 
 
 # ────────────────────────────────────────────────────────────────
@@ -237,7 +235,9 @@ def shift_features(
             continue
 
         shifted_name = f"{col}{suffix}{shifts}"
-        result = result.with_columns(pl.col(col).shift(shifts).over(symbol_col).alias(shifted_name))
+        result = result.with_columns(
+            pl.col(col).shift(shifts).over(symbol_col).alias(shifted_name)
+        )
 
     return result
 
@@ -339,7 +339,7 @@ def resample_safe(
 
     # Polars group_by_dynamic with label="left" equivalent
     try:
-        result = (
+        return (
             df.sort([symbol_col, time_col])
             .group_by_dynamic(
                 index_column=time_col,
@@ -350,7 +350,6 @@ def resample_safe(
             )
             .agg(pl.all().exclude([symbol_col, time_col]).last())
         )
-        return result
     except Exception as e:
         logger.warning("resample_safe failed: {} — returning original", e)
         return df
@@ -398,8 +397,11 @@ def standardize_features(
 
     if apply_shift:
         shifted_cols = [
-            f"{c}_zscore" if method == "cross_sectional" else f"{c}_roll_z" for c in value_cols
+            f"{c}_zscore" if method == "cross_sectional" else f"{c}_roll_z"
+            for c in value_cols
         ]
-        result = shift_features(result, [c for c in shifted_cols if c in result.columns])
+        result = shift_features(
+            result, [c for c in shifted_cols if c in result.columns]
+        )
 
     return result

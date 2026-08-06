@@ -38,7 +38,9 @@ class ShortTermReversal5D(BaseFeature):
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
-        df = df.with_columns((pl.col("close").pct_change(5).over("symbol")).alias("feature_value"))
+        df = df.with_columns(
+            (pl.col("close").pct_change(5).over("symbol")).alias("feature_value")
+        )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
         df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
@@ -59,7 +61,9 @@ class Momentum1M(BaseFeature):
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
-        df = df.with_columns((pl.col("close").pct_change(20).over("symbol")).alias("feature_value"))
+        df = df.with_columns(
+            (pl.col("close").pct_change(20).over("symbol")).alias("feature_value")
+        )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
         df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
@@ -80,7 +84,9 @@ class Momentum3M(BaseFeature):
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
-        df = df.with_columns((pl.col("close").pct_change(60).over("symbol")).alias("feature_value"))
+        df = df.with_columns(
+            (pl.col("close").pct_change(60).over("symbol")).alias("feature_value")
+        )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
         df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
@@ -132,7 +138,9 @@ class Momentum3MVolAdjusted(BaseFeature):
         ret_60d = pl.col("close").pct_change(60).over("symbol")
         vol_60d = pl.col("close").pct_change().rolling_std(60).over("symbol")
 
-        df = df.with_columns((ret_60d / vol_60d.replace(0.0, None)).alias("feature_value"))
+        df = df.with_columns(
+            (ret_60d / vol_60d.replace(0.0, None)).alias("feature_value")
+        )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
         df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
@@ -206,8 +214,9 @@ class ResidualMomentum3M(BaseFeature):
             factors = compute_momentum_factors(stock_df, index_df=index_df)
             if "Residual_Momentum_3M" in factors.columns:
                 result_parts.append(
-                    factors.select(["trade_date", "Residual_Momentum_3M"])
-                    .with_columns(pl.lit(symbol).alias("symbol"))
+                    factors.select(["trade_date", "Residual_Momentum_3M"]).with_columns(
+                        pl.lit(symbol).alias("symbol")
+                    )
                 )
 
         if not result_parts:
@@ -279,7 +288,9 @@ def compute_momentum_factors(
     # Vol-adjusted momentum
     df = df.with_columns(pl.col("close").pct_change().rolling_std(60).alias("_vol_60d"))
     df = df.with_columns(
-        (pl.col("Momentum_3M") / pl.col("_vol_60d").replace(0.0, None)).alias("Momentum_3M_vol_adj")
+        (pl.col("Momentum_3M") / pl.col("_vol_60d").replace(0.0, None)).alias(
+            "Momentum_3M_vol_adj"
+        )
     )
     df = df.drop("_vol_60d")
 
@@ -290,7 +301,11 @@ def compute_momentum_factors(
     )
 
     # Residual Momentum: beta-adjusted 3M momentum (stock-specific alpha)
-    factor_names = list(_MOMENTUM_PERIODS.keys()) + ["Momentum_3M_vol_adj", "Trend_MA120"]
+    factor_names = [
+        *list(_MOMENTUM_PERIODS.keys()),
+        "Momentum_3M_vol_adj",
+        "Trend_MA120",
+    ]
     if index_df is not None and not index_df.is_empty():
         df = _compute_residual_momentum(df, index_df)
         factor_names.append("Residual_Momentum_3M")
@@ -299,7 +314,7 @@ def compute_momentum_factors(
     for name in factor_names:
         df = df.with_columns(pl.col(name).shift(1).alias(name))
 
-    return df.select(["trade_date"] + factor_names).drop_nulls()
+    return df.select(["trade_date", *factor_names]).drop_nulls()
 
 
 def _compute_residual_momentum(
@@ -342,9 +357,7 @@ def _compute_residual_momentum(
     # Rolling covariance / variance = rolling beta
     stock_x_idx = (pl.col("stock_ret") * pl.col("idx_ret")).rolling_sum(window)
     idx_sq = (pl.col("idx_ret") ** 2).rolling_sum(window)
-    df = df.with_columns(
-        (stock_x_idx / idx_sq.replace(0.0, None)).alias("_beta")
-    )
+    df = df.with_columns((stock_x_idx / idx_sq.replace(0.0, None)).alias("_beta"))
 
     # Residual = raw 60d momentum - beta * index 60d return
     df = df.with_columns(pl.col("close").pct_change(window).alias("_stock_mom"))
@@ -354,8 +367,7 @@ def _compute_residual_momentum(
     )
 
     # Cleanup
-    df = df.drop(["_beta", "_stock_mom", "stock_ret", "idx_ret"])
-    return df
+    return df.drop(["_beta", "_stock_mom", "stock_ret", "idx_ret"])
 
 
 # ------------------------------------------------------------------

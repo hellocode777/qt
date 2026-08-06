@@ -23,8 +23,8 @@ from qp.research.trainer.registry import (
 )
 
 __all__ = [
-    "CrossSectionalStandardizer",
     "DEFAULT_LGB_PARAMS",
+    "CrossSectionalStandardizer",
     "LightGBMRankModel",
     "ModelMetadata",
     "ModelRegistry",

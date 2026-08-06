@@ -288,7 +288,9 @@ class TestValidationGate:
         ).with_columns(pl.col("trade_date").str.to_date())
         report = gate.validate(bad_df)
         assert report.passed is False
-        assert any(c.check_name == "ohlc_physics_check" and not c.passed for c in report.checks)
+        assert any(
+            c.check_name == "ohlc_physics_check" and not c.passed for c in report.checks
+        )
 
     def test_circuit_breaker_integration(self):
         """Gate with zero-tolerance breaker trips on any error."""

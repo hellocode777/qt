@@ -182,10 +182,14 @@ class StrategyMonitor:
 
             # Check if signal count is in expected range
             if mean_sig < self._expected_min:
-                alerts.append(f"Low signals: avg {mean_sig:.1f}/day < min {self._expected_min}")
+                alerts.append(
+                    f"Low signals: avg {mean_sig:.1f}/day < min {self._expected_min}"
+                )
                 scores["consistency"] = max(0, 25 * mean_sig / self._expected_min)
             elif mean_sig > self._expected_max:
-                alerts.append(f"High signals: avg {mean_sig:.1f}/day > max {self._expected_max}")
+                alerts.append(
+                    f"High signals: avg {mean_sig:.1f}/day > max {self._expected_max}"
+                )
                 scores["consistency"] = 15.0  # Too many signals
             else:
                 # Coefficient of variation — lower is more stable
@@ -202,7 +206,9 @@ class StrategyMonitor:
         if self._turnover_history:
             avg_turnover = float(np.mean(self._turnover_history))
             if avg_turnover > self._max_turnover:
-                alerts.append(f"High turnover: {avg_turnover:.1%}/week > {self._max_turnover:.0%}")
+                alerts.append(
+                    f"High turnover: {avg_turnover:.1%}/week > {self._max_turnover:.0%}"
+                )
                 scores["turnover"] = max(0, 25 * self._max_turnover / avg_turnover)
             elif avg_turnover > self._max_turnover * 0.7:
                 scores["turnover"] = 20.0
@@ -215,7 +221,9 @@ class StrategyMonitor:
         if self._drawdown_history:
             current_dd = abs(self._drawdown_history[-1][1])
             if current_dd > self._max_drawdown:
-                alerts.append(f"Drawdown breach: {current_dd:.1%} > max {self._max_drawdown:.0%}")
+                alerts.append(
+                    f"Drawdown breach: {current_dd:.1%} > max {self._max_drawdown:.0%}"
+                )
                 scores["drawdown"] = max(0, 25 * self._max_drawdown / current_dd)
             elif current_dd > self._max_drawdown * 0.7:
                 scores["drawdown"] = 20.0
@@ -228,7 +236,9 @@ class StrategyMonitor:
         days_gap = self._compute_signal_gap()
         if days_gap > self._max_signal_gap:
             alerts.append(f"Signal gap: {days_gap} days since last signal")
-            scores["continuity"] = max(0, 25 * (1 - days_gap / (self._max_signal_gap * 3)))
+            scores["continuity"] = max(
+                0, 25 * (1 - days_gap / (self._max_signal_gap * 3))
+            )
         else:
             scores["continuity"] = 25.0
 
@@ -247,13 +257,19 @@ class StrategyMonitor:
             level = HealthLevel.CRITICAL
 
         # Metrics
-        signal_counts = [r.n_signals for r in self._signal_history] if self._signal_history else [0]
+        signal_counts = (
+            [r.n_signals for r in self._signal_history] if self._signal_history else [0]
+        )
         avg_signals = float(np.mean(signal_counts)) if signal_counts else 0.0
         cv = float(np.std(signal_counts)) / avg_signals if avg_signals > 0 else 0.0
         consistency = max(0.0, 1.0 - min(cv, 1.0))
 
-        avg_turnover = float(np.mean(self._turnover_history)) if self._turnover_history else 0.0
-        current_dd = abs(self._drawdown_history[-1][1]) if self._drawdown_history else 0.0
+        avg_turnover = (
+            float(np.mean(self._turnover_history)) if self._turnover_history else 0.0
+        )
+        current_dd = (
+            abs(self._drawdown_history[-1][1]) if self._drawdown_history else 0.0
+        )
 
         return StrategyHealth(
             strategy_id=self._strategy_id,
@@ -270,7 +286,8 @@ class StrategyMonitor:
                 f"Score={total_score:.0f}/100 | "
                 f"Signals={avg_signals:.1f}/day | "
                 f"Turnover={avg_turnover:.1%} | "
-                f"DD={current_dd:.1%}" + (f" | ⚠ {len(alerts)} alerts" if alerts else "")
+                f"DD={current_dd:.1%}"
+                + (f" | ⚠ {len(alerts)} alerts" if alerts else "")
             ),
         )
 

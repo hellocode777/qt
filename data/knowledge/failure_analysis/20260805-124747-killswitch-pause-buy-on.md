@@ -10,7 +10,7 @@ tags:
 - liquidity_crunch
 ---
 
-# KillSwitch: pause_buy on 
+# KillSwitch: pause_buy on
 
 ## Event Summary
 <!-- What failed? When? How was it detected? -->

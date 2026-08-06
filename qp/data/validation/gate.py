@@ -138,7 +138,9 @@ class ValidationGate:
         Returns:
             ValidationReport with per-check results and circuit breaker outcome.
         """
-        logger.info("ValidationGate: 开始校验 ({} 行, {} 列)", df.height, len(df.columns))
+        logger.info(
+            "ValidationGate: 开始校验 ({} 行, {} 列)", df.height, len(df.columns)
+        )
 
         all_checks: list[CheckResult] = []
 
@@ -151,7 +153,9 @@ class ValidationGate:
         # ── Physical checks ──
         if self.config.enable_gaps:
             all_checks.append(
-                check_gaps(df, max_allowed_gap_days=self.config.max_gap_days, calendar=calendar)
+                check_gaps(
+                    df, max_allowed_gap_days=self.config.max_gap_days, calendar=calendar
+                )
             )
 
         if self.config.enable_monotonicity:
@@ -235,7 +239,10 @@ class ValidationGate:
             logger.info("✓ ValidationGate: {}/{} 校验通过", passed, total)
         else:
             logger.warning(
-                "✗ ValidationGate: {}/{} 校验通过, {} 失败", passed, total, report.failed_checks
+                "✗ ValidationGate: {}/{} 校验通过, {} 失败",
+                passed,
+                total,
+                report.failed_checks,
             )
 
         for check in report.checks:

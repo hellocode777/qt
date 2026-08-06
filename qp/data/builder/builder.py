@@ -41,9 +41,12 @@ class DatasetBuilder:
         builder = DatasetBuilder()
         builder.register_source("akshare", DailyPriceContract)
         metadata = DatasetMetadata(
-            name="daily_price", owner="data-layer", source="akshare",
+            name="daily_price",
+            owner="data-layer",
+            source="akshare",
             schema={"trade_date": "date", "symbol": "str", "close": "float64"},
-            frequency="daily", primary_key=["trade_date", "symbol"],
+            frequency="daily",
+            primary_key=["trade_date", "symbol"],
         )
         result = builder.build(df, metadata)
         assert result.success
@@ -137,7 +140,7 @@ class DatasetBuilder:
                 errors=errors,
                 stats={"rows": df.height, "columns": len(df.columns)},
             )
-        elif contract is not None:
+        if contract is not None:
             try:
                 validation_errors = contract.validate(df)
             except Exception as e:
@@ -235,7 +238,9 @@ class DatasetBuilder:
         df: pl.DataFrame,
     ) -> None:
         """Write a _metadata.json companion file alongside the parquet."""
-        meta_path = output_path.with_suffix("").with_name(f"{output_path.stem}_metadata.json")
+        meta_path = output_path.with_suffix("").with_name(
+            f"{output_path.stem}_metadata.json"
+        )
         payload: dict[str, Any] = {
             **metadata.to_dict(),
             "rows": df.height,

@@ -1,10 +1,66 @@
+# QP Engineering Standard v1.1 — pre-commit 配置
+# 原则: 本地只做快速检查 + 自动修复; 重型验证 (mypy/pytest/coverage) 归 CI
+
+default_language_version:
+  python: python3
+
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
+  ###########################################################################
+  # Repository checks
+  ###########################################################################
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-      - id: ruff-format
+      - id: check-ast
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-docstring-first
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+
+  ###########################################################################
+  # Ruff
+  ###########################################################################
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
       - id: ruff-check
-        args: [--fix]
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  ###########################################################################
+  # Secret Detection
+  ###########################################################################
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: |
+          (^poetry\.lock$)|
+          (^uv\.lock$)|
+          (^pdm\.lock$)|
+          (^package-lock\.json$)|
+          (^pnpm-lock\.yaml$)|
+          (^yarn\.lock$)|
+          (^tests/fixtures/.*$)|
+          (^logs/.*$)|
+          (\.min\.js$)|
+          (\.svg$)
+
+  ###########################################################################
+  # Local type-check (fast incremental, full run in CI)
+  ###########################################################################
+
   - repo: local
     hooks:
       - id: pyright

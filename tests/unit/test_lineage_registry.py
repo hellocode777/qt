@@ -177,7 +177,9 @@ class TestCodeHash:
 
 class TestRegistration:
     def test_register_dataset(self, empty_registry):
-        node_id = empty_registry.register_dataset("daily_price", "s3://bucket/data.parquet", "v1")
+        node_id = empty_registry.register_dataset(
+            "daily_price", "s3://bucket/data.parquet", "v1"
+        )
         assert node_id == "data::daily_price::v1"
         assert empty_registry.data_count == 1
         assert empty_registry.node_count == 1
@@ -218,7 +220,9 @@ class TestRegistration:
         assert node_id == "feature::my_factor::hash_deadbeef00"
 
     def test_register_feature_auto_creates_edges(self, empty_registry):
-        data_node = empty_registry.register_dataset("prices", "s3://b/prices.parquet", "v1")
+        data_node = empty_registry.register_dataset(
+            "prices", "s3://b/prices.parquet", "v1"
+        )
         feat_node = empty_registry.register_feature(
             feature_name="factor_1",
             compute_func=lambda df: df,
@@ -318,7 +322,9 @@ class TestDownstreamImpact:
 
     def test_impact_report_with_no_strategies(self, empty_registry):
         data = empty_registry.register_dataset("d", "/x", "v1")
-        feat = empty_registry.register_feature("f1", code_hash="aa", input_data_nodes=[data])
+        feat = empty_registry.register_feature(
+            "f1", code_hash="aa", input_data_nodes=[data]
+        )
         empty_registry.register_model("m1", "v1", used_feature_nodes=[feat])
         report = empty_registry.get_impact_report(data)
         assert "RECHECK" in report["recommendation"]
@@ -568,8 +574,12 @@ class TestEdgeCases:
     def test_multiple_features_per_data(self, empty_registry):
         """One data source → multiple features."""
         data = empty_registry.register_dataset("prices", "/p", "v1")
-        f1 = empty_registry.register_feature("f1", code_hash="aa", input_data_nodes=[data])
-        f2 = empty_registry.register_feature("f2", code_hash="bb", input_data_nodes=[data])
+        f1 = empty_registry.register_feature(
+            "f1", code_hash="aa", input_data_nodes=[data]
+        )
+        f2 = empty_registry.register_feature(
+            "f2", code_hash="bb", input_data_nodes=[data]
+        )
         assert empty_registry.get_features_for_data(data) == sorted([f1, f2])
 
     def test_multiple_models_per_feature(self, empty_registry):
@@ -589,7 +599,9 @@ class TestEdgeCases:
     def test_chain_with_two_features(self, empty_registry):
         """Data → Feature_A → Feature_B (derived feature) → Model → Strategy."""
         data = empty_registry.register_dataset("prices", "/p", "v1")
-        f_a = empty_registry.register_feature("f_a", code_hash="aa", input_data_nodes=[data])
+        f_a = empty_registry.register_feature(
+            "f_a", code_hash="aa", input_data_nodes=[data]
+        )
 
         # Feature B derived from Feature A (not directly from data)
         # Manually create edge since register_feature only accepts data nodes

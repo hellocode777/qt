@@ -152,7 +152,9 @@ def apply_quality_filter(
 
         # ST/PT check (optional — pipeline already does this)
         if not skip_st_check:
-            name_col = df.select(pl.col("name").tail(1)).item() if "name" in df.columns else ""
+            name_col = (
+                df.select(pl.col("name").tail(1)).item() if "name" in df.columns else ""
+            )
             if _is_st_or_delisted(name_col):
                 failed[code] = f"ST/PT/退市({name_col})"
                 continue

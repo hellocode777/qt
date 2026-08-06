@@ -194,7 +194,7 @@ Top5 = -3.27% →  选错了区域
 
 目标:
   Factor → Score → Distribution Analysis → Selection Policy → Portfolio
-                                                              
+
   Selection Policy = TOP_N | SCORE_BAND | THRESHOLD | ADAPTIVE_REGION
 ```
 

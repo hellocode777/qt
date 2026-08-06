@@ -108,7 +108,9 @@ class RuleEngine:
         # Confidence: fraction of rules that passed
         confidence = 1.0 - len(failed_names) / len(rule_results)
 
-        overall_status = ValidationStatus.FAIL if failed_names else ValidationStatus.PASS
+        overall_status = (
+            ValidationStatus.FAIL if failed_names else ValidationStatus.PASS
+        )
 
         if failed_names:
             recommendation = (
@@ -117,7 +119,9 @@ class RuleEngine:
                 + ". Fix the issues above before promoting to Paper Trading."
             )
         else:
-            recommendation = "All validation checks passed. Strategy may proceed to Paper Trading."
+            recommendation = (
+                "All validation checks passed. Strategy may proceed to Paper Trading."
+            )
 
         return ValidationResult(
             status=overall_status,

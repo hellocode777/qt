@@ -88,8 +88,8 @@ class CircuitBreaker:
     Usage::
 
         breaker = CircuitBreaker(BreakerConfig(max_critical_failures=0))
-        report = gate.validate(df)          # produces list[CheckResult]
-        result = breaker.evaluate(report)   # → BreakerResult
+        report = gate.validate(df)  # produces list[CheckResult]
+        result = breaker.evaluate(report)  # → BreakerResult
         if result.tripped:
             raise DataQualityException(result.reason)
     """
@@ -124,7 +124,9 @@ class CircuitBreaker:
             BreakerResult indicating whether pipeline should be halted.
         """
         errors = [r for r in results if r.severity == Severity.ERROR and not r.passed]
-        warnings = [r for r in results if r.severity == Severity.WARNING and not r.passed]
+        warnings = [
+            r for r in results if r.severity == Severity.WARNING and not r.passed
+        ]
 
         # --- Determine if breaker should trip ---
         trip_reasons: list[str] = []
@@ -132,7 +134,9 @@ class CircuitBreaker:
         if self.config.require_all_checks:
             all_failed = [r for r in results if not r.passed]
             if all_failed:
-                trip_reasons.append(f"require_all_checks=True: {len(all_failed)} check(s) failed")
+                trip_reasons.append(
+                    f"require_all_checks=True: {len(all_failed)} check(s) failed"
+                )
 
         if len(errors) > self.config.max_critical_failures:
             trip_reasons.append(

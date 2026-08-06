@@ -144,7 +144,7 @@
 - **状态**: `[x]` ✅ 已完成 (2026-07-22)
 - **已实现**: `WeightEngine` — 5 种加权方法（FIXED/EQUAL/IC_WEIGHTED/SHARPE_WEIGHTED/REGIME），支持 min_weight 地板 + EMA 平滑 + 6 种市场 regime 预设权重矩阵
 - **文档出处**: 6_Strategy_Engine.md §模块五 "Final Score = 0.4 × Momentum + 0.4 × Quality + 0.2 × Value" + 补充 "保留各子策略原始分，方便归因"
-- **要求**: 
+- **要求**:
   - 固定权重分配
   - IC-weighted（按近期 IC 分配权重）
   - Sharpe-weighted（按近期表现分配）
@@ -156,7 +156,7 @@
 - **状态**: `[x]` ✅ 已完成 (2026-07-22)
 - **已实现**: 集成在 `EnsembleEngine._align_universes()` — 5 种策略（fill_zero/fill_median/renormalize/intersection/union），处理 "全A股 vs 沪深300" 截面错位问题
 - **文档出处**: 6_Strategy_Engine.md 补充 §1 "Universe 对齐：策略 A 可能是针对全 A 股（5000只），策略 B 可能只针对沪深300（300只）。在融合（Ensemble）前，缺失值（NaN）是当做 0 处置，还是直接在权重计算中重新归一化？"
-- **要求**: 
+- **要求**:
   - 定义 Universe 概念
   - 合并时缺失值处理策略（fill 0 / fill median / re-normalize）
   - 仅交集 vs 全并集选项

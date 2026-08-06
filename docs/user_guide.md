@@ -843,7 +843,7 @@ sudo systemctl start qp-scheduler   # 启动（已配置开机自启）
   09:07 → monitor_check    KillSwitchPipeline 全扫描
   16:53 → pre_close_check  收盘前二次确认
   17:57 → daily_pipeline   产出 DecisionPackage
-  
+
   → system_health_log  每日自动写入
   → system_state       跨 Pipeline 状态同步
   → watchdog ping      每个 Job 执行留痕

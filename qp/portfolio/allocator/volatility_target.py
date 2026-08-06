@@ -84,7 +84,9 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
             DataFrame with [symbol, target_weight, target_capital, vol_scale].
         """
         if candidates.empty:
-            return pd.DataFrame(columns=["symbol", "target_weight", "target_capital", "vol_scale"])
+            return pd.DataFrame(
+                columns=["symbol", "target_weight", "target_capital", "vol_scale"]
+            )
 
         n = len(candidates)
         base_weight = 1.0 / n  # Equal weight as baseline
@@ -195,7 +197,9 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
             return 0.20
 
         px = px.sort(["symbol", "trade_date"])
-        px = px.with_columns((pl.col("close").log().diff().over("symbol")).alias("log_return"))
+        px = px.with_columns(
+            (pl.col("close").log().diff().over("symbol")).alias("log_return")
+        )
         px = px.drop_nulls(subset=["log_return"])
         px = px.group_by("symbol").tail(self._vol_lookback)
 

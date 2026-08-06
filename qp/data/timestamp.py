@@ -85,18 +85,18 @@ def annotate_timestamps_pl(
     # Daily bar event time = trade_date + 15:00:00 Asia/Shanghai (= market close)
     if date_col:
         df = df.with_columns(
-            (pl.col(date_col).cast(pl.Utf8) + "T15:00:00+08:00").alias("source_event_time"),
+            (pl.col(date_col).cast(pl.Utf8) + "T15:00:00+08:00").alias(
+                "source_event_time"
+            ),
         )
     else:
         df = df.with_columns(
             pl.lit("", dtype=pl.Utf8).alias("source_event_time"),
         )
 
-    df = df.with_columns(
+    return df.with_columns(
         pl.lit(ingestion_ts, dtype=pl.Utf8).alias("ingestion_received_time"),
     )
-
-    return df
 
 
 # ---------------------------------------------------------------------------

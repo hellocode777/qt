@@ -73,12 +73,28 @@ FactorHealthStage = FactorLifecycle
 # Lifecycle display config
 LIFECYCLE_META: dict[FactorLifecycle, dict[str, str]] = {
     FactorLifecycle.RESEARCH: {"icon": "🔬", "label": "研究", "badge": "badge-info"},
-    FactorLifecycle.VALIDATED: {"icon": "✅", "label": "已验证", "badge": "badge-success"},
-    FactorLifecycle.PRODUCTION: {"icon": "🚀", "label": "生产中", "badge": "badge-green"},
-    FactorLifecycle.WEAKENING: {"icon": "🟠", "label": "衰退中", "badge": "badge-warning"},
+    FactorLifecycle.VALIDATED: {
+        "icon": "✅",
+        "label": "已验证",
+        "badge": "badge-success",
+    },
+    FactorLifecycle.PRODUCTION: {
+        "icon": "🚀",
+        "label": "生产中",
+        "badge": "badge-green",
+    },
+    FactorLifecycle.WEAKENING: {
+        "icon": "🟠",
+        "label": "衰退中",
+        "badge": "badge-warning",
+    },
     FactorLifecycle.DEGRADED: {"icon": "🔴", "label": "衰减", "badge": "badge-danger"},
     FactorLifecycle.RETIRED: {"icon": "💀", "label": "已淘汰", "badge": "badge-dark"},
-    FactorLifecycle.ARCHIVED: {"icon": "📦", "label": "已归档", "badge": "badge-secondary"},
+    FactorLifecycle.ARCHIVED: {
+        "icon": "📦",
+        "label": "已归档",
+        "badge": "badge-secondary",
+    },
 }
 
 # Backward-compat aliases (module-level)
@@ -386,9 +402,7 @@ class FactorHealthMonitor:
 
         # ── Consecutive day tracking (TRAILING WINDOW only) ──
         # Use 60d rolling decay for degradation check
-        consecutive_degraded = self._count_consecutive_degraded(
-            valid, decay_60d, ic_ir
-        )
+        consecutive_degraded = self._count_consecutive_degraded(valid, decay_60d, ic_ir)
         consecutive_healthy = self._count_consecutive_healthy(valid)
 
         # ── Classify lifecycle (state machine) ──
@@ -411,13 +425,14 @@ class FactorHealthMonitor:
         if retired_reason:
             retirement_note = f" RETIRED({retired_reason.value}): {stale_days}d stale."
         elif should_retire:
-            retirement_note = f" AUTO-RETIRE: |IC| below {self._absolute_min_ic} for {stale_days}d."
+            retirement_note = (
+                f" AUTO-RETIRE: |IC| below {self._absolute_min_ic} for {stale_days}d."
+            )
 
         summary = (
             f"Factor [{factor_name}] {lifecycle.value.upper()}: "
             f"IC_30d={ic_30d:+.4f} | IC_IR={ic_ir:.2f} | "
-            f"decay={decay_rate:+.5f}/day | N={n_valid}"
-            + retirement_note
+            f"decay={decay_rate:+.5f}/day | N={n_valid}" + retirement_note
         )
 
         return FactorHealthStatus(
@@ -459,9 +474,7 @@ class FactorHealthMonitor:
         Returns:
             List of FactorHealthStatus, sorted by severity (worst first).
         """
-        results = [
-            self.check_factor(name, ics) for name, ics in factor_ics.items()
-        ]
+        results = [self.check_factor(name, ics) for name, ics in factor_ics.items()]
         # Sort: RETIRED first, then DEGRADED, then RESEARCH, then VALIDATED, then PRODUCTION
         severity = {
             FactorLifecycle.RETIRED: 0,
@@ -518,7 +531,10 @@ class FactorHealthMonitor:
             )
 
         # Pattern 2: IC near zero for extended period
-        if abs_ic < self._absolute_min_ic and stale_days >= self._retirement_consecutive:
+        if (
+            abs_ic < self._absolute_min_ic
+            and stale_days >= self._retirement_consecutive
+        ):
             reason = RetiredReason.IC_BELOW_THRESHOLD
             return (
                 FactorLifecycle.RETIRED,
@@ -528,7 +544,10 @@ class FactorHealthMonitor:
             )
 
         # Pattern 3: Terminal decay
-        if decay_rate < self._decay_slope and stale_days >= self._retirement_consecutive:
+        if (
+            decay_rate < self._decay_slope
+            and stale_days >= self._retirement_consecutive
+        ):
             reason = RetiredReason.DECAY_TERMINAL
             return (
                 FactorLifecycle.RETIRED,
@@ -608,13 +627,12 @@ class FactorHealthMonitor:
                 f"研究中: |IC|={abs_ic:.4f} 但 IR 或稳定性不足。"
                 "继续观察，积累更多数据。",
             )
-        else:
-            return (
-                FactorLifecycle.RESEARCH,
-                None,
-                f"研究中: |IC|={abs_ic:.4f}<0.02。"
-                "因子尚未展示预测能力。可能需要重新设计或等待更多数据。",
-            )
+        return (
+            FactorLifecycle.RESEARCH,
+            None,
+            f"研究中: |IC|={abs_ic:.4f}<0.02。"
+            "因子尚未展示预测能力。可能需要重新设计或等待更多数据。",
+        )
 
     # ------------------------------------------------------------------
     # Consecutive day helpers
@@ -668,7 +686,7 @@ class FactorHealthMonitor:
         """
         if len(arr) == 0:
             return 0.0
-        tail = arr[-min(window, len(arr)):]
+        tail = arr[-min(window, len(arr)) :]
         return float(np.mean(tail))
 
     @staticmethod
@@ -684,7 +702,7 @@ class FactorHealthMonitor:
         """
         if len(arr) < 10:
             return 0.0
-        tail = arr[-min(window, len(arr)):]
+        tail = arr[-min(window, len(arr)) :]
         x = np.arange(len(tail))
         slope = np.polyfit(x, tail, 1)[0]
         return float(slope)
@@ -767,7 +785,9 @@ class FactorHealthMonitor:
         current_pct = current_hist / current_hist.sum() + eps
 
         # PSI = sum((actual - expected) * ln(actual / expected))
-        psi = float(np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct)))
+        psi = float(
+            np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
+        )
         return max(0.0, psi)
 
     def check_psi_for_factor(
@@ -901,7 +921,7 @@ class FactorHealthMonitor:
         if len(daily_scores) < 2:
             return 0.0
 
-        tail = daily_scores[-min(window, len(daily_scores)):]
+        tail = daily_scores[-min(window, len(daily_scores)) :]
         turnovers = [
             FactorHealthMonitor.compute_turnover(tail[i], tail[i - 1])
             for i in range(1, len(tail))

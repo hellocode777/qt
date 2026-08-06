@@ -121,9 +121,9 @@ def compute_daily_ic_series(
     # Compute forward returns
     px = price_df.sort(["symbol", "trade_date"])
     px = px.with_columns(
-        (pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1).alias(
-            "forward_return"
-        )
+        (
+            pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1
+        ).alias("forward_return")
     )
     px = px.drop_nulls(subset=["forward_return"])
 
@@ -175,7 +175,9 @@ def evaluate_factor_ic(
     Returns:
         ICRecord with all statistics and threshold checks.
     """
-    daily = compute_daily_ic_series(score_df, price_df, forward_days, min_stocks_per_day)
+    daily = compute_daily_ic_series(
+        score_df, price_df, forward_days, min_stocks_per_day
+    )
 
     if not daily:
         return ICRecord(

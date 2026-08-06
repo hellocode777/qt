@@ -41,7 +41,9 @@ class DataPipeline(BasePipeline):
         symbols_raw = context.parameters.get("symbols")
         quick_mode = context.parameters.get("quick", False)
         if symbols_raw:
-            symbols = list(symbols_raw) if isinstance(symbols_raw, list) else symbols_raw
+            symbols = (
+                list(symbols_raw) if isinstance(symbols_raw, list) else symbols_raw
+            )
         elif quick_mode:
             from qp.data.adapter.code_list import CORE_SYMBOLS
 
@@ -204,7 +206,9 @@ class DataPipeline(BasePipeline):
                 return result
 
             tmp_path.rename(output_path)
-            result.metrics["output_size_mb"] = output_path.stat().st_size / (1024 * 1024)
+            result.metrics["output_size_mb"] = output_path.stat().st_size / (
+                1024 * 1024
+            )
 
             # ── Step 7: Registry with hash ──
             sha = hashlib.sha256()
@@ -216,7 +220,11 @@ class DataPipeline(BasePipeline):
             actual_start = start_date_str
             actual_end = end_date_str
             if "trade_date" in clean.columns:
-                dates = clean.select(pl.col("trade_date").cast(pl.Utf8)).unique().sort("trade_date")
+                dates = (
+                    clean.select(pl.col("trade_date").cast(pl.Utf8))
+                    .unique()
+                    .sort("trade_date")
+                )
                 if not dates.is_empty():
                     actual_start = str(dates.head(1).item())
                     actual_end = str(dates.tail(1).item())
@@ -230,7 +238,9 @@ class DataPipeline(BasePipeline):
                     "start_date": actual_start,
                     "end_date": actual_end,
                     "rows": clean.height,
-                    "symbols": clean["symbol"].n_unique() if "symbol" in clean.columns else 0,
+                    "symbols": clean["symbol"].n_unique()
+                    if "symbol" in clean.columns
+                    else 0,
                     "sha256": data_hash,
                     "updated_at": datetime.now(UTC).isoformat(),
                     "status": "READY",
@@ -261,7 +271,9 @@ class DataPipeline(BasePipeline):
                 "rows_before": result.metrics.get("existing_rows", 0),
                 "rows_after": clean.height,
                 "new_rows": clean.height - result.metrics.get("existing_rows", 0),
-                "symbols": clean["symbol"].n_unique() if "symbol" in clean.columns else 0,
+                "symbols": clean["symbol"].n_unique()
+                if "symbol" in clean.columns
+                else 0,
                 "date_range": {"min": actual_start, "max": actual_end},
                 "sha256": data_hash,
             }
@@ -396,7 +408,9 @@ def _validate_data_gate(
                 n_rows = df.height
                 row_drift = abs(n_rows - prev_rows) / prev_rows
                 if row_drift > 0.30:
-                    errors.append(f"Cold-start row drift {row_drift:.1%}: {prev_rows} → {n_rows}")
+                    errors.append(
+                        f"Cold-start row drift {row_drift:.1%}: {prev_rows} → {n_rows}"
+                    )
 
     return errors
 

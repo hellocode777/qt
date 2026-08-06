@@ -23,12 +23,12 @@ from qp.research.evaluation.rank_ic import (
 __all__ = [
     # Rank IC
     "ICRecord",
-    "compute_rank_ic",
-    "compute_daily_ic_series",
-    "compute_ic_decay",
-    "evaluate_factor_ic",
     # Layered test
     "LayeredTestResult",
+    "compute_daily_ic_series",
+    "compute_ic_decay",
     "compute_layered_returns",
     "compute_quantile_spread_series",
+    "compute_rank_ic",
+    "evaluate_factor_ic",
 ]

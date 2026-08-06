@@ -132,7 +132,9 @@ class LiquidityExposure:
             # Days to liquidate
             if adv > 0 and wt > 0:
                 daily_capacity = adv * self.participation_rate
-                days = wt / (daily_capacity / (adv / 252)) if daily_capacity > 0 else 999
+                days = (
+                    wt / (daily_capacity / (adv / 252)) if daily_capacity > 0 else 999
+                )
                 max_days = max(max_days, days)
 
         if total_wt > 0:
@@ -147,7 +149,10 @@ class LiquidityExposure:
             "low_liquid_violation": tier_weights["low"] > self.max_low_liquid_weight,
             "max_days_to_liquidate": round(max_days, 1),
             "by_tier": {
-                tier: {"weight": round(tier_weights[tier], 4), "count": tier_counts[tier]}
+                tier: {
+                    "weight": round(tier_weights[tier], 4),
+                    "count": tier_counts[tier],
+                }
                 for tier in ("liquid", "low", "illiquid")
             },
         }

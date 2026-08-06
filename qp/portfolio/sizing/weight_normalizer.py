@@ -138,7 +138,9 @@ class WeightNormalizer:
                 if current > 0 and abs(current - target_total) > self._tolerance:
                     df[weight_col] = df[weight_col] / current * target_total
                 converged = True
-                capped_count = int(df["_cap"].notna().sum() - (df[weight_col] < df["_cap"]).sum())
+                capped_count = int(
+                    df["_cap"].notna().sum() - (df[weight_col] < df["_cap"]).sum()
+                )
                 break
 
             # Mark capped positions
@@ -155,7 +157,11 @@ class WeightNormalizer:
             if uncapped_sum > 0:
                 # Redistribute proportionally to current weights (preserve ordering)
                 for idx in uncapped[uncapped].index:
-                    proportion = df.loc[idx, weight_col] / uncapped_sum if uncapped_sum > 0 else 0.0
+                    proportion = (
+                        df.loc[idx, weight_col] / uncapped_sum
+                        if uncapped_sum > 0
+                        else 0.0
+                    )
                     df.loc[idx, weight_col] += freed_weight * proportion
             else:
                 # All positions are capped — stop

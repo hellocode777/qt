@@ -148,5 +148,7 @@ def create_slippage_model(model_type: str = "fixed", **kwargs) -> BaseSlippageMo
         "sqrt": SqrtImpactModel,
     }
     if model_type not in models:
-        raise ValueError(f"Unknown slippage model '{model_type}'. Choose from: {list(models)}")
+        raise ValueError(
+            f"Unknown slippage model '{model_type}'. Choose from: {list(models)}"
+        )
     return models[model_type](**kwargs)

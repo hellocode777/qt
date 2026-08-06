@@ -59,7 +59,9 @@ def load_price_data(
     else:
         codes = [
             row["code"]
-            for row in conn.execute("SELECT code FROM security_info WHERE is_active = 1")
+            for row in conn.execute(
+                "SELECT code FROM security_info WHERE is_active = 1"
+            )
         ]
 
     # 2. Get stock names
@@ -79,7 +81,7 @@ def load_price_data(
         f"WHERE code IN ({placeholders}) "
         f"AND date >= ? AND date <= ? "
         f"ORDER BY code, date",
-        codes + [start_date, end_date],
+        [*codes, start_date, end_date],
     ).fetchall()
 
     # 4. Build per-stock DataFrames

@@ -186,7 +186,9 @@ class FundamentalDataProduct:
         if df is None or df.is_empty():
             return pl.DataFrame()
 
-        cols = ["report_date", "publish_date"] + [f for f in FUNDAMENTAL_FIELDS if f in df.columns]
+        cols = ["report_date", "publish_date"] + [
+            f for f in FUNDAMENTAL_FIELDS if f in df.columns
+        ]
         return df.select([c for c in cols if c in df.columns]).sort("report_date")
 
     def get_snapshot(
@@ -269,7 +271,10 @@ class FundamentalDataProduct:
             pair_idx = 0
             for td in trading_dates:
                 # Advance to the latest publish_date <= td
-                while pair_idx + 1 < len(valid_pairs) and valid_pairs[pair_idx + 1][0] <= td:
+                while (
+                    pair_idx + 1 < len(valid_pairs)
+                    and valid_pairs[pair_idx + 1][0] <= td
+                ):
                     pair_idx += 1
                 if valid_pairs[pair_idx][0] <= td:
                     aligned.append(valid_pairs[pair_idx][1])

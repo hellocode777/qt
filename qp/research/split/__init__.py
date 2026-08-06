@@ -21,10 +21,10 @@ except ImportError:
     PurgedKFoldSklearn = None  # type: ignore[assignment]
 
 __all__ = [
-    "PurgedKFold",
     "PurgedFold",
     "PurgedGroupTimeSeriesSplit",
+    "PurgedKFold",
     "PurgedKFoldSklearn",
-    "purge_train_set",
     "embargo_test_set",
+    "purge_train_set",
 ]

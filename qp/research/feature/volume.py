@@ -36,7 +36,9 @@ class VolumeRatio5D(BaseFeature):
         df = df.sort(["symbol", "trade_date"])
 
         ma5 = pl.col("volume").rolling_mean(5).over("symbol")
-        df = df.with_columns((pl.col("volume") / ma5.replace(0.0, None)).alias("feature_value"))
+        df = df.with_columns(
+            (pl.col("volume") / ma5.replace(0.0, None)).alias("feature_value")
+        )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
         df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
@@ -133,7 +135,9 @@ class VolumePriceTrend(BaseFeature):
         price_slope = pl.col("close").rolling_mean(5).diff(5).over("symbol")
         vol_slope = pl.col("volume").rolling_mean(5).diff(5).over("symbol")
 
-        df = df.with_columns((price_slope.sign() * vol_slope.sign()).alias("feature_value"))
+        df = df.with_columns(
+            (price_slope.sign() * vol_slope.sign()).alias("feature_value")
+        )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
         df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
@@ -192,12 +196,16 @@ def compute_volume_factors(df: pl.DataFrame) -> pl.DataFrame:
     cov = ((ret - ret_mean) * (pl.col("volume") - vol_mean)).rolling_mean(20)
     std_ret = ret.rolling_std(20)
     std_vol = pl.col("volume").rolling_std(20)
-    df = df.with_columns((cov / (std_ret * std_vol).replace(0.0, None)).alias("Price_Volume_Corr"))
+    df = df.with_columns(
+        (cov / (std_ret * std_vol).replace(0.0, None)).alias("Price_Volume_Corr")
+    )
 
     # Volume-price trend consistency
     price_slope = pl.col("close").rolling_mean(5).diff(5)
     vol_slope = pl.col("volume").rolling_mean(5).diff(5)
-    df = df.with_columns((price_slope.sign() * vol_slope.sign()).alias("Volume_Price_Trend"))
+    df = df.with_columns(
+        (price_slope.sign() * vol_slope.sign()).alias("Volume_Price_Trend")
+    )
 
     factor_names = [
         "Volume_Ratio_5D",
@@ -209,18 +217,26 @@ def compute_volume_factors(df: pl.DataFrame) -> pl.DataFrame:
     # Volume expansion: 20-day MA / 120-day MA (medium-term expansion)
     ma20_v = pl.col("volume").rolling_mean(20)
     ma120_v = pl.col("volume").rolling_mean(120)
-    df = df.with_columns((ma20_v / ma120_v.replace(0.0, None)).alias("Volume_Expansion_20_120"))
+    df = df.with_columns(
+        (ma20_v / ma120_v.replace(0.0, None)).alias("Volume_Expansion_20_120")
+    )
     factor_names.append("Volume_Expansion_20_120")
 
     # Amount momentum: 20-day MA amount / 120-day MA amount
-    amount = pl.col("amount") if "amount" in df.columns else (pl.col("close") * pl.col("volume"))
+    amount = (
+        pl.col("amount")
+        if "amount" in df.columns
+        else (pl.col("close") * pl.col("volume"))
+    )
     ma20_a = amount.rolling_mean(20)
     ma120_a = amount.rolling_mean(120)
-    df = df.with_columns((ma20_a / ma120_a.replace(0.0, None)).alias("Amount_Momentum_20_120"))
+    df = df.with_columns(
+        (ma20_a / ma120_a.replace(0.0, None)).alias("Amount_Momentum_20_120")
+    )
     factor_names.append("Amount_Momentum_20_120")
 
     # shift(1): prevent future information leakage — each factor uses only data ≤ T-1
     for name in factor_names:
         df = df.with_columns(pl.col(name).shift(1).alias(name))
 
-    return df.select(["trade_date"] + factor_names).drop_nulls()
+    return df.select(["trade_date", *factor_names]).drop_nulls()

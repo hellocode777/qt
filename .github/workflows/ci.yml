@@ -2,35 +2,83 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [master, main]
   pull_request:
-    branches: [main, master]
+    branches: [master, main]
+
+# 防止同一个 PR 重复提交时浪费 CI 资源，自动取消旧的运行任务
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Quality Gates
+  lint:
+    name: Ruff
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
           enable-cache: true
 
+      # Ruff 不需要安装项目依赖，使用 uvx 直接免安装极速运行
+      - name: Ruff Check
+        run: uvx ruff check .
+
+      - name: Ruff Format
+        run: uvx ruff format --check .
+
+  typecheck:
+    name: Mypy
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --dev
 
-      - name: Ruff check
-        run: uv run ruff check
-
-      - name: Pyright
+      - name: Run Pyright
         run: uv run pyright
 
-      - name: Pytest
-        run: uv run pytest -q
+      # mypy 渐进式接入: polars 动态类型噪音多(328 errors), 先跑不阻塞, 后续逐步清零
+      - name: Run Mypy (progressive)
+        continue-on-error: true
+        run: uv run mypy qp
+
+  tests:
+    name: Pytest
+    needs: lint  # 解绑 typecheck，让 Mypy 和 Pytest 在 Lint 通过后并行运行
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run Pytest
+        run: |
+          uv run pytest \
+            --cov=qp \
+            --cov-report=term-missing \
+            --cov-report=xml
 
   cli-smoke:
     name: CLI Smoke Test
@@ -39,14 +87,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
           enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --dev
 
       - name: qp version
         run: uv run qp version

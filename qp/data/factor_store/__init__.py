@@ -16,7 +16,7 @@ Usage:
 from qp.data.factor_store.store import DEFAULT_STORE_ROOT, FactorStore, TierMetadata
 
 __all__ = [
+    "DEFAULT_STORE_ROOT",
     "FactorStore",
     "TierMetadata",
-    "DEFAULT_STORE_ROOT",
 ]

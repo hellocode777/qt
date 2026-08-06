@@ -104,7 +104,9 @@ class ApprovedStrategy:
         bs_raw = data.get("backtest_summary", {})
         backtest_summary: dict[str, float] = {}
         if bs_raw:
-            backtest_summary = {str(k): float(str(v)) for k, v in cast_dict(bs_raw).items()}
+            backtest_summary = {
+                str(k): float(str(v)) for k, v in cast_dict(bs_raw).items()
+            }
 
         # Parse meta — coerce to str
         meta_raw = data.get("meta", {})

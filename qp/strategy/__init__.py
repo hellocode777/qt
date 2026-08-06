@@ -4,7 +4,12 @@ See ADR-026: Strategy Produces Decision.
 """
 
 from qp.strategy.aggregator import SignalAggregator
-from qp.strategy.ensemble import EnsembleEngine, UniversePolicy, WeightEngine, WeightMethod
+from qp.strategy.ensemble import (
+    EnsembleEngine,
+    UniversePolicy,
+    WeightEngine,
+    WeightMethod,
+)
 from qp.strategy.generator import GeneratorConfig, SignalGenerator
 from qp.strategy.loader import StrategyLoader
 from qp.strategy.market_filter import (
@@ -48,62 +53,62 @@ from qp.strategy.simple_rank import Decision, SimpleRankStrategy
 from qp.strategy.strategies import MomentumStrategy, QualityStrategy, ValueStrategy
 
 __all__ = [
+    "DEFAULT_REGIME_POSITIONS",
     # Models
     "AlphaSignal",
     "AlphaSignalBatch",
-    "StrategyResult",
-    # Ensemble
-    "EnsembleEngine",
-    "UniversePolicy",
-    "WeightEngine",
-    "WeightMethod",
-    # Runner
-    "StrategyRunner",
-    "RunnerResult",
-    # Loader
-    "StrategyLoader",
-    # Generator
-    "SignalGenerator",
-    "GeneratorConfig",
-    # Signal post-processing
-    "SignalNormalizer",
-    "NormMethod",
-    "SignalSmoother",
-    "SmoothMethod",
-    "SignalClipper",
     "ClipMethod",
-    "SignalThreshold",
     "ConfidenceScorer",
-    # Concrete strategies
-    "MomentumStrategy",
-    "ValueStrategy",
-    "QualityStrategy",
     # Simple (walking skeleton, backward-compatible)
     "Decision",
-    "SimpleRankStrategy",
-    "SignalAggregator",
-    "StrategyRegistry",
-    "StrategyMeta",
-    # Multi-factor (full engine)
-    "run_multifactor_strategy",
-    "compute_cross_sectional_scores",
-    "generate_rebalance_signals",
-    # Quality filter
-    "apply_quality_filter",
-    "get_filter_report",
-    # Market filter
-    "check_market_environment",
-    "filter_signals",
-    "apply_regime_gating",
-    "MarketStatus",
+    # Ensemble
+    "EnsembleEngine",
+    "GeneratorConfig",
     # Market regime detection
     "MarketRegimeDetector",
-    "RegimeResult",
-    "regime_to_position_pct",
-    "regime_allows_buy",
-    "DEFAULT_REGIME_POSITIONS",
+    "MarketStatus",
+    # Concrete strategies
+    "MomentumStrategy",
+    "NormMethod",
+    "PaperTradingResult",
+    "PaperTradingRun",
     # Paper trading
     "PaperTradingTracker",
-    "PaperTradingRun",
-    "PaperTradingResult",
+    "QualityStrategy",
+    "RegimeResult",
+    "RunnerResult",
+    "SignalAggregator",
+    "SignalClipper",
+    # Generator
+    "SignalGenerator",
+    # Signal post-processing
+    "SignalNormalizer",
+    "SignalSmoother",
+    "SignalThreshold",
+    "SimpleRankStrategy",
+    "SmoothMethod",
+    # Loader
+    "StrategyLoader",
+    "StrategyMeta",
+    "StrategyRegistry",
+    "StrategyResult",
+    # Runner
+    "StrategyRunner",
+    "UniversePolicy",
+    "ValueStrategy",
+    "WeightEngine",
+    "WeightMethod",
+    # Quality filter
+    "apply_quality_filter",
+    "apply_regime_gating",
+    # Market filter
+    "check_market_environment",
+    "compute_cross_sectional_scores",
+    "filter_signals",
+    "generate_rebalance_signals",
+    "get_filter_report",
+    "regime_allows_buy",
+    "regime_to_position_pct",
+    # Multi-factor (full engine)
+    "run_multifactor_strategy",
 ]

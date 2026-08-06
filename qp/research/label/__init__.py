@@ -18,7 +18,7 @@ __all__ = [
     "build_forward_returns",
     "build_industry_neutral_labels",
     "build_labels",
+    "check_label_coverage",
     "detect_label_overlap",
     "validate_label_rebalance_consistency",
-    "check_label_coverage",
 ]

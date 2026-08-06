@@ -211,7 +211,9 @@ class PositionLedger:
         )
 
         self._save(position)
-        logger.info("Position opened: {} {} {}shares @¥{}", pos_id, symbol, shares, entry_price)
+        logger.info(
+            "Position opened: {} {} {}shares @¥{}", pos_id, symbol, shares, entry_price
+        )
         return position
 
     def close(
@@ -251,7 +253,9 @@ class PositionLedger:
         pos.exit_reason = exit_reason
         pos.pnl = (exit_price - pos.entry_price) * pos.shares
         pos.pnl_pct = (
-            (exit_price - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
+            (exit_price - pos.entry_price) / pos.entry_price
+            if pos.entry_price > 0
+            else 0.0
         )
         if notes:
             pos.notes = pos.notes + "; " + notes if pos.notes else notes

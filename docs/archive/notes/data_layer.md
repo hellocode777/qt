@@ -291,14 +291,14 @@ from pandera.typing import Series
 class StockDailySchema(pa.DataFrameModel):
     symbol: Series[str] = pa.Field(nullable=False)
     trade_date: Series[pd.Timestamp] = pa.Field(nullable=False)
-    
+
     # 硬性价格逻辑校验
     open: Series[float] = pa.Field(gt=0)
     high: Series[float] = pa.Field(gt=0)
     low: Series[float] = pa.Field(gt=0)
     close: Series[float] = pa.Field(gt=0)
     volume: Series[float] = pa.Field(ge=0)
-    
+
     # 业务逻辑断言：High 必须是最高，Low 必须是最低
     @pa.dataframe_check
     def check_price_logic(cls, df: pd.DataFrame) -> Series[bool]:
@@ -359,12 +359,12 @@ V2 (审计修订)
 
 SQL
 -- 在回测 2023-11-01 时，提取 PIT 财报数据的 SQL 逻辑
-SELECT symbol, net_profit 
-FROM pit_financials 
-WHERE symbol = '600000.SH' 
+SELECT symbol, net_profit
+FROM pit_financials
+WHERE symbol = '600000.SH'
   AND period_end <= '2023-09-30'
   AND knowledge_time <= '2023-11-01 00:00:00' -- 严格限制已知时间
-ORDER BY knowledge_time DESC 
+ORDER BY knowledge_time DESC
 LIMIT 1;
 
 2. Dynamic Universe（动态可交易标的池）
@@ -403,7 +403,7 @@ SELECT symbol, pe_ratio, roe
 FROM 'financials_pit.parquet'
 WHERE announcement_date <= '2024-03-01'
 QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY symbol, report_period 
+    PARTITION BY symbol, report_period
     ORDER BY announcement_date DESC
 ) = 1
 """
@@ -514,7 +514,7 @@ df['feature_momentum_ready'] = df['feature_momentum'].shift(1)
 小时线特征在未完结（10:00 - 11:00 期间）前，只能使用到 10:00 已经闭合（Closed）的上一个完整小时 Bar 的特征，或者使用实时增量算出的 Partial Bar。
 4. Feature Store 架构与存储落地
 在个人量化系统中，Feature Store 的架构应当遵循 “重读取、轻写入、列式存储” 的原则。
-[ Raw Validated Data ] 
+[ Raw Validated Data ]
            │
            ▼
  [ Feature Calculation Engine ] (Polars / DuckDB)
@@ -554,4 +554,3 @@ Validation 拦截一切脏数据和异常突变；
 PIT & Universe 保证时间真实（不看未来）与空间真实（不买不可交易标的）；
 Feature Store 保证计算高效、批流一致且无窗口泄露。
 地基打牢后，上层的策略开发和回测才能真正做到所见即所得，回测即实盘。
-

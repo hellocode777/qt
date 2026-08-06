@@ -134,7 +134,11 @@ def compute_shap_importance(
 
         # Aggregate SHAP importance: mean(|shap|) per feature
         # Multi-class output → take first class
-        shap_arr = np.abs(shap_values[0]) if isinstance(shap_values, list) else np.abs(shap_values)
+        shap_arr = (
+            np.abs(shap_values[0])
+            if isinstance(shap_values, list)
+            else np.abs(shap_values)
+        )
 
         for i, col in enumerate(X.columns):
             if i < shap_arr.shape[1]:
@@ -252,7 +256,9 @@ def compare_importance_versions(
         change = abs(curr_rel - prev_rel)
         if change > surge_threshold and curr_val > 0:
             direction = "↑" if curr_rel > prev_rel else "↓"
-            surge_alerts.append(f"{f}: {prev_rel:.3f}→{curr_rel:.3f} ({direction}{change:.1%})")
+            surge_alerts.append(
+                f"{f}: {prev_rel:.3f}→{curr_rel:.3f} ({direction}{change:.1%})"
+            )
 
     # Determine drift severity
     overlap_count = len(overlap)

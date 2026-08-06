@@ -58,7 +58,7 @@ class PriceMomentumFactor(BaseFactor):
         # 生产级代码：严格确保计算不跨股票（groupby）、无未来泄露
         close_prices = data['close'].unstack(level='symbol')
         momentum = close_prices.pct_change(self.window)
-        
+
         # ⚠️ 强约束：所有计算出的原始特征，必须在逻辑出口统一 shift(1) 才能交由下一环
         return momentum.shift(1).stack(level='symbol', future_stack=True)
 
@@ -87,7 +87,7 @@ import pandas as pd
 import statsmodels.api as sm
 
 def neutralize_cross_section(
-    factor_series: pd.Series, 
+    factor_series: pd.Series,
     risk_matrix: pd.DataFrame
 ) -> pd.Series:
     """
@@ -121,7 +121,7 @@ def neutralize_cross_section(
 
 
  Timeline ──────────────►
- 
+
  Fold 1: [  Train Data  ] [ Purge ] [ Test Data ] [ Embargo ] [  Train Data  ]
                            ▲                    ▲
                            │                    │
@@ -155,33 +155,33 @@ class PurgedGroupTimeSeriesSplit(_BaseKFold):
         unique_dates = np.unique(groups)
         n_dates = len(unique_dates)
         embargo_offset = int(n_dates * self.embargo_pct)
-        
+
         # 按时间顺序切分 Fold
         fold_size = n_dates // self.n_splits
-        
+
         for i in range(self.n_splits):
             test_start_idx = i * fold_size
             test_end_idx = (i + 1) * fold_size if i < self.n_splits - 1 else n_dates
-            
+
             test_dates = unique_dates[test_start_idx:test_end_idx]
-            
+
             # 1. 确定 Purging 范围 (测试集起始点前退 N 天，消除重叠标签)
             train_mask = np.ones(len(groups), dtype=bool)
             test_mask = np.isin(groups, test_dates)
-            
+
             # 2. Purging: 剔除测试集区间前的重叠数据
             purged_start_date = unique_dates[max(0, test_start_idx - self.max_target_info_gap)]
             train_mask[np.isin(groups, unique_dates[
                 max(0, test_start_idx - self.max_target_info_gap) : test_start_idx
             ])] = False
-            
+
             # 3. Embargo: 测试集结束后的冷却期
             embargo_end_idx = min(n_dates, test_end_idx + embargo_offset)
             train_mask[np.isin(groups, unique_dates[test_end_idx:embargo_end_idx])] = False
-            
+
             # 4. 排除测试集本身
             train_mask[test_mask] = False
-            
+
             yield np.where(train_mask)[0], np.where(test_mask)[0]
 
 
@@ -195,7 +195,7 @@ def run_research_pipeline(raw_market_data, risk_matrix_data):
     # Step 1: Production Src (调用生产级因子计算逻辑)
     factor_engine = PriceMomentumFactor(window=20)
     raw_factor_s = factor_engine.compute(raw_market_data)
-    
+
     # Step 2: Neutralization (全时段截面中性化)
     clean_factor_list = []
     for date, df_sub in raw_factor_s.groupby(level='trade_date'):
@@ -203,19 +203,19 @@ def run_research_pipeline(raw_market_data, risk_matrix_data):
         if risk_sub is not None:
             neu_s = neutralize_cross_section(df_sub, risk_sub)
             clean_factor_list.append(neu_s)
-            
+
     clean_factor_s = pd.concat(clean_factor_list)
-    
+
     # Step 3: Purged CV (严谨的评估与模型参数选择)
     cv = PurgedGroupTimeSeriesSplit(n_splits=5, max_target_info_gap=5, embargo_pct=0.01)
     dates_array = clean_factor_s.index.get_level_values('trade_date').values
-    
+
     ic_scores = []
     for train_idx, test_idx in cv.split(clean_factor_s, groups=dates_array):
         # 在被 Purged/Embargo 清理过的训练集和测试集上进行验证
         test_data = clean_factor_s.iloc[test_idx]
         # 计算该 Fold 的 Rank IC...
-        
+
     return clean_factor_s
 
 
@@ -282,7 +282,7 @@ if not ray.is_initialized():
 # 2. 统一因子接口规范
 class BaseFactor(ABC):
     name: str
-    
+
     @abstractmethod
     def compute(self, df: pd.DataFrame) -> pd.Series:
         """
@@ -329,18 +329,18 @@ def _compute_factor_task(factor_instance: BaseFactor, data_ref: ray.ObjectRef) -
 # --- Remote Task 2: 单日截面中性化 Worker ---
 @ray.remote
 def _neutralize_date_task(
-    date: pd.Timestamp, 
-    factor_slice: pd.Series, 
+    date: pd.Timestamp,
+    factor_slice: pd.Series,
     risk_slice: pd.DataFrame
 ) -> Tuple[pd.Timestamp, pd.Series]:
     """单日 OLS 中性化算子（剔除行业与市值偏好）"""
     aligned = pd.concat([factor_slice, risk_slice], axis=1).dropna()
     if aligned.empty:
         return date, pd.Series(dtype=float)
-    
+
     y = aligned.iloc[:, 0]
     X = aligned.iloc[:, 1:]
-    
+
     # 最小二乘法提取残差（纯净 Alpha）
     model = sm.OLS(y, X).fit()
     residuals = model.resid
@@ -360,24 +360,24 @@ class PurgedGroupTimeSeriesSplit(_BaseKFold):
         n_dates = len(unique_dates)
         embargo_offset = int(n_dates * self.embargo_pct)
         fold_size = n_dates // self.n_splits
-        
+
         for i in range(self.n_splits):
             test_start_idx = i * fold_size
             test_end_idx = (i + 1) * fold_size if i < self.n_splits - 1 else n_dates
             test_dates = unique_dates[test_start_idx:test_end_idx]
-            
+
             train_mask = np.ones(len(groups), dtype=bool)
             test_mask = np.isin(groups, test_dates)
-            
+
             # Purging: 清除测试集前的重叠标签
             train_mask[np.isin(groups, unique_dates[
                 max(0, test_start_idx - self.max_target_info_gap) : test_start_idx
             ])] = False
-            
+
             # Embargo: 测试集后的冷却期
             embargo_end_idx = min(n_dates, test_end_idx + embargo_offset)
             train_mask[np.isin(groups, unique_dates[test_end_idx:embargo_end_idx])] = False
-            
+
             train_mask[test_mask] = False
             yield np.where(train_mask)[0], np.where(test_mask)[0]
 
@@ -392,18 +392,18 @@ def _eval_fold_task(
     """计算单个 Fold 测试集上的 Rank IC 与 评估指标"""
     sub_factor = factor_ref.iloc[test_idx]
     sub_returns = returns_ref.iloc[test_idx]
-    
+
     merged = pd.concat([sub_factor, sub_returns], axis=1).dropna()
     merged.columns = ['factor', 'return']
-    
+
     # 每日斯皮尔曼秩相关系数 (Rank IC)
     daily_ic = merged.groupby(level='trade_date').apply(
         lambda g: g['factor'].corr(g['return'], method='spearman')
     )
-    
+
     mean_ic = daily_ic.mean()
     ic_std = daily_ic.std()
-    
+
     return {
         "fold": fold_id,
         "mean_ic": mean_ic,
@@ -421,25 +421,25 @@ class RayResearchEngine:
         print(f"🌟 [Ray Engine Initialized] Connected with {self.num_cpus} CPUs.")
 
     def run_pipeline(
-        self, 
-        market_data: pd.DataFrame, 
-        risk_matrix: pd.DataFrame, 
+        self,
+        market_data: pd.DataFrame,
+        risk_matrix: pd.DataFrame,
         forward_returns: pd.Series,
         factor_list: List[BaseFactor]
     ) -> pd.DataFrame:
-        
+
         # ---------------------------------------------------------
         # Step 1: 共享内存广播 (Zero-Copy Data Distribution)
         # ---------------------------------------------------------
         print("📥 [Step 1] Putting Heavy Datasets into Plasma Shared Memory...")
         market_ref = ray.put(market_data)
-        
+
         # ---------------------------------------------------------
         # Step 2: 并行批量计算因子库
         # ---------------------------------------------------------
         print(f"⚡ [Step 2] Computing {len(factor_list)} Factors in Parallel...")
         factor_futures = [
-            _compute_factor_task.remote(factor, market_ref) 
+            _compute_factor_task.remote(factor, market_ref)
             for factor in factor_list
         ]
         computed_factors = ray.get(factor_futures)
@@ -450,30 +450,30 @@ class RayResearchEngine:
         # ---------------------------------------------------------
         print("🧼 [Step 3] Parallel Cross-Sectional Neutralization...")
         neutralized_factors = {}
-        
+
         for col in raw_factor_df.columns:
             factor_s = raw_factor_df[col]
             unique_dates = factor_s.index.get_level_values('trade_date').unique()
-            
+
             # 按交易日并发提交中性化任务
             neu_futures = [
                 _neutralize_date_task.remote(
-                    date, 
-                    factor_s.xs(date, level='trade_date'), 
+                    date,
+                    factor_s.xs(date, level='trade_date'),
                     risk_matrix.xs(date, level='trade_date')
                 )
                 for date in unique_dates if date in risk_matrix.index
             ]
             neu_results = ray.get(neu_futures)
-            
+
             # 重组为完整 Series
             processed_s = pd.concat(
-                [res[1] for res in neu_results], 
-                keys=[res[0] for res in neu_results], 
+                [res[1] for res in neu_results],
+                keys=[res[0] for res in neu_results],
                 names=['trade_date', 'symbol']
             )
             neutralized_factors[col] = processed_s
-            
+
         clean_factor_df = pd.DataFrame(neutralized_factors)
 
         # ---------------------------------------------------------
@@ -483,19 +483,19 @@ class RayResearchEngine:
         returns_ref = ray.put(forward_returns)
         groups = clean_factor_df.index.get_level_values('trade_date').values
         cv = PurgedGroupTimeSeriesSplit(n_splits=5, max_target_info_gap=5, embargo_pct=0.01)
-        
+
         eval_summary = []
         for col in clean_factor_df.columns:
             factor_ref = ray.put(clean_factor_df[col])
-            
+
             fold_futures = [
                 _eval_fold_task.remote(fold_id, test_idx, factor_ref, returns_ref)
                 for fold_id, (_, test_idx) in enumerate(cv.split(clean_factor_df, groups=groups))
             ]
-            
+
             fold_results = ray.get(fold_futures)
             df_fold = pd.DataFrame(fold_results)
-            
+
             # 汇总该因子的 CV 表现
             eval_summary.append({
                 "factor_name": col,
@@ -515,6 +515,3 @@ class RayResearchEngine:
 在 Step 3 截面中性化中，如果历史交易日有 3000+ 天，一次性提交 3000 个极小的 Remote Task 会引发 Ray Task 调度的 Overhead。可以按 月（Month）或周（Week） 将交易日分组打包提交给 Worker。
 集成 Ray Dashboard：
 启动时使用 ray.init(dashboard_host="0.0.0.0", dashboard_port=8265)，浏览器访问 http://localhost:8265 即可实时监控 CPU 核心占用率、Plasma 内存消耗以及各个 Task 的耗时 Flame Graph（火焰图）。
-
-
-

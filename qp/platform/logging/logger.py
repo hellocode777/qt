@@ -71,7 +71,9 @@ class QPLogger:
         self._logger.add(
             str(log_path) + "/{time:YYYY-MM-DD}/qp.log",
             level=level,
-            format=("{time:ISO8601} | {level: <8} | {extra[module]: <20} | {message} | {extra}"),
+            format=(
+                "{time:ISO8601} | {level: <8} | {extra[module]: <20} | {message} | {extra}"
+            ),
             rotation=rotation,
             retention=retention,
             encoding="utf-8",

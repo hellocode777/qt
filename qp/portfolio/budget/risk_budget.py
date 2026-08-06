@@ -134,7 +134,9 @@ class VolatilityBudget(RiskBudget):
             return RiskBudgetResult()
 
         # 1. Inverse volatility weights
-        inv_vols = np.array([1.0 / max(volatilities.get(s, 0.30), 0.01) for s in symbols])
+        inv_vols = np.array(
+            [1.0 / max(volatilities.get(s, 0.30), 0.01) for s in symbols]
+        )
         raw_weights = inv_vols / inv_vols.sum()
 
         # 2. Scale to target vol
@@ -171,7 +173,9 @@ class VolatilityBudget(RiskBudget):
         if self.use_clusters and clusters:
             for s, lbl in clusters.items():
                 if s in weight_caps:
-                    cluster_budgets[lbl] = cluster_budgets.get(lbl, 0.0) + weight_caps[s]
+                    cluster_budgets[lbl] = (
+                        cluster_budgets.get(lbl, 0.0) + weight_caps[s]
+                    )
 
         return RiskBudgetResult(
             weight_caps=weight_caps,

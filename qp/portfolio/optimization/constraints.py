@@ -154,13 +154,18 @@ class OptimizationConstraintsBuilder:
         for _, row in candidates.iterrows():
             symbol = str(row["symbol"])
             passed = row.get("pass_status", True)
-            limit = float(cast("float", row.get("max_weight_limit", self._default_max_single)))
+            limit = float(
+                cast("float", row.get("max_weight_limit", self._default_max_single))
+            )
 
             if not passed:
                 cs.blacklist.add(symbol)
                 cs.per_position_bounds[symbol] = (0.0, 0.0)
             else:
-                cs.per_position_bounds[symbol] = (0.0, min(limit, self._default_max_single))
+                cs.per_position_bounds[symbol] = (
+                    0.0,
+                    min(limit, self._default_max_single),
+                )
 
         # ── Sector bounds from risk report ──
         if risk_report:
@@ -168,7 +173,9 @@ class OptimizationConstraintsBuilder:
             if isinstance(sector_exposure, dict):
                 for sector, wt in sector_exposure.items():
                     # Cap each sector at min(current, default_max)
-                    cs.sector_bounds[str(sector)] = min(float(wt), self._default_max_sector)
+                    cs.sector_bounds[str(sector)] = min(
+                        float(wt), self._default_max_sector
+                    )
 
         # ── Cluster bounds from candidates ──
         if "risk_cluster" in candidates.columns:
@@ -184,7 +191,7 @@ class OptimizationConstraintsBuilder:
 
         # ── Liquidity floor ──
         if "liquidity_score" in candidates.columns:
-            scores = candidates.loc[candidates["pass_status"] == True, "liquidity_score"]  # noqa: E712
+            scores = candidates.loc[candidates["pass_status"], "liquidity_score"]
             if not scores.empty:
                 cs.min_liquidity_score = float(scores.quantile(0.10))
 
@@ -240,7 +247,10 @@ class OptimizationConstraintsBuilder:
             )
 
         candidates_df = pd.DataFrame()
-        if hasattr(engine_result, "candidates") and engine_result.candidates is not None:
+        if (
+            hasattr(engine_result, "candidates")
+            and engine_result.candidates is not None
+        ):
             candidates_df = engine_result.candidates
 
         return self.build(candidates_df, risk_report, max_turnover=max_turnover)

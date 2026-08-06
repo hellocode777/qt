@@ -75,28 +75,37 @@ class FactorHealthService:
         for name, record in latest.items():
             stage = record.get("stage", "research")
             meta = _lifecycle_meta(stage)
-            factors.append({
-                "name": name,
-                "stage": stage,
-                "stage_label": meta["label"],
-                "badge_class": meta["badge"],
-                "icon": meta["icon"],
-                "ic_30d": record.get("ic_30d", 0.0),
-                "ic_90d": record.get("ic_90d", 0.0),
-                "ic_ir": record.get("ic_ir", 0.0),
-                "ic_decay_rate": record.get("ic_decay_rate", 0.0),
-                "ic_ratio": record.get("ic_ratio", 1.0),
-                "n_days": record.get("n_days", 0),
-                "retired_reason": record.get("retired_reason", ""),
-                "direction_flipped": record.get("direction_flipped", False),
-                "consecutive_degraded_days": record.get("consecutive_degraded_days", 0),
-                "recommended_action": record.get("recommended_action", ""),
-            })
+            factors.append(
+                {
+                    "name": name,
+                    "stage": stage,
+                    "stage_label": meta["label"],
+                    "badge_class": meta["badge"],
+                    "icon": meta["icon"],
+                    "ic_30d": record.get("ic_30d", 0.0),
+                    "ic_90d": record.get("ic_90d", 0.0),
+                    "ic_ir": record.get("ic_ir", 0.0),
+                    "ic_decay_rate": record.get("ic_decay_rate", 0.0),
+                    "ic_ratio": record.get("ic_ratio", 1.0),
+                    "n_days": record.get("n_days", 0),
+                    "retired_reason": record.get("retired_reason", ""),
+                    "direction_flipped": record.get("direction_flipped", False),
+                    "consecutive_degraded_days": record.get(
+                        "consecutive_degraded_days", 0
+                    ),
+                    "recommended_action": record.get("recommended_action", ""),
+                }
+            )
 
         # ── Compute contribution % (weight × |IC| based) ──
         weight_map = {
-            "research": 0.25, "validated": 0.50, "production": 1.00,
-            "weakening": 0.75, "degraded": 0.50, "retired": 0.0, "archived": 0.0,
+            "research": 0.25,
+            "validated": 0.50,
+            "production": 1.00,
+            "weakening": 0.75,
+            "degraded": 0.50,
+            "retired": 0.0,
+            "archived": 0.0,
         }
         total_contrib = sum(
             abs(f["ic_30d"]) * weight_map.get(f.get("stage", "research"), 0.25)
@@ -104,17 +113,37 @@ class FactorHealthService:
         )
         for f in factors:
             raw = abs(f["ic_30d"]) * weight_map.get(f.get("stage", "research"), 0.25)
-            f["contribution_pct"] = round(raw / total_contrib * 100, 1) if total_contrib > 0 else 0.0
+            f["contribution_pct"] = (
+                round(raw / total_contrib * 100, 1) if total_contrib > 0 else 0.0
+            )
 
         # Sort by lifecycle severity then by |IC_30d|
-        stage_order = {"retired": 0, "archived": 1, "degraded": 2, "weakening": 3, "research": 4, "validated": 5, "production": 6}
-        factors.sort(key=lambda f: (
-            stage_order.get(f["stage"], 99),
-            -abs(f["ic_30d"]),
-        ))
+        stage_order = {
+            "retired": 0,
+            "archived": 1,
+            "degraded": 2,
+            "weakening": 3,
+            "research": 4,
+            "validated": 5,
+            "production": 6,
+        }
+        factors.sort(
+            key=lambda f: (
+                stage_order.get(f["stage"], 99),
+                -abs(f["ic_30d"]),
+            )
+        )
 
         # ── Aggregate counts by lifecycle ──
-        counts = {"research": 0, "validated": 0, "production": 0, "weakening": 0, "degraded": 0, "retired": 0, "archived": 0}
+        counts = {
+            "research": 0,
+            "validated": 0,
+            "production": 0,
+            "weakening": 0,
+            "degraded": 0,
+            "retired": 0,
+            "archived": 0,
+        }
         for f in factors:
             s = f["stage"]
             if s in counts:
@@ -143,10 +172,18 @@ class FactorHealthService:
             "n_healthy": counts.get("production", 0),
             "n_warning": counts.get("validated", 0),
             "n_stale": counts.get("retired", 0),
-            "healthy_factors": [f["name"] for f in factors if f["stage"] == "production"],
-            "warning_factors": [f["name"] for f in factors if f["stage"] == "validated"],
-            "degraded_factors": [f["name"] for f in factors if f["stage"] == "degraded"],
-            "stale_factors": [f["name"] for f in factors if f["stage"] in ("retired", "archived")],
+            "healthy_factors": [
+                f["name"] for f in factors if f["stage"] == "production"
+            ],
+            "warning_factors": [
+                f["name"] for f in factors if f["stage"] == "validated"
+            ],
+            "degraded_factors": [
+                f["name"] for f in factors if f["stage"] == "degraded"
+            ],
+            "stale_factors": [
+                f["name"] for f in factors if f["stage"] in ("retired", "archived")
+            ],
             # New
             "correlation": correlation,
             "families": families,
@@ -203,13 +240,19 @@ class FactorHealthService:
         "Trend_MA120": "趋势 Trend",
     }
 
-    FAMILY_ORDER = ["低波动 LowVol", "动量 Momentum", "反转 Reversal",
-                    "成交量 Volume", "价值 Value", "质量 Quality",
-                    "成长 Growth", "资金流 MoneyFlow", "趋势 Trend"]
+    FAMILY_ORDER = [
+        "低波动 LowVol",
+        "动量 Momentum",
+        "反转 Reversal",
+        "成交量 Volume",
+        "价值 Value",
+        "质量 Quality",
+        "成长 Growth",
+        "资金流 MoneyFlow",
+        "趋势 Trend",
+    ]
 
-    def _compute_families(
-        self, factors: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def _compute_families(self, factors: list[dict[str, Any]]) -> dict[str, Any]:
         """Group factors into Alpha Families and compute aggregate IC.
 
         Returns:
@@ -262,14 +305,24 @@ class FactorHealthService:
             total_abs_ic = sum(abs(m["ic_30d"]) for m in members)
             if total_abs_ic > 0:
                 fam["ic_30d_weighted"] = round(
-                    sum(abs(m["ic_30d"]) * abs(m["ic_30d"]) for m in members) / total_abs_ic, 4
+                    sum(abs(m["ic_30d"]) * abs(m["ic_30d"]) for m in members)
+                    / total_abs_ic,
+                    4,
                 )
 
             # Dominant stage (worst among non-retired members)
             active = [m for m in members if m["stage"] not in ("retired", "archived")]
             if active:
-                stage_order = {"production": 5, "weakening": 4, "validated": 3, "degraded": 2, "research": 1}
-                fam["dominant_stage"] = min(active, key=lambda m: stage_order.get(m["stage"], 0))["stage"]
+                stage_order = {
+                    "production": 5,
+                    "weakening": 4,
+                    "validated": 3,
+                    "degraded": 2,
+                    "research": 1,
+                }
+                fam["dominant_stage"] = min(
+                    active, key=lambda m: stage_order.get(m["stage"], 0)
+                )["stage"]
 
             # Suggest composite if >2 members with high mutual correlation
             fam["suggest_composite"] = len(members) >= 3
@@ -288,7 +341,9 @@ class FactorHealthService:
             "families": result_list,
             "n_families": len(result_list),
             "n_active_families": sum(
-                1 for f in result_list if f["dominant_stage"] in ("production", "weakening")
+                1
+                for f in result_list
+                if f["dominant_stage"] in ("production", "weakening")
             ),
             "has_data": len(result_list) > 0,
         }
@@ -297,9 +352,7 @@ class FactorHealthService:
     # Factor correlation matrix
     # ------------------------------------------------------------------
 
-    def _compute_correlation(
-        self, latest: dict[str, dict[str, Any]]
-    ) -> dict[str, Any]:
+    def _compute_correlation(self, latest: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Compute pairwise factor correlation from IC series.
 
         Uses IC_30d as proxy for factor return correlation.
@@ -328,7 +381,7 @@ class FactorHealthService:
                 # In production, this should use daily IC series Spearman
                 ici = abs(ic_values.get(fi, 0.0))
                 icj = abs(ic_values.get(fj, 0.0))
-                if ici == 0 and icj == 0 or ici + icj == 0:
+                if (ici == 0 and icj == 0) or ici + icj == 0:
                     sim = 0.0
                 else:
                     # Cosine similarity of IC magnitudes
@@ -358,7 +411,8 @@ class FactorHealthService:
     # ------------------------------------------------------------------
 
     def _generate_recommendations(
-        self, factors: list[dict[str, Any]],
+        self,
+        factors: list[dict[str, Any]],
         correlation: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Auto-generate factor management recommendations (v3 — family-aware)."""
@@ -382,16 +436,18 @@ class FactorHealthService:
         for family_name, members in family_clusters.items():
             if len(members) >= 2:
                 member_list = sorted(members)
-                recs.append({
-                    "factor": ", ".join(member_list[:4]),
-                    "type": "composite",
-                    "severity": "warning",
-                    "message": (
-                        f"🔗 {family_name}: {len(members)}个因子高度相关({', '.join(member_list[:3])}…)。"
-                        f"建议合并为 {family_name.split()[0]} Composite，只保留一个族代表。"
-                    ),
-                    "action": "合成 Composite",
-                })
+                recs.append(
+                    {
+                        "factor": ", ".join(member_list[:4]),
+                        "type": "composite",
+                        "severity": "warning",
+                        "message": (
+                            f"🔗 {family_name}: {len(members)}个因子高度相关({', '.join(member_list[:3])}…)。"
+                            f"建议合并为 {family_name.split()[0]} Composite，只保留一个族代表。"
+                        ),
+                        "action": "合成 Composite",
+                    }
+                )
 
         for f in factors:
             name = f["name"]
@@ -403,62 +459,74 @@ class FactorHealthService:
             # RETIRED factors: confirm retirement reason
             if stage == "retired":
                 reason = f.get("retired_reason", "")
-                recs.append({
-                    "factor": name,
-                    "type": "retire_confirm",
-                    "severity": "info",
-                    "message": f"✅ {name} 已淘汰: {reason}。建议归档并从策略中移除。",
-                    "action": "从策略移除",
-                })
+                recs.append(
+                    {
+                        "factor": name,
+                        "type": "retire_confirm",
+                        "severity": "info",
+                        "message": f"✅ {name} 已淘汰: {reason}。建议归档并从策略中移除。",
+                        "action": "从策略移除",
+                    }
+                )
 
             # DEGRADED factors: recommend weight reduction
             elif stage == "degraded":
-                recs.append({
-                    "factor": name,
-                    "type": "reduce_weight",
-                    "severity": "warning",
-                    "message": f"🔴 {name} 衰减中 (IC_30d={ic_30d:+.4f}, IR={ic_ir:.2f})。建议权重降至 50%。",
-                    "action": "降权至 50%",
-                })
+                recs.append(
+                    {
+                        "factor": name,
+                        "type": "reduce_weight",
+                        "severity": "warning",
+                        "message": f"🔴 {name} 衰减中 (IC_30d={ic_30d:+.4f}, IR={ic_ir:.2f})。建议权重降至 50%。",
+                        "action": "降权至 50%",
+                    }
+                )
 
             # RESEARCH factors with good IC: promote to validated
             elif stage == "research" and abs(ic_30d) >= 0.02 and ic_ir >= 0.3:
-                recs.append({
-                    "factor": name,
-                    "type": "promote",
-                    "severity": "success",
-                    "message": f"🔬 {name} 有预测力 (IC={ic_30d:+.4f}, IR={ic_ir:.2f})。建议进入验证阶段。",
-                    "action": "提升至 VALIDATED",
-                })
+                recs.append(
+                    {
+                        "factor": name,
+                        "type": "promote",
+                        "severity": "success",
+                        "message": f"🔬 {name} 有预测力 (IC={ic_30d:+.4f}, IR={ic_ir:.2f})。建议进入验证阶段。",
+                        "action": "提升至 VALIDATED",
+                    }
+                )
 
             # RESEARCH factors with weak IC
             elif stage == "research" and abs(ic_30d) < 0.02:
                 if ic_ir < 0.1:
-                    recs.append({
-                        "factor": name,
-                        "type": "retire_soon",
-                        "severity": "danger",
-                        "message": f"⚠️ {name} IC 微弱且不稳定 (IR={ic_ir:.2f})。建议考虑淘汰或重新设计。",
-                        "action": "评估淘汰",
-                    })
+                    recs.append(
+                        {
+                            "factor": name,
+                            "type": "retire_soon",
+                            "severity": "danger",
+                            "message": f"⚠️ {name} IC 微弱且不稳定 (IR={ic_ir:.2f})。建议考虑淘汰或重新设计。",
+                            "action": "评估淘汰",
+                        }
+                    )
                 else:
-                    recs.append({
-                        "factor": name,
-                        "type": "monitor",
-                        "severity": "info",
-                        "message": f"📊 {name} IC 偏弱 ({ic_30d:+.4f})，但 IR 尚可 ({ic_ir:.2f})。继续观察。",
-                        "action": "继续观察",
-                    })
+                    recs.append(
+                        {
+                            "factor": name,
+                            "type": "monitor",
+                            "severity": "info",
+                            "message": f"📊 {name} IC 偏弱 ({ic_30d:+.4f})，但 IR 尚可 ({ic_ir:.2f})。继续观察。",
+                            "action": "继续观察",
+                        }
+                    )
 
             # Strong decay rate warning
             if decay < -0.001 and stage not in ("retired", "archived"):
-                recs.append({
-                    "factor": name,
-                    "type": "decay_warning",
-                    "severity": "danger",
-                    "message": f"📉 {name} IC 衰减加速 ({decay:+.5f}/天)。Alpha 可能在消失。",
-                    "action": "紧急复核",
-                })
+                recs.append(
+                    {
+                        "factor": name,
+                        "type": "decay_warning",
+                        "severity": "danger",
+                        "message": f"📉 {name} IC 衰减加速 ({decay:+.5f}/天)。Alpha 可能在消失。",
+                        "action": "紧急复核",
+                    }
+                )
 
         # Sort by severity
         sev_order = {"danger": 0, "warning": 1, "info": 2, "success": 3}
@@ -504,17 +572,19 @@ class FactorHealthService:
         history = []
         for row in df.sort("date", descending=True).head(30).to_dicts():
             stage = row.get("stage", "healthy")
-            history.append({
-                "date": row.get("date", ""),
-                "stage": stage,
-                "stage_label": _stage_label(stage),
-                "badge_class": _stage_badge(stage),
-                "ic_30d": row.get("ic_30d", 0.0),
-                "ic_90d": row.get("ic_90d", 0.0),
-                "ic_ir": row.get("ic_ir", 0.0),
-                "ic_decay_rate": row.get("ic_decay_rate", 0.0),
-                "n_days": row.get("n_days", 0),
-            })
+            history.append(
+                {
+                    "date": row.get("date", ""),
+                    "stage": stage,
+                    "stage_label": _stage_label(stage),
+                    "badge_class": _stage_badge(stage),
+                    "ic_30d": row.get("ic_30d", 0.0),
+                    "ic_90d": row.get("ic_90d", 0.0),
+                    "ic_ir": row.get("ic_ir", 0.0),
+                    "ic_decay_rate": row.get("ic_decay_rate", 0.0),
+                    "n_days": row.get("n_days", 0),
+                }
+            )
 
         stage = latest_row.get("stage", "healthy")
 
@@ -598,29 +668,38 @@ class FactorHealthService:
         # Family data
         if overview.get("families", {}).get("has_data"):
             for fam in overview["families"]["families"]:
-                baseline["families"].append({
-                    "name": fam["name"],
-                    "ic_weighted": fam.get("ic_30d_weighted", 0.0),
-                    "dominant_stage": fam["dominant_stage"],
-                    "members": fam["member_names"],
-                    "suggest_composite": fam["suggest_composite"],
-                })
+                baseline["families"].append(
+                    {
+                        "name": fam["name"],
+                        "ic_weighted": fam.get("ic_30d_weighted", 0.0),
+                        "dominant_stage": fam["dominant_stage"],
+                        "members": fam["member_names"],
+                        "suggest_composite": fam["suggest_composite"],
+                    }
+                )
 
         # Composite suggestions from recommendations
         for rec in overview.get("recommendations", []):
             if rec.get("type") == "composite":
-                baseline["composite_suggestions"].append({
-                    "family": rec.get("factor", ""),
-                    "action": rec.get("action", ""),
-                    "message": rec.get("message", ""),
-                })
+                baseline["composite_suggestions"].append(
+                    {
+                        "family": rec.get("factor", ""),
+                        "action": rec.get("action", ""),
+                        "message": rec.get("message", ""),
+                    }
+                )
 
         # Persist
         path = Path("data/factor_library") / f"baseline_{version}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2))
-        logger.info("Factor Baseline {} saved → {} ({} factors, {} families)",
-                     version, path, baseline["n_factors"], baseline["n_families"])
+        logger.info(
+            "Factor Baseline {} saved → {} ({} factors, {} families)",
+            version,
+            path,
+            baseline["n_factors"],
+            baseline["n_families"],
+        )
 
         return baseline
 

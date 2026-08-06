@@ -33,10 +33,7 @@ async def experiments_list(
     experiments: list[dict[str, Any]] = svc.list_recent(limit=50)
 
     if strategy:
-        experiments = [
-            e for e in experiments
-            if e.get("strategy_name", "") == strategy
-        ]
+        experiments = [e for e in experiments if e.get("strategy_name", "") == strategy]
 
     experiments.sort(key=lambda e: str(e.get("experiment_id", "")), reverse=True)
 

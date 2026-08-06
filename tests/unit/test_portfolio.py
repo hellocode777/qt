@@ -636,7 +636,9 @@ class TestRiskClusterer:
         labels = {"A": "Cluster_1", "B": "Cluster_1", "C": "Cluster_2"}
         weights = {"A": 0.20, "B": 0.20, "C": 0.60}
 
-        violations = clusterer.check_cluster_concentration(weights, labels, max_per_cluster=0.30)
+        violations = clusterer.check_cluster_concentration(
+            weights, labels, max_per_cluster=0.30
+        )
         assert len(violations) >= 1
         assert any("Cluster_1" in v for v in violations)
 
@@ -647,7 +649,9 @@ class TestRiskClusterer:
         labels = {"A": "Cluster_1", "B": "Cluster_2", "C": "Cluster_3"}
         weights = {"A": 0.20, "B": 0.20, "C": 0.20}
 
-        violations = clusterer.check_cluster_concentration(weights, labels, max_per_cluster=0.30)
+        violations = clusterer.check_cluster_concentration(
+            weights, labels, max_per_cluster=0.30
+        )
         assert len(violations) == 0
 
     def test_invalid_linkage_raises(self) -> None:
@@ -765,14 +769,22 @@ class TestPortfolioRiskEngine:
         engine = PortfolioRiskEngine()
         signals = pl.DataFrame(
             {
-                "symbol": ["*ST_BAD.SH", "600519.SH", "300750.SZ", "000002.SZ", "600276.SH"],
+                "symbol": [
+                    "*ST_BAD.SH",
+                    "600519.SH",
+                    "300750.SZ",
+                    "000002.SZ",
+                    "600276.SH",
+                ],
                 "alpha_score": [0.99, 0.95, 0.91, 0.72, 0.85],
             }
         )
-        prices = self._make_price_data(["600519.SH", "300750.SZ", "000002.SZ", "600276.SH"])
+        prices = self._make_price_data(
+            ["600519.SH", "300750.SZ", "000002.SZ", "600276.SH"]
+        )
         candidates = engine.evaluate(signals, prices)
 
-        st_candidate = [c for c in candidates if "ST_BAD" in c.symbol][0]
+        st_candidate = next(c for c in candidates if "ST_BAD" in c.symbol)
         assert st_candidate.pass_status is False
         assert "ST" in st_candidate.rejection_reason
 
@@ -798,7 +810,10 @@ class TestPortfolioRiskEngine:
         assert "sectors_represented" in summary
 
     def test_config_custom_limits(self) -> None:
-        from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine, RiskEngineConfig
+        from qp.portfolio.portfolio_risk_engine import (
+            PortfolioRiskEngine,
+            RiskEngineConfig,
+        )
 
         config = RiskEngineConfig(
             limits={
@@ -1523,7 +1538,9 @@ class TestPositionSizer:
                 "alpha_score": [0.9, 0.8, 0.7, 0.6],
             }
         )
-        result = sizer.size_batch(candidates, total_capital=400_000, group_by="risk_cluster")
+        result = sizer.size_batch(
+            candidates, total_capital=400_000, group_by="risk_cluster"
+        )
         assert len(result) == 4
         assert "_group" in result.columns
 
@@ -1563,7 +1580,9 @@ class TestWeightNormalizer:
         )
         result = normalizer.normalize(positions, target_total=0.95)
         # A must be capped at 0.15
-        wt_a = result.positions.loc[result.positions["symbol"] == "A", "target_weight"].iloc[0]
+        wt_a = result.positions.loc[
+            result.positions["symbol"] == "A", "target_weight"
+        ].iloc[0]
         assert wt_a <= 0.15 + 0.001
         assert abs(result.weight_sum - 0.95) < 0.01
         assert result.capped_count >= 1
@@ -1582,8 +1601,12 @@ class TestWeightNormalizer:
             }
         )
         result = normalizer.normalize(positions, target_total=0.95)
-        wt_s0 = result.positions.loc[result.positions["symbol"] == "S0", "target_weight"].iloc[0]
-        wt_s1 = result.positions.loc[result.positions["symbol"] == "S1", "target_weight"].iloc[0]
+        wt_s0 = result.positions.loc[
+            result.positions["symbol"] == "S0", "target_weight"
+        ].iloc[0]
+        wt_s1 = result.positions.loc[
+            result.positions["symbol"] == "S1", "target_weight"
+        ].iloc[0]
         assert wt_s0 <= 0.10 + 0.01
         assert wt_s1 <= 0.15 + 0.01
         assert abs(result.weight_sum - 0.95) < 0.02
@@ -1678,7 +1701,10 @@ class TestCapitalAllocator:
     def test_run_equal_weight(self) -> None:
         import pandas as pd
 
-        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.capital_allocator import (
+            CapitalAllocator,
+            CapitalAllocatorConfig,
+        )
 
         config = CapitalAllocatorConfig(method="equal_weight", cash_buffer=0.0)
         allocator = CapitalAllocator(config)
@@ -1702,7 +1728,10 @@ class TestCapitalAllocator:
     def test_run_with_rejected(self) -> None:
         import pandas as pd
 
-        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.capital_allocator import (
+            CapitalAllocator,
+            CapitalAllocatorConfig,
+        )
 
         config = CapitalAllocatorConfig(method="equal_weight", cash_buffer=0.0)
         allocator = CapitalAllocator(config)
@@ -1731,14 +1760,19 @@ class TestCapitalAllocator:
                 "max_weight_limit": [0.50, 0.50],
             }
         )
-        result = CapitalAllocator.quick(candidates, method="equal_weight", total_capital=500_000)
+        result = CapitalAllocator.quick(
+            candidates, method="equal_weight", total_capital=500_000
+        )
         assert result.n_positions_out == 2
         assert result.target_portfolio is not None
 
     def test_with_volatility_target(self) -> None:
         import pandas as pd
 
-        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.capital_allocator import (
+            CapitalAllocator,
+            CapitalAllocatorConfig,
+        )
 
         config = CapitalAllocatorConfig(
             method="volatility_target", cash_buffer=0.05, target_vol=0.12
@@ -1808,7 +1842,9 @@ class TestCashManager:
         from qp.portfolio.cash.cash_manager import CashManager
 
         cm = CashManager()
-        decision = cm.evaluate(n_candidates=10, current_market_vol=0.15, vol_percentile=0.45)
+        decision = cm.evaluate(
+            n_candidates=10, current_market_vol=0.15, vol_percentile=0.45
+        )
         assert decision.cash_mode == "normal"
         assert decision.final_cash_ratio == 0.05  # policy min
         assert not decision.is_defensive
@@ -1819,7 +1855,9 @@ class TestCashManager:
 
         cm = CashManager()
         # Only 2 candidates → scarcity trigger
-        decision = cm.evaluate(n_candidates=2, current_market_vol=0.15, vol_percentile=0.45)
+        decision = cm.evaluate(
+            n_candidates=2, current_market_vol=0.15, vol_percentile=0.45
+        )
         assert decision.cash_mode == "scarcity"
         assert decision.final_cash_ratio >= 0.30  # defensive_cash kicked in
         assert decision.is_defensive
@@ -1830,7 +1868,9 @@ class TestCashManager:
 
         cm = CashManager()
         # Vol at 95th percentile → vol defense
-        decision = cm.evaluate(n_candidates=10, current_market_vol=0.40, vol_percentile=0.95)
+        decision = cm.evaluate(
+            n_candidates=10, current_market_vol=0.40, vol_percentile=0.95
+        )
         assert decision.cash_mode == "defensive"
         assert decision.final_cash_ratio >= 0.30
         assert decision.is_defensive
@@ -1841,7 +1881,9 @@ class TestCashManager:
 
         cm = CashManager()
         # Both scarcity and high vol
-        decision = cm.evaluate(n_candidates=3, current_market_vol=0.50, vol_percentile=0.97)
+        decision = cm.evaluate(
+            n_candidates=3, current_market_vol=0.50, vol_percentile=0.97
+        )
         assert decision.cash_mode == "scarcity"  # scarcity takes precedence
         assert decision.final_cash_ratio >= 0.30
         assert len(decision.triggers) >= 2
@@ -1891,7 +1933,10 @@ class TestCapitalAllocatorWithCash:
     def test_dynamic_cash_defense(self) -> None:
         import pandas as pd
 
-        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.capital_allocator import (
+            CapitalAllocator,
+            CapitalAllocatorConfig,
+        )
         from qp.portfolio.cash.reserve_policy import ReservePolicy
 
         config = CapitalAllocatorConfig(
@@ -1919,7 +1964,10 @@ class TestCapitalAllocatorWithCash:
     def test_vol_defense_integrated(self) -> None:
         import pandas as pd
 
-        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.capital_allocator import (
+            CapitalAllocator,
+            CapitalAllocatorConfig,
+        )
         from qp.portfolio.cash.reserve_policy import ReservePolicy
 
         config = CapitalAllocatorConfig(
@@ -1949,7 +1997,10 @@ class TestCapitalAllocatorWithCash:
     def test_cash_mode_in_metadata(self) -> None:
         import pandas as pd
 
-        from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+        from qp.portfolio.capital_allocator import (
+            CapitalAllocator,
+            CapitalAllocatorConfig,
+        )
         from qp.portfolio.cash.reserve_policy import ReservePolicy
 
         config = CapitalAllocatorConfig(

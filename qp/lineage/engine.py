@@ -24,9 +24,11 @@ Usage::
         version="v20260701",
     )
 
+
     # Register a feature (with code hash)
     def momentum_20d_logic(df):
-        return df['close'].pct_change(20)
+        return df["close"].pct_change(20)
+
 
     feat_node = registry.register_feature(
         feature_name="momentum_20d",
@@ -129,9 +131,7 @@ class LineageRegistry:
             source_code = inspect.getsource(func)
         except (OSError, TypeError):
             # Fallback: use function name + module as identifier
-            source_code = (
-                f"{getattr(func, '__module__', '')}.{getattr(func, '__name__', str(func))}"
-            )
+            source_code = f"{getattr(func, '__module__', '')}.{getattr(func, '__name__', str(func))}"
         return hashlib.md5(source_code.encode("utf-8")).hexdigest()[:10]
 
     # ==================================================================
@@ -233,7 +233,9 @@ class LineageRegistry:
                     parent_node,
                 )
 
-        logger.info("⚡ [Feature Registered] {} (pit_safe={})", node_id, point_in_time_safe)
+        logger.info(
+            "⚡ [Feature Registered] {} (pit_safe={})", node_id, point_in_time_safe
+        )
         return node_id
 
     # ==================================================================
@@ -300,7 +302,9 @@ class LineageRegistry:
                 )
 
         logger.info(
-            "🧠 [Model Registered] {} (features={})", node_id, len(used_feature_nodes or [])
+            "🧠 [Model Registered] {} (features={})",
+            node_id,
+            len(used_feature_nodes or []),
         )
         return node_id
 
@@ -509,7 +513,10 @@ class LineageRegistry:
             return False
 
         ancestor_types = {parse_node_id(a).get("node_type", "") for a in ancestors}
-        return all(t in ancestor_types for t in (NodeType.MODEL, NodeType.FEATURE, NodeType.DATA))
+        return all(
+            t in ancestor_types
+            for t in (NodeType.MODEL, NodeType.FEATURE, NodeType.DATA)
+        )
 
     def validate_lineage(self, strategy_node_id: str) -> dict[str, Any]:
         """Validate lineage completeness with detailed report.
@@ -584,17 +591,25 @@ class LineageRegistry:
 
     def get_features_for_data(self, data_node_id: str) -> list[str]:
         """Get all Feature nodes derived from a Data node."""
-        return sorted(self._graph.successors(data_node_id) if data_node_id in self._graph else [])
+        return sorted(
+            self._graph.successors(data_node_id) if data_node_id in self._graph else []
+        )
 
     def get_models_for_feature(self, feature_node_id: str) -> list[str]:
         """Get all Model nodes trained on a Feature node."""
         return sorted(
-            self._graph.successors(feature_node_id) if feature_node_id in self._graph else []
+            self._graph.successors(feature_node_id)
+            if feature_node_id in self._graph
+            else []
         )
 
     def get_strategies_for_model(self, model_node_id: str) -> list[str]:
         """Get all Strategy nodes deployed from a Model node."""
-        return sorted(self._graph.successors(model_node_id) if model_node_id in self._graph else [])
+        return sorted(
+            self._graph.successors(model_node_id)
+            if model_node_id in self._graph
+            else []
+        )
 
     # ==================================================================
     # Properties
@@ -648,9 +663,13 @@ class LineageRegistry:
             "exported_at": datetime.now(UTC).isoformat(),
             "graph": graph_data,
             "data_registry": {k: v.to_dict() for k, v in self._data_registry.items()},
-            "feature_registry": {k: v.to_dict() for k, v in self._feature_registry.items()},
+            "feature_registry": {
+                k: v.to_dict() for k, v in self._feature_registry.items()
+            },
             "model_registry": {k: v.to_dict() for k, v in self._model_registry.items()},
-            "strategy_registry": {k: v.to_dict() for k, v in self._strategy_registry.items()},
+            "strategy_registry": {
+                k: v.to_dict() for k, v in self._strategy_registry.items()
+            },
         }
 
     @classmethod

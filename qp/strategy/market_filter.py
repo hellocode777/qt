@@ -101,7 +101,9 @@ def check_market_environment(
         confirmed = pl.Series("confirmed", [False] * df.height)
         for i in range(df.height):
             if i >= confirmation_days - 1:
-                confirmed[i] = above_ma.slice(i - confirmation_days + 1, confirmation_days).all()
+                confirmed[i] = above_ma.slice(
+                    i - confirmation_days + 1, confirmation_days
+                ).all()
         above_ma = confirmed
 
     is_above = bool(above_ma.tail(1).item() or False)
@@ -207,15 +209,13 @@ def filter_signals(
     date_ok_map = dict(zip(dates_arr, above_arr, strict=True))
 
     # Filter: remove buy signals on bad market days
-    result = signals_df.filter(
+    return signals_df.filter(
         pl.when(pl.col("signal") == "buy")
         .then(
             pl.col("date").replace_strict(date_ok_map, default=False)  # type: ignore[arg-type]
         )
         .otherwise(True)
     )
-
-    return result
 
 
 # ------------------------------------------------------------------
@@ -252,11 +252,9 @@ def apply_regime_gating(
         regime = regime_map.get(str(row_date), "sideways_up")
         return regime not in blocked_regimes
 
-    result = signals_df.filter(
+    return signals_df.filter(
         pl.struct(["date", "signal"]).map_elements(
             lambda s: _allow(s["date"], s["signal"]),
             return_dtype=pl.Boolean,
         )
     )
-
-    return result

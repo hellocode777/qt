@@ -134,7 +134,9 @@ class TestAlphaSignal:
         s = AlphaSignal(date="2026-07-15", symbol="A", alpha_score=0.5, confidence=1.5)
         assert s.confidence == 1.0
 
-        s2 = AlphaSignal(date="2026-07-15", symbol="B", alpha_score=0.5, confidence=-0.3)
+        s2 = AlphaSignal(
+            date="2026-07-15", symbol="B", alpha_score=0.5, confidence=-0.3
+        )
         assert s2.confidence == 0.0
 
     def test_to_dict(self) -> None:
@@ -613,7 +615,9 @@ class TestSignalNormalizer:
                 "raw_score": [1.0, 2.0, 3.0],
             }
         )
-        result = norm.normalize_polars(df, score_col="raw_score", output_col="alpha_score")
+        result = norm.normalize_polars(
+            df, score_col="raw_score", output_col="alpha_score"
+        )
         assert "alpha_score" in result.columns
         assert result["alpha_score"].max() <= 1.0
 
@@ -636,7 +640,9 @@ class TestSignalNormalizer:
                 "raw_score": [1.0, 2.0, 5.0, 3.0],
             }
         )
-        result = norm.normalize_by_date(df, score_col="raw_score", output_col="alpha_score")
+        result = norm.normalize_by_date(
+            df, score_col="raw_score", output_col="alpha_score"
+        )
         assert "alpha_score" in result.columns
         assert result.height == 4
 
@@ -779,7 +785,9 @@ class TestSignalClipper:
     def test_winsorize(self) -> None:
         from qp.strategy.signal.threshold import ClipMethod, SignalClipper
 
-        clipper = SignalClipper(method=ClipMethod.WINSORIZE, lower_pct=0.1, upper_pct=0.9)
+        clipper = SignalClipper(
+            method=ClipMethod.WINSORIZE, lower_pct=0.1, upper_pct=0.9
+        )
         scores = np.array([0.0, 0.2, 0.5, 0.8, 1.0], dtype=np.float64)
         result = clipper.clip(scores)
         # Middle values unchanged, extremes clipped
@@ -829,7 +837,9 @@ class TestSignalClipper:
                 "alpha_score": [0.5, 1.5],
             }
         )
-        result = clipper.clip_polars(df, score_col="alpha_score", output_col="clipped_score")
+        result = clipper.clip_polars(
+            df, score_col="alpha_score", output_col="clipped_score"
+        )
         assert "clipped_score" in result.columns
         # 1.5 should be clipped
         assert result["clipped_score"].max() <= 1.0
@@ -936,7 +946,7 @@ class TestSignalThreshold:
 
         gate = SignalThreshold(min_score=0.3, max_per_day=3)
         scores = np.array([0.5, 0.2, 0.8, 0.6, 0.1])
-        filtered_scores, indices = gate.filter_array(scores)
+        filtered_scores, _indices = gate.filter_array(scores)
         assert len(filtered_scores) <= 3
         # All filtered scores >= min_score
         assert np.all(filtered_scores >= 0.3)
@@ -1328,7 +1338,9 @@ class TestMomentumStrategy:
     def test_generate_signals_raw_momentum(self) -> None:
         from qp.strategy.strategies.momentum import MomentumStrategy
 
-        price_data = _make_price_data(["600001.SH", "600002.SH", "600003.SH"], n_days=120)
+        price_data = _make_price_data(
+            ["600001.SH", "600002.SH", "600003.SH"], n_days=120
+        )
         s = MomentumStrategy(
             config={
                 "lookback": 60,
@@ -1732,7 +1744,9 @@ class TestQualityStrategy:
         from qp.strategy.strategies.quality import QualityStrategy
 
         cutoffs = {"ROE": ("min", 0.0), "debt_ratio": ("max", 85.0)}
-        assert QualityStrategy._passes_cutoffs({"ROE": 0.15, "debt_ratio": 30.0}, cutoffs)
+        assert QualityStrategy._passes_cutoffs(
+            {"ROE": 0.15, "debt_ratio": 30.0}, cutoffs
+        )
         assert not QualityStrategy._passes_cutoffs({"ROE": -0.05}, cutoffs)
         assert not QualityStrategy._passes_cutoffs({"debt_ratio": 90.0}, cutoffs)
 
@@ -1746,7 +1760,9 @@ class TestQualityStrategy:
                 "gross_margin": [0.45],
             }
         )
-        vals = QualityStrategy._get_latest_metrics(df, ["ROE", "gross_margin"], "2026-07-20")
+        vals = QualityStrategy._get_latest_metrics(
+            df, ["ROE", "gross_margin"], "2026-07-20"
+        )
         assert vals is not None
         assert vals["ROE"] == 0.18
 
@@ -2011,7 +2027,9 @@ class TestStrategyRunner:
         from qp.strategy.runner.strategy_runner import StrategyRunner
 
         # Daily always runs
-        assert StrategyRunner._should_run_today(date(2026, 7, 15), RebalanceSchedule.DAILY)
+        assert StrategyRunner._should_run_today(
+            date(2026, 7, 15), RebalanceSchedule.DAILY
+        )
 
     def test_should_run_weekly(self) -> None:
         from qp.shared.types import RebalanceSchedule
@@ -2033,7 +2051,9 @@ class TestStrategyRunner:
         end_of_month = date(2026, 7, 30)
         assert StrategyRunner._should_run_today(end_of_month, RebalanceSchedule.MONTHLY)
         # Early in month — should be False
-        assert not StrategyRunner._should_run_today(date(2026, 7, 15), RebalanceSchedule.MONTHLY)
+        assert not StrategyRunner._should_run_today(
+            date(2026, 7, 15), RebalanceSchedule.MONTHLY
+        )
 
     def test_should_run_biweekly(self) -> None:
         from qp.shared.types import RebalanceSchedule
@@ -2049,7 +2069,9 @@ class TestStrategyRunner:
         from qp.shared.types import RebalanceSchedule
         from qp.strategy.runner.strategy_runner import StrategyRunner
 
-        result = StrategyRunner._next_rebalance_date(date(2026, 7, 15), RebalanceSchedule.DAILY)
+        result = StrategyRunner._next_rebalance_date(
+            date(2026, 7, 15), RebalanceSchedule.DAILY
+        )
         assert result == date(2026, 7, 15)
 
     def test_next_rebalance_weekly(self) -> None:
@@ -2067,7 +2089,9 @@ class TestStrategyRunner:
         from qp.shared.types import RebalanceSchedule
         from qp.strategy.runner.strategy_runner import StrategyRunner
 
-        result = StrategyRunner._next_rebalance_date(date(2026, 7, 15), RebalanceSchedule.MONTHLY)
+        result = StrategyRunner._next_rebalance_date(
+            date(2026, 7, 15), RebalanceSchedule.MONTHLY
+        )
         # Should be the last day of July
         assert result.month == 7
         next_day = result + __import__("datetime").timedelta(days=1)
@@ -2561,7 +2585,11 @@ class TestStrategyRegistry:
         restored = StrategyMeta.from_dict(d)
 
         assert restored.weights == {"Amplitude_5D": -0.252, "Momentum_3M": -0.202}
-        assert restored.parameters == {"top_n": 10, "rebalance": 20, "industry_neutral": True}
+        assert restored.parameters == {
+            "top_n": 10,
+            "rebalance": 20,
+            "industry_neutral": True,
+        }
         assert restored.backtest_ic == pytest.approx(0.08)
         assert restored.backtest_sharpe == pytest.approx(1.03)
         assert restored.backtest_max_dd == pytest.approx(8.9)
@@ -2588,7 +2616,7 @@ class TestStrategyRegistry:
         d = {"weights": {"F1": 1, "F2": "0.5"}}
         meta = StrategyMeta.from_dict(d)
         assert meta.weights == {"F1": 1.0, "F2": 0.5}
-        assert isinstance(list(meta.weights.values())[0], float)
+        assert isinstance(next(iter(meta.weights.values())), float)
 
     def test_register_with_frozen_meta(self) -> None:
         """Registry persists frozen meta fields via _save/_load."""
@@ -2920,7 +2948,10 @@ class TestRegistryApprovedWorkflow:
 
         registry.deactivate("simple_rank_v1.0")
 
-        assert registry.get_lifecycle("simple_rank_v1.0") == StrategyLifecycle.BACKTEST_PASSED
+        assert (
+            registry.get_lifecycle("simple_rank_v1.0")
+            == StrategyLifecycle.BACKTEST_PASSED
+        )
         active = registry.load_active()
         assert len(active) == 0
         # Snapshot still exists for audit

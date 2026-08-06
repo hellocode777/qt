@@ -27,20 +27,20 @@ from qp.lineage.types import (
 )
 
 __all__ = [
+    # Metadata
+    "DataNodeMeta",
+    "EdgeRelation",
+    "FeatureNodeMeta",
     # Engine
     "LineageRegistry",
+    "ModelNodeMeta",
     # Enums
     "NodeType",
-    "EdgeRelation",
+    "StrategyNodeMeta",
     # Node ID helpers
     "make_data_node_id",
     "make_feature_node_id",
     "make_model_node_id",
     "make_strategy_node_id",
     "parse_node_id",
-    # Metadata
-    "DataNodeMeta",
-    "FeatureNodeMeta",
-    "ModelNodeMeta",
-    "StrategyNodeMeta",
 ]

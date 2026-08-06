@@ -11,7 +11,8 @@ Usage::
 
     tracker = SchemaTracker()
     v1 = SchemaVersion(
-        dataset_name="daily_price", version="2026-07-01",
+        dataset_name="daily_price",
+        version="2026-07-01",
         columns={"trade_date": "date", "symbol": "str", "close": "float64"},
         primary_key=["trade_date", "symbol"],
     )
@@ -83,7 +84,9 @@ class SchemaVersion:
         common = set(self.columns.keys()) & set(other.columns.keys())
         for col in sorted(common):
             if self.columns[col] != other.columns[col]:
-                changes.append(f"列 '{col}' 类型变更: {other.columns[col]} → {self.columns[col]}")
+                changes.append(
+                    f"列 '{col}' 类型变更: {other.columns[col]} → {self.columns[col]}"
+                )
 
         # Primary key changes
         if self.primary_key != other.primary_key:
@@ -121,11 +124,14 @@ class SchemaTracker:
     Usage::
 
         tracker = SchemaTracker()
-        tracker.record(SchemaVersion(
-            dataset_name="daily_price", version="2026-07-01",
-            columns={"trade_date": "date", "symbol": "str", "close": "float64"},
-            primary_key=["trade_date", "symbol"],
-        ))
+        tracker.record(
+            SchemaVersion(
+                dataset_name="daily_price",
+                version="2026-07-01",
+                columns={"trade_date": "date", "symbol": "str", "close": "float64"},
+                primary_key=["trade_date", "symbol"],
+            )
+        )
         latest = tracker.get_latest("daily_price")
         history = tracker.get_history("daily_price")
     """
@@ -180,7 +186,9 @@ class SchemaTracker:
         """Return all recorded schema versions for a dataset, oldest first."""
         return list(self._schemas.get(dataset_name, []))
 
-    def diff_versions(self, dataset_name: str, version_a: str, version_b: str) -> list[str]:
+    def diff_versions(
+        self, dataset_name: str, version_a: str, version_b: str
+    ) -> list[str]:
         """Diff two specific schema versions of the same dataset.
 
         Returns:
@@ -204,7 +212,8 @@ class SchemaTracker:
         data: dict[str, Any] = {
             "updated_at": datetime.now(UTC).isoformat(),
             "datasets": {
-                name: [sv.to_dict() for sv in versions] for name, versions in self._schemas.items()
+                name: [sv.to_dict() for sv in versions]
+                for name, versions in self._schemas.items()
             },
         }
         self._store_path.write_text(

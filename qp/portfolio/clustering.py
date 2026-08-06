@@ -153,7 +153,11 @@ class RiskClusterer:
                 corr = CorrelationAnalyzer(lookback=self.lookback)
                 matrix = corr.get_correlation_matrix(prices, syms)
                 if not matrix.is_empty():
-                    vals = [matrix[c].drop_nulls().mean() for c in syms if c in matrix.columns]
+                    vals = [
+                        matrix[c].drop_nulls().mean()
+                        for c in syms
+                        if c in matrix.columns
+                    ]
                     if vals:
                         cluster_info["intra_corr"] = round(
                             float(np.mean(cast("list[float]", vals))), 3
@@ -190,7 +194,9 @@ class RiskClusterer:
         violations: list[str] = []
         for lbl, wt in sorted(cluster_wt.items(), key=lambda x: -x[1]):
             if wt > max_per_cluster:
-                violations.append(f"Cluster {lbl}: weight {wt:.1%} > {max_per_cluster:.0%}")
+                violations.append(
+                    f"Cluster {lbl}: weight {wt:.1%} > {max_per_cluster:.0%}"
+                )
         return violations
 
     # ------------------------------------------------------------------

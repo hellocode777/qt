@@ -55,7 +55,8 @@ def cmd_monitor_check() -> int:
     print()
     print("── 特征漂移 / Drift ──")
     print(
-        f"  PSI:               {report.psi_value:.3f}" + (" ⚠" if report.psi_value >= 0.25 else "")
+        f"  PSI:               {report.psi_value:.3f}"
+        + (" ⚠" if report.psi_value >= 0.25 else "")
     )
 
     print()
@@ -66,7 +67,9 @@ def cmd_monitor_check() -> int:
     print("── 策略健康 / Strategy Health ──")
     if report.strategy_health:
         print(f"  分数:              {report.strategy_health.health_score:.0f}/100")
-        print(f"  等级:              {report.strategy_health.health_level.value.upper()}")
+        print(
+            f"  等级:              {report.strategy_health.health_level.value.upper()}"
+        )
 
     print()
     print("── 建议操作 / Action ──")
@@ -152,11 +155,17 @@ def cmd_monitor_alert_test() -> int:
     print()
 
     print("  发送 INFO 级别...")
-    manager.info("测试信息 / Test Info", "监控系统正常运行。All systems operational.", "alert_test")
+    manager.info(
+        "测试信息 / Test Info",
+        "监控系统正常运行。All systems operational.",
+        "alert_test",
+    )
 
     print("  发送 WARNING 级别...")
     manager.warning(
-        "测试警告 / Test Warning", "这是一条警告测试。This is a test warning.", "alert_test"
+        "测试警告 / Test Warning",
+        "这是一条警告测试。This is a test warning.",
+        "alert_test",
     )
 
     print("  发送 CRITICAL 级别...")

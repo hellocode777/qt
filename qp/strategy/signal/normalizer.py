@@ -89,9 +89,7 @@ class SignalNormalizer:
         result = np.clip(result, self.clip_range[0], self.clip_range[1])
 
         # Restore NaN
-        result = np.where(nan_mask, 0.0, result)
-
-        return result
+        return np.where(nan_mask, 0.0, result)
 
     # ------------------------------------------------------------------
     # Convenience: with symbols

@@ -61,7 +61,9 @@ class LineageSnapshot:
 class RegimeContext:
     """Market state snapshot at decision time."""
 
-    regime: str = "unknown"  # bull / bear / neutral / crisis / sideways_up / sideways_down
+    regime: str = (
+        "unknown"  # bull / bear / neutral / crisis / sideways_up / sideways_down
+    )
     confidence: float = 0.0
     suggested_exposure: float = 1.0
     trend_strength: float = 0.0
@@ -77,7 +79,9 @@ class RiskAuditEntry:
     """One risk decision with full reasoning — for audit trail."""
 
     symbol: str = ""
-    violation_type: str = ""  # "industry_concentration" | "max_position" | "correlation"
+    violation_type: str = (
+        ""  # "industry_concentration" | "max_position" | "correlation"
+    )
     detail: str = ""
     threshold: str = ""
     actual: str = ""
@@ -188,7 +192,10 @@ class HumanReview:
             self.reviewed = True
             if actor:
                 self.reviewer = actor
-        elif to_status in (DecisionStatus.PARTIALLY_EXECUTED, DecisionStatus.MONITORING):
+        elif to_status in (
+            DecisionStatus.PARTIALLY_EXECUTED,
+            DecisionStatus.MONITORING,
+        ):
             self.executed = True
             self.execution_time = record.timestamp
 
@@ -413,7 +420,8 @@ class DecisionPackage:
             entries=risk_entries,
             dropped_symbols=risk_data.get("dropped_symbols", []),
             sector_exposure={
-                str(k): float(v) for k, v in risk_data.get("sector_exposure", {}).items()
+                str(k): float(v)
+                for k, v in risk_data.get("sector_exposure", {}).items()
             },
             passed=risk_data.get("passed", True),
         )
@@ -436,7 +444,9 @@ class DecisionPackage:
                     {
                         "from_status": "pending",
                         "to_status": hr_status,
-                        "timestamp": hr_data.get("execution_time", hr_data.get("generated_at", "")),
+                        "timestamp": hr_data.get(
+                            "execution_time", hr_data.get("generated_at", "")
+                        ),
                         "actor": hr_data.get("reviewer", ""),
                         "notes": "Migrated from legacy format",
                     }
@@ -786,9 +796,11 @@ class DecisionPackage:
                         "unknown": "❓",
                     }.get(trend, "?")
                     rec = report.get("recommendation", "?")
-                    rec_icon = {"healthy": "✅", "needs_retrain": "⚠️", "not_approved": "❌"}.get(
-                        rec, "?"
-                    )
+                    rec_icon = {
+                        "healthy": "✅",
+                        "needs_retrain": "⚠️",
+                        "not_approved": "❌",
+                    }.get(rec, "?")
                 else:
                     trend_icon = "—"
                     rec_icon = "—"
@@ -805,7 +817,9 @@ class DecisionPackage:
                 if rules:
                     failed = [r for r in rules if r.get("status") == "fail"]
                     if failed:
-                        lines.append(f"**{sid}** — {len(failed)}/{len(rules)} rules failed:")
+                        lines.append(
+                            f"**{sid}** — {len(failed)}/{len(rules)} rules failed:"
+                        )
                         for r in failed:
                             threshold_str = (
                                 f" (threshold: {r.get('threshold')})"
@@ -817,7 +831,9 @@ class DecisionPackage:
                                 if r.get("actual_value") is not None
                                 else ""
                             )
-                            detail_str = f" — {r.get('detail')}" if r.get("detail") else ""
+                            detail_str = (
+                                f" — {r.get('detail')}" if r.get("detail") else ""
+                            )
                             lines.append(
                                 f"  - ❌ {r.get('rule_name', '?')}: "
                                 f"score={r.get('score', 0)}{threshold_str}{actual_str}{detail_str}"
@@ -857,8 +873,12 @@ class DecisionPackage:
             lines.append(f"- **Dropped**: {', '.join(self.risk_audit.dropped_symbols)}")
         if self.risk_audit.entries:
             lines.append("")
-            lines.append("| Symbol | Violation | Detail | Threshold | Actual | Action |")
-            lines.append("|--------|-----------|--------|-----------|--------|--------|")
+            lines.append(
+                "| Symbol | Violation | Detail | Threshold | Actual | Action |"
+            )
+            lines.append(
+                "|--------|-----------|--------|-----------|--------|--------|"
+            )
             for e in self.risk_audit.entries:
                 lines.append(
                     f"| {e.symbol} | {e.violation_type} | {e.detail} | "
@@ -867,7 +887,9 @@ class DecisionPackage:
         if self.risk_audit.sector_exposure:
             lines.append("")
             lines.append("**Sector Exposure**:")
-            for sector, wt in sorted(self.risk_audit.sector_exposure.items(), key=lambda x: -x[1]):
+            for sector, wt in sorted(
+                self.risk_audit.sector_exposure.items(), key=lambda x: -x[1]
+            ):
                 lines.append(f"- {sector}: {wt:.1%}")
         lines.append("")
 

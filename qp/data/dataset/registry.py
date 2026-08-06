@@ -90,7 +90,9 @@ class DatasetRegistry:
             if require_exists:
                 full_path = _resolve_file_path(entry, self._base_dir)
                 if not full_path.exists():
-                    raise KeyError(f"Dataset file not found: {full_path} (registry entry: {key})")
+                    raise KeyError(
+                        f"Dataset file not found: {full_path} (registry entry: {key})"
+                    )
             return entry
 
         # Find latest version (with optional file existence check)

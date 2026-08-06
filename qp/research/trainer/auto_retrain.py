@@ -139,7 +139,9 @@ class MonthlyRetrainPipeline(BasePipeline):
             if logger:
                 logger.info("Step 2/7: Computing features and labels...")
             feature_df = self._compute_features(price_df, feature_names)
-            labels = self._build_labels(price_df, forward_days=DEFAULT_FORWARD_RETURN_DAYS)
+            labels = self._build_labels(
+                price_df, forward_days=DEFAULT_FORWARD_RETURN_DAYS
+            )
 
             # Step 3: Split train/test
             if logger:
@@ -208,7 +210,9 @@ class MonthlyRetrainPipeline(BasePipeline):
             drift_report = self._check_feature_importance_drift(
                 strategy_id, result.feature_importance, feature_names
             )
-            result.feature_importance_warning = bool(drift_report.get("has_drift", False))
+            result.feature_importance_warning = bool(
+                drift_report.get("has_drift", False)
+            )
 
             # Block promotion if severe feature importance drift detected
             if drift_report.get("drift_severity") == "severe" and not dry_run:
@@ -233,13 +237,15 @@ class MonthlyRetrainPipeline(BasePipeline):
                     model_id = self._register_model(strategy_id, feature_names, result)
                     result.model_registered = True
                     result.model_id = model_id
-                    result.recommendation = (
-                        f"PASS: Model {model_id} registered and promoted to BACKTEST_PASSED."
-                    )
+                    result.recommendation = f"PASS: Model {model_id} registered and promoted to BACKTEST_PASSED."
                 except Exception as e:
-                    result.recommendation = f"Validation passed but registration failed: {e}"
+                    result.recommendation = (
+                        f"Validation passed but registration failed: {e}"
+                    )
             elif dry_run:
-                status_text = "PASS (dry run)" if result.validation_passed else "FAIL (dry run)"
+                status_text = (
+                    "PASS (dry run)" if result.validation_passed else "FAIL (dry run)"
+                )
                 result.recommendation = f"{status_text}: model not registered."
             else:
                 result.recommendation = (
@@ -358,7 +364,10 @@ class MonthlyRetrainPipeline(BasePipeline):
         df = price_df.sort(["symbol", "trade_date"])
         return (
             df.with_columns(
-                ((pl.col("close").shift(-forward_days) - pl.col("close")) / pl.col("close"))
+                (
+                    (pl.col("close").shift(-forward_days) - pl.col("close"))
+                    / pl.col("close")
+                )
                 .over("symbol")
                 .alias("label")
             )
@@ -417,7 +426,9 @@ class MonthlyRetrainPipeline(BasePipeline):
             train_dates_mask = pl.col("trade_date").is_in(
                 [str(d) for d in dates[fold.train_indices]]
             )
-            test_dates_mask = pl.col("trade_date").is_in([str(d) for d in dates[fold.test_indices]])
+            test_dates_mask = pl.col("trade_date").is_in(
+                [str(d) for d in dates[fold.test_indices]]
+            )
 
             train_df = merged.filter(train_dates_mask).to_pandas()  # type: ignore[assignment]
             test_df = merged.filter(test_dates_mask).to_pandas()  # type: ignore[assignment]
@@ -493,7 +504,12 @@ class MonthlyRetrainPipeline(BasePipeline):
         )  # type: ignore[assignment]
 
         if len(train_merged) < 100 or len(test_merged) < 10:
-            return {"oos_ic": 0.0, "oos_sharpe": 0.0, "oos_max_dd": 0.0, "feature_importance": {}}
+            return {
+                "oos_ic": 0.0,
+                "oos_sharpe": 0.0,
+                "oos_max_dd": 0.0,
+                "feature_importance": {},
+            }
 
         X_train = train_merged[feature_names]
         y_train = train_merged["label"]
@@ -508,7 +524,12 @@ class MonthlyRetrainPipeline(BasePipeline):
         try:
             model.fit(X_train, y_train, groups=groups, params_override=params)  # type: ignore[arg-type]
         except Exception:
-            return {"oos_ic": 0.0, "oos_sharpe": 0.0, "oos_max_dd": 0.0, "feature_importance": {}}
+            return {
+                "oos_ic": 0.0,
+                "oos_sharpe": 0.0,
+                "oos_max_dd": 0.0,
+                "feature_importance": {},
+            }
 
         # Predict and compute IC
         test_pred = model.predict(X_test)  # type: ignore[arg-type]
@@ -550,7 +571,9 @@ class MonthlyRetrainPipeline(BasePipeline):
 
         # Feature importance
         fi = model.feature_importance
-        fi_dict = dict(zip(fi["feature"], fi["gain"], strict=True)) if not fi.empty else {}
+        fi_dict = (
+            dict(zip(fi["feature"], fi["gain"], strict=True)) if not fi.empty else {}
+        )
 
         return {
             "oos_ic": oos_ic,
@@ -594,7 +617,9 @@ class MonthlyRetrainPipeline(BasePipeline):
 
         # Overfit check
         if retrain_result.in_sample_ic > 0:
-            oos_ratio = abs(retrain_result.out_of_sample_ic) / abs(retrain_result.in_sample_ic)
+            oos_ratio = abs(retrain_result.out_of_sample_ic) / abs(
+                retrain_result.in_sample_ic
+            )
             checks.append(
                 (
                     "overfit",

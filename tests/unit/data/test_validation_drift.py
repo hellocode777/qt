@@ -34,7 +34,8 @@ class TestComputePsi:
         base = [random.gauss(100, 10) for _ in range(1000)]
         shifted = [random.gauss(102, 11) for _ in range(1000)]
         result = compute_psi(
-            pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64)
+            pl.Series("x", base, dtype=pl.Float64),
+            pl.Series("x", shifted, dtype=pl.Float64),
         )
         assert result["psi"] < PSI_NO_DRIFT
 
@@ -46,7 +47,8 @@ class TestComputePsi:
         base = [random.gauss(100, 10) for _ in range(1000)]
         shifted = [random.gauss(200, 10) for _ in range(1000)]
         result = compute_psi(
-            pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64)
+            pl.Series("x", base, dtype=pl.Float64),
+            pl.Series("x", shifted, dtype=pl.Float64),
         )
         assert result["psi"] > PSI_NO_DRIFT
 
@@ -64,7 +66,9 @@ class TestComputePsi:
 
     def test_with_nulls(self):
         """PSI should handle nulls by dropping them — similar distributions with nulls."""
-        expected = pl.Series("x", [1.0, 2.0, None, 3.0, 4.0, 5.0] * 20, dtype=pl.Float64)
+        expected = pl.Series(
+            "x", [1.0, 2.0, None, 3.0, 4.0, 5.0] * 20, dtype=pl.Float64
+        )
         actual = pl.Series("x", [1.0, 2.0, None, 3.0, 4.0, 5.0] * 20, dtype=pl.Float64)
         result = compute_psi(expected, actual)
         assert "psi" in result
@@ -75,7 +79,8 @@ class TestComputePsi:
         base = [1.0] * 500 + [9.0] * 500
         shifted = [2.0] * 500 + [8.0] * 500
         result = compute_psi(
-            pl.Series("x", base, dtype=pl.Float64), pl.Series("x", shifted, dtype=pl.Float64)
+            pl.Series("x", base, dtype=pl.Float64),
+            pl.Series("x", shifted, dtype=pl.Float64),
         )
         assert result["psi"] >= 0
         assert result["psi"] == result["psi"]  # Not NaN

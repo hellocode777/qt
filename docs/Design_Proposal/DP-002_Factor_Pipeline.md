@@ -373,12 +373,12 @@ class BaseFactor:
     direction: str         # "Positive" | "Negative"
     author: str            # "Wei"
     description: str       # "3-month price momentum"
-    
+
     # ── Processing config ──
     neutralize: list[str]  # ["Industry", "MarketCap"]
     winsorize: str         # "MAD"
     normalize: str         # "ZScore"
-    
+
     # ── Core methods ──
     def compute(self, data_map: dict) -> pl.DataFrame: ...
     def required_columns(self) -> list[str]: ...

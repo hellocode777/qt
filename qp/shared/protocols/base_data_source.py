@@ -24,7 +24,9 @@ class BaseDataSource(ABC):
         ...
 
     @abstractmethod
-    def fetch_raw(self, start_date: date, end_date: date, **kwargs) -> pd.DataFrame | pl.DataFrame:
+    def fetch_raw(
+        self, start_date: date, end_date: date, **kwargs
+    ) -> pd.DataFrame | pl.DataFrame:
         """Pull raw data from the external API or database.
 
         Args:

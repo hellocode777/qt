@@ -373,7 +373,7 @@ class StrategyVersionTree:
                 category=KnowledgeCategory.RESEARCH_DEBT,
                 title=f"[{node.strategy_name}] {node.version}",
                 content=content,
-                tags=node.tags + [node.strategy_name, node.version],
+                tags=[*node.tags, node.strategy_name, node.version],
             )
         except Exception:
             pass

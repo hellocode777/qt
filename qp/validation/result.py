@@ -206,10 +206,14 @@ class GateResult:
                 "min_sample_period",
             }
         ]
-        portfolio_rules = [r for r in validation.rules if r.rule_name in {"stratification"}]
+        portfolio_rules = [
+            r for r in validation.rules if r.rule_name in {"stratification"}
+        ]
 
         factor_pass = (
-            all(r.status == ValidationStatus.PASS for r in factor_rules) if factor_rules else False
+            all(r.status == ValidationStatus.PASS for r in factor_rules)
+            if factor_rules
+            else False
         )
         portfolio_pass = (
             all(r.status == ValidationStatus.PASS for r in portfolio_rules)
@@ -246,7 +250,9 @@ class GateResult:
             score=validation.score,
             confidence=validation.confidence,
             data_integrity=data_integrity,
-            factor_validity="PASS" if factor_pass else ("FAIL" if factor_rules else "NOT_RUN"),
+            factor_validity="PASS"
+            if factor_pass
+            else ("FAIL" if factor_rules else "NOT_RUN"),
             portfolio_conversion="PASS"
             if portfolio_pass
             else ("FAIL" if portfolio_rules else "NOT_RUN"),
@@ -308,7 +314,11 @@ class GateResult:
         }
         for key, label in labels.items():
             status = getattr(self, key)
-            icon = "[PASS]" if status == "PASS" else ("[FAIL]" if status == "FAIL" else "[SKIP]")
+            icon = (
+                "[PASS]"
+                if status == "PASS"
+                else ("[FAIL]" if status == "FAIL" else "[SKIP]")
+            )
             lines.append(f"    {icon} {label}")
         lines.append("")
         if self.recommendation:

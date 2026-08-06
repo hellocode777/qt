@@ -135,7 +135,7 @@ class FeatureRegistry:
             return pl.DataFrame()
 
         # Start with the first dataset as base
-        first_key = list(data_map.keys())[0] if data_map else None
+        first_key = next(iter(data_map.keys())) if data_map else None
         if first_key is None:
             return pl.DataFrame()
 
@@ -263,6 +263,7 @@ class FeatureRegistry:
             "-" * 60,
         ]
         from typing import Any as _Any
+
         categories: dict[str, dict[str, _Any]] = cat["categories"]  # type: ignore[assignment]
         for cat_name, factors in sorted(categories.items(), key=lambda x: str(x[0])):
             lines.append(f"  [{cat_name}] ({len(factors)} factors)")

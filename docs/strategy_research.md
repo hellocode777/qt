@@ -76,7 +76,7 @@ uv run qp experiment compare
 **Gate 判定**：PASSED / BLOCKED / RESEARCH_ONLY
 
 **发现**：
-- 
+-
 ```
 
 ---

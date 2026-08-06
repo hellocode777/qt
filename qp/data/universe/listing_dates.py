@@ -262,7 +262,9 @@ class ListingDateRegistry:
 
     @staticmethod
     def _build_hardcoded() -> dict[str, date_t]:
-        return {code: date_t.fromisoformat(d) for code, (d, _) in _HARDCODED_LISTING.items()}
+        return {
+            code: date_t.fromisoformat(d) for code, (d, _) in _HARDCODED_LISTING.items()
+        }
 
     @staticmethod
     def _fetch_from_akshare() -> dict[str, date_t]:
@@ -300,7 +302,9 @@ class ListingDateRegistry:
         path = _DEFAULT_CACHE_PATH
         if not path.exists():
             return None
-        age = (datetime.now(tz=UTC) - datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)).days
+        age = (
+            datetime.now(tz=UTC) - datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+        ).days
         if age > _CACHE_TTL_DAYS:
             logger.debug("IPO 日期缓存过期 ({} 天)", age)
             return None

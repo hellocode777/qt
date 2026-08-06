@@ -32,14 +32,28 @@ GATE_TO_LIFECYCLE: dict[GateDecision, StrategyLifecycle] = {
     # OVERRIDDEN: no automatic promotion — human decision overrides
 }
 
-LIFECYCLE_TRANSITION_LOG: dict[tuple[StrategyLifecycle, GateDecision], StrategyLifecycle] = {
+LIFECYCLE_TRANSITION_LOG: dict[
+    tuple[StrategyLifecycle, GateDecision], StrategyLifecycle
+] = {
     # Current state → Gate decision → New state
-    (StrategyLifecycle.RESEARCH, GateDecision.PASSED): StrategyLifecycle.BACKTEST_PASSED,
-    (StrategyLifecycle.BACKTEST_PASSED, GateDecision.PASSED): StrategyLifecycle.PAPER_TRADING,
+    (
+        StrategyLifecycle.RESEARCH,
+        GateDecision.PASSED,
+    ): StrategyLifecycle.BACKTEST_PASSED,
+    (
+        StrategyLifecycle.BACKTEST_PASSED,
+        GateDecision.PASSED,
+    ): StrategyLifecycle.PAPER_TRADING,
     (StrategyLifecycle.PAPER_TRADING, GateDecision.PASSED): StrategyLifecycle.APPROVED,
     # Degradation paths
-    (StrategyLifecycle.BACKTEST_PASSED, GateDecision.BLOCKED): StrategyLifecycle.DEPRECATED,
-    (StrategyLifecycle.PAPER_TRADING, GateDecision.BLOCKED): StrategyLifecycle.BACKTEST_PASSED,
+    (
+        StrategyLifecycle.BACKTEST_PASSED,
+        GateDecision.BLOCKED,
+    ): StrategyLifecycle.DEPRECATED,
+    (
+        StrategyLifecycle.PAPER_TRADING,
+        GateDecision.BLOCKED,
+    ): StrategyLifecycle.BACKTEST_PASSED,
     (StrategyLifecycle.PRODUCTION, GateDecision.BLOCKED): StrategyLifecycle.WARNING,
 }
 
@@ -227,7 +241,11 @@ class GateRegistryBridge:
         try:
             self._registry.set_meta(strategy_id, meta)
         except Exception as exc:
-            logger.warning("GateRegistryBridge: failed to update meta for '{}': {}", strategy_id, exc)
+            logger.warning(
+                "GateRegistryBridge: failed to update meta for '{}': {}",
+                strategy_id,
+                exc,
+            )
 
     # ------------------------------------------------------------------
     # Batch operations

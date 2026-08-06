@@ -132,7 +132,9 @@ def cmd_experiment_list() -> int:
         print(f"过滤条件: {', '.join(filters)}")
         print()
 
-    print(f"{'ID':<32s} {'策略':>16s} {'Sharpe':>7s} {'IC':>8s} {'Ret':>8s} {'回撤':>7s}  Lineage")
+    print(
+        f"{'ID':<32s} {'策略':>16s} {'Sharpe':>7s} {'IC':>8s} {'Ret':>8s} {'回撤':>7s}  Lineage"
+    )
     print("-" * 110)
     for r in records:
         strategy = r.config.strategy_name or "?"
@@ -215,18 +217,39 @@ def cmd_experiment_run() -> int:
         print("    --start 2024-01-01           Start date", file=sys.stderr)
         print("    --end 2026-07-20             End date", file=sys.stderr)
         print("    --top-n 10                   Top N stocks", file=sys.stderr)
-        print("    --quality-filter=true/false  Enable/disable quality filter", file=sys.stderr)
-        print("    --quality-min-roe=0.05       Minimum ROE for quality filter", file=sys.stderr)
-        print("    --rebalance 20               Rebalance frequency (days)", file=sys.stderr)
-        print("    --industry-neutral           Enable industry neutralization", file=sys.stderr)
-        print("    --orthogonalize              Enable factor orthogonalization", file=sys.stderr)
+        print(
+            "    --quality-filter=true/false  Enable/disable quality filter",
+            file=sys.stderr,
+        )
+        print(
+            "    --quality-min-roe=0.05       Minimum ROE for quality filter",
+            file=sys.stderr,
+        )
+        print(
+            "    --rebalance 20               Rebalance frequency (days)",
+            file=sys.stderr,
+        )
+        print(
+            "    --industry-neutral           Enable industry neutralization",
+            file=sys.stderr,
+        )
+        print(
+            "    --orthogonalize              Enable factor orthogonalization",
+            file=sys.stderr,
+        )
         print(
             "    --score-band 60-80          Score percentile band (Q4 sweet spot)",
             "    --score-band auto            Auto-search all bands and compare",
             file=sys.stderr,
         )
-        print("    --debug                     Enable DEBUG-level logging", file=sys.stderr)
-        print("    --resume <experiment_id>    Reproduce experiment from snapshot", file=sys.stderr)
+        print(
+            "    --debug                     Enable DEBUG-level logging",
+            file=sys.stderr,
+        )
+        print(
+            "    --resume <experiment_id>    Reproduce experiment from snapshot",
+            file=sys.stderr,
+        )
         return 1
 
     pipeline_name = sys.argv[3]
@@ -308,7 +331,11 @@ def cmd_experiment_run() -> int:
             i += 1
             params["strategy"] = args[i]
         elif arg.startswith("--quality-filter="):
-            params["quality_filter"] = arg.split("=", 1)[1].lower() in ("true", "1", "yes")
+            params["quality_filter"] = arg.split("=", 1)[1].lower() in (
+                "true",
+                "1",
+                "yes",
+            )
         elif arg == "--quality-filter" and i + 1 < len(args):
             i += 1
             params["quality_filter"] = args[i].lower() in ("true", "1", "yes")
@@ -413,7 +440,9 @@ def cmd_experiment_run() -> int:
             print(f"\n{'=' * 60}")
             print(f"  运行策略: {strat}")
             print(f"{'=' * 60}")
-            ctx = PipelineContext(pipeline_name="multifactor_experiment", parameters=strat_params)
+            ctx = PipelineContext(
+                pipeline_name="multifactor_experiment", parameters=strat_params
+            )
             pipeline = MultiFactorPipeline()
             result = pipeline.run(ctx)
             all_results.append(
@@ -437,7 +466,7 @@ def cmd_experiment_run() -> int:
         for r in all_results:
             m: dict[str, float] = r["metrics"]  # type: ignore[misc]
             print(
-                f"{str(r['strategy']):>24s} {str(r['status']):>8s} "
+                f"{r['strategy']!s:>24s} {r['status']!s:>8s} "
                 f"{float(m.get('ic_mean', 0)):+7.4f} "
                 f"{float(m.get('ic_ir', 0)):+6.2f} "
                 f"{float(m.get('sharpe_ratio', 0)):+6.2f} "
@@ -474,7 +503,9 @@ def cmd_experiment_validate(experiment_id: str | None = None) -> int:
     """Validate an experiment against Layer 5 Gate criteria."""
     if not experiment_id:
         print("qp experiment validate <experiment_id>", file=sys.stderr)
-        print("  Loads a completed experiment and runs the full Layer 5", file=sys.stderr)
+        print(
+            "  Loads a completed experiment and runs the full Layer 5", file=sys.stderr
+        )
         print("  Validation Gate, printing a structured report.", file=sys.stderr)
         return 1
 
@@ -591,7 +622,8 @@ def cmd_experiment_validate(experiment_id: str | None = None) -> int:
         if ic_pass and sharpe >= 0.5 and max_dd <= 30
         else GateDecision.BLOCKED,
         score=sum(r.score for r in rules) / len(rules) if rules else 0,
-        confidence=sum(1 for r in rules if r.status == ValidationStatus.PASS) / len(rules)
+        confidence=sum(1 for r in rules if r.status == ValidationStatus.PASS)
+        / len(rules)
         if rules
         else 0,
         data_integrity="PASS",
@@ -626,7 +658,9 @@ def cmd_experiment_clean() -> int:
         elif a == "--dry-run":
             dry_run = True
 
-    files = sorted(exp_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+    files = sorted(
+        exp_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True
+    )
     if len(files) <= keep:
         print(f"共 {len(files)} 个文件， ≤ {keep}，无需清理")
         return 0

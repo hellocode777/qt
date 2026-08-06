@@ -11,9 +11,12 @@ Fills the gap from credibility_check.md §1:
 Quick start::
 
     from qp.data.metadata import (
-        SourceMetadata, SourceMetadataStore,
-        SchemaVersion, SchemaTracker,
-        DataLineage, LineageTracker,
+        SourceMetadata,
+        SourceMetadataStore,
+        SchemaVersion,
+        SchemaTracker,
+        DataLineage,
+        LineageTracker,
     )
 
     # Track source health
@@ -22,18 +25,25 @@ Quick start::
 
     # Track schema evolution
     schemas = SchemaTracker()
-    schemas.record(SchemaVersion(
-        dataset_name="daily_price", version="2026-07-20",
-        columns={"trade_date": "date", "symbol": "str", "close": "float64"},
-        primary_key=["trade_date", "symbol"],
-    ))
+    schemas.record(
+        SchemaVersion(
+            dataset_name="daily_price",
+            version="2026-07-20",
+            columns={"trade_date": "date", "symbol": "str", "close": "float64"},
+            primary_key=["trade_date", "symbol"],
+        )
+    )
 
     # Track data lineage
     lineage = LineageTracker()
-    lineage.record(DataLineage(
-        source_name="akshare", dataset_name="daily_price",
-        dataset_version="2026-07-20", pipeline_run_id="run_abc",
-    ))
+    lineage.record(
+        DataLineage(
+            source_name="akshare",
+            dataset_name="daily_price",
+            dataset_version="2026-07-20",
+            pipeline_run_id="run_abc",
+        )
+    )
 """
 
 from qp.data.metadata.lineage_tracker import DataLineage, LineageTracker
@@ -41,10 +51,10 @@ from qp.data.metadata.schema_tracker import SchemaTracker, SchemaVersion
 from qp.data.metadata.source_metadata import SourceMetadata, SourceMetadataStore
 
 __all__ = [
-    "SourceMetadata",
-    "SourceMetadataStore",
-    "SchemaVersion",
-    "SchemaTracker",
     "DataLineage",
     "LineageTracker",
+    "SchemaTracker",
+    "SchemaVersion",
+    "SourceMetadata",
+    "SourceMetadataStore",
 ]

@@ -210,9 +210,13 @@ class ValidationPipeline(BasePipeline):
         overrides = self._config.overrides
 
         engine.register(
-            RankICCheck(min_ic_mean=overrides.get("rank_ic", {}).get("min_ic_mean", 0.02))
+            RankICCheck(
+                min_ic_mean=overrides.get("rank_ic", {}).get("min_ic_mean", 0.02)
+            )
         )
-        engine.register(ICIRCheck(min_ic_ir=overrides.get("ic_ir", {}).get("min_ic_ir", 0.3)))
+        engine.register(
+            ICIRCheck(min_ic_ir=overrides.get("ic_ir", {}).get("min_ic_ir", 0.3))
+        )
         engine.register(
             TStatCheck(min_t_stat=overrides.get("ic_t_stat", {}).get("min_t_stat", 2.0))
         )
@@ -222,7 +226,9 @@ class ValidationPipeline(BasePipeline):
             )
         )
         engine.register(
-            NeutralizationCheck(min_ratio=overrides.get("neutralization", {}).get("min_ratio", 0.5))
+            NeutralizationCheck(
+                min_ratio=overrides.get("neutralization", {}).get("min_ratio", 0.5)
+            )
         )
         engine.register(
             MinSamplePeriodCheck(
@@ -231,12 +237,16 @@ class ValidationPipeline(BasePipeline):
         )
         engine.register(
             CoverageCheck(
-                min_coverage_pct=overrides.get("coverage", {}).get("min_coverage_pct", 0.95)
+                min_coverage_pct=overrides.get("coverage", {}).get(
+                    "min_coverage_pct", 0.95
+                )
             )
         )
         engine.register(
             MissingRateCheck(
-                max_missing_rate=overrides.get("missing_rate", {}).get("max_missing_rate", 0.05)
+                max_missing_rate=overrides.get("missing_rate", {}).get(
+                    "max_missing_rate", 0.05
+                )
             )
         )
         engine.register(
@@ -246,7 +256,9 @@ class ValidationPipeline(BasePipeline):
         )
         engine.register(
             TurnoverLimitCheck(
-                max_turnover=overrides.get("turnover_limit", {}).get("max_turnover", 0.50)
+                max_turnover=overrides.get("turnover_limit", {}).get(
+                    "max_turnover", 0.50
+                )
             )
         )
 
@@ -261,23 +273,33 @@ class ValidationPipeline(BasePipeline):
         overrides = self._config.overrides
 
         engine.register(
-            SharpeCheck(min_sharpe=overrides.get("sharpe_ratio", {}).get("min_sharpe", 1.0))
+            SharpeCheck(
+                min_sharpe=overrides.get("sharpe_ratio", {}).get("min_sharpe", 1.0)
+            )
         )
         engine.register(
             MaxDrawdownCheck(
-                max_drawdown_pct=overrides.get("max_drawdown", {}).get("max_drawdown_pct", 25.0)
+                max_drawdown_pct=overrides.get("max_drawdown", {}).get(
+                    "max_drawdown_pct", 25.0
+                )
             )
         )
         engine.register(
             TurnoverCheck(
-                min_turnover_pct=overrides.get("turnover", {}).get("min_turnover_pct", 5.0),
-                max_turnover_pct=overrides.get("turnover", {}).get("max_turnover_pct", 200.0),
+                min_turnover_pct=overrides.get("turnover", {}).get(
+                    "min_turnover_pct", 5.0
+                ),
+                max_turnover_pct=overrides.get("turnover", {}).get(
+                    "max_turnover_pct", 200.0
+                ),
             )
         )
         engine.register(
             CostAdjustedCheck(
                 min_sharpe=overrides.get("cost_adjusted", {}).get("min_sharpe", 1.0),
-                max_drawdown_pct=overrides.get("cost_adjusted", {}).get("max_drawdown_pct", 25.0),
+                max_drawdown_pct=overrides.get("cost_adjusted", {}).get(
+                    "max_drawdown_pct", 25.0
+                ),
             )
         )
 
@@ -291,13 +313,19 @@ class ValidationPipeline(BasePipeline):
 
         engine.register(
             OverfitCheck(
-                min_oos_ratio=overrides.get("overfit_ic_ratio", {}).get("min_oos_ratio", 0.5)
+                min_oos_ratio=overrides.get("overfit_ic_ratio", {}).get(
+                    "min_oos_ratio", 0.5
+                )
             )
         )
         engine.register(
             FeatureImportanceCheck(
-                max_top1_pct=overrides.get("feature_importance", {}).get("max_top1_pct", 0.80),
-                max_top3_pct=overrides.get("feature_importance", {}).get("max_top3_pct", 0.95),
+                max_top1_pct=overrides.get("feature_importance", {}).get(
+                    "max_top1_pct", 0.80
+                ),
+                max_top3_pct=overrides.get("feature_importance", {}).get(
+                    "max_top3_pct", 0.95
+                ),
             )
         )
 
@@ -312,7 +340,9 @@ class ValidationPipeline(BasePipeline):
 
         engine.register(
             SignalCorrelationCheck(
-                min_correlation=overrides.get("signal_correlation", {}).get("min_correlation", 0.8)
+                min_correlation=overrides.get("signal_correlation", {}).get(
+                    "min_correlation", 0.8
+                )
             )
         )
         engine.register(

@@ -132,7 +132,11 @@ class RiskParityAllocator(BaseCapitalAllocator):
         """
         if signals.is_empty() or prices.is_empty():
             return pl.DataFrame(
-                schema={"symbol": pl.Utf8, "target_weight": pl.Float64, "target_amount": pl.Float64}
+                schema={
+                    "symbol": pl.Utf8,
+                    "target_weight": pl.Float64,
+                    "target_amount": pl.Float64,
+                }
             )
 
         symbols = signals["symbol"].to_list()
@@ -184,7 +188,9 @@ class RiskParityAllocator(BaseCapitalAllocator):
             return {}
 
         px = px.sort(["symbol", "trade_date"])
-        px = px.with_columns((pl.col("close").log().diff().over("symbol")).alias("log_return"))
+        px = px.with_columns(
+            (pl.col("close").log().diff().over("symbol")).alias("log_return")
+        )
         px = px.drop_nulls(subset=["log_return"])
 
         # Last N days per symbol
@@ -197,7 +203,9 @@ class RiskParityAllocator(BaseCapitalAllocator):
         for row in vols.iter_rows(named=True):
             symbol = str(row["symbol"])
             vol = row["annual_vol"]
-            if vol is not None and not (isinstance(vol, float) and vol != vol):  # skip NaN
+            if vol is not None and not (
+                isinstance(vol, float) and vol != vol
+            ):  # skip NaN
                 result[symbol] = float(vol)
 
         return result

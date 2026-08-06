@@ -41,7 +41,9 @@ class TestPurgeTrainSet:
         dates = _make_dates(200)
         train_indices = np.arange(0, 200)
         test_start = dates[150]
-        kept = purge_train_set(train_indices, dates, test_start_date=test_start, purge_days=5)
+        kept = purge_train_set(
+            train_indices, dates, test_start_date=test_start, purge_days=5
+        )
         # Should remove training samples close to test start
         assert len(kept) < 200
         assert len(kept) > 0
@@ -60,7 +62,9 @@ class TestEmbargoTestSet:
     def test_embargo_returns_next_trainable_index(self) -> None:
         dates = _make_dates(250)
         # Test ends at index 200, with 5-day embargo
-        result = embargo_test_set(n_samples=250, test_end_idx=200, embargo_days=5, dates=dates)
+        result = embargo_test_set(
+            n_samples=250, test_end_idx=200, embargo_days=5, dates=dates
+        )
         # Returns index of first trainable sample after embargo
         assert isinstance(result, int)
         assert result > 200  # Must be after test_end_idx

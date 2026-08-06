@@ -81,7 +81,9 @@ def compute_simple_backtest(
         return {"total_return_pct": 0.0, "sharpe": 0.0, "max_dd_pct": 0.0}
 
     all_dates = sorted(
-        set().union(*(df["trade_date"].unique().to_list() for df in price_data.values()))
+        set().union(
+            *(df["trade_date"].unique().to_list() for df in price_data.values())
+        )
     )
 
     cash = initial_capital
@@ -142,7 +144,9 @@ def compute_simple_backtest(
 
     if daily_rets:
         rets = np.array(daily_rets)
-        sharpe = float(np.sqrt(252) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+        sharpe = (
+            float(np.sqrt(252) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+        )
         cum = np.cumprod(1 + rets)
         running_max = np.maximum.accumulate(cum)
         max_dd = (
@@ -262,7 +266,9 @@ def main() -> None:
                         fwd_returns.append(px_future / px_today - 1)
 
         if len(scores_list) >= 5:
-            ic = ExperimentRunner._spearman_ic(np.array(scores_list), np.array(fwd_returns))
+            ic = ExperimentRunner._spearman_ic(
+                np.array(scores_list), np.array(fwd_returns)
+            )
             daily_ics.append(ic)
 
     if daily_ics:
@@ -296,10 +302,14 @@ def main() -> None:
         print()
         print("   最近一次调仓信号:")
         latest_date = signals["date"].max()
-        latest = signals.filter(pl.col("date") == latest_date).sort("signal", descending=True)
+        latest = signals.filter(pl.col("date") == latest_date).sort(
+            "signal", descending=True
+        )
         for row in latest.iter_rows(named=True):
             emoji = "🟢" if row["signal"] == "buy" else "🔴"
-            print(f"     {emoji} {row['signal']:4s}  {row['symbol']:8s}  score={row['score']:.4f}")
+            print(
+                f"     {emoji} {row['signal']:4s}  {row['symbol']:8s}  score={row['score']:.4f}"
+            )
     else:
         print("   ⚠️ 无信号生成")
     print()

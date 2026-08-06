@@ -76,12 +76,12 @@ from typing import Dict, Any, Tuple
 
 class ValidationGateEngine:
     """ Layer 5: 自动化研究质检闸门引擎 """
-    
+
     def __init__(
-        self, 
-        min_ic: float = 0.03, 
-        min_ic_ir: float = 1.2, 
-        max_pbo: float = 0.30, 
+        self,
+        min_ic: float = 0.03,
+        min_ic_ir: float = 1.2,
+        max_pbo: float = 0.30,
         max_correlation_with_live: float = 0.65
     ):
         self.min_ic = min_ic
@@ -95,68 +95,68 @@ class ValidationGateEngine:
         null_rate = factor_series.isnull().mean()
         if null_rate > 0.20:
             return False, f"❌ [Gate 1 Failed] Data Null Rate too high: {null_rate:.2%}"
-        
+
         # 检查无限值 (Inf)
         if np.isinf(factor_series.values).any():
             return False, "❌ [Gate 1 Failed] Factor contains Inf values."
-            
+
         return True, "✅ [Gate 1 Passed] Data integrity & sanity check clean."
 
     # 2. Gate 2: 统计显著性与 IC/IR 质检
     def check_gate2_stats(
-        self, 
-        factor_series: pd.Series, 
+        self,
+        factor_series: pd.Series,
         forward_returns: pd.Series,
         num_trials_tested: int = 50
     ) -> Tuple[bool, str, Dict[str, float]]:
-        
+
         merged = pd.concat([factor_series, forward_returns], axis=1).dropna()
         merged.columns = ['factor', 'return']
-        
+
         # 计算每日 Rank IC
         daily_ic = merged.groupby(level='trade_date').apply(
             lambda g: g['factor'].corr(g['return'], method='spearman')
         )
-        
+
         mean_ic = daily_ic.mean()
         ic_std = daily_ic.std()
         ic_ir = mean_ic / (ic_std + 1e-8)
-        
+
         # 简易试错过拟合惩罚估算 (Deflated Adjustment)
         trial_penalty = np.sqrt(2 * np.log(max(1, num_trials_tested))) * 0.1
         adjusted_ic_ir = ic_ir - trial_penalty
-        
+
         metrics = {
             "raw_ic": mean_ic,
             "raw_ic_ir": ic_ir,
             "adjusted_ic_ir": adjusted_ic_ir
         }
-        
+
         if mean_ic < self.min_ic:
             return False, f"❌ [Gate 2 Failed] Mean Rank IC ({mean_ic:.4f}) < Threshold ({self.min_ic})", metrics
-            
+
         if adjusted_ic_ir < self.min_ic_ir:
             return False, f"❌ [Gate 2 Failed] Trial-Adjusted IC_IR ({adjusted_ic_ir:.2f}) < Threshold ({self.min_ic_ir})", metrics
-            
+
         return True, "✅ [Gate 2 Passed] IC and Deflated IC_IR passed statistically.", metrics
 
     # 3. Gate 3: 扣除成本后的净回测质检
     def check_gate3_backtest(
-        self, 
-        gross_sharpe: float, 
-        net_sharpe: float, 
+        self,
+        gross_sharpe: float,
+        net_sharpe: float,
         annual_turnover: float
     ) -> Tuple[bool, str]:
-        
+
         # 换手率损耗测算：净 Sharpe 降幅不能超过 40%
         if gross_sharpe > 0:
             sharpe_decay = (gross_sharpe - net_sharpe) / gross_sharpe
             if sharpe_decay > 0.40:
                 return False, f"❌ [Gate 3 Failed] Net Sharpe decayed by {sharpe_decay:.1%} due to turnover/costs!"
-        
+
         if net_sharpe < 1.0:
             return False, f"❌ [Gate 3 Failed] Net Sharpe ({net_sharpe:.2f}) is below 1.0 limit."
-            
+
         return True, f"✅ [Gate 3 Passed] Net Sharpe ({net_sharpe:.2f}) holds strong after trading costs."
 
     # 4. 执行全套 Gate CI/CD 审核流水线
@@ -171,23 +171,23 @@ class ValidationGateEngine:
         turnover: float
     ):
         print(f"\n================ 🛡️ Reviewing Strategy: {strategy_name} ================")
-        
+
         # Run Gate 1
         g1_pass, msg1 = self.check_gate1_data(factor_series)
         print(msg1)
         if not g1_pass: return False
-        
+
         # Run Gate 2
         g2_pass, msg2, stats = self.check_gate2_stats(factor_series, forward_returns, num_trials)
         print(msg2)
         print(f"   └── [Stats Detail] Raw IC: {stats['raw_ic']:.4f} | Raw IR: {stats['raw_ic_ir']:.2f} | Adj IR: {stats['adjusted_ic_ir']:.2f}")
         if not g2_pass: return False
-        
+
         # Run Gate 3
         g3_pass, msg3 = self.check_gate3_backtest(gross_sharpe, net_sharpe, turnover)
         print(msg3)
         if not g3_pass: return False
-        
+
         print(f"\n🎉 [Gate Passed] {strategy_name} cleared all automated gates! Ready for IC Committee Review.\n")
         return True
 
@@ -196,5 +196,3 @@ class ValidationGateEngine:
 当一个策略通过 Layer 5 的所有 Validation Gates 之后，系统会自动向 Layer 4（Registry & Lineage Layer） 触发一条回调事件（Callback）：
 自动打上质量标签（Quality Stamp）：在 Model/Strategy Registry 中将其状态从 Experimental 修改为 Approved_For_Paper_Trading。
 冻结血缘链条（Freeze Lineage Graph）：锁死该策略所对应的数据版本号（Data Hash）、代码版本号（Git Commit SHA）和特征计算公式，防止后续有人误修改底层代码导致线上逻辑滑坡。
-
-

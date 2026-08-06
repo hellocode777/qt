@@ -520,7 +520,7 @@ import pandas as pd
 
 class BaseAllocator(ABC):
     """资金配置器统一基类"""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
 
@@ -574,4 +574,3 @@ Layer 6：回答“看好谁”（解决胜率/Alpha问题）
 Layer 7：回答“能买谁”（解决存活/风险问题）
 Layer 8：回答“买多少”（解决盈亏比/资金效率问题）
 这种解耦彻底告别了“小作坊”式的单体脚本开发，迈向了标准化、模块化的工业级个人量化平台架构！下一步无论接执行层（Execution Layer）还是再平衡引擎（Rebalance Engine），数据流都会异常顺畅。
-

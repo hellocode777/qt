@@ -33,36 +33,36 @@ from qp.research.trainer import (
 )
 
 __all__ = [
+    "ALL_FACTOR_DESCRIPTIONS",
+    "ALL_FACTOR_DIRECTIONS",
+    "PRICE_VOLUME_FACTORS",
+    # Trainer
+    "CrossSectionalStandardizer",
     # Experiment
     "ExperimentConfig",
     "ExperimentMetrics",
     "ExperimentRecord",
     "ExperimentRunner",
     "ExperimentTracker",
-    "LineageGraph",
     # Feature — classes
     "FeatureRegistry",
-    "Momentum20dFeature",  # backward-compatible
-    "Volatility20dFeature",  # backward-compatible
+    "LightGBMRankModel",
+    "LineageGraph",
+    "ModelMetadata",
+    "ModelRegistry",
     "Momentum1M",
     "Momentum3M",
     "Momentum6M",
+    "Momentum20dFeature",  # backward-compatible
+    # Split
+    "PurgedKFold",
     "ShortTermReversal5D",
     "Volatility20D",
+    "Volatility20dFeature",  # backward-compatible
     "Volatility60D",
     # Feature — batch compute
     "compute_all_factors",
-    "get_default_factor_weights",
-    "ALL_FACTOR_DIRECTIONS",
-    "ALL_FACTOR_DESCRIPTIONS",
-    "PRICE_VOLUME_FACTORS",
-    # Split
-    "PurgedKFold",
     "embargo_test_set",
+    "get_default_factor_weights",
     "purge_train_set",
-    # Trainer
-    "CrossSectionalStandardizer",
-    "LightGBMRankModel",
-    "ModelMetadata",
-    "ModelRegistry",
 ]

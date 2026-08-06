@@ -5,7 +5,7 @@ from qp.platform.metadata.runtime import RuntimeMeta
 from qp.platform.metadata.version import __version__
 
 __all__ = [
-    "__version__",
     "EnvironmentMeta",
     "RuntimeMeta",
+    "__version__",
 ]

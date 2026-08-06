@@ -40,9 +40,10 @@ class Momentum(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.with_columns(
-            (pl.col("close") / pl.col("close").shift(self.window).over("symbol") - 1.0).alias(
-                self.feature_name
-            )
+            (
+                pl.col("close") / pl.col("close").shift(self.window).over("symbol")
+                - 1.0
+            ).alias(self.feature_name)
         )
 
     def update_stream(self, new_value: float) -> float | None:
@@ -131,7 +132,9 @@ class RSI(BaseFeature):
         ).over("symbol")
 
         return df.with_columns(
-            (100.0 - 100.0 / (1.0 + avg_gain / (avg_loss + 1e-10))).alias(self.feature_name)
+            (100.0 - 100.0 / (1.0 + avg_gain / (avg_loss + 1e-10))).alias(
+                self.feature_name
+            )
         )
 
     def update_stream(self, new_value: float) -> float | None:
@@ -184,9 +187,12 @@ class ShortTermReversal(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.with_columns(
-            (-(pl.col("close") / pl.col("close").shift(self.window).over("symbol") - 1.0)).alias(
-                self.feature_name
-            )
+            (
+                -(
+                    pl.col("close") / pl.col("close").shift(self.window).over("symbol")
+                    - 1.0
+                )
+            ).alias(self.feature_name)
         )
 
     def update_stream(self, new_value: float) -> float | None:

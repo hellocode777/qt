@@ -16,7 +16,11 @@ from qp.shared.types import RuntimeState
 VALID_TRANSITIONS: dict[RuntimeState, set[RuntimeState]] = {
     RuntimeState.CREATED: {RuntimeState.INITIALIZING, RuntimeState.FAILED},
     RuntimeState.INITIALIZING: {RuntimeState.READY, RuntimeState.FAILED},
-    RuntimeState.READY: {RuntimeState.RUNNING, RuntimeState.STOPPING, RuntimeState.FAILED},
+    RuntimeState.READY: {
+        RuntimeState.RUNNING,
+        RuntimeState.STOPPING,
+        RuntimeState.FAILED,
+    },
     RuntimeState.RUNNING: {RuntimeState.STOPPING, RuntimeState.FAILED},
     RuntimeState.STOPPING: {RuntimeState.TERMINATED, RuntimeState.FAILED},
     RuntimeState.FAILED: {RuntimeState.STOPPING, RuntimeState.TERMINATED},
@@ -49,7 +53,9 @@ class LifecycleManager:
             RuntimeStateError: If the transition is invalid.
         """
         if not self.can_transition_to(target):
-            raise RuntimeStateError(f"Invalid state transition: {self._state.name} → {target.name}")
+            raise RuntimeStateError(
+                f"Invalid state transition: {self._state.name} → {target.name}"
+            )
         self._state = target
 
     def is_terminal(self) -> bool:

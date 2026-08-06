@@ -56,13 +56,13 @@ class TestConfigValidation:
     def test_invalid_storage_backend(self) -> None:
         config = build_default_config()
         config.storage.backend = "invalid"
-        with pytest.raises(ConfigValidationError, match="storage.backend"):
+        with pytest.raises(ConfigValidationError, match=r"storage\.backend"):
             validate_config(config)
 
     def test_invalid_log_level(self) -> None:
         config = build_default_config()
         config.logging.level = "TRACE"
-        with pytest.raises(ConfigValidationError, match="logging.level"):
+        with pytest.raises(ConfigValidationError, match=r"logging\.level"):
             validate_config(config)
 
     def test_invalid_num_leaves(self) -> None:

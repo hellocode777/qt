@@ -99,7 +99,9 @@ class ProposalStore:
         if not path.exists():
             return None
         try:
-            return StrategyProposal.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            return StrategyProposal.from_dict(
+                json.loads(path.read_text(encoding="utf-8"))
+            )
         except (json.JSONDecodeError, KeyError) as exc:
             logger.warning("Failed to load proposal {}: {}", proposal_id, exc)
             return None

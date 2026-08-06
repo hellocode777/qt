@@ -169,7 +169,9 @@ class TestDecisionReport:
 
     def test_disclaimer_present(self) -> None:
         report = DecisionReport()
-        assert "投资建议" in report.disclaimer or "investment advice" in report.disclaimer
+        assert (
+            "投资建议" in report.disclaimer or "investment advice" in report.disclaimer
+        )
 
 
 class TestDecisionEngine:
@@ -277,7 +279,9 @@ class TestDecisionStatus:
             DecisionStatus.MONITORING,
             DecisionStatus.CLOSED,
         ):
-            assert s.requires_human_action is False, f"{s} should not require human action"
+            assert s.requires_human_action is False, (
+                f"{s} should not require human action"
+            )
 
 
 class TestCanTransition:
@@ -287,23 +291,35 @@ class TestCanTransition:
         assert can_transition(DecisionStatus.PENDING, DecisionStatus.APPROVED) is True
         assert can_transition(DecisionStatus.PENDING, DecisionStatus.REJECTED) is True
         assert can_transition(DecisionStatus.PENDING, DecisionStatus.MODIFIED) is True
-        assert can_transition(DecisionStatus.APPROVED, DecisionStatus.PARTIALLY_EXECUTED) is True
-        assert can_transition(DecisionStatus.APPROVED, DecisionStatus.MONITORING) is True
+        assert (
+            can_transition(DecisionStatus.APPROVED, DecisionStatus.PARTIALLY_EXECUTED)
+            is True
+        )
+        assert (
+            can_transition(DecisionStatus.APPROVED, DecisionStatus.MONITORING) is True
+        )
         assert can_transition(DecisionStatus.MODIFIED, DecisionStatus.APPROVED) is True
-        assert can_transition(DecisionStatus.PARTIALLY_EXECUTED, DecisionStatus.MONITORING) is True
+        assert (
+            can_transition(DecisionStatus.PARTIALLY_EXECUTED, DecisionStatus.MONITORING)
+            is True
+        )
         assert can_transition(DecisionStatus.MONITORING, DecisionStatus.CLOSED) is True
 
     def test_invalid_transitions(self) -> None:
         assert can_transition(DecisionStatus.REJECTED, DecisionStatus.APPROVED) is False
         assert can_transition(DecisionStatus.CLOSED, DecisionStatus.MONITORING) is False
         assert can_transition(DecisionStatus.APPROVED, DecisionStatus.PENDING) is False
-        assert can_transition(DecisionStatus.MONITORING, DecisionStatus.PENDING) is False
+        assert (
+            can_transition(DecisionStatus.MONITORING, DecisionStatus.PENDING) is False
+        )
         assert can_transition(DecisionStatus.CLOSED, DecisionStatus.PENDING) is False
         assert can_transition(DecisionStatus.REJECTED, DecisionStatus.MODIFIED) is False
 
     def test_self_transition_always_allowed(self) -> None:
         for s in DecisionStatus:
-            assert can_transition(s, s) is True, f"Self-transition for {s} should be allowed"
+            assert can_transition(s, s) is True, (
+                f"Self-transition for {s} should be allowed"
+            )
 
     def test_terminal_no_outgoing(self) -> None:
         for s in DecisionStatus:
@@ -353,7 +369,9 @@ class TestTransition:
         assert record.timestamp != ""
 
     def test_self_transition(self) -> None:
-        new_status, record = transition(DecisionStatus.APPROVED, DecisionStatus.APPROVED)
+        new_status, record = transition(
+            DecisionStatus.APPROVED, DecisionStatus.APPROVED
+        )
         assert new_status == DecisionStatus.APPROVED
         assert record.from_status == DecisionStatus.APPROVED
         assert record.to_status == DecisionStatus.APPROVED
@@ -389,7 +407,9 @@ class TestReject:
     """Test reject convenience function."""
 
     def test_from_pending(self) -> None:
-        new_status, _ = reject(DecisionStatus.PENDING, reviewer="李四", notes="策略失效")
+        new_status, _ = reject(
+            DecisionStatus.PENDING, reviewer="李四", notes="策略失效"
+        )
         assert new_status == DecisionStatus.REJECTED
 
     def test_from_already_approved_raises(self) -> None:
@@ -401,7 +421,9 @@ class TestModify:
     """Test modify convenience function."""
 
     def test_from_pending(self) -> None:
-        new_status, _ = modify(DecisionStatus.PENDING, reviewer="王五", notes="移除603986")
+        new_status, _ = modify(
+            DecisionStatus.PENDING, reviewer="王五", notes="移除603986"
+        )
         assert new_status == DecisionStatus.MODIFIED
 
     def test_from_approved_raises(self) -> None:
@@ -417,7 +439,9 @@ class TestMarkExecuted:
         assert new_status == DecisionStatus.PARTIALLY_EXECUTED
 
     def test_from_partially_to_monitoring(self) -> None:
-        new_status, _ = mark_executed(DecisionStatus.PARTIALLY_EXECUTED, notes="全部成交")
+        new_status, _ = mark_executed(
+            DecisionStatus.PARTIALLY_EXECUTED, notes="全部成交"
+        )
         assert new_status == DecisionStatus.MONITORING
 
     def test_from_pending_raises(self) -> None:
@@ -482,7 +506,10 @@ class TestHappyPath:
         assert s == DecisionStatus.APPROVED
 
         s, _ = transition(
-            DecisionStatus.APPROVED, DecisionStatus.MONITORING, actor="system", notes="批量全部成交"
+            DecisionStatus.APPROVED,
+            DecisionStatus.MONITORING,
+            actor="system",
+            notes="批量全部成交",
         )
         assert s == DecisionStatus.MONITORING
 
@@ -719,7 +746,9 @@ class TestDecisionPackageSerialization:
         assert dp.human_review.current_status == DecisionStatus.APPROVED
         assert len(dp.human_review.status_history) == 1
         assert dp.human_review.status_history[0]["to_status"] == "approved"
-        assert dp.human_review.status_history[0]["notes"] == "Migrated from legacy format"
+        assert (
+            dp.human_review.status_history[0]["notes"] == "Migrated from legacy format"
+        )
 
     def test_backward_compat_old_format_executed(self) -> None:
         """Old JSON with executed=true infers MONITORING."""
@@ -1123,7 +1152,11 @@ class TestValidationRuleDetails:
         assert "sharpe_ratio" in md
         assert "IC below minimum threshold" in md
         # passed rule should NOT be in failure list
-        assert "code_review" not in md.split("**momentum")[1] if "**momentum" in md else True
+        assert (
+            "code_review" not in md.split("**momentum")[1]
+            if "**momentum" in md
+            else True
+        )
 
     def test_empty_rules_no_crash(self) -> None:
         """Validation without rules list doesn't crash the markdown builder."""
@@ -1255,7 +1288,11 @@ class TestPositionLedger:
 
             ledger = mod.PositionLedger()
             pos = ledger.open(
-                "600519", 1450.0, 100, strategy_id="momentum_v1.0", decision_id="dp-test-001"
+                "600519",
+                1450.0,
+                100,
+                strategy_id="momentum_v1.0",
+                decision_id="dp-test-001",
             )
 
             assert pos.position_id.startswith("P-")
@@ -1436,7 +1473,10 @@ class TestPositionLedger:
                     reason="排名 #2",
                 ),
                 TradeRecommendation(
-                    symbol="000002", action="SELL", estimated_price=50.0, quantity_shares=0
+                    symbol="000002",
+                    action="SELL",
+                    estimated_price=50.0,
+                    quantity_shares=0,
                 ),
             ]
 

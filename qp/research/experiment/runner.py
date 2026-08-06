@@ -173,7 +173,9 @@ class ExperimentRunner:
 
         ics = np.array(daily_ics)
         metrics.ic_mean = float(np.mean(ics))
-        metrics.ic_ir = float(np.abs(np.mean(ics)) / np.std(ics)) if np.std(ics) > 0 else 0.0
+        metrics.ic_ir = (
+            float(np.abs(np.mean(ics)) / np.std(ics)) if np.std(ics) > 0 else 0.0
+        )
         n = len(ics)
         metrics.ic_t_stat = (
             float(np.abs(np.mean(ics)) / (np.std(ics) / np.sqrt(n)))

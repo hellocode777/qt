@@ -62,7 +62,7 @@ class TestDriftMonitor:
 
         a = np.random.normal(0, 1, 1000)
         b = np.random.normal(3, 1, 1000)
-        ks_stat, ks_pval = DriftMonitor.compute_ks(a, b)
+        ks_stat, _ks_pval = DriftMonitor.compute_ks(a, b)
         assert ks_stat > 0.5  # Large difference
 
     def test_wasserstein(self) -> None:
@@ -239,8 +239,12 @@ class TestP0SafetyTriggers:
         assert ks._level_rank(KillSwitchLevel.HALT_BUY) == 2
         assert ks._level_rank(KillSwitchLevel.FULL_STOP) == 3
         # Escalation: higher rank = more severe
-        assert ks._level_rank(KillSwitchLevel.FULL_STOP) > ks._level_rank(KillSwitchLevel.HALT_BUY)
-        assert ks._level_rank(KillSwitchLevel.HALT_BUY) > ks._level_rank(KillSwitchLevel.WARNING)
+        assert ks._level_rank(KillSwitchLevel.FULL_STOP) > ks._level_rank(
+            KillSwitchLevel.HALT_BUY
+        )
+        assert ks._level_rank(KillSwitchLevel.HALT_BUY) > ks._level_rank(
+            KillSwitchLevel.WARNING
+        )
 
     # ------------------------------------------------------------------
     # WeeklyDrawdownTrigger
@@ -949,7 +953,9 @@ class TestDecisionAuditLogger:
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = DecisionAuditLogger(base_dir=tmpdir)
             logger.record_signal(date="2026-07-25", symbol="A", action="BUY", score=0.9)
-            logger.record_signal(date="2026-07-26", symbol="B", action="SELL", score=0.3)
+            logger.record_signal(
+                date="2026-07-26", symbol="B", action="SELL", score=0.3
+            )
 
             df = logger.query_by_date("2026-07-25")
             assert len(df) == 1
@@ -990,7 +996,9 @@ class TestDecisionAuditLogger:
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = DecisionAuditLogger(base_dir=tmpdir)
             logger.record_signal(date="2026-07-25", symbol="A", action="BUY", score=0.9)
-            logger.record_signal(date="2026-07-25", symbol="B", action="SELL", score=0.3)
+            logger.record_signal(
+                date="2026-07-25", symbol="B", action="SELL", score=0.3
+            )
             stats = logger.stats()
             assert stats["n_decisions"] == 2
 
@@ -1252,7 +1260,9 @@ class TestRetrainSignal:
     def test_evaluate_none(self) -> None:
         from qp.monitoring.retrain_signal import RetrainAction, evaluate_retrain_need
 
-        signal = evaluate_retrain_need(psi_value=0.05, rolling_ic=0.03, training_ic=0.035)
+        signal = evaluate_retrain_need(
+            psi_value=0.05, rolling_ic=0.03, training_ic=0.035
+        )
         assert signal.action == RetrainAction.NONE
         assert signal.is_actionable() is False
 
@@ -1586,7 +1596,10 @@ class TestStrategyHealthLogger:
 
     def test_record_and_check_basic(self, tmp_path) -> None:
 
-        from qp.monitoring.strategy_health_logger import MONITORING_DIR, StrategyHealthLogger
+        from qp.monitoring.strategy_health_logger import (
+            MONITORING_DIR,
+            StrategyHealthLogger,
+        )
 
         original_dir = str(MONITORING_DIR)
         try:
@@ -1938,7 +1951,8 @@ class TestStrategyHealthReport:
 
         # Scores: 40, 55, 70, 85, 92 — clearly improving
         history = [
-            StrategyHealth(strategy_id="t", health_score=s) for s in [40.0, 55.0, 70.0, 85.0, 92.0]
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [40.0, 55.0, 70.0, 85.0, 92.0]
         ]
         trend = _compute_trend(history)
         assert trend == "improving"
@@ -1949,7 +1963,8 @@ class TestStrategyHealthReport:
 
         # Scores: 95, 88, 75, 60, 45 — clearly declining
         history = [
-            StrategyHealth(strategy_id="t", health_score=s) for s in [95.0, 88.0, 75.0, 60.0, 45.0]
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [95.0, 88.0, 75.0, 60.0, 45.0]
         ]
         trend = _compute_trend(history)
         assert trend == "declining"
@@ -1959,7 +1974,8 @@ class TestStrategyHealthReport:
         from qp.monitoring.strategy_monitor import StrategyHealth
 
         history = [
-            StrategyHealth(strategy_id="t", health_score=s) for s in [80.0, 81.0, 79.0, 80.5, 80.0]
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [80.0, 81.0, 79.0, 80.5, 80.0]
         ]
         trend = _compute_trend(history)
         assert trend == "stable"
@@ -2018,7 +2034,8 @@ class TestStrategyHealthReport:
 
         # Declining history
         history = [
-            StrategyHealth(strategy_id="t", health_score=s) for s in [90.0, 80.0, 70.0, 60.0, 50.0]
+            StrategyHealth(strategy_id="t", health_score=s)
+            for s in [90.0, 80.0, 70.0, 60.0, 50.0]
         ]
         health = StrategyHealth(
             strategy_id="t",

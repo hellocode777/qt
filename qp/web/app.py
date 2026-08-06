@@ -75,6 +75,7 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(simulation_router)
     # Factor health router (L9 monitoring)
     from qp.web.routers.factors import router as factors_router
+
     app.include_router(factors_router)
     app.include_router(strategies_router)
 

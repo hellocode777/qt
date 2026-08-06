@@ -190,7 +190,9 @@ class FullDataPipeline(BasePipeline):
         if "is_tradeable" in bronze_df.columns:
             gold_df = bronze_df.filter(pl.col("is_tradeable"))
             logger.info(
-                "Universe 过滤: {} → {} 行 (剔除不可交易)", bronze_df.height, gold_df.height
+                "Universe 过滤: {} → {} 行 (剔除不可交易)",
+                bronze_df.height,
+                gold_df.height,
             )
         else:
             gold_df = bronze_df

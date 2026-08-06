@@ -138,7 +138,10 @@ async def mark_reviewed(
         return templates.TemplateResponse(
             request=request,
             name="components/human_review_panel.html",
-            context={"decision": None, "error": "Decision not found or invalid transition"},
+            context={
+                "decision": None,
+                "error": "Decision not found or invalid transition",
+            },
             status_code=404,
         )
     return templates.TemplateResponse(
@@ -161,7 +164,10 @@ async def mark_executed(
         return templates.TemplateResponse(
             request=request,
             name="components/human_review_panel.html",
-            context={"decision": None, "error": "Decision not found or invalid transition"},
+            context={
+                "decision": None,
+                "error": "Decision not found or invalid transition",
+            },
             status_code=404,
         )
     return templates.TemplateResponse(
@@ -184,7 +190,10 @@ async def close_decision(
         return templates.TemplateResponse(
             request=request,
             name="components/human_review_panel.html",
-            context={"decision": None, "error": "Decision not found or invalid transition"},
+            context={
+                "decision": None,
+                "error": "Decision not found or invalid transition",
+            },
             status_code=404,
         )
     return templates.TemplateResponse(

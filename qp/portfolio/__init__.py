@@ -23,7 +23,11 @@ from qp.portfolio.clustering import RiskClusterer
 from qp.portfolio.constraints import TrimAndRefill, TrimResult
 from qp.portfolio.correlation import CorrelationAnalyzer
 from qp.portfolio.cost_model import CostBreakdown, CostModel, MarketImpactModel
-from qp.portfolio.exposure import FactorExposureAnalyzer, LiquidityExposure, MarketCapExposure
+from qp.portfolio.exposure import (
+    FactorExposureAnalyzer,
+    LiquidityExposure,
+    MarketCapExposure,
+)
 from qp.portfolio.industry import IndustryMapper
 from qp.portfolio.metrics import PortfolioMetrics
 from qp.portfolio.models import (
@@ -49,6 +53,7 @@ __all__ = [
     "AllocationFactory",
     "AllocationResult",
     "AttributionReport",
+    "CVaRBudget",
     "CapitalAllocator",
     "CapitalAllocatorConfig",
     "CashDecision",
@@ -57,7 +62,6 @@ __all__ = [
     "CorrelationAnalyzer",
     "CostBreakdown",
     "CostModel",
-    "CVaRBudget",
     "EqualWeightAllocator",
     "FactorExposureAnalyzer",
     "IndustryMapper",
@@ -71,8 +75,8 @@ __all__ = [
     "OptimizationConstraintsBuilder",
     "OptimizationResult",
     "Order",
-    "PortfolioRiskEngine",
     "PortfolioMetrics",
+    "PortfolioRiskEngine",
     "PortfolioRiskManager",
     "PortfolioSnapshot",
     "PositionSizer",

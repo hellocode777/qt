@@ -108,7 +108,9 @@ class TierMetadata:
         )
 
         # Identify factor columns (not trade_date, symbol)
-        factor_cols = factors or [c for c in df.columns if c not in ("trade_date", "symbol")]
+        factor_cols = factors or [
+            c for c in df.columns if c not in ("trade_date", "symbol")
+        ]
         content = df.select(factor_cols).to_pandas().to_csv(index=False).encode()
         content_hash = hashlib.sha256(content).hexdigest()[:16]
 
@@ -301,9 +303,7 @@ class FactorStore:
         df.write_parquet(path)
 
         if meta is None:
-            meta = TierMetadata.from_df(
-                df, version=version, factors=factor_names
-            )
+            meta = TierMetadata.from_df(df, version=version, factors=factor_names)
         self._save_meta(FEATURE_TIER, name, meta)
 
         logger.info(
@@ -361,7 +361,9 @@ class FactorStore:
         if not tier_dir.exists():
             return []
         return sorted(
-            f.stem for f in tier_dir.glob("*.parquet") if not f.stem.startswith("_meta_")
+            f.stem
+            for f in tier_dir.glob("*.parquet")
+            if not f.stem.startswith("_meta_")
         )
 
     def tier_summary(self, tier: str) -> dict[str, Any]:
@@ -405,6 +407,4 @@ class FactorStore:
         import json
 
         meta_path = self._meta_path_for(tier, name)
-        meta_path.write_text(
-            json.dumps(meta.to_dict(), ensure_ascii=False, indent=2)
-        )
+        meta_path.write_text(json.dumps(meta.to_dict(), ensure_ascii=False, indent=2))

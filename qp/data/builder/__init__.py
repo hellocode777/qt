@@ -13,9 +13,12 @@ Quick start::
     builder.register_source("akshare", DailyPriceContract)
 
     metadata = DatasetMetadata(
-        name="daily_price", owner="data-layer", source="akshare",
+        name="daily_price",
+        owner="data-layer",
+        source="akshare",
         schema={"trade_date": "date", "symbol": "str", "close": "float64"},
-        frequency="daily", primary_key=["trade_date", "symbol"],
+        frequency="daily",
+        primary_key=["trade_date", "symbol"],
     )
     result = builder.build(df, metadata)
     assert result.success
@@ -26,9 +29,9 @@ from qp.data.builder.config import BuildConfig, DatasetMetadata
 from qp.data.builder.result import BuildResult
 
 __all__ = [
-    "DatasetBuilder",
     "BuildConfig",
-    "DatasetMetadata",
     "BuildResult",
+    "DatasetBuilder",
+    "DatasetMetadata",
     "build_dataset",
 ]

@@ -116,14 +116,14 @@ class LineageRegistry:
 
     # 2. 注册特征/因子（自动关联输入数据）
     def register_feature(
-        self, 
-        feature_name: str, 
-        compute_func: Callable, 
+        self,
+        feature_name: str,
+        compute_func: Callable,
         input_data_nodes: List[str]
     ) -> str:
         code_hash = self._generate_code_hash(compute_func)
         node_id = f"feature::{feature_name}::hash_{code_hash}"
-        
+
         metadata = {
             "node_type": "Feature",
             "feature_name": feature_name,
@@ -132,20 +132,20 @@ class LineageRegistry:
         }
         self.feature_registry[node_id] = metadata
         self.lineage_graph.add_node(node_id, **metadata)
-        
+
         # 建立血缘边：Data ──► Feature
         for parent_node in input_data_nodes:
             self.lineage_graph.add_edge(parent_node, node_id, relation="DERIVED_FROM")
-            
+
         print(f"⚡ [Feature Registered] {node_id}")
         return node_id
 
     # 3. 注册模型（关联使用的特征节点）
     def register_model(
-        self, 
-        model_name: str, 
-        version: str, 
-        used_feature_nodes: List[str], 
+        self,
+        model_name: str,
+        version: str,
+        used_feature_nodes: List[str],
         metrics: Dict[str, float]
     ) -> str:
         node_id = f"model::{model_name}::{version}"
@@ -158,11 +158,11 @@ class LineageRegistry:
         }
         self.model_registry[node_id] = metadata
         self.lineage_graph.add_node(node_id, **metadata)
-        
+
         # 建立血缘边：Feature ──► Model
         for f_node in used_feature_nodes:
             self.lineage_graph.add_edge(f_node, node_id, relation="TRAINED_ON")
-            
+
         print(f"🧠 [Model Registered] {node_id}")
         return node_id
 
@@ -171,7 +171,7 @@ class LineageRegistry:
         """如果某个数据源/因子出了问题，快速定位下游所有受影响的节点"""
         if bad_node_id not in self.lineage_graph:
             return []
-        
+
         # 使用图的 BFS 查找所有下游可达节点
         affected_nodes = list(nx.descendants(self.lineage_graph, bad_node_id))
         return affected_nodes
@@ -179,32 +179,32 @@ class LineageRegistry:
 # --- 🚀 使用示例 ---
 if __name__ == "__main__":
     registry = LineageRegistry()
-    
+
     # Step 1: 注册日线行情数据快照
     raw_data_node = registry.register_dataset(
-        data_id="cn_stock_ohlcv", 
-        uri="s3://quant-data/lake/ohlcv_v20260701.parquet", 
+        data_id="cn_stock_ohlcv",
+        uri="s3://quant-data/lake/ohlcv_v20260701.parquet",
         version="v20260701"
     )
-    
+
     # Step 2: 定义并注册因子
     def momentum_20d_logic(df):
         return df['close'].pct_change(20)
-        
+
     feature_node = registry.register_feature(
-        feature_name="momentum_20d", 
-        compute_func=momentum_20d_logic, 
+        feature_name="momentum_20d",
+        compute_func=momentum_20d_logic,
         input_data_nodes=[raw_data_node]
     )
-    
+
     # Step 3: 注册机器学习模型
     model_node = registry.register_model(
-        model_name="LGBM_Alpha_V1", 
-        version="1.0.3", 
+        model_name="LGBM_Alpha_V1",
+        version="1.0.3",
         used_feature_nodes=[feature_node],
         metrics={"purged_cv_ic": 0.068, "ic_ir": 1.82}
     )
-    
+
     # Step 4: 模拟故障排查——如果原始数据有误，查看下游受影响范围
     print("\n🔍 [Impact Analysis Query]")
     affected = registry.trace_downstream_impact(raw_data_node)
@@ -228,5 +228,3 @@ Feature Store 共享同一套特征逻辑与注册 ID
 血缘图谱 3 秒诊断，精准熔断受影响的特定策略
 
 Layer 4 是保证研究操作系统（Research OS）随着时间推移能够持续积累数字资产，而不是变成一堆不可维护的“垃圾代码与脏数据”的最强保障。
-
-

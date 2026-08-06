@@ -228,7 +228,9 @@ class FactorHealthPipeline(BasePipeline):
 
         for fname, score_df in factor_scores.items():
             daily = compute_daily_ic_series(
-                score_df, price_df, forward_days=forward_days,
+                score_df,
+                price_df,
+                forward_days=forward_days,
                 min_stocks_per_day=min_stocks_per_day,
             )
             if daily:
@@ -236,6 +238,7 @@ class FactorHealthPipeline(BasePipeline):
                 factor_ics[fname] = ics
                 # Use mean as fallback reference
                 import numpy as np
+
                 arr = np.array(ics, dtype=float)
                 computed_ref[fname] = float(np.mean(arr[~np.isnan(arr)]))
 
@@ -254,6 +257,7 @@ class FactorHealthPipeline(BasePipeline):
         # Create a simple context-like object
         class _Ctx:
             parameters: dict[str, Any] = {}
+
         ctx = _Ctx()
         ctx.parameters = params
 
@@ -306,23 +310,18 @@ class FactorHealthPipeline(BasePipeline):
         # Build alerts
         alerts: list[str] = []
         degraded = [
-            s for s in statuses
+            s
+            for s in statuses
             if s.stage in (FactorHealthStage.DEGRADED, FactorLifecycle.RETIRED)
         ]
         if degraded:
             names = ", ".join(s.factor_name for s in degraded)
-            alerts.append(
-                f"{len(degraded)} factor(s) degraded/stale: {names}"
-            )
+            alerts.append(f"{len(degraded)} factor(s) degraded/stale: {names}")
 
-        warning_only = [
-            s for s in statuses if s.stage == FactorLifecycle.VALIDATED
-        ]
+        warning_only = [s for s in statuses if s.stage == FactorLifecycle.VALIDATED]
         if warning_only:
             names = ", ".join(s.factor_name for s in warning_only)
-            alerts.append(
-                f"{len(warning_only)} factor(s) in warning: {names}"
-            )
+            alerts.append(f"{len(warning_only)} factor(s) in warning: {names}")
 
         total = len(statuses)
         summary = (

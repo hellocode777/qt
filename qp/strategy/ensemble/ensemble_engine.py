@@ -148,7 +148,9 @@ class EnsembleEngine:
             all_symbols.update(df["symbol"].to_list())
 
         # Per-strategy weighted scores keyed by symbol
-        strategy_scores: dict[str, dict[str, float | None]] = {sym: {} for sym in all_symbols}
+        strategy_scores: dict[str, dict[str, float | None]] = {
+            sym: {} for sym in all_symbols
+        }
         for sid, df in aligned.items():
             w = weights.get(sid, 1.0 / max(len(aligned), 1))
             if w <= 0:
@@ -188,14 +190,12 @@ class EnsembleEngine:
             return AlphaSignalBatch(date=date_str)
 
         # ── 4. Convert to AlphaSignalBatch ──
-        batch = self._to_batch(
+        return self._to_batch(
             fused,
             date_str=date_str,
             weights=weights,
             raw_components=aligned,
         )
-
-        return batch
 
     # ------------------------------------------------------------------
     # Universe alignment
@@ -293,7 +293,11 @@ class EnsembleEngine:
             scores = df[score_col].to_numpy()
             mn = float(scores.min())
             mx = float(scores.max())
-            normalized = (scores - mn) / (mx - mn) if mx - mn > 1e-12 else np.full_like(scores, 0.5)
+            normalized = (
+                (scores - mn) / (mx - mn)
+                if mx - mn > 1e-12
+                else np.full_like(scores, 0.5)
+            )
             result[sid] = df.with_columns(pl.Series(score_col, normalized))
 
         return result

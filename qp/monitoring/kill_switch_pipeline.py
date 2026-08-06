@@ -26,7 +26,10 @@ from enum import StrEnum
 from typing import Any
 
 from qp.monitoring.alerts import AlertManager, AlertSeverity
-from qp.monitoring.factor_health_pipeline import FactorHealthPipeline, FactorHealthReport
+from qp.monitoring.factor_health_pipeline import (
+    FactorHealthPipeline,
+    FactorHealthReport,
+)
 from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
 from qp.monitoring.regime import MarketRegimeEngine, RegimeResult
 from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
@@ -118,7 +121,9 @@ class KillSwitchPipeline(BasePipeline):
             PipelineResult with MonitorReport as artifact.
         """
 
-        run_id = getattr(context, "run_id", "ks-" + datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
+        run_id = getattr(
+            context, "run_id", "ks-" + datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        )
         logger = getattr(context, "logger", None)
 
         report = MonitorReport(
@@ -222,7 +227,9 @@ class KillSwitchPipeline(BasePipeline):
         ref_window = getattr(context, "psi_reference_window", "training_period")
 
         if psi >= 0.25:
-            alerts.append(f"PSI {psi:.3f} ≥ 0.25 vs {ref_window} — significant feature drift")
+            alerts.append(
+                f"PSI {psi:.3f} ≥ 0.25 vs {ref_window} — significant feature drift"
+            )
 
         return psi, alerts
 
@@ -462,7 +469,9 @@ class KillSwitchPipeline(BasePipeline):
             # Build event summary from report
             regime_str = report.regime.regime.value if report.regime else "UNKNOWN"
             triggers_str = (
-                ", ".join(report.kill_switch_triggers) if report.kill_switch_triggers else "none"
+                ", ".join(report.kill_switch_triggers)
+                if report.kill_switch_triggers
+                else "none"
             )
 
             event_summary = (
@@ -479,10 +488,18 @@ class KillSwitchPipeline(BasePipeline):
             root_cause = (
                 f"Monitoring pipeline detected escalation to {report.action.value}. "
                 f"Market regime was {regime_str}. "
-                + (f"Triggers: {triggers_str}." if triggers_str != "none" else "No KS triggers.")
+                + (
+                    f"Triggers: {triggers_str}."
+                    if triggers_str != "none"
+                    else "No KS triggers."
+                )
             )
 
-            severity = "4" if report.action in (MonitorAction.STOP, MonitorAction.REDUCE) else "2"
+            severity = (
+                "4"
+                if report.action in (MonitorAction.STOP, MonitorAction.REDUCE)
+                else "2"
+            )
 
             archive.create_failure_analysis(
                 title=f"KillSwitch: {report.action.value} on {report.timestamp[:10]}",

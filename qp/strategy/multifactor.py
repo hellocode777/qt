@@ -127,8 +127,12 @@ def compute_cross_sectional_scores(
 
     # Composite factors (computed post-hoc from raw factors, not from OHLCV)
     composite_factor_names = {
-        "LowVol_Composite", "Momentum_Composite", "Value_Composite",
-        "Quality_Composite", "Volume_Composite", "Reversal_Composite",
+        "LowVol_Composite",
+        "Momentum_Composite",
+        "Value_Composite",
+        "Quality_Composite",
+        "Volume_Composite",
+        "Reversal_Composite",
     }
 
     # When composites are in weights, expand to include their raw members
@@ -170,12 +174,16 @@ def compute_cross_sectional_scores(
 
     # Price/volume factors (computed from OHLCV) — exclude composites
     price_factor_names = (
-        all_factor_names - valuation_factor_names
-        - fundamental_factor_names - composite_factor_names
+        all_factor_names
+        - valuation_factor_names
+        - fundamental_factor_names
+        - composite_factor_names
     )
 
     # Collect raw factor values: {date_str: {symbol: {factor_name: value}}}
-    all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
+    all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(
+        lambda: defaultdict(dict)
+    )
 
     total_stocks = len(price_data)
     for stock_idx, (code, df) in enumerate(price_data.items()):
@@ -225,7 +233,9 @@ def compute_cross_sectional_scores(
         if val_df_src is not None and not val_df_src.is_empty():
             for fname in valuation_factor_names:
                 if fname in val_df_src.columns:
-                    aligned = _align_to_price_dates(val_df_src, fname, price_dates_dt, "trade_date")
+                    aligned = _align_to_price_dates(
+                        val_df_src, fname, price_dates_dt, "trade_date"
+                    )
                     if aligned is not None:
                         val_arrays[fname] = aligned
 
@@ -276,7 +286,11 @@ def compute_cross_sectional_scores(
             continue
         for date_str in all_dates:
             stocks = all_raw[date_str]
-            haves = {code: factors[fname] for code, factors in stocks.items() if fname in factors}
+            haves = {
+                code: factors[fname]
+                for code, factors in stocks.items()
+                if fname in factors
+            }
             if len(haves) < 5:
                 continue
             median_val = sorted(haves.values())[len(haves) // 2]
@@ -298,8 +312,12 @@ def compute_cross_sectional_scores(
 
     # ── Auto-generate composite factors (DP-002 v3) ──
     composite_names = {
-        "LowVol_Composite", "Momentum_Composite", "Value_Composite",
-        "Quality_Composite", "Volume_Composite", "Reversal_Composite",
+        "LowVol_Composite",
+        "Momentum_Composite",
+        "Value_Composite",
+        "Quality_Composite",
+        "Volume_Composite",
+        "Reversal_Composite",
     }
     if composite_names & set(weights.keys()):
         from qp.strategy.factor_composite import FactorCompositeEngine
@@ -389,7 +407,8 @@ def _build_risk_maps(
         if "volume" in df_s.columns:
             amt = df_s["close"] * df_s["volume"]
             avg_amt = amt.tail(20).mean()
-            amt_val: float = float(avg_amt) if avg_amt is not None and avg_amt > 0 else 0.0  # type: ignore[arg-type]
+            avg_amt_f: float = float(avg_amt) if avg_amt is not None else 0.0  # type: ignore[arg-type]
+            amt_val: float = avg_amt_f if avg_amt_f > 0 else 0.0
             if amt_val > 0:
                 amt_map[str(code)] = amt_val
 
@@ -616,8 +635,7 @@ def generate_rebalance_signals(
         return pl.DataFrame()
 
     result = pl.DataFrame(signals)
-    result = result.sort(["date", "signal"])
-    return result
+    return result.sort(["date", "signal"])
 
 
 # ------------------------------------------------------------------
@@ -701,7 +719,9 @@ def run_multifactor_strategy(
         if qualified_codes:
             filtered = len(price_data) - len(qualified_codes)
             if filtered > 0:
-                price_data = {k: v for k, v in price_data.items() if k in qualified_codes}
+                price_data = {
+                    k: v for k, v in price_data.items() if k in qualified_codes
+                }
 
     # ── 1. Cross-sectional scoring ──
     is_live = force_rebalance_today and holdings is not None
@@ -922,9 +942,13 @@ class MultiFactorStrategy(BaseStrategy):
             self._strategy_name = strategy_name
             self._top_n = top_n or cfg.max_positions
             self._industry_neutral = (
-                industry_neutral if industry_neutral is not None else cfg.industry_neutral
+                industry_neutral
+                if industry_neutral is not None
+                else cfg.industry_neutral
             )
-            self._orthogonalize = orthogonalize if orthogonalize is not None else cfg.orthogonalize
+            self._orthogonalize = (
+                orthogonalize if orthogonalize is not None else cfg.orthogonalize
+            )
             if weights is None:
                 weights = dict(cfg.factors)
         else:
@@ -1098,7 +1122,9 @@ def compute_today_signals(
             today_scores[code] = score
 
     if not today_scores:
-        return pl.DataFrame(schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64})
+        return pl.DataFrame(
+            schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64}
+        )
 
     # Build DataFrame, cross-sectionally rank
     result = pl.DataFrame(

@@ -21,19 +21,24 @@ Usage::
     result = engine.query("SELECT symbol, AVG(close) FROM ohlcv GROUP BY symbol")
 
     # 2. Query Parquet directly (no memory load)
-    df = engine.query_parquet("data/features/momentum/**/*.parquet",
-        "SELECT * FROM data WHERE trade_date >= '2024-01-01'")
+    df = engine.query_parquet(
+        "data/features/momentum/**/*.parquet",
+        "SELECT * FROM data WHERE trade_date >= '2024-01-01'",
+    )
 
     # 3. PIT query (Knowledge Time filtering)
-    pit_df = engine.pit_query("financials",
+    pit_df = engine.pit_query(
+        "financials",
         period_col="report_date",
         knowledge_col="publish_date",
-        as_of="2024-03-01")
+        as_of="2024-03-01",
+    )
 
     # 4. Bridge to OfflineStore
     store = OfflineStore("data/features")
-    df = engine.query_store(store,
-        "SELECT symbol, trade_date, momentum_20, rsi_14 FROM features")
+    df = engine.query_store(
+        store, "SELECT symbol, trade_date, momentum_20, rsi_14 FROM features"
+    )
 """
 
 from __future__ import annotations
@@ -91,7 +96,12 @@ class DuckDBEngine:
         arrow = df.to_arrow()
         self._conn.register(name, arrow)
         self._registered.add(name)
-        logger.debug("DuckDBEngine: registered '{}' ({} rows × {} cols)", name, df.height, df.width)
+        logger.debug(
+            "DuckDBEngine: registered '{}' ({} rows × {} cols)",
+            name,
+            df.height,
+            df.width,
+        )
 
     def register_many(self, tables: dict[str, pl.DataFrame]) -> None:
         """Register multiple DataFrames at once.
@@ -125,7 +135,9 @@ class DuckDBEngine:
             Polars DataFrame with query results.
         """
         try:
-            result = self._conn.execute(sql, params) if params else self._conn.execute(sql)
+            result = (
+                self._conn.execute(sql, params) if params else self._conn.execute(sql)
+            )
             # DuckDB >= 1.0 supports direct Polars conversion
             return result.pl()
         except Exception as e:
@@ -427,7 +439,9 @@ class DuckDBEngine:
         """
         self.register("_compute_src", df)
 
-        feature_sql = ", ".join(f"{expr} AS {name}" for name, expr in expressions.items())
+        feature_sql = ", ".join(
+            f"{expr} AS {name}" for name, expr in expressions.items()
+        )
 
         sql = f"""
             SELECT *,

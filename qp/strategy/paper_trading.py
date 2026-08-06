@@ -183,7 +183,7 @@ class PaperTradingTracker:
         from qp.strategy.simple_rank import SimpleRankStrategy
 
         if broker is None:
-            from qp.simulation.broker import SimulatedBroker  # noqa: PLC0415
+            from qp.simulation.broker import SimulatedBroker
 
             broker = SimulatedBroker(initial_cash=run.capital)
 
@@ -214,7 +214,9 @@ class PaperTradingTracker:
             today = date.fromisoformat(trade_date)
             signals = strategy.generate_signals(today)
 
-        n_signals = len(signals) if signals is not None and not signals.is_empty() else 0
+        n_signals = (
+            len(signals) if signals is not None and not signals.is_empty() else 0
+        )
         n_trades = 0
 
         # Submit orders only on first day (positioning) or weekly rebalance
@@ -288,7 +290,11 @@ class PaperTradingTracker:
         returns = np.array([r.daily_return for r in run.daily_records])
 
         total_ret = float((run.current_equity / run.capital - 1) * 100)
-        sharpe = float(np.sqrt(252) * returns.mean() / returns.std()) if returns.std() > 0 else 0.0
+        sharpe = (
+            float(np.sqrt(252) * returns.mean() / returns.std())
+            if returns.std() > 0
+            else 0.0
+        )
         ann_vol = float(returns.std() * np.sqrt(252) * 100)
 
         # Max drawdown
@@ -320,14 +326,10 @@ class PaperTradingTracker:
             recommendations.append(f"Avg signals {avg_signals:.1f} out of [3, 30]")
 
         if passed:
-            recommendation = (
-                "PASS: Paper trading successful. Recommend promotion to SHADOW_PRODUCTION."
-            )
+            recommendation = "PASS: Paper trading successful. Recommend promotion to SHADOW_PRODUCTION."
             promotion = StrategyLifecycle.SHADOW_PRODUCTION
         else:
-            recommendation = (
-                f"FAIL: {', '.join(recommendations)}. Recommend return to RESEARCH for iteration."
-            )
+            recommendation = f"FAIL: {', '.join(recommendations)}. Recommend return to RESEARCH for iteration."
             promotion = StrategyLifecycle.RESEARCH
 
         return PaperTradingResult(
@@ -424,6 +426,6 @@ class PaperTradingTracker:
             state_file=str(path),
         )
         run.daily_records = [DailyRecord(**r) for r in data.get("daily_records", [])]
-        if "result" in data and data["result"]:
+        if data.get("result"):
             run.result = PaperTradingResult(**data["result"])
         return run

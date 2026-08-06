@@ -216,9 +216,13 @@ class PortfolioDrawdownTrigger(_BaseTrigger):
 
         messages = []
         if monthly_fired:
-            messages.append(f"Monthly return {monthly_ret:.1%} ≤ -{self._monthly_limit:.0%}")
+            messages.append(
+                f"Monthly return {monthly_ret:.1%} ≤ -{self._monthly_limit:.0%}"
+            )
         if rolling_fired:
-            messages.append(f"Rolling 60d DD {rolling_60d_dd:.1%} ≥ {self._rolling_60d_limit:.0%}")
+            messages.append(
+                f"Rolling 60d DD {rolling_60d_dd:.1%} ≥ {self._rolling_60d_limit:.0%}"
+            )
 
         return {
             "fired": fired,
@@ -254,7 +258,9 @@ class PSITrigger(_BaseTrigger):
             "kill_level": KillSwitchLevel.WARNING if fired else KillSwitchLevel.NORMAL,
             "psi": psi,
             "threshold": self._threshold,
-            "message": (f"PSI {psi:.3f} ≥ threshold {self._threshold}") if fired else "",
+            "message": (f"PSI {psi:.3f} ≥ threshold {self._threshold}")
+            if fired
+            else "",
         }
 
     @staticmethod
@@ -442,7 +448,9 @@ class WeeklyDrawdownTrigger(_BaseTrigger):
             "kill_level": KillSwitchLevel.HALT_BUY if fired else KillSwitchLevel.NORMAL,
             "weekly_drawdown": weekly_dd,
             "threshold": self._weekly_limit,
-            "message": (f"Weekly drawdown {weekly_dd:.1%} > threshold {self._weekly_limit:.0%}")
+            "message": (
+                f"Weekly drawdown {weekly_dd:.1%} > threshold {self._weekly_limit:.0%}"
+            )
             if fired
             else "",
         }
@@ -523,7 +531,9 @@ class AbnormalTurnoverTrigger(_BaseTrigger):
 
         return {
             "fired": fired,
-            "kill_level": KillSwitchLevel.FULL_STOP if fired else KillSwitchLevel.NORMAL,
+            "kill_level": KillSwitchLevel.FULL_STOP
+            if fired
+            else KillSwitchLevel.NORMAL,
             "daily_trade_count": daily_trades,
             "total_holdings": total_holdings,
             "turnover_ratio": ratio,

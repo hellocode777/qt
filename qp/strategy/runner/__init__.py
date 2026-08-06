@@ -2,4 +2,4 @@
 
 from qp.strategy.runner.strategy_runner import RunnerResult, StrategyRunner
 
-__all__ = ["StrategyRunner", "RunnerResult"]
+__all__ = ["RunnerResult", "StrategyRunner"]

@@ -154,9 +154,8 @@ class FactorHealthLogger:
             return {}
 
         # Get max date per factor
-        latest_dates = (
-            df.group_by("factor_name")
-            .agg(pl.col("date").max().alias("max_date"))
+        latest_dates = df.group_by("factor_name").agg(
+            pl.col("date").max().alias("max_date")
         )
 
         # Join back to get full row
@@ -217,19 +216,36 @@ class FactorHealthLogger:
         if not latest:
             return {
                 "n_factors": 0,
-                "n_research": 0, "n_validated": 0, "n_production": 0,
-                "n_degraded": 0, "n_retired": 0, "n_archived": 0,
+                "n_research": 0,
+                "n_validated": 0,
+                "n_production": 0,
+                "n_degraded": 0,
+                "n_retired": 0,
+                "n_archived": 0,
                 # Backward compat
-                "n_healthy": 0, "n_warning": 0, "n_stale": 0,
-                "research_factors": [], "validated_factors": [],
-                "production_factors": [], "degraded_factors": [],
-                "retired_factors": [], "archived_factors": [],
-                "healthy_factors": [], "warning_factors": [],
+                "n_healthy": 0,
+                "n_warning": 0,
+                "n_stale": 0,
+                "research_factors": [],
+                "validated_factors": [],
+                "production_factors": [],
+                "degraded_factors": [],
+                "retired_factors": [],
+                "archived_factors": [],
+                "healthy_factors": [],
+                "warning_factors": [],
                 "stale_factors": [],
             }
 
         # All known lifecycle stages
-        all_stages = ["research", "validated", "production", "degraded", "retired", "archived"]
+        all_stages = [
+            "research",
+            "validated",
+            "production",
+            "degraded",
+            "retired",
+            "archived",
+        ]
         by_stage: dict[str, list[str]] = {s: [] for s in all_stages}
 
         for name, record in latest.items():
@@ -250,7 +266,8 @@ class FactorHealthLogger:
             # Backward compat
             "n_healthy": len(by_stage.get("production", [])),
             "n_warning": len(by_stage.get("validated", [])),
-            "n_stale": len(by_stage.get("retired", [])) + len(by_stage.get("archived", [])),
+            "n_stale": len(by_stage.get("retired", []))
+            + len(by_stage.get("archived", [])),
             "research_factors": by_stage.get("research", []),
             "validated_factors": by_stage.get("validated", []),
             "production_factors": by_stage.get("production", []),

@@ -100,13 +100,19 @@ class PanderaValidator:
                 metadata={"schema_name": name, "exception": str(exc)},
             )
 
-        logger.info("Pandera({}): 校验通过 ({} 行, {} 列)", name, df.height, len(df.columns))
+        logger.info(
+            "Pandera({}): 校验通过 ({} 行, {} 列)", name, df.height, len(df.columns)
+        )
         return CheckResult(
             check_name=check_name,
             passed=True,
             severity=Severity.INFO,
             detail=f"Schema '{name}' validates: {df.height} rows, {len(df.columns)} columns",
-            metadata={"schema_name": name, "rows": df.height, "columns": len(df.columns)},
+            metadata={
+                "schema_name": name,
+                "rows": df.height,
+                "columns": len(df.columns),
+            },
         )
 
     @staticmethod

@@ -254,7 +254,9 @@ class IndustryClassifier:
 
         # 3. Try AkShare supplement
         if len(baostock_data) < 1000:
-            logger.info("Baostock 数据不足 ({} 条)，尝试 AkShare 补充...", len(baostock_data))
+            logger.info(
+                "Baostock 数据不足 ({} 条)，尝试 AkShare 补充...", len(baostock_data)
+            )
             akshare_data = self._fetch_from_akshare()
             # Merge: baostock wins, akshare fills gaps
             for code, industry in akshare_data.items():
@@ -353,7 +355,10 @@ class IndustryClassifier:
 
         import time
 
-        logger.info("尝试 AkShare 东方财富行业板块 API ({} 个板块)...", len(_AKSHARE_BOARD_CODES))
+        logger.info(
+            "尝试 AkShare 东方财富行业板块 API ({} 个板块)...",
+            len(_AKSHARE_BOARD_CODES),
+        )
         industry_map: dict[str, str] = {}
         success_count = 0
 
@@ -383,7 +388,9 @@ class IndustryClassifier:
             time.sleep(0.15)
 
             if (i + 1) % 20 == 0:
-                logger.debug("  AkShare 行业板块进度: {}/{}", i + 1, len(_AKSHARE_BOARD_CODES))
+                logger.debug(
+                    "  AkShare 行业板块进度: {}/{}", i + 1, len(_AKSHARE_BOARD_CODES)
+                )
 
         logger.info(
             "AkShare: {}/{} 板块成功, {} 只股票",

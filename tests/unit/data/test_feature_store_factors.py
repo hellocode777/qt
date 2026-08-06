@@ -153,7 +153,11 @@ class TestMomentum:
         result = Momentum20().transform_batch(df)
         # First value of each symbol should be null
         for sym in ["600519", "000001"]:
-            first = result.filter(pl.col("symbol") == sym).head(20)["momentum_20"].drop_nulls()
+            first = (
+                result.filter(pl.col("symbol") == sym)
+                .head(20)["momentum_20"]
+                .drop_nulls()
+            )
             # After 20 rows, first non-null should appear
             assert first.len() >= 0
 
@@ -289,7 +293,9 @@ class TestTechnical:
         result = MACD().transform_batch(df)
         valid = result.drop_nulls(subset=["macd_hist", "macd_line", "macd_signal"])
         if valid.height > 0:
-            diff = (valid["macd_line"] - valid["macd_signal"] - valid["macd_hist"]).abs()
+            diff = (
+                valid["macd_line"] - valid["macd_signal"] - valid["macd_hist"]
+            ).abs()
             assert diff.max() < 0.01
 
 

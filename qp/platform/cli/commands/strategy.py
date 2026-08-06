@@ -50,7 +50,9 @@ def cmd_strategy_approve(
         exp_weights = exp_cfg.get("model_params", {})
 
         if not exp_weights:
-            print(f"❌ 实验 '{from_experiment}' 没有 model_params / No weights in experiment")
+            print(
+                f"❌ 实验 '{from_experiment}' 没有 model_params / No weights in experiment"
+            )
             return 1
 
         exp_strategy = exp_cfg.get("strategy_name", strategy_id)

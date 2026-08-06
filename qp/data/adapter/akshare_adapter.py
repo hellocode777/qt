@@ -62,8 +62,7 @@ class AKShareAdapter(BaseDataSource):
         if not frames:
             return pd.DataFrame()
 
-        result = pd.concat(frames, ignore_index=True)
-        return result
+        return pd.concat(frames, ignore_index=True)
 
     def validate_schema(self, df: pd.DataFrame) -> bool:
         """Check that the DataFrame contains expected columns."""

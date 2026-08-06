@@ -178,7 +178,7 @@ class QuantTradingDBAdapter(BaseDataSource):
             f"SELECT code, date, open, high, low, close, volume "
             f"FROM daily_bar WHERE code IN ({ph}) "
             f"AND date >= ? AND date <= ? ORDER BY code, date",
-            codes + [start_str, end_str],
+            [*codes, start_str, end_str],
         ).fetchall()
 
         if not rows:

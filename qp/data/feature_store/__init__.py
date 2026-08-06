@@ -26,6 +26,7 @@ Quick start::
         shift_features,
     )
 
+
     # 1. Define a feature
     class Momentum20(BaseFeature):
         feature_name = "momentum_20"
@@ -33,15 +34,14 @@ Quick start::
         window = 20
 
         def transform_batch(self, df):
-            return df.with_columns(
-                pl.col("close").pct_change(20).alias("momentum_20")
-            )
+            return df.with_columns(pl.col("close").pct_change(20).alias("momentum_20"))
 
         def update_stream(self, new_value):
             self._buffer.append(new_value)
             if not self.is_ready:
                 return None
             return self._buffer[-1] / self._buffer[0] - 1
+
 
     # 2. Register & compute
     registry = FeatureRegistry()
@@ -78,18 +78,18 @@ from qp.data.feature_store.standardization import (
 __all__ = [
     # Core
     "BaseFeature",
-    "FeatureRegistry",
-    "FeatureEngine",
     "DuckDBEngine",
+    "FeatureEngine",
+    "FeatureRegistry",
     # Storage
     "OfflineStore",
     "OnlineCache",
+    "cross_sectional_rank",
     # Standardization & Anti-leakage
     "cross_sectional_zscore",
-    "cross_sectional_rank",
+    "resample_safe",
     "rolling_zscore",
     "shift_features",
     "standardize_features",
     "validate_no_future_leakage",
-    "resample_safe",
 ]

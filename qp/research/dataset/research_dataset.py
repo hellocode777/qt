@@ -149,7 +149,9 @@ class ResearchDataset:
         n_dates = len(dates)
 
         if n_dates < min_train_days + 63:  # Need at least ~3 months test
-            raise ValueError(f"Need at least {min_train_days + 63} dates, got {n_dates}")
+            raise ValueError(
+                f"Need at least {min_train_days + 63} dates, got {n_dates}"
+            )
 
         test_cut = int(n_dates * (1 - test_ratio))
         val_cut = int(n_dates * (1 - test_ratio - val_ratio))
@@ -188,7 +190,8 @@ class ResearchDataset:
 
         train = df.filter(pl.col(self._date_col) <= train_end)
         test = df.filter(
-            (pl.col(self._date_col) >= test_start) & (pl.col(self._date_col) <= test_end)
+            (pl.col(self._date_col) >= test_start)
+            & (pl.col(self._date_col) <= test_end)
         )
 
         return train, test
@@ -220,7 +223,9 @@ class ResearchDataset:
             issues.append(f"Missing columns: {missing}")
 
         # Duplicates
-        dup_count = df.filter(df.select([self._date_col, self._symbol_col]).is_duplicated()).height
+        dup_count = df.filter(
+            df.select([self._date_col, self._symbol_col]).is_duplicated()
+        ).height
         if dup_count > 0:
             issues.append(f"{dup_count} duplicate (date, symbol) pairs")
 
@@ -241,7 +246,9 @@ class ResearchDataset:
             df_sorted = df.sort([self._symbol_col, self._date_col])
             pct_chg = (
                 df_sorted.with_columns(
-                    (pl.col("close").pct_change().over(self._symbol_col).abs()).alias("_pct_chg")
+                    (pl.col("close").pct_change().over(self._symbol_col).abs()).alias(
+                        "_pct_chg"
+                    )
                 )
                 .filter(pl.col("_pct_chg") > 0.5)
                 .height

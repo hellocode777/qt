@@ -165,7 +165,9 @@ class TestComputeDailyICSeries:
             }
         ).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
 
-        series = compute_daily_ic_series(score_df, price_df, forward_days=1, min_stocks_per_day=10)
+        series = compute_daily_ic_series(
+            score_df, price_df, forward_days=1, min_stocks_per_day=10
+        )
         assert len(series) >= 1
         for item in series:
             assert "date" in item
@@ -209,12 +211,20 @@ class TestEvaluateFactorIC:
         for d_offset in range(10):
             d_str = f"2026-01-{15 + d_offset:02d}"
             for sym in symbols:
-                rows.append({"trade_date": d_str, "symbol": sym, "close": 10.0 + float(d_offset)})
+                rows.append(
+                    {
+                        "trade_date": d_str,
+                        "symbol": sym,
+                        "close": 10.0 + float(d_offset),
+                    }
+                )
         price_df = pl.DataFrame(rows).with_columns(
             pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d")
         )
 
-        rec = evaluate_factor_ic(score_df, price_df, forward_days=1, min_stocks_per_day=10)
+        rec = evaluate_factor_ic(
+            score_df, price_df, forward_days=1, min_stocks_per_day=10
+        )
         assert isinstance(rec, ICRecord)
         assert rec.n_days >= 1
 
@@ -243,11 +253,19 @@ class TestComputeICDecay:
                     else f"2026-02-{d_offset - 30:02d}"
                 )
                 rows_price.append(
-                    {"trade_date": d_str, "symbol": sym, "close": 10.0 + float(d_offset)}
+                    {
+                        "trade_date": d_str,
+                        "symbol": sym,
+                        "close": 10.0 + float(d_offset),
+                    }
                 )
                 if d_offset < 25:
                     rows_score.append(
-                        {"trade_date": d_str, "symbol": sym, "score": float(d_offset % 12) / 12.0}
+                        {
+                            "trade_date": d_str,
+                            "symbol": sym,
+                            "score": float(d_offset % 12) / 12.0,
+                        }
                     )
 
         score_df = pl.DataFrame(rows_score).with_columns(
@@ -257,7 +275,9 @@ class TestComputeICDecay:
             pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d")
         )
 
-        results = compute_ic_decay(score_df, price_df, horizons=[1, 5], min_stocks_per_day=10)
+        results = compute_ic_decay(
+            score_df, price_df, horizons=[1, 5], min_stocks_per_day=10
+        )
         assert len(results) == 2
         assert 1 in results
         assert 5 in results

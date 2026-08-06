@@ -103,7 +103,9 @@ def _make_lvr_config(name: str, display: str, factors: dict) -> StrategyConfig:
 LVR_VOL_ONLY = register_config(
     _make_lvr_config("lvr_vol_only", "低波(仅波动率)", LVR_VOL_ONLY_WEIGHTS)
 )
-LVR_VOL_MOM = register_config(_make_lvr_config("lvr_vol_mom", "低波+动量", LVR_VOL_MOM_WEIGHTS))
+LVR_VOL_MOM = register_config(
+    _make_lvr_config("lvr_vol_mom", "低波+动量", LVR_VOL_MOM_WEIGHTS)
+)
 LVR_VOL_ALL_REV = register_config(
     _make_lvr_config("lvr_vol_all_rev", "低波+全部反转", LVR_VOL_ALL_REVERSAL_WEIGHTS)
 )
@@ -296,10 +298,11 @@ def run_momentum_vol_full(
                 )
             # Log regime distribution
             from collections import Counter
+
             regime_counts = Counter(regime_map.values())
             total_days = len(regime_map)
             dist_parts = [
-                f"{r}:{c}/{total_days}({c/total_days:.0%})"
+                f"{r}:{c}/{total_days}({c / total_days:.0%})"
                 for r, c in regime_counts.most_common()
             ]
             logger.info(
@@ -378,7 +381,9 @@ def run_momentum_vol_full(
 # ------------------------------------------------------------------
 
 
-def _apply_overrides(config: StrategyConfig, overrides: dict[str, Any]) -> StrategyConfig:
+def _apply_overrides(
+    config: StrategyConfig, overrides: dict[str, Any]
+) -> StrategyConfig:
     """将 **overrides 中的键值覆盖到 config 上."""
     import copy
 

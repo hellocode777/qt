@@ -88,7 +88,9 @@ class KellyAllocator(BaseCapitalAllocator):
             symbol = str(row["symbol"])
 
             if has_limits:
-                layer7_limit = float(cast("float", row.get("max_weight_limit", self._max_single)))
+                layer7_limit = float(
+                    cast("float", row.get("max_weight_limit", self._max_single))
+                )
             else:
                 layer7_limit = self._max_single
 
@@ -187,7 +189,9 @@ class KellyAllocator(BaseCapitalAllocator):
 
         px = px.sort(["symbol", "trade_date"])
         px = px.with_columns(
-            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("daily_return")
+            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias(
+                "daily_return"
+            )
         )
         px = px.drop_nulls(subset=["daily_return"])
 

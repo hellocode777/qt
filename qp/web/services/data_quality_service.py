@@ -79,7 +79,9 @@ class DataQualityService:
         # 2. Scan the latest daily_price parquet for today & full stats
         latest_parquet = self._dataset_dir / "daily_price_latest.parquet"
         if not latest_parquet.exists():
-            latest_parquet = self._find_latest_parquet("daily_price")  # fallback to old files
+            latest_parquet = self._find_latest_parquet(
+                "daily_price"
+            )  # fallback to old files
         today_stocks = 0
         today_rows = 0
         main_stocks = 0
@@ -95,11 +97,17 @@ class DataQualityService:
                 # Find latest trade_date
                 if "trade_date" in df.columns:
                     dates = (
-                        df.select(pl.col("trade_date").cast(pl.Utf8)).unique().sort("trade_date")
+                        df.select(pl.col("trade_date").cast(pl.Utf8))
+                        .unique()
+                        .sort("trade_date")
                     )
-                    daily_end_date = str(dates.tail(1).item() if not dates.is_empty() else "")
+                    daily_end_date = str(
+                        dates.tail(1).item() if not dates.is_empty() else ""
+                    )
                     # Today's rows: count rows matching latest trade_date
-                    today_df = df.filter(pl.col("trade_date").cast(pl.Utf8) == daily_end_date)
+                    today_df = df.filter(
+                        pl.col("trade_date").cast(pl.Utf8) == daily_end_date
+                    )
                     today_rows = today_df.height
                     if "symbol" in today_df.columns:
                         today_stocks = today_df["symbol"].n_unique()
@@ -133,10 +141,14 @@ class DataQualityService:
                     freshness_label = f"最近交易日: {daily_end_date} (1个交易日前)"
                 elif trading_days_old <= 3:
                     freshness_status = "stale"
-                    freshness_label = f"最近交易日: {daily_end_date} ({trading_days_old}个交易日前)"
+                    freshness_label = (
+                        f"最近交易日: {daily_end_date} ({trading_days_old}个交易日前)"
+                    )
                 else:
                     freshness_status = "outdated"
-                    freshness_label = f"数据滞后 ({daily_end_date}, {trading_days_old}个交易日前)"
+                    freshness_label = (
+                        f"数据滞后 ({daily_end_date}, {trading_days_old}个交易日前)"
+                    )
             except ValueError:
                 freshness_status = "unknown"
                 freshness_label = f"最新: {daily_end_date}"
@@ -197,7 +209,9 @@ class DataQualityService:
         # Fallback: infer health from dataset registry
         return self._inferred_source_health()
 
-    def _format_sources(self, raw_sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _format_sources(
+        self, raw_sources: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Format raw source dicts from sources.json."""
         result = []
         for s in raw_sources:

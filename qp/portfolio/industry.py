@@ -65,7 +65,10 @@ class IndustryMapper:
             try:
                 data = _json.loads(_INDUSTRY_PATH.read_text(encoding="utf-8"))
                 for code, info in data.items():
-                    self._map[code] = (info.get("sector", "Other"), info.get("subsector", "Other"))
+                    self._map[code] = (
+                        info.get("sector", "Other"),
+                        info.get("subsector", "Other"),
+                    )
             except Exception:
                 pass
 

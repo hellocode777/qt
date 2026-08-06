@@ -81,7 +81,11 @@ def _build_index_df(price_data: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if not price_data:
         return pl.DataFrame()
 
-    date_col = "trade_date" if "trade_date" in next(iter(price_data.values())).columns else "date"
+    date_col = (
+        "trade_date"
+        if "trade_date" in next(iter(price_data.values())).columns
+        else "date"
+    )
 
     frames = []
     for pdf in price_data.values():
@@ -97,14 +101,12 @@ def _build_index_df(price_data: dict[str, pl.DataFrame]) -> pl.DataFrame:
         return pl.DataFrame()
 
     all_closes = pl.concat(frames, how="vertical")
-    result = (
+    return (
         all_closes.group_by(date_col)
         .agg(pl.col("close").mean().alias("close"))
         .sort(date_col)
         .rename({date_col: "date"})
     )
-
-    return result
 
 
 def _load_fundamental_data() -> dict[str, pl.DataFrame]:
@@ -134,7 +136,9 @@ def _load_fundamental_data() -> dict[str, pl.DataFrame]:
         for sym in df["symbol"].unique().to_list():
             sub = df.filter(pl.col("symbol") == sym).sort("report_date")
             if not sub.is_empty():
-                result[str(sym)] = sub.with_columns(pl.col("report_date").alias("publish_date"))
+                result[str(sym)] = sub.with_columns(
+                    pl.col("report_date").alias("publish_date")
+                )
 
     return result
 
@@ -252,7 +256,9 @@ class DailyPipeline(BasePipeline):
                     result.errors.extend(data_result.errors)
                     result.status = PipelineStatus.FAILED
                     return result
-                result.metrics.update({f"data_{k}": v for k, v in data_result.metrics.items()})
+                result.metrics.update(
+                    {f"data_{k}": v for k, v in data_result.metrics.items()}
+                )
 
             # ================================================================
             # Step 2: Feature computation (momentum + volatility)
@@ -271,7 +277,9 @@ class DailyPipeline(BasePipeline):
             result.metrics["price_symbols"] = len(price_data)
 
             if not price_data:
-                result.metadata["warning"] = "No price data available — skipping strategies"
+                result.metadata["warning"] = (
+                    "No price data available — skipping strategies"
+                )
                 result.artifacts.append("data/dataset/momentum_20d.parquet")
                 result.artifacts.append("data/dataset/volatility_20d.parquet")
                 return result
@@ -302,8 +310,12 @@ class DailyPipeline(BasePipeline):
                     regime_label = regime_result.regime
                     suggested_position_pct = regime_result.suggested_position_pct
                     result.metadata["market_regime"] = regime_label
-                    result.metrics["regime_position_pct"] = round(suggested_position_pct, 2)
-                    result.metrics["regime_confidence"] = round(regime_result.confidence, 2)
+                    result.metrics["regime_position_pct"] = round(
+                        suggested_position_pct, 2
+                    )
+                    result.metrics["regime_confidence"] = round(
+                        regime_result.confidence, 2
+                    )
                     result.metrics["regime_trend"] = round(regime_result.trend_score, 2)
                     # Compute actual annualized vol from price data
                     if not index_df.is_empty() and "close" in index_df.columns:
@@ -397,7 +409,9 @@ class DailyPipeline(BasePipeline):
                     # ADR-031: read frozen weights from Registry first,
                     # fall back to StrategyConfig for parameters
                     registry_meta = registry.get_meta(strategy_name)
-                    weights = dict(registry_meta.weights) if registry_meta.weights else {}
+                    weights = (
+                        dict(registry_meta.weights) if registry_meta.weights else {}
+                    )
 
                     if not weights:
                         # Fallback: no weights in Registry yet → read from config
@@ -408,11 +422,17 @@ class DailyPipeline(BasePipeline):
                         "   {} — {} factors (today-only scoring{})",
                         strategy_name,
                         len(weights),
-                        " [from Registry]" if registry_meta.weights else " [from Config]",
+                        " [from Registry]"
+                        if registry_meta.weights
+                        else " [from Config]",
                     )
 
                     # Parameters: try Registry first, then config
-                    params = dict(registry_meta.parameters) if registry_meta.parameters else {}
+                    params = (
+                        dict(registry_meta.parameters)
+                        if registry_meta.parameters
+                        else {}
+                    )
                     industry_neutral = params.get("industry_neutral", True)
                     if not isinstance(industry_neutral, bool):
                         industry_neutral = True
@@ -565,11 +585,20 @@ class DailyPipeline(BasePipeline):
                         n_buys=n_buys,
                         n_sells=0,
                     )
-                    strategy_health_data[sid] = StrategyHealthLogger.health_to_dict(health)
-                    result.metrics[f"health_score_{sid}"] = round(health.health_score, 1)
+                    strategy_health_data[sid] = StrategyHealthLogger.health_to_dict(
+                        health
+                    )
+                    result.metrics[f"health_score_{sid}"] = round(
+                        health.health_score, 1
+                    )
 
-                result.metadata["strategy_health_count"] = str(len(strategy_health_data))
-                logger.info("Strategy health recorded for {} strategies", len(strategy_health_data))
+                result.metadata["strategy_health_count"] = str(
+                    len(strategy_health_data)
+                )
+                logger.info(
+                    "Strategy health recorded for {} strategies",
+                    len(strategy_health_data),
+                )
 
                 # Merge health data into validation results for DecisionPackage
                 for sid, health in strategy_health_data.items():
@@ -590,7 +619,10 @@ class DailyPipeline(BasePipeline):
                             hist_health = []
                         # Build current health from dict
                         hd = strategy_health_data[sid]
-                        from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
+                        from qp.monitoring.strategy_monitor import (
+                            HealthLevel,
+                            StrategyHealth,
+                        )
 
                         current = StrategyHealth(
                             strategy_id=sid,
@@ -604,7 +636,9 @@ class DailyPipeline(BasePipeline):
                             alerts=hd["alerts"],
                             summary=hd["summary"],
                         )
-                        report = StrategyHealthReport.from_health(current, history=hist_health)
+                        report = StrategyHealthReport.from_health(
+                            current, history=hist_health
+                        )
                         strategy_reports[sid] = report.to_dict()
                         if sid in validation_results:
                             validation_results[sid]["health_report"] = report.to_dict()
@@ -639,16 +673,20 @@ class DailyPipeline(BasePipeline):
             risk_report = None
             if not combined_signals.is_empty() and not prices.is_empty():
                 risk_manager = PortfolioRiskManager()
-                filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(
-                    combined_signals, prices
+                filtered_signals, risk_report = (
+                    risk_manager.apply_risk_limits_with_prices(combined_signals, prices)
                 )
                 result.metrics["risk_candidates_in"] = risk_report.candidates_in
                 result.metrics["risk_candidates_out"] = risk_report.candidates_out
                 result.metrics["risk_violations"] = len(risk_report.violations)
                 if risk_report.violations:
-                    result.metadata["risk_violations"] = "; ".join(risk_report.violations)
+                    result.metadata["risk_violations"] = "; ".join(
+                        risk_report.violations
+                    )
                 if risk_report.dropped_symbols:
-                    result.metadata["risk_dropped"] = ", ".join(risk_report.dropped_symbols)
+                    result.metadata["risk_dropped"] = ", ".join(
+                        risk_report.dropped_symbols
+                    )
 
                 # Build structured RiskAudit
                 risk_entries: list[RiskAuditEntry] = []
@@ -701,7 +739,9 @@ class DailyPipeline(BasePipeline):
                         price_data=price_data,
                     )
                     online_health[sid] = result_item.to_dict()
-                    result.metrics[f"online_health_{sid}"] = float(result_item.health_score)
+                    result.metrics[f"online_health_{sid}"] = float(
+                        result_item.health_score
+                    )
                     if result_item.alerts:
                         logger.warning(
                             "Online monitor [{}]: level={}, alerts={}",
@@ -745,7 +785,9 @@ class DailyPipeline(BasePipeline):
                     )
                     total_impact += cost.total_cost
 
-                result.metrics["estimated_cost_pct"] = round(total_impact / total_capital * 100, 4)
+                result.metrics["estimated_cost_pct"] = round(
+                    total_impact / total_capital * 100, 4
+                )
 
             # ================================================================
             # Step 12: Capital allocation (Layer 8 engine) — only on rebalance day
@@ -772,7 +814,9 @@ class DailyPipeline(BasePipeline):
                 candidates_pl = filtered_signals.select(
                     [
                         "symbol",
-                        (pl.col(score_col) if score_col else pl.lit(0.5)).alias("alpha_score"),
+                        (pl.col(score_col) if score_col else pl.lit(0.5)).alias(
+                            "alpha_score"
+                        ),
                         pl.lit(0.15).alias("max_weight_limit"),
                         pl.lit("").alias("risk_cluster"),
                     ]
@@ -794,7 +838,9 @@ class DailyPipeline(BasePipeline):
                 tp = alloc_result.target_portfolio
                 result.metadata["allocator_used"] = str(alloc_result.allocator_used)
                 result.metrics["n_positions_out"] = tp.n_equities if tp else 0
-                result.metrics["cash_reserve"] = round(tp.cash_reserve, 4) if tp else 0.0
+                result.metrics["cash_reserve"] = (
+                    round(tp.cash_reserve, 4) if tp else 0.0
+                )
                 result.metrics["allocated_positions"] = tp.n_equities if tp else 0
 
                 if alloc_result.warnings:
@@ -810,7 +856,9 @@ class DailyPipeline(BasePipeline):
                         amount = wt * total_capital
                         quantity = int(amount // 100 * 100)  # Round to lots
                         if quantity > 0:
-                            orders.append(Order(symbol=sym, side="BUY", quantity=quantity))
+                            orders.append(
+                                Order(symbol=sym, side="BUY", quantity=quantity)
+                            )
 
                 result.metrics["order_count"] = len(orders)
                 for o in orders:
@@ -833,7 +881,9 @@ class DailyPipeline(BasePipeline):
             cost_basis: dict[str, float] = {}
             current_prices: dict[str, float] = {}
             TARGET_TOP_N = effective_top_n if effective_top_n > 0 else 10
-            SELL_BUFFER_RANK = TARGET_TOP_N * 2  # V2.1: Buy Top10, Buffer 11-20, Sell >20
+            SELL_BUFFER_RANK = (
+                TARGET_TOP_N * 2
+            )  # V2.1: Buy Top10, Buffer 11-20, Sell >20
 
             try:
                 from qp.decision.position_ledger import PositionLedger
@@ -854,9 +904,9 @@ class DailyPipeline(BasePipeline):
 
                     # Build current price lookup
                     if not prices.is_empty():
-                        latest_prices = prices.sort("trade_date", descending=True).unique(
-                            subset=["symbol"], keep="first"
-                        )
+                        latest_prices = prices.sort(
+                            "trade_date", descending=True
+                        ).unique(subset=["symbol"], keep="first")
                         for row in latest_prices.iter_rows(named=True):
                             sym = str(row["symbol"])
                             if sym in holdings:
@@ -878,7 +928,9 @@ class DailyPipeline(BasePipeline):
                     # {symbol: {reasons: set, details: list, priority: Priority}}
                     exit_map: dict[str, dict[str, Any]] = {}
 
-                    def _add_exit(sym: str, reason: str, detail: str, prio: Priority) -> None:
+                    def _add_exit(
+                        sym: str, reason: str, detail: str, prio: Priority
+                    ) -> None:
                         if sym not in exit_map:
                             exit_map[sym] = {
                                 "reasons": set(),
@@ -912,7 +964,11 @@ class DailyPipeline(BasePipeline):
                         result.metrics["risk_exit_signals"] = len(risk_signals)
 
                     # ── 第一类：Rank Exit (仅调仓日) ──
-                    if is_rebalance_day and active_positions and not combined_signals.is_empty():
+                    if (
+                        is_rebalance_day
+                        and active_positions
+                        and not combined_signals.is_empty()
+                    ):
                         # V2.1: today's rank map (1 = best)
                         rank_map: dict[str, int] = {}
                         sig_symbols = combined_signals["symbol"].to_list()
@@ -955,7 +1011,8 @@ class DailyPipeline(BasePipeline):
                             if total_value > 0:
                                 for sector, sps in sector_positions.items():
                                     sector_value = sum(
-                                        p.shares * current_prices.get(p.symbol, 0) for p in sps
+                                        p.shares * current_prices.get(p.symbol, 0)
+                                        for p in sps
                                     )
                                     sector_wt = sector_value / total_value
                                     if sector_wt > SECTOR_OVERWEIGHT_THRESHOLD:
@@ -973,7 +1030,9 @@ class DailyPipeline(BasePipeline):
                                             sector_wt,
                                             len(sps),
                                         )
-                            result.metrics["sector_exit_checked"] = len(sector_positions)
+                            result.metrics["sector_exit_checked"] = len(
+                                sector_positions
+                            )
                         except Exception as exc:
                             logger.debug("Sector exit check skipped: {}", exc)
 
@@ -1009,13 +1068,15 @@ class DailyPipeline(BasePipeline):
                                 risk_warnings=info["details"],
                                 confidence=(
                                     0.95
-                                    if info["priority"] in (Priority.CRITICAL, Priority.HIGH)
+                                    if info["priority"]
+                                    in (Priority.CRITICAL, Priority.HIGH)
                                     else 0.70
                                     if info["priority"] == Priority.MEDIUM
                                     else 0.55
                                 ),
                                 strategy="risk_exit"
-                                if info["priority"] in (Priority.CRITICAL, Priority.HIGH)
+                                if info["priority"]
+                                in (Priority.CRITICAL, Priority.HIGH)
                                 else "rank_exit",
                             )
                         )
@@ -1062,7 +1123,11 @@ class DailyPipeline(BasePipeline):
                 strategy_id="multi_strategy_ensemble",
                 total_capital=total_capital,
             )
-            if is_rebalance_day and not filtered_signals.is_empty() and not prices.is_empty():
+            if (
+                is_rebalance_day
+                and not filtered_signals.is_empty()
+                and not prices.is_empty()
+            ):
                 # Use only latest price per symbol (avoid stale historical prices)
                 latest_prices = prices.sort("trade_date", descending=True).unique(
                     subset=["symbol"], keep="first"
@@ -1080,7 +1145,9 @@ class DailyPipeline(BasePipeline):
                 except Exception as exc:
                     logger.warning("DecisionEngine failed: {}", exc)
             elif not is_rebalance_day:
-                logger.info("非调仓日 — 跳过 BUY 信号生成 (Only Risk/Rank Exit runs daily)")
+                logger.info(
+                    "非调仓日 — 跳过 BUY 信号生成 (Only Risk/Rank Exit runs daily)"
+                )
 
             # P3.1: Append exit engine SELL recommendations
             if sell_recommendations:
@@ -1110,7 +1177,9 @@ class DailyPipeline(BasePipeline):
                 human_review=HumanReview(),
                 metadata={
                     "pipeline_run_id": context.run_id,
-                    "allocator_used": str(result.metadata.get("allocator_used", "equal_weight")),
+                    "allocator_used": str(
+                        result.metadata.get("allocator_used", "equal_weight")
+                    ),
                     "strategy_health_count": str(len(strategy_health_data)),
                     "is_rebalance_day": str(is_rebalance_day),
                 },
@@ -1140,7 +1209,9 @@ class DailyPipeline(BasePipeline):
                 shadow_n_positions = shadow_result.get("n_positions", 0)
                 shadow_cash = shadow_result.get("cash", shadow_equity)
                 result.metrics["shadow_equity"] = round(shadow_equity, 2)
-                result.metadata["shadow_pnl"] = str(shadow_result.get("unrealized_pnl", 0))
+                result.metadata["shadow_pnl"] = str(
+                    shadow_result.get("unrealized_pnl", 0)
+                )
                 logger.info(
                     "Shadow: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
                     shadow_equity,

@@ -109,7 +109,9 @@ def repair_ohlc_boundaries(df: pl.DataFrame) -> pl.DataFrame:
             for i in bad_indices:
                 old_val = df[col][i]
                 repaired_list[i][col] = f"zero_or_neg({old_val})"
-            df = df.with_columns(pl.when(bad_mask).then(None).otherwise(pl.col(col)).alias(col))
+            df = df.with_columns(
+                pl.when(bad_mask).then(None).otherwise(pl.col(col)).alias(col)
+            )
 
     # ── Step 2: NaN → ffill (then bfill for leading NaN) ──
     for col in available:
@@ -186,17 +188,22 @@ def validate_and_fix_amount(
 
     # Average price from OHLC
     df = df.with_columns(
-        ((pl.col("open") + pl.col("high") + pl.col("low") + pl.col("close")) / 4.0).alias(
-            "_avg_price"
-        )
+        (
+            (pl.col("open") + pl.col("high") + pl.col("low") + pl.col("close")) / 4.0
+        ).alias("_avg_price")
     )
-    df = df.with_columns((pl.col("volume") * pl.col("_avg_price")).alias("_expected_amount"))
+    df = df.with_columns(
+        (pl.col("volume") * pl.col("_avg_price")).alias("_expected_amount")
+    )
 
     # Detect bad rows (volume > 0, deviation > tolerance)
     has_trade = df["volume"] > 0
     df = df.with_columns(
         pl.when(has_trade & (df["_expected_amount"] > 0))
-        .then((pl.col("amount") - pl.col("_expected_amount")).abs() / pl.col("_expected_amount"))
+        .then(
+            (pl.col("amount") - pl.col("_expected_amount")).abs()
+            / pl.col("_expected_amount")
+        )
         .otherwise(0.0)
         .alias("_amount_deviation")
     )
@@ -389,7 +396,9 @@ def detect_price_limit_anomalies(
         if abs(r) > threshold:
             # Check adjacent days for similar extremes (adjustment pattern)
             prev_r = abs(rets[i - 1]) if i > 1 and rets[i - 1] is not None else 0
-            next_r = abs(rets[i + 1]) if i < df.height - 2 and rets[i + 1] is not None else 0
+            next_r = (
+                abs(rets[i + 1]) if i < df.height - 2 and rets[i + 1] is not None else 0
+            )
             is_adj_jump = (prev_r > threshold) or (next_r > threshold)
             flags[i] = "adj_jump" if is_adj_jump else "ex_limit"
 

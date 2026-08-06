@@ -157,16 +157,16 @@ def compute_composite_factors(
         ranked_cols = []
         for m in available:
             rank_col = f"__rank_{m}"
-            df = df.with_columns(
-                pl.col(m).rank().over("trade_date").alias(rank_col)
-            )
+            df = df.with_columns(pl.col(m).rank().over("trade_date").alias(rank_col))
             ranked_cols.append(rank_col)
 
         # Composite = mean of ranks × direction
         if ranked_cols:
             rank_exprs = [pl.col(c) for c in ranked_cols]
             df = df.with_columns(
-                (pl.sum_horizontal(rank_exprs) / len(ranked_cols) * direction).alias(comp_name)
+                (pl.sum_horizontal(rank_exprs) / len(ranked_cols) * direction).alias(
+                    comp_name
+                )
             )
 
             # Cleanup temp columns

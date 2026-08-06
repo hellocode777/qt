@@ -17,7 +17,9 @@ def cmd_model_list() -> int:
         print("  暂无已注册模型。")
         return 0
 
-    print(f"{'Model ID':<35s} {'Strategy':<25s} {'Stage':<16s} {'Sharpe':>8s} {'Features'}")
+    print(
+        f"{'Model ID':<35s} {'Strategy':<25s} {'Stage':<16s} {'Sharpe':>8s} {'Features'}"
+    )
     print("-" * 120)
     for m in models:
         features_str = ", ".join(m.features[:3])

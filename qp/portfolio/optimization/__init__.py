@@ -5,6 +5,9 @@ Per docs/8_Capital_Allocation_Layer.md §第三部分:
   将 Layer 7 输出的 risk bounds 转换为优化器的硬约束。
 """
 
-from qp.portfolio.optimization.constraints import ConstraintSet, OptimizationConstraintsBuilder
+from qp.portfolio.optimization.constraints import (
+    ConstraintSet,
+    OptimizationConstraintsBuilder,
+)
 
 __all__ = ["ConstraintSet", "OptimizationConstraintsBuilder"]

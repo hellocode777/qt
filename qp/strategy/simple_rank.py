@@ -67,7 +67,9 @@ class SimpleRankStrategy(BaseStrategy):
 
         # Rank by feature_value (descending)
         df = df.sort("feature_value", descending=True)
-        df = df.with_columns(pl.col("feature_value").rank(descending=True).alias("rank"))
+        df = df.with_columns(
+            pl.col("feature_value").rank(descending=True).alias("rank")
+        )
         df = df.filter(pl.col("rank") <= self._top_n)
 
         df = df.with_columns(pl.lit("BUY").alias("action"))

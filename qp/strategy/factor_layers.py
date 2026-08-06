@@ -262,7 +262,9 @@ class FactorEnsemble:
         Returns:
             {factor_name: signed_effective_weight} with health adjustments.
         """
-        base_weights = self.get_active_weights(regime=regime, layer_overrides=layer_overrides)
+        base_weights = self.get_active_weights(
+            regime=regime, layer_overrides=layer_overrides
+        )
 
         if not health_multipliers:
             return base_weights
@@ -359,9 +361,7 @@ class FactorEnsemble:
         if total_quality <= 0:
             return self.get_layer_weights()
 
-        ic_weights = {
-            lname: q / total_quality for lname, q in layer_quality.items()
-        }
+        ic_weights = {lname: q / total_quality for lname, q in layer_quality.items()}
 
         # Shrinkage: blend with prior (base layer weights)
         prior = self.get_layer_weights()

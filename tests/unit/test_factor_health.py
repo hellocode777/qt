@@ -40,7 +40,7 @@ class TestFactorHealthStatus:
     def test_to_dict(self):
         s = FactorHealthStatus(
             factor_name="test",
-lifecycle=FactorLifecycle.PRODUCTION,
+            lifecycle=FactorLifecycle.PRODUCTION,
             ic_mean=0.03,
             ic_30d=0.025,
         )
@@ -63,7 +63,10 @@ class TestFactorHealthMonitor:
         np.random.seed(42)
         daily_ics = list(np.random.normal(0.05, 0.02, 100))
         status = monitor.check_factor("healthy_factor", daily_ics)
-        assert status.lifecycle in (FactorLifecycle.VALIDATED, FactorLifecycle.PRODUCTION)
+        assert status.lifecycle in (
+            FactorLifecycle.VALIDATED,
+            FactorLifecycle.PRODUCTION,
+        )
         assert status.n_days == 100
 
     def test_stale_near_zero_ic(self):
@@ -113,7 +116,9 @@ class TestFactorHealthMonitor:
         monitor = FactorHealthMonitor(decay_slope=-0.0005)
         # Steadily declining IC
         np.random.seed(42)
-        daily_ics = list(np.linspace(0.06, 0.005, 100) + np.random.normal(0, 0.005, 100))
+        daily_ics = list(
+            np.linspace(0.06, 0.005, 100) + np.random.normal(0, 0.005, 100)
+        )
         status = monitor.check_factor("trend_factor", daily_ics)
         # Should detect strong negative trend
         assert status.ic_decay_rate < 0
@@ -132,7 +137,11 @@ class TestFactorHealthMonitor:
         daily_ics = list(np.random.normal(0.01, 0.15, 100))
         status = monitor.check_factor("noisy_factor", daily_ics)
         # Very noisy IC → low IC_IR → DEGRADED (consecutive degraded days ≥ 30)
-        assert status.lifecycle in (FactorLifecycle.RESEARCH, FactorLifecycle.DEGRADED, FactorLifecycle.RETIRED)
+        assert status.lifecycle in (
+            FactorLifecycle.RESEARCH,
+            FactorLifecycle.DEGRADED,
+            FactorLifecycle.RETIRED,
+        )
 
     def test_check_all_sorts_by_severity(self):
         monitor = FactorHealthMonitor(reference_ic_mean=0.05)

@@ -84,7 +84,9 @@ class AllocationResult:
         """Full serialization."""
         return {
             "allocator_used": self.allocator_used,
-            "target_portfolio": self.target_portfolio.to_dict() if self.target_portfolio else None,
+            "target_portfolio": self.target_portfolio.to_dict()
+            if self.target_portfolio
+            else None,
             "n_candidates_in": self.n_candidates_in,
             "n_positions_out": self.n_positions_out,
             "cash_reserve": self.cash_reserve,

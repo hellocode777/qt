@@ -119,12 +119,16 @@ class MultiFactorPipeline(BasePipeline):
         industry_neutral: bool = params.get("industry_neutral", False)
         orthogonalize: bool = params.get("orthogonalize", False)
         dataset: str = params.get("dataset", "daily_price_latest")
-        data_snapshot: str = params.get("data_snapshot", "")  # path to price_data.parquet
+        data_snapshot: str = params.get(
+            "data_snapshot", ""
+        )  # path to price_data.parquet
         freeze_weights: dict[str, float] | None = params.get("freeze_weights", None)
         strategy_name: str = params.get("strategy", "default")
         skip_gate: bool = params.get("skip_gate", False)
         model_mode: bool = params.get("model_mode", False)
-        score_band: str | None = params.get("score_band", None)  # e.g. "60-80" = Q4 only
+        score_band: str | None = params.get(
+            "score_band", None
+        )  # e.g. "60-80" = Q4 only
 
         # ── Strategy mode ──
         use_full_strategy = strategy_name in (
@@ -173,9 +177,13 @@ class MultiFactorPipeline(BasePipeline):
             engine_label,
         )
         if use_full_strategy:
-            logger.info("质量过滤: ✅ | 行业中性: ✅ | 正交化: ✅ | 防追高: ✅ | 大盘过滤: ✅")
+            logger.info(
+                "质量过滤: ✅ | 行业中性: ✅ | 正交化: ✅ | 防追高: ✅ | 大盘过滤: ✅"
+            )
         elif industry_neutral:
-            logger.info("行业中性化: ✅ | 因子正交化: {}", "✅" if orthogonalize else "❌")
+            logger.info(
+                "行业中性化: ✅ | 因子正交化: {}", "✅" if orthogonalize else "❌"
+            )
 
         # ML 模式：需要额外历史数据用于训练
         fetch_start = start_date_str
@@ -192,10 +200,14 @@ class MultiFactorPipeline(BasePipeline):
         logger.info("[1/6] 获取行情数据...")
         try:
             if data_snapshot:
-                price_data = self._load_snapshot(data_snapshot, symbols, fetch_start, end_date_str)
+                price_data = self._load_snapshot(
+                    data_snapshot, symbols, fetch_start, end_date_str
+                )
                 logger.info("   📸 从实验快照加载: {}", data_snapshot)
             else:
-                price_data = self._fetch_data(symbols, fetch_start, end_date_str, dataset)
+                price_data = self._fetch_data(
+                    symbols, fetch_start, end_date_str, dataset
+                )
         except Exception as e:
             logger.error("数据获取失败: {}", e)
             result.status = PipelineStatus.FAILED
@@ -222,30 +234,41 @@ class MultiFactorPipeline(BasePipeline):
         # Build frozen config override for experiment reproduction
         frozen_override: StrategyConfig | None = None
         if freeze_weights:
-            frozen_override = _build_optimized_config(strategy_name, dict(freeze_weights))
+            frozen_override = _build_optimized_config(
+                strategy_name, dict(freeze_weights)
+            )
             if frozen_override:
                 logger.info("   🔒 权重冻结 (复现模式): {}", freeze_weights)
 
         if use_full_strategy:
-            signals, scores, fundamental_data, valuation_data, index_df, extra_factors = (
-                self._run_full_strategy(
-                    price_data=price_data,
-                    top_n=top_n,
-                    rebalance_freq=rebalance_freq,
-                    sell_buffer=sell_buffer,
-                    strategy_name=strategy_name,
-                    model_mode=model_mode,
-                    config_override=frozen_override,
-                    score_band=score_band,
-                )
+            (
+                signals,
+                scores,
+                fundamental_data,
+                valuation_data,
+                index_df,
+                extra_factors,
+            ) = self._run_full_strategy(
+                price_data=price_data,
+                top_n=top_n,
+                rebalance_freq=rebalance_freq,
+                sell_buffer=sell_buffer,
+                strategy_name=strategy_name,
+                model_mode=model_mode,
+                config_override=frozen_override,
+                score_band=score_band,
             )
             from qp.strategy.config import get_strategy_config
 
             cfg = get_strategy_config(strategy_name)
-            weights = freeze_weights if freeze_weights is not None else dict(cfg.factors)
+            weights = (
+                freeze_weights if freeze_weights is not None else dict(cfg.factors)
+            )
             features = list(weights.keys())
             n_factors = len(features)
-            result.metrics["score_rows"] = float(scores.height if not scores.is_empty() else 0)
+            result.metrics["score_rows"] = float(
+                scores.height if not scores.is_empty() else 0
+            )
         else:
             # ── Legacy: bare factor pipeline ──
             fundamental_data = None
@@ -253,7 +276,10 @@ class MultiFactorPipeline(BasePipeline):
             index_df = None
             logger.info("[2/6] 计算原始因子值...")
             n_factors = len(PRICE_VOLUME_FACTORS)
-            weights = {f: ALL_FACTOR_DIRECTIONS.get(f, 1) / n_factors for f in PRICE_VOLUME_FACTORS}
+            weights = {
+                f: ALL_FACTOR_DIRECTIONS.get(f, 1) / n_factors
+                for f in PRICE_VOLUME_FACTORS
+            }
             features = list(PRICE_VOLUME_FACTORS)
             n_pos = sum(1 for v in weights.values() if v > 0)
             n_neg = sum(1 for v in weights.values() if v < 0)
@@ -280,14 +306,18 @@ class MultiFactorPipeline(BasePipeline):
             logger.info("   原始因子: {} 天截面", len(all_raw))
 
             # Factor pipeline (winsorize → normalize → neutralize → combine)
-            logger.info("[2.5/6] 因子管线处理 (Winsorize→Normalize→Neutralize→Combine)...")
+            logger.info(
+                "[2.5/6] 因子管线处理 (Winsorize→Normalize→Neutralize→Combine)..."
+            )
             neutralize_method = "median" if industry_neutral else None
             scores = factor_pipeline(
                 all_raw,
                 weights=weights,
                 normalize_method="rank",
                 winsorize_method="mad",
-                industry_map=_build_industry_map(price_data) if industry_neutral else None,
+                industry_map=_build_industry_map(price_data)
+                if industry_neutral
+                else None,
                 neutralize_method=neutralize_method,
                 orthogonalize=orthogonalize,
             )
@@ -346,7 +376,9 @@ class MultiFactorPipeline(BasePipeline):
             else:
                 logger.info("")
                 logger.info("[3.6/6] 因子权重优化 (IC-加权, 全量数据)...")
-                optimized_weights = _optimize_weights_from_ic(factor_ic_table, factor_weights)
+                optimized_weights = _optimize_weights_from_ic(
+                    factor_ic_table, factor_weights
+                )
                 _log_weight_optimization(factor_weights, optimized_weights)
 
             # Re-run strategy with optimized weights (skip if unchanged, ML mode, or frozen)
@@ -356,10 +388,14 @@ class MultiFactorPipeline(BasePipeline):
             )
             if use_full_strategy and (_weights_changed or not model_mode):
                 if model_mode:
-                    logger.info("   以优化权重重新运行策略 (ML 模式跳过 — 模型自学习权重)")
+                    logger.info(
+                        "   以优化权重重新运行策略 (ML 模式跳过 — 模型自学习权重)"
+                    )
                 else:
                     logger.info("   以优化权重重新运行策略...")
-                optimized_config = _build_optimized_config(strategy_name, optimized_weights)
+                optimized_config = _build_optimized_config(
+                    strategy_name, optimized_weights
+                )
                 if optimized_config:
                     # For ML mode: skip the full re-run, just re-evaluate IC from existing scores
                     if model_mode:
@@ -379,7 +415,7 @@ class MultiFactorPipeline(BasePipeline):
                         result.metrics["ic_ir_optimized"] = ic2.ic_ir
                         result.metadata["optimized_weights"] = "ml_skip"
                     else:
-                        sig2, scores2, *_rest = self._run_full_strategy(
+                        _sig2, scores2, *_rest = self._run_full_strategy(
                             price_data=price_data,
                             top_n=top_n,
                             rebalance_freq=rebalance_freq,
@@ -405,7 +441,8 @@ class MultiFactorPipeline(BasePipeline):
                         result.metrics["ic_mean_optimized"] = ic2.ic_mean
                         result.metrics["ic_ir_optimized"] = ic2.ic_ir
                         result.metadata["optimized_weights"] = ",".join(
-                            f"{k}={v:+.3f}" for k, v in sorted(optimized_weights.items())
+                            f"{k}={v:+.3f}"
+                            for k, v in sorted(optimized_weights.items())
                         )
                         scores = scores2 if not scores2.is_empty() else scores
                         weights = optimized_weights
@@ -466,7 +503,9 @@ class MultiFactorPipeline(BasePipeline):
                         layered.monotonicity_t_stat,
                     )
             if layered.spread_t_stat < 2.0:
-                failures.append(f"Q5-Q1 spread t={layered.spread_t_stat:.2f} < 2.0 (阈值)")
+                failures.append(
+                    f"Q5-Q1 spread t={layered.spread_t_stat:.2f} < 2.0 (阈值)"
+                )
 
             logger.error("   ⛔ 因子检验未通过 §10.1 — 禁止进入策略层")
             for f in failures:
@@ -484,7 +523,9 @@ class MultiFactorPipeline(BasePipeline):
             gate_rules.append(
                 RuleResult(
                     "rank_ic",
-                    ValidationStatus.PASS if ic_record.ic_mean_pass else ValidationStatus.FAIL,
+                    ValidationStatus.PASS
+                    if ic_record.ic_mean_pass
+                    else ValidationStatus.FAIL,
                     80 if ic_record.ic_mean_pass else 30,
                     threshold=0.02,
                     actual_value=abs(ic_record.ic_mean),
@@ -494,7 +535,9 @@ class MultiFactorPipeline(BasePipeline):
             gate_rules.append(
                 RuleResult(
                     "ic_ir",
-                    ValidationStatus.PASS if ic_record.ic_ir_pass else ValidationStatus.FAIL,
+                    ValidationStatus.PASS
+                    if ic_record.ic_ir_pass
+                    else ValidationStatus.FAIL,
                     80 if ic_record.ic_ir_pass else 30,
                     threshold=0.3,
                     actual_value=ic_record.ic_ir,
@@ -504,7 +547,9 @@ class MultiFactorPipeline(BasePipeline):
             gate_rules.append(
                 RuleResult(
                     "ic_t_stat",
-                    ValidationStatus.PASS if ic_record.ic_t_stat_pass else ValidationStatus.FAIL,
+                    ValidationStatus.PASS
+                    if ic_record.ic_t_stat_pass
+                    else ValidationStatus.FAIL,
                     80 if ic_record.ic_t_stat_pass else 30,
                     threshold=2.0,
                     actual_value=ic_record.ic_t_stat,
@@ -514,7 +559,9 @@ class MultiFactorPipeline(BasePipeline):
             gate_rules.append(
                 RuleResult(
                     "monotonicity",
-                    ValidationStatus.PASS if layered.is_monotonic else ValidationStatus.FAIL,
+                    ValidationStatus.PASS
+                    if layered.is_monotonic
+                    else ValidationStatus.FAIL,
                     80 if layered.is_monotonic else 30,
                     threshold=2.0,
                     actual_value=layered.monotonicity_t_stat,
@@ -541,7 +588,9 @@ class MultiFactorPipeline(BasePipeline):
                 if (ic_pass and not layered_pass)
                 else GateDecision.BLOCKED,
                 score=sum(r.score for r in gate_rules) / len(gate_rules),
-                confidence=sum(1 for r in gate_rules if r.status == ValidationStatus.PASS)
+                confidence=sum(
+                    1 for r in gate_rules if r.status == ValidationStatus.PASS
+                )
                 / len(gate_rules),
                 data_integrity="PASS",
                 factor_validity="PASS" if ic_pass else "FAIL",
@@ -577,18 +626,21 @@ class MultiFactorPipeline(BasePipeline):
             gate_dir = Path("data/experiments")
             gate_dir.mkdir(parents=True, exist_ok=True)
             gate_file = (
-                gate_dir / f"{strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_gate.json"
+                gate_dir
+                / f"{strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_gate.json"
             )
             import json as _json
 
             gate_file.write_text(
-                _json.dumps(gate.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+                _json.dumps(gate.to_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
             )
             gate.artifacts.append(str(gate_file))
 
             result.status = PipelineStatus.FAILED
             result.errors.append(
-                f"§10.1 Gate: {len(failures)} threshold(s) not met — " + "; ".join(failures)
+                f"§10.1 Gate: {len(failures)} threshold(s) not met — "
+                + "; ".join(failures)
             )
             result.metadata["gate_result"] = gate.to_dict()  # type: ignore[assignment]
             result.metadata["gate_failures"] = "; ".join(failures)
@@ -633,7 +685,9 @@ class MultiFactorPipeline(BasePipeline):
 
             # Latest rebalance
             latest_date = signals["date"].max()
-            latest = signals.filter(pl.col("date") == latest_date).sort("signal", descending=True)
+            latest = signals.filter(pl.col("date") == latest_date).sort(
+                "signal", descending=True
+            )
             for row in latest.iter_rows(named=True):
                 emoji = "🟢" if row["signal"] == "buy" else "🔴"
                 logger.info(
@@ -655,7 +709,11 @@ class MultiFactorPipeline(BasePipeline):
         logger.info("   年化夏普:  {:.2f}", bt["sharpe"])
         logger.info("   最大回撤:  {:.2f}%", bt["max_dd_pct"])
         logger.info("   期末资产:  ¥{:,.0f}", bt["final_equity"])
-        logger.info("   交易次数:  {} (止损触发: {})", bt["n_trades"], bt.get("stop_loss_hits", 0))
+        logger.info(
+            "   交易次数:  {} (止损触发: {})",
+            bt["n_trades"],
+            bt.get("stop_loss_hits", 0),
+        )
         logger.info("   总成本:    ¥{:,.0f} (佣金+印花税+滑点)", bt["total_cost"])
         if bt.get("turnover_pct", 0) > 0:
             logger.info("   累计换手:  {:.0f}% (总卖出/平均权益)", bt["turnover_pct"])
@@ -672,7 +730,9 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Stage 6: Benchmark ──
         logger.info("[6/6] 基准对比 (等权持有)...")
-        bench_ret = self._benchmark_return(price_data, symbols, start_date_str, end_date_str)
+        bench_ret = self._benchmark_return(
+            price_data, symbols, start_date_str, end_date_str
+        )
         logger.info("   等权买入持有: {:+.2f}%", bench_ret)
         result.metrics["benchmark_return_pct"] = bench_ret
 
@@ -705,7 +765,11 @@ class MultiFactorPipeline(BasePipeline):
             # Save full price data (not just close) so experiment can be reproduced
             full_parts: list[pl.DataFrame] = []
             for _code, _df in price_data.items():
-                if _df is not None and not _df.is_empty() and "trade_date" in _df.columns:
+                if (
+                    _df is not None
+                    and not _df.is_empty()
+                    and "trade_date" in _df.columns
+                ):
                     full_parts.append(_df)
             if full_parts:
                 snapshot_df = pl.concat(full_parts)
@@ -717,7 +781,11 @@ class MultiFactorPipeline(BasePipeline):
             daily_benchmark_list = bt.get("daily_benchmark", [])
             daily_drawdown_list = bt.get("daily_drawdown", [])
             daily_return_pct_list = bt.get("daily_return_pct", [])
-            if daily_equity_list and daily_dates and len(daily_equity_list) == len(daily_dates):
+            if (
+                daily_equity_list
+                and daily_dates
+                and len(daily_equity_list) == len(daily_dates)
+            ):
                 n_rows = len(daily_dates)
                 nav_df = pl.DataFrame(
                     {
@@ -869,11 +937,11 @@ class MultiFactorPipeline(BasePipeline):
 
                 return run_alpha_multi_factor_v2
             if name == "alpha_ensemble_v2":
-                import qp.strategy.strategies.ensemble_v2  # noqa: F401, F811 — registers config
+                import qp.strategy.strategies.ensemble_v2
 
                 return run_momentum_vol_full
             if name == "alpha_ensemble_v3":
-                import qp.strategy.strategies.ensemble_v3  # noqa: F401, F811 — registers config
+                import qp.strategy.strategies.ensemble_v3  # noqa: F401 — registers config
 
                 return run_momentum_vol_full
             return run_momentum_vol_full
@@ -958,7 +1026,9 @@ class MultiFactorPipeline(BasePipeline):
         if isinstance(strategy_result, tuple):
             signals, extra = strategy_result
             scores = extra.get("scores") if isinstance(extra, dict) else None  # type: ignore[union-attr]
-            extra_factors = extra.get("extra_factors") if isinstance(extra, dict) else None
+            extra_factors = (
+                extra.get("extra_factors") if isinstance(extra, dict) else None
+            )
         else:
             signals = strategy_result  # type: ignore[assignment]
             scores = None
@@ -967,7 +1037,14 @@ class MultiFactorPipeline(BasePipeline):
         if scores is None:
             logger.warning("策略未返回截面得分，IC 分析将跳过")
 
-        return signals, scores, fundamental_data, valuation_data, index_df, extra_factors  # type: ignore[return-value]
+        return (
+            signals,
+            scores,
+            fundamental_data,
+            valuation_data,
+            index_df,
+            extra_factors,
+        )  # type: ignore[return-value]
 
     @staticmethod
     def _load_fundamental_data() -> dict[str, pl.DataFrame]:
@@ -1174,9 +1251,15 @@ class MultiFactorPipeline(BasePipeline):
             if dataset.endswith("_latest"):
                 base_name = dataset[: -len("_latest")]
                 try:
-                    entry = registry.resolve(base_name, version="latest", require_exists=True)
+                    entry = registry.resolve(
+                        base_name, version="latest", require_exists=True
+                    )
                     gold_path = entry["path"]
-                    logger.info("    📂 Gold (Registry→latest): {} → {}@latest", dataset, base_name)
+                    logger.info(
+                        "    📂 Gold (Registry→latest): {} → {}@latest",
+                        dataset,
+                        base_name,
+                    )
                 except KeyError:
                     pass
 
@@ -1305,8 +1388,12 @@ class MultiFactorPipeline(BasePipeline):
             if not first_day_df.is_empty():
                 first_close = first_day_df["close"]
                 first_close_filtered = first_close.filter(first_close >= 1.0)
-                use_close = first_close_filtered if len(first_close_filtered) > 100 else first_close
-                base_avg_close = float(use_close.median())
+                use_close = (
+                    first_close_filtered
+                    if len(first_close_filtered) > 100
+                    else first_close
+                )
+                base_avg_close = float(use_close.median())  # type: ignore[arg-type]  # polars median 类型推断噪音
         if base_avg_close <= 0:
             base_avg_close = 1.0
 
@@ -1457,7 +1544,9 @@ class MultiFactorPipeline(BasePipeline):
 
                 # ── Phase 2: Buy target stocks we don't hold ──
                 after_df = broker.get_positions()
-                after_df = after_df[after_df["shares"] > 0] if not after_df.empty else after_df
+                after_df = (
+                    after_df[after_df["shares"] > 0] if not after_df.empty else after_df
+                )
                 after_sells = (
                     {str(row["symbol"]) for _, row in after_df.iterrows()}
                     if not after_df.empty
@@ -1528,7 +1617,7 @@ class MultiFactorPipeline(BasePipeline):
                 day_close = day_all["close"].filter(day_all["close"] >= 1.0)
                 if len(day_close) < 100:
                     day_close = day_all["close"]
-                day_median = float(day_close.median())
+                day_median = float(day_close.median())  # type: ignore[arg-type]  # polars median 类型推断噪音
                 bench_now = initial_capital * (day_median / base_avg_close)
                 # Cap extreme single-day jumps (>3x = data glitch)
                 if bench_now > prev_bench * 3:
@@ -1556,7 +1645,9 @@ class MultiFactorPipeline(BasePipeline):
 
         # Turnover: total sell value / average equity (cumulative, %)
         avg_equity = float(np.mean(daily_equity)) if daily_equity else initial_capital
-        turnover_pct = round(total_sell_value / avg_equity * 100, 2) if avg_equity > 0 else 0.0
+        turnover_pct = (
+            round(total_sell_value / avg_equity * 100, 2) if avg_equity > 0 else 0.0
+        )
 
         # Daily returns and drawdown series (for WebUI equity curve)
         daily_return_pct: list[float] = []
@@ -1568,7 +1659,9 @@ class MultiFactorPipeline(BasePipeline):
                 daily_return_pct.append(0.0)
             else:
                 prev = daily_equity[i - 1]
-                daily_return_pct.append(round((eq / prev - 1) * 100, 4) if prev > 0 else 0.0)
+                daily_return_pct.append(
+                    round((eq / prev - 1) * 100, 4) if prev > 0 else 0.0
+                )
             # Drawdown from running max (%)
             running_max_eq = max(running_max_eq, eq)
             dd = (
@@ -1586,7 +1679,11 @@ class MultiFactorPipeline(BasePipeline):
         ]
         if daily_rets:
             rets = np.array(daily_rets)
-            sharpe = float(np.sqrt(252) * rets.mean() / rets.std()) if rets.std() > 0 else 0.0
+            sharpe = (
+                float(np.sqrt(252) * rets.mean() / rets.std())
+                if rets.std() > 0
+                else 0.0
+            )
             cum = np.cumprod(1 + rets)
             running_max = np.maximum.accumulate(cum)
             max_dd = (
@@ -1690,8 +1787,12 @@ class MultiFactorPipeline(BasePipeline):
         n_years = n_trading_days / 252 if n_trading_days > 0 else 0
 
         # CAGR: (1 + total_ret)^(1/n_years) - 1
-        annual_ret = (((1 + total_ret / 100) ** (1 / n_years)) - 1) * 100 if n_years > 0 else 0.0
-        annual_vol = abs(annual_ret / sharpe) if sharpe != 0 and annual_ret != 0 else 0.0
+        annual_ret = (
+            (((1 + total_ret / 100) ** (1 / n_years)) - 1) * 100 if n_years > 0 else 0.0
+        )
+        annual_vol = (
+            abs(annual_ret / sharpe) if sharpe != 0 and annual_ret != 0 else 0.0
+        )
 
         tracker.log_experiment(
             experiment_id=experiment_id,
@@ -1718,7 +1819,9 @@ class MultiFactorPipeline(BasePipeline):
                 "sharpe_ratio": sharpe,
                 "max_drawdown_pct": float(result.metrics.get("max_dd_pct", 0.0)),
                 "total_return_pct": total_ret,
-                "excess_return_pct": float(result.metrics.get("excess_return_pct", 0.0)),
+                "excess_return_pct": float(
+                    result.metrics.get("excess_return_pct", 0.0)
+                ),
                 "annual_return_pct": round(annual_ret, 2),
                 "annual_volatility_pct": round(annual_vol, 2),
                 "n_days": n_trading_days,
@@ -1774,7 +1877,9 @@ def _diagnose_quintile_profiles(
         )
         if has_vol:
             df_s = df_s.with_columns(
-                (pl.col("volume") / pl.col("volume").rolling_mean(20)).alias("turnover_ratio"),
+                (pl.col("volume") / pl.col("volume").rolling_mean(20)).alias(
+                    "turnover_ratio"
+                ),
             )
         parts.append(
             df_s.select(
@@ -1802,7 +1907,10 @@ def _diagnose_quintile_profiles(
 
     # Rank ascending: Q1 = lowest scores, Q5 = highest scores (industry convention)
     merged = merged.with_columns(
-        pl.col("score").rank("ordinal", descending=False).over("trade_date").alias("_rank"),
+        pl.col("score")
+        .rank("ordinal", descending=False)
+        .over("trade_date")
+        .alias("_rank"),
         pl.col("score").count().over("trade_date").alias("_n"),
     )
     merged = merged.with_columns(
@@ -1895,9 +2003,13 @@ def _flatten_price_data(
         if df is not None and not df.is_empty():
             if "close" not in df.columns:
                 continue
-            parts.append(df.select(["trade_date", pl.lit(code).alias("symbol"), "close"]))
+            parts.append(
+                df.select(["trade_date", pl.lit(code).alias("symbol"), "close"])
+            )
     if not parts:
-        return pl.DataFrame(schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "close": pl.Float64})
+        return pl.DataFrame(
+            schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "close": pl.Float64}
+        )
     return pl.concat(parts)
 
 
@@ -1965,8 +2077,29 @@ def _compute_factor_ic_attribution(
     for fname in list(attrib_weights):
         is_available = (
             fname in PRICE_VOLUME_FACTORS
-            or (valuation_data and fname in {"PE_TTM", "PB", "PCF_OCF", "Dividend_Yield", "PS_TTM"})
-            or (fundamental_data and fname in {"ROE", "revenue_growth", "net_profit_growth", "gross_margin", "net_margin", "debt_ratio", "EPS", "NAV", "ROE_Level", "Profit_Stability", "Earnings_Quality", "Margin_Composite", "cashflow_per_share"})
+            or (
+                valuation_data
+                and fname in {"PE_TTM", "PB", "PCF_OCF", "Dividend_Yield", "PS_TTM"}
+            )
+            or (
+                fundamental_data
+                and fname
+                in {
+                    "ROE",
+                    "revenue_growth",
+                    "net_profit_growth",
+                    "gross_margin",
+                    "net_margin",
+                    "debt_ratio",
+                    "EPS",
+                    "NAV",
+                    "ROE_Level",
+                    "Profit_Stability",
+                    "Earnings_Quality",
+                    "Margin_Composite",
+                    "cashflow_per_share",
+                }
+            )
             or (extra_factors and fname in extra_factors)
         )
         # Residual_Momentum_3M requires index_df to compute
@@ -2024,7 +2157,9 @@ def _compute_factor_ic_attribution(
         factor_df = pl.DataFrame(
             rows, schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "score": pl.Float64}
         )
-        ic = evaluate_factor_ic(factor_df, price_flat, forward_days=5, min_stocks_per_day=10)
+        ic = evaluate_factor_ic(
+            factor_df, price_flat, forward_days=5, min_stocks_per_day=10
+        )
 
         if ic.n_days >= 10:
             results.append(
@@ -2086,11 +2221,13 @@ def _persist_factor_health(
                     if fname in factors:
                         val = factors[fname]
                         if val is not None and val == val:  # not NaN
-                            rows.append({
-                                "trade_date": date_str,
-                                "symbol": code,
-                                "score": float(val),
-                            })
+                            rows.append(
+                                {
+                                    "trade_date": date_str,
+                                    "symbol": code,
+                                    "score": float(val),
+                                }
+                            )
             if len(rows) < 100:
                 continue
 
@@ -2098,7 +2235,9 @@ def _persist_factor_health(
                 rows,
                 schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "score": pl.Float64},
             )
-            ic_full = evaluate_factor_ic(fdf, price_flat, forward_days=5, min_stocks_per_day=10)
+            ic_full = evaluate_factor_ic(
+                fdf, price_flat, forward_days=5, min_stocks_per_day=10
+            )
             if ic_full.n_days < 10:
                 continue
 
@@ -2107,7 +2246,9 @@ def _persist_factor_health(
             logged += 1
 
         if logged:
-            logger.info("   ✅ 因子健康已写入: {} 个因子 → factor_health.parquet", logged)
+            logger.info(
+                "   ✅ 因子健康已写入: {} 个因子 → factor_health.parquet", logged
+            )
     except Exception as e:
         logger.warning("   因子健康记录失败 (非致命): {}", e)
 
@@ -2232,12 +2373,16 @@ def _log_weight_optimization(
     new_weights: dict[str, float],
 ) -> None:
     """Log the weight optimization results."""
-    logger.info("   {:28s} {:>10s} {:>10s} {:>10s}".format("因子", "旧权重", "新权重", "变化"))
+    logger.info(
+        "   {:28s} {:>10s} {:>10s} {:>10s}".format("因子", "旧权重", "新权重", "变化")
+    )
     logger.info("   " + "-" * 68)
     for fname in sorted(old_weights.keys()):
         old_w = old_weights[fname]
         new_w = new_weights.get(fname, old_w)
-        change = "翻转" if old_w * new_w < 0 else ("↑" if abs(new_w) > abs(old_w) else "↓")
+        change = (
+            "翻转" if old_w * new_w < 0 else ("↑" if abs(new_w) > abs(old_w) else "↓")
+        )
         logger.info(f"   {fname:25s} {old_w:>+9.3f} {new_w:>+9.3f}  {change:>4s}")
 
 
@@ -2321,7 +2466,9 @@ def _auto_search_score_band(
     # Log comparison table
     logger.info("")
     logger.info("   🔍 Score Band 自动搜索:")
-    logger.info("   {:16s} {:>8s} {:>10s} {:>10s}".format("Band", "Spread", "t_mono", "N Days"))
+    logger.info(
+        "   {:16s} {:>8s} {:>10s} {:>10s}".format("Band", "Spread", "t_mono", "N Days")
+    )
     logger.info("   " + "-" * 48)
     for r in results:
         if "error" in r:
@@ -2370,7 +2517,9 @@ def _archive_research_debt(
     # ── Build parameterized next steps based on failure type ──
     next_steps: list[str] = []
     has_ic_fail = any("IC" in f for f in failures)
-    has_mono_fail = any("单调" in f for f in failures) or any("mono" in f.lower() for f in failures)
+    has_mono_fail = any("单调" in f for f in failures) or any(
+        "mono" in f.lower() for f in failures
+    )
     has_spread_fail = any("spread" in f.lower() for f in failures) or any(
         "Q5" in f for f in failures
     )

@@ -148,9 +148,7 @@ class WeightEngine:
         weights = self._normalize(weights)
 
         # EMA smoothing
-        weights = self._ema_smooth(weights)
-
-        return weights
+        return self._ema_smooth(weights)
 
     # ------------------------------------------------------------------
     # Weighting schemes

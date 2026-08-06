@@ -91,7 +91,9 @@ def stage1_anomaly_detection(df: pl.DataFrame) -> StageResult:
 
     # ── Limit-up/down detection ──
     # Compute daily return (close vs prev close)
-    result = result.with_columns(pl.col("close").pct_change().over("symbol").alias("_daily_ret"))
+    result = result.with_columns(
+        pl.col("close").pct_change().over("symbol").alias("_daily_ret")
+    )
 
     # Determine limit threshold per stock (board_type if available, else default 10%)
     if "board_type" in result.columns:
@@ -171,10 +173,15 @@ def stage2_volume_cleaning(df: pl.DataFrame) -> StageResult:
 
     # ── Abnormal volume (10x 20-day median) ──
     df = df.with_columns(
-        pl.col("volume").rolling_median(20, min_samples=10).over("symbol").alias("_vol_med_20")
+        pl.col("volume")
+        .rolling_median(20, min_samples=10)
+        .over("symbol")
+        .alias("_vol_med_20")
     )
     df = df.with_columns(
-        pl.when((pl.col("volume") > pl.col("_vol_med_20") * 10) & (~pl.col("is_suspended")))
+        pl.when(
+            (pl.col("volume") > pl.col("_vol_med_20") * 10) & (~pl.col("is_suspended"))
+        )
         .then(True)
         .otherwise(False)
         .alias("is_volume_anomaly")
@@ -186,7 +193,9 @@ def stage2_volume_cleaning(df: pl.DataFrame) -> StageResult:
     return StageResult(
         df=df,
         flags_added=flags,
-        rows_affected=df.filter(pl.col("is_suspended") | pl.col("is_volume_anomaly")).height,
+        rows_affected=df.filter(
+            pl.col("is_suspended") | pl.col("is_volume_anomaly")
+        ).height,
         stage_name="成交量清洗",
     )
 
@@ -245,7 +254,9 @@ def stage3_suspension_handling(df: pl.DataFrame) -> StageResult:
         else:
             consec.append(0)
 
-    df = df.with_columns(pl.Series("consecutive_suspended_days", consec, dtype=pl.Int32))
+    df = df.with_columns(
+        pl.Series("consecutive_suspended_days", consec, dtype=pl.Int32)
+    )
     flags.append("consecutive_suspended_days")
 
     # ── Delisting risk (> 60 consecutive trading days suspended) ──

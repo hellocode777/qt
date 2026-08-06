@@ -46,7 +46,9 @@ class IndustryCache:
 
         age_days = self._age_days()
         if age_days > self._ttl_days:
-            logger.info("行业缓存已过期 ({} 天 > {} 天)，将重新获取", age_days, self._ttl_days)
+            logger.info(
+                "行业缓存已过期 ({} 天 > {} 天)，将重新获取", age_days, self._ttl_days
+            )
             return None
 
         try:
@@ -56,7 +58,8 @@ class IndustryCache:
                 logger.info("加载行业缓存: {} 只股票 ({} 天前)", len(data), age_days)
                 return data
             logger.warning(
-                "行业缓存数据不足 ({} 条)，视为无效", len(data) if isinstance(data, dict) else 0
+                "行业缓存数据不足 ({} 条)，视为无效",
+                len(data) if isinstance(data, dict) else 0,
             )
             return None
         except (json.JSONDecodeError, OSError) as e:

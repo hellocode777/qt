@@ -29,7 +29,9 @@ async def models_list(request: Request) -> Any:
             models.append(
                 {
                     "model_id": m.model_id if hasattr(m, "model_id") else str(m),
-                    "stage": str(m.stage.value) if hasattr(m, "stage") and m.stage else "?",
+                    "stage": str(m.stage.value)
+                    if hasattr(m, "stage") and m.stage
+                    else "?",
                     "strategy_id": m.strategy_id if hasattr(m, "strategy_id") else "",
                     "features": ", ".join(m.features[:3])
                     if hasattr(m, "features") and m.features

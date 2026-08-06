@@ -143,7 +143,11 @@ class SlippageDeviationCheck(BaseRule):
                 actual_value=actual,
                 detail=(
                     "Assumed slippage is 0 bps — "
-                    + ("actual is also 0." if actual == 0 else f"actual is {actual:.1f} bps.")
+                    + (
+                        "actual is also 0."
+                        if actual == 0
+                        else f"actual is {actual:.1f} bps."
+                    )
                 ),
             )
 
@@ -254,7 +258,9 @@ class SignalInterruptionCheck(BaseRule):
             )
 
         # Score: 0 missing → 100, max_missing_ratio → 50
-        score = max(0.0, 100.0 * (1.0 - missing_ratio / (2.0 * self._max_missing_ratio)))
+        score = max(
+            0.0, 100.0 * (1.0 - missing_ratio / (2.0 * self._max_missing_ratio))
+        )
 
         return RuleResult(
             rule_name=self.rule_name,

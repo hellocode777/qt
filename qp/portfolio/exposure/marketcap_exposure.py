@@ -155,7 +155,9 @@ class MarketCapExposure:
         Returns:
             List of violation messages (empty = all pass).
         """
-        small_wt = sum(wt for sym, wt in weights.items() if cap_labels.get(sym, "mid") == "small")
+        small_wt = sum(
+            wt for sym, wt in weights.items() if cap_labels.get(sym, "mid") == "small"
+        )
         if small_wt > self.max_small_cap:
             return [f"Small-cap exposure {small_wt:.1%} > {self.max_small_cap:.0%}"]
         return []

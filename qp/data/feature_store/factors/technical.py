@@ -66,7 +66,9 @@ class SMACross(BaseFeature):
             .over("symbol")
         )
 
-        return df.with_columns((sma_fast / (sma_slow + 1e-10) - 1.0).alias(self.feature_name))
+        return df.with_columns(
+            (sma_fast / (sma_slow + 1e-10) - 1.0).alias(self.feature_name)
+        )
 
     def update_stream(self, new_value: float) -> float | None:
         if self._buffer is None:
@@ -134,7 +136,9 @@ class PricePosition(BaseFeature):
             )
 
         return df.with_columns(
-            ((pl.col("close") - low_n) / (high_n - low_n + 1e-10)).alias(self.feature_name)
+            ((pl.col("close") - low_n) / (high_n - low_n + 1e-10)).alias(
+                self.feature_name
+            )
         )
 
     def update_stream(self, new_value: float) -> float | None:
@@ -239,7 +243,9 @@ class MACD(BaseFeature):
         if len(self._macd_buffer) == 1:
             self._signal_line = macd_line
         else:
-            self._signal_line = self._signal_line * (1 - alpha_sig) + macd_line * alpha_sig
+            self._signal_line = (
+                self._signal_line * (1 - alpha_sig) + macd_line * alpha_sig
+            )
 
         if len(self._macd_buffer) < self.signal_period:
             return None

@@ -91,16 +91,22 @@ class TestSystemStateE2E:
             mgr = SystemStateManager(base_dir=tmpdir)
 
             # NORMAL → WARNING
-            t1 = mgr.transition(SystemState.WARNING, reason="PSI 0.30 > 0.25", source="test")
+            t1 = mgr.transition(
+                SystemState.WARNING, reason="PSI 0.30 > 0.25", source="test"
+            )
             assert t1.to_state == SystemState.WARNING
             assert mgr.current().to_state == SystemState.WARNING
 
             # WARNING → PAUSED
-            t2 = mgr.transition(SystemState.PAUSED, reason="Weekly DD 7%", source="test")
+            t2 = mgr.transition(
+                SystemState.PAUSED, reason="Weekly DD 7%", source="test"
+            )
             assert t2.to_state == SystemState.PAUSED
 
             # PAUSED → STOPPED
-            t3 = mgr.transition(SystemState.STOPPED, reason="Abnormal turnover", source="test")
+            t3 = mgr.transition(
+                SystemState.STOPPED, reason="Abnormal turnover", source="test"
+            )
             assert t3.to_state == SystemState.STOPPED
 
             # Check history
@@ -147,7 +153,9 @@ class TestSystemStateE2E:
         assert SystemState.WARNING.can_open_positions()
         assert not SystemState.PAUSED.can_open_positions()
         assert not SystemState.STOPPED.can_open_positions()
-        assert SystemState.RECOVERY.can_open_positions() is False  # RECOVERY > PAUSED in int value
+        assert (
+            SystemState.RECOVERY.can_open_positions() is False
+        )  # RECOVERY > PAUSED in int value
 
     def test_stats(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -172,7 +180,9 @@ class TestRetrainSignalE2E:
         assert signal.is_actionable()
 
         # IC decay → reduce weight
-        signal = evaluate_retrain_need(rolling_ic=0.008, training_ic=0.035, strategy_name="test")
+        signal = evaluate_retrain_need(
+            rolling_ic=0.008, training_ic=0.035, strategy_name="test"
+        )
         assert signal.action == RetrainAction.REDUCE_WEIGHT
         assert signal.is_actionable()
 
@@ -181,12 +191,16 @@ class TestRetrainSignalE2E:
         assert signal.action == RetrainAction.RETIRE
 
         # Mild PSI → monitor only (not actionable)
-        signal = evaluate_retrain_need(psi_value=0.12, rolling_ic=0.03, strategy_name="test")
+        signal = evaluate_retrain_need(
+            psi_value=0.12, rolling_ic=0.03, strategy_name="test"
+        )
         assert signal.action == RetrainAction.MONITOR
         assert not signal.is_actionable()
 
         # All clear → none
-        signal = evaluate_retrain_need(psi_value=0.05, rolling_ic=0.03, training_ic=0.035)
+        signal = evaluate_retrain_need(
+            psi_value=0.05, rolling_ic=0.03, training_ic=0.035
+        )
         assert signal.action == RetrainAction.NONE
 
     def test_log_and_retrieve(self) -> None:

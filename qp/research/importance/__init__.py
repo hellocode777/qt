@@ -12,8 +12,8 @@ from qp.research.importance.feature_importance import (
 )
 
 __all__ = [
-    "ImportanceRecord",
     "ImportanceDriftReport",
+    "ImportanceRecord",
     "compare_importance_versions",
     "compute_gain_importance",
     "compute_shap_importance",

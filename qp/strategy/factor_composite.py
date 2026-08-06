@@ -122,6 +122,7 @@ COMPOSITE_WEIGHTS: dict[str, float] = {
 @dataclass
 class CompositeResult:
     """Result of computing one composite factor."""
+
     name: str = ""
     n_members_found: int = 0
     n_members_total: int = 0
@@ -227,11 +228,13 @@ class FactorCompositeEngine:
                 if vals:
                     raw = sum(vals) / len(vals)
                     score = raw * direction
-                    rows.append({
-                        "trade_date": date_str,
-                        "symbol": code,
-                        "score": score,
-                    })
+                    rows.append(
+                        {
+                            "trade_date": date_str,
+                            "symbol": code,
+                            "score": score,
+                        }
+                    )
 
         if rows:
             result.score = pl.DataFrame(
@@ -257,7 +260,9 @@ class FactorCompositeEngine:
                 composites[name] = r.score
                 logger.debug(
                     "Composite '{}': {}/{} members (missing: {})",
-                    name, r.n_members_found, r.n_members_total,
+                    name,
+                    r.n_members_found,
+                    r.n_members_total,
                     r.missing_members,
                 )
         return composites

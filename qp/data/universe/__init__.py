@@ -11,6 +11,7 @@ Modules:
 Quick start::
 
     from qp.data.universe import UniverseBuilder, UniverseConfig
+
     builder = UniverseBuilder(UniverseConfig())
     universe = builder.build(df, as_of_date="2024-06-30")
     # → pl.DataFrame filtered to tradeable stocks only
@@ -31,18 +32,18 @@ from qp.data.universe.restatement import RestatementTracker
 from qp.data.universe.universe_builder import UniverseBuilder, UniverseConfig
 
 __all__ = [
+    # Listing dates
+    "ListingDateRegistry",
+    # Restatement
+    "RestatementTracker",
     # Builder
     "UniverseBuilder",
     "UniverseConfig",
-    # Listing dates
-    "ListingDateRegistry",
-    "get_listing_date",
-    "is_listed_before",
     # Liquidity
     "compute_median_volume",
     "filter_by_liquidity",
     "filter_by_percentile",
     "get_liquidity_stats",
-    # Restatement
-    "RestatementTracker",
+    "get_listing_date",
+    "is_listed_before",
 ]

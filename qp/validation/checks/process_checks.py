@@ -136,17 +136,16 @@ class ExperimentRecordCheck(BaseRule):
                             f"lineage={record.lineage.chain_str()[:80]}"
                         ),
                     )
-                else:
-                    return RuleResult(
-                        rule_name=self.rule_name,
-                        status=ValidationStatus.FAIL,
-                        score=0.0,
-                        detail=(
-                            f"Experiment '{experiment_id}' not found in "
-                            f"ExperimentTracker. Run the experiment first or "
-                            f"check the experiment_id."
-                        ),
-                    )
+                return RuleResult(
+                    rule_name=self.rule_name,
+                    status=ValidationStatus.FAIL,
+                    score=0.0,
+                    detail=(
+                        f"Experiment '{experiment_id}' not found in "
+                        f"ExperimentTracker. Run the experiment first or "
+                        f"check the experiment_id."
+                    ),
+                )
             except Exception as exc:
                 return RuleResult(
                     rule_name=self.rule_name,

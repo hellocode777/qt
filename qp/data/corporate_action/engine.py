@@ -15,7 +15,9 @@ from typing import Any
 
 import pandas as pd
 
-from qp.shared.protocols.base_corporate_action import CorporateActionEngine as CorpActionABC
+from qp.shared.protocols.base_corporate_action import (
+    CorporateActionEngine as CorpActionABC,
+)
 
 
 class ActionType(StrEnum):

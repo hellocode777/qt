@@ -91,9 +91,13 @@ class TestAnnotateTimestampsPL:
                 "close": [1500.0],
             }
         )
-        result = annotate_timestamps_pl(df, ingestion_time="2024-06-01T08:30:00.123456+00:00")
+        result = annotate_timestamps_pl(
+            df, ingestion_time="2024-06-01T08:30:00.123456+00:00"
+        )
 
-        assert result["ingestion_received_time"][0] == "2024-06-01T08:30:00.123456+00:00"
+        assert (
+            result["ingestion_received_time"][0] == "2024-06-01T08:30:00.123456+00:00"
+        )
         assert result["source_event_time"][0] == "2024-06-01T15:00:00+08:00"
 
     def test_chinese_date_column(self):
@@ -111,7 +115,9 @@ class TestAnnotateTimestampsPL:
         assert result["source_event_time"][0] == "2024-03-20T15:00:00+08:00"
 
     def test_empty_dataframe(self):
-        df = pl.DataFrame(schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "close": pl.Float64})
+        df = pl.DataFrame(
+            schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "close": pl.Float64}
+        )
         result = annotate_timestamps_pl(df.clear())
 
         assert result.is_empty()
@@ -167,16 +173,28 @@ class TestAnnotateTimestampsPD:
         assert result.loc[1, "source_event_time"] == "2024-01-16T15:00:00+08:00"
 
         # Same ingestion timestamp for all rows in the batch
-        assert result.loc[0, "ingestion_received_time"] == result.loc[1, "ingestion_received_time"]
+        assert (
+            result.loc[0, "ingestion_received_time"]
+            == result.loc[1, "ingestion_received_time"]
+        )
 
     def test_explicit_ingestion_time(self):
-        df = pd.DataFrame({"trade_date": ["2024-06-01"], "symbol": ["600519"], "close": [1500.0]})
-        result = annotate_timestamps_pd(df, ingestion_time="2024-06-01T08:30:00.000000+00:00")
+        df = pd.DataFrame(
+            {"trade_date": ["2024-06-01"], "symbol": ["600519"], "close": [1500.0]}
+        )
+        result = annotate_timestamps_pd(
+            df, ingestion_time="2024-06-01T08:30:00.000000+00:00"
+        )
 
-        assert result.loc[0, "ingestion_received_time"] == "2024-06-01T08:30:00.000000+00:00"
+        assert (
+            result.loc[0, "ingestion_received_time"]
+            == "2024-06-01T08:30:00.000000+00:00"
+        )
 
     def test_original_df_not_mutated(self):
-        df = pd.DataFrame({"trade_date": ["2024-01-15"], "symbol": ["000001"], "close": [10.5]})
+        df = pd.DataFrame(
+            {"trade_date": ["2024-01-15"], "symbol": ["000001"], "close": [10.5]}
+        )
         original_cols = set(df.columns)
         _result = annotate_timestamps_pd(df)
 

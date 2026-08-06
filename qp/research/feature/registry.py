@@ -120,7 +120,9 @@ class FeatureRegistry:
                 logger.warning("Failed to auto-register {}: {}", cls.__name__, exc)
 
         if skipped:
-            logger.debug("Skipped {} already-registered features: {}", len(skipped), skipped)
+            logger.debug(
+                "Skipped {} already-registered features: {}", len(skipped), skipped
+            )
 
         return registered
 
@@ -184,7 +186,9 @@ class FeatureRegistry:
                 direction = "↑" if meta.get("direction", 1) > 0 else "↓"
                 lookback = meta.get("lookback", 0)
                 ver = meta.get("version", "")
-                lines.append(f"    {direction} {fname:35s} v{ver}  lookback={lookback}d")
+                lines.append(
+                    f"    {direction} {fname:35s} v{ver}  lookback={lookback}d"
+                )
         return "\n".join(lines)
 
     def get_factors_by_category(self, category: str) -> list[str]:

@@ -157,7 +157,7 @@ def test_daily_pipeline_demo():
     )
     pipeline = DailyPipeline()
     result = pipeline.run(context)
-    
+
     assert result.status == PipelineStatus.SUCCESS
     assert result.metrics.get("strategy_count", 0) > 0
 ```

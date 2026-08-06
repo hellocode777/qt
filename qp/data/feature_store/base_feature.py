@@ -14,14 +14,14 @@ Usage::
 
     from qp.data.feature_store import BaseFeature
 
+
     class Momentum20(BaseFeature):
         feature_name = "momentum_20"
         required_data = ["close"]
 
         def transform_batch(self, df):
-            return df.with_columns(
-                pl.col("close").pct_change(20).alias("momentum_20")
-            )
+            return df.with_columns(pl.col("close").pct_change(20).alias("momentum_20"))
+
 
     # Offline batch
     result = Momentum20().transform_batch(df)
@@ -120,7 +120,9 @@ class BaseFeature:
 
     # ── Anti-leakage ──
 
-    def shift_feature(self, df: pl.DataFrame, feature_col: str | None = None) -> pl.DataFrame:
+    def shift_feature(
+        self, df: pl.DataFrame, feature_col: str | None = None
+    ) -> pl.DataFrame:
         """Apply shift(1) to prevent look-ahead bias.
 
         data_layer.md §1.5 陷阱 2:
@@ -243,6 +245,4 @@ class BaseFeature:
         return hashlib.sha256(content.encode()).hexdigest()[:12]
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(feature_name='{self.feature_name}', window={self.window})"
-        )
+        return f"{self.__class__.__name__}(feature_name='{self.feature_name}', window={self.window})"

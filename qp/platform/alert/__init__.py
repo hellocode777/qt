@@ -13,7 +13,7 @@ Usage:
     am.critical("System down")
 """
 
-from qp.monitoring.alerts import (  # noqa: F401
+from qp.monitoring.alerts import (
     Alert,
     AlertManager,
     AlertSeverity,

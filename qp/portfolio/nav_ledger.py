@@ -63,7 +63,9 @@ class NAVLedger:
             "total_nav": round(total_value, 2),
             "cash": round(cash, 2),
             "positions_value": round(total_value - cash, 2),
-            "benchmark_value": round(benchmark_value, 2) if benchmark_value is not None else None,
+            "benchmark_value": round(benchmark_value, 2)
+            if benchmark_value is not None
+            else None,
             "n_positions": n_positions,
             "decision_id": decision_id,
         }

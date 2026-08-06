@@ -19,7 +19,11 @@ def _make_test_data(n_stocks: int = 50, n_days: int = 100) -> dict[str, pl.DataF
     np.random.seed(42)
 
     symbols = [f"00000{i:03d}" for i in range(n_stocks)]
-    dates = [f"2024-{m:02d}-{d:02d}" for m in range(1, 4) for d in range(1, min(29, n_days // 3 + 1))]
+    dates = [
+        f"2024-{m:02d}-{d:02d}"
+        for m in range(1, 4)
+        for d in range(1, min(29, n_days // 3 + 1))
+    ]
     dates = sorted(set(dates))[:n_days]
 
     # Price data
@@ -31,28 +35,32 @@ def _make_test_data(n_stocks: int = 50, n_days: int = 100) -> dict[str, pl.DataF
             noise = np.random.normal(0, 0.02)
             ret = noise
             base_price *= 1 + ret
-            price_rows.append({
-                "trade_date": d,
-                "symbol": sym,
-                "open": base_price * (1 + np.random.normal(0, 0.005)),
-                "high": base_price * (1 + abs(np.random.normal(0, 0.01))),
-                "low": base_price * (1 - abs(np.random.normal(0, 0.01))),
-                "close": base_price,
-                "volume": np.random.uniform(1e6, 1e8),
-            })
-            if i % 20 == 0:
-                fund_rows.append({
+            price_rows.append(
+                {
                     "trade_date": d,
                     "symbol": sym,
-                    "ROE": np.random.uniform(0.05, 0.25),
-                    "gross_margin": np.random.uniform(0.1, 0.5),
-                    "net_margin": np.random.uniform(0.02, 0.20),
-                    "debt_ratio": np.random.uniform(0.1, 0.7),
-                    "cashflow_per_share": np.random.uniform(0.1, 2.0),
-                    "EPS": np.random.uniform(0.1, 2.0),
-                    "revenue_growth": np.random.uniform(-0.2, 0.4),
-                    "net_profit_growth": np.random.uniform(-0.3, 0.5),
-                })
+                    "open": base_price * (1 + np.random.normal(0, 0.005)),
+                    "high": base_price * (1 + abs(np.random.normal(0, 0.01))),
+                    "low": base_price * (1 - abs(np.random.normal(0, 0.01))),
+                    "close": base_price,
+                    "volume": np.random.uniform(1e6, 1e8),
+                }
+            )
+            if i % 20 == 0:
+                fund_rows.append(
+                    {
+                        "trade_date": d,
+                        "symbol": sym,
+                        "ROE": np.random.uniform(0.05, 0.25),
+                        "gross_margin": np.random.uniform(0.1, 0.5),
+                        "net_margin": np.random.uniform(0.02, 0.20),
+                        "debt_ratio": np.random.uniform(0.1, 0.7),
+                        "cashflow_per_share": np.random.uniform(0.1, 2.0),
+                        "EPS": np.random.uniform(0.1, 2.0),
+                        "revenue_growth": np.random.uniform(-0.2, 0.4),
+                        "net_profit_growth": np.random.uniform(-0.3, 0.5),
+                    }
+                )
 
     price_df = pl.DataFrame(price_rows)
     fund_df = pl.DataFrame(fund_rows)
@@ -152,11 +160,13 @@ class TestFactorRefinery:
 
         rows = []
         for i in range(20):
-            rows.append({
-                "symbol": f"stock_{i}",
-                "factor_a": float(i) / 20.0,
-                "factor_b": 1.0 - float(i) / 20.0,
-            })
+            rows.append(
+                {
+                    "symbol": f"stock_{i}",
+                    "factor_a": float(i) / 20.0,
+                    "factor_b": 1.0 - float(i) / 20.0,
+                }
+            )
         df = pl.DataFrame(rows)
         result = combine_factors(df, weights={"factor_a": 0.6, "factor_b": 0.4})
 
@@ -189,11 +199,13 @@ class TestFactorStore:
         from qp.data.factor_store import FactorStore
 
         store = FactorStore(root=tmp_path / "factor_store")
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-01", "2024-01-02"],
-            "symbol": ["A", "B"],
-            "factor_x": [0.1, 0.2],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-01", "2024-01-02"],
+                "symbol": ["A", "B"],
+                "factor_x": [0.1, 0.2],
+            }
+        )
 
         store.save_raw("test_factor", df)
         loaded = store.load_raw("test_factor")
@@ -206,11 +218,13 @@ class TestFactorStore:
         from qp.data.factor_store import FactorStore
 
         store = FactorStore(root=tmp_path / "factor_store")
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-01"],
-            "symbol": ["A"],
-            "factor_x_norm": [0.5],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-01"],
+                "symbol": ["A"],
+                "factor_x_norm": [0.5],
+            }
+        )
 
         store.save_refined("test_refined", df)
         loaded = store.load_refined("test_refined")
@@ -222,12 +236,14 @@ class TestFactorStore:
         from qp.data.factor_store import FactorStore
 
         store = FactorStore(root=tmp_path / "factor_store")
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-01"],
-            "symbol": ["A"],
-            "f1": [0.1],
-            "f2": [0.2],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-01"],
+                "symbol": ["A"],
+                "f1": [0.1],
+                "f2": [0.2],
+            }
+        )
 
         store.save_feature_matrix("v1.0", df, factor_names=["f1", "f2"])
         store.save_feature_matrix("v2.0", df, factor_names=["f1", "f2"])
@@ -241,11 +257,13 @@ class TestFactorStore:
         from qp.data.factor_store import FactorStore, TierMetadata
 
         store = FactorStore(root=tmp_path / "factor_store")
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-01", "2024-01-02"],
-            "symbol": ["A", "B"],
-            "f1": [0.1, 0.2],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-01", "2024-01-02"],
+                "symbol": ["A", "B"],
+                "f1": [0.1, 0.2],
+            }
+        )
 
         meta = TierMetadata.from_df(df, version="2.1", factors=["f1"])
         store.save_raw("test_meta", df, meta=meta)
@@ -330,7 +348,7 @@ class TestFactorHealthExtended:
         monitor = FactorHealthMonitor(absolute_min_ic=0.01)
         # 60+ days of near-zero IC
         ics = [0.005] * 70 + [0.02] * 30
-        should_retire, stale_days = monitor.check_retirement(ics, consecutive_days=60)
+        should_retire, _stale_days = monitor.check_retirement(ics, consecutive_days=60)
         assert not should_retire  # Last 30 days are above threshold
 
     def test_auto_retirement_stale_at_end(self):
@@ -377,11 +395,13 @@ class TestValidationGateExtended:
         from qp.validation.checks.factor_checks import CoverageCheck
         from qp.validation.engine import ValidationContext
 
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-01"] * 20,
-            "symbol": [f"S{i:03d}" for i in range(20)],
-            "feature_value": [float(i) for i in range(20)],
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-01"] * 20,
+                "symbol": [f"S{i:03d}" for i in range(20)],
+                "feature_value": [float(i) for i in range(20)],
+            }
+        )
         ctx = ValidationContext(feature_df=df, price_df=df)
         check = CoverageCheck(min_coverage_pct=0.95)
         result = check.check(ctx)
@@ -394,11 +414,13 @@ class TestValidationGateExtended:
 
         # 5 nulls out of 20 = 25% missing
         values = [float(i) for i in range(15)] + [None] * 5
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-01"] * 20,
-            "symbol": [f"S{i:03d}" for i in range(20)],
-            "feature_value": values,
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-01"] * 20,
+                "symbol": [f"S{i:03d}" for i in range(20)],
+                "feature_value": values,
+            }
+        )
         ctx = ValidationContext(feature_df=df)
         check = MissingRateCheck(max_missing_rate=0.05)
         result = check.check(ctx)
@@ -411,14 +433,17 @@ class TestValidationGateExtended:
 
         from qp.validation.checks.factor_checks import MaxCorrelationCheck
         from qp.validation.engine import ValidationContext
+
         np.random.seed(1)
         n = 100
-        df = pl.DataFrame({
-            "trade_date": ["2024-01-01"] * n,
-            "symbol": [f"S{i:03d}" for i in range(n)],
-            "feature_value": np.random.randn(n).tolist(),
-            "factor_b": np.random.randn(n).tolist(),
-        })
+        df = pl.DataFrame(
+            {
+                "trade_date": ["2024-01-01"] * n,
+                "symbol": [f"S{i:03d}" for i in range(n)],
+                "feature_value": np.random.randn(n).tolist(),
+                "factor_b": np.random.randn(n).tolist(),
+            }
+        )
         ctx = ValidationContext(feature_df=df)
         check = MaxCorrelationCheck(max_corr=0.85)
         result = check.check(ctx)
@@ -592,7 +617,12 @@ class TestFactorEnsembleOptimization:
         )
 
         # No price_alpha factors should remain
-        price_factors = {"Residual_Momentum_3M", "Short_Term_Reversal_5D",
-                         "Volatility_20D", "Amplitude_5D", "Volume_Concentration"}
+        price_factors = {
+            "Residual_Momentum_3M",
+            "Short_Term_Reversal_5D",
+            "Volatility_20D",
+            "Amplitude_5D",
+            "Volume_Concentration",
+        }
         remaining = set(weights.keys())
         assert not (price_factors & remaining)

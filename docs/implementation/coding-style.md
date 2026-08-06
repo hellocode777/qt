@@ -95,11 +95,11 @@ import os
 
 class MyClass:
     """Docstring."""
-    
+
     # 方法间：一空行
     def method_a(self) -> None:
         ...
-    
+
     def method_b(self) -> None:
         ...
 ```

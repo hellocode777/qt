@@ -325,9 +325,13 @@ def mark_executed(
         DecisionStateError: If status doesn't support execution.
     """
     if from_status == DecisionStatus.APPROVED:
-        return transition(from_status, DecisionStatus.PARTIALLY_EXECUTED, actor=actor, notes=notes)
+        return transition(
+            from_status, DecisionStatus.PARTIALLY_EXECUTED, actor=actor, notes=notes
+        )
     if from_status == DecisionStatus.PARTIALLY_EXECUTED:
-        return transition(from_status, DecisionStatus.MONITORING, actor=actor, notes=notes)
+        return transition(
+            from_status, DecisionStatus.MONITORING, actor=actor, notes=notes
+        )
     raise DecisionStateError(
         from_status,
         DecisionStatus.PARTIALLY_EXECUTED,

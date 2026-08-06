@@ -166,7 +166,9 @@ class ExperimentRecord:
             "experiment_id": self.config.experiment_id,
             "status": self.status.value,
             "created_at": self.config.created_at.isoformat(),
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": self.completed_at.isoformat()
+            if self.completed_at
+            else None,
             "config": self.config.to_dict(),
             "metrics": self.metrics.to_dict(),
             "lineage": self.lineage.to_dict(),

@@ -146,7 +146,7 @@
   - `PurgedGroupTimeSeriesSplit` — sklearn-compatible splitter with `split(X, y, groups)` interface
   - `PurgedKFoldSklearn` — 完全继承 `sklearn.model_selection._BaseKFold`，自动兼容 `cross_val_score`、`GridSearchCV`、`RandomizedSearchCV`
   - 保留原有 `PurgedKFold` @dataclass 不变，新增两个类作为补充
-  
+
 ---
 
 ### 3.2 LightGBM 单调约束集成
@@ -159,7 +159,7 @@
   - `LightGBMRankModel.fit()` 接受 `monotone_constraints` kwarg（list 或 dict）
   - `save_model()` / `load_model()` 持久化和恢复约束配置
   - `monotone_constraints` 属性暴露当前约束
-  
+
 ---
 
 ### 3.3 Feature Importance 剧烈变化自动复核
@@ -171,7 +171,7 @@
   - severe drift → 阻断 promote（`validation_passed = False`）
   - moderate drift → 允许上线但发出 warning
   - 返回详细 drift report（overlap_count, new_entrants, departed, surge_alerts, rank_shifts）
-  
+
 ---
 
 ### 3.4 Model Decay 与 Kill Switch 联动
@@ -186,7 +186,7 @@
     - 通过 `StrategyRegistry.set_lifecycle()` 实际修改策略状态
   - `kill_switch_pipeline.py`: `_check_kill_switch()` 已集成 `ModelDecayTrigger`
   - `ModelDecayDetector.check_series()` 支持连续 N 天阈值检查，防止单日误报
-  
+
 ---
 
 ## 四、P3 — Ray 并行引擎（中长期目标）

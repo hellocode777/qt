@@ -243,7 +243,11 @@ class StratificationCheck(BaseRule):
 
         mean_spread = float(spreads.mean())
         std_spread = float(spreads.std())
-        t_stat = abs(mean_spread) / (std_spread / np.sqrt(len(spreads))) if std_spread > 0 else 0.0
+        t_stat = (
+            abs(mean_spread) / (std_spread / np.sqrt(len(spreads)))
+            if std_spread > 0
+            else 0.0
+        )
 
         passed = t_stat >= self._min_t_stat
         score = min(100.0, (t_stat / 5.0) * 100.0)
@@ -377,7 +381,9 @@ def _compute_quantile_spreads(
         )
 
         # Mean forward return per quantile
-        q_ret = day_data.group_by("quantile").agg(pl.col("fwd_ret").mean().alias("mean_ret"))
+        q_ret = day_data.group_by("quantile").agg(
+            pl.col("fwd_ret").mean().alias("mean_ret")
+        )
         q_ret = q_ret.sort("quantile")
 
         if q_ret.height < 2:
@@ -582,15 +588,13 @@ class CoverageCheck(BaseRule):
 
         # Count total stocks per day from price universe (or feature_df itself)
         if price_df is not None and not price_df.is_empty():
-            universe_per_day = (
-                price_df.group_by("trade_date")
-                .agg(pl.col("symbol").n_unique().alias("total_stocks"))
+            universe_per_day = price_df.group_by("trade_date").agg(
+                pl.col("symbol").n_unique().alias("total_stocks")
             )
         else:
             # Fallback: use feature_df itself as the universe
-            universe_per_day = (
-                feature_df.group_by("trade_date")
-                .agg(pl.col("symbol").n_unique().alias("total_stocks"))
+            universe_per_day = feature_df.group_by("trade_date").agg(
+                pl.col("symbol").n_unique().alias("total_stocks")
             )
 
         # Count stocks with valid factor values per day
@@ -878,12 +882,18 @@ class TurnoverLimitCheck(BaseRule):
             prev = feature_df.filter(pl.col("trade_date") == dates[i - 1])
             curr = feature_df.filter(pl.col("trade_date") == dates[i])
 
-            common_symbols = set(prev["symbol"].to_list()) & set(curr["symbol"].to_list())
+            common_symbols = set(prev["symbol"].to_list()) & set(
+                curr["symbol"].to_list()
+            )
             if len(common_symbols) < 5:
                 continue
 
-            prev_scores = prev.filter(pl.col("symbol").is_in(common_symbols))["feature_value"]
-            curr_scores = curr.filter(pl.col("symbol").is_in(common_symbols))["feature_value"]
+            prev_scores = prev.filter(pl.col("symbol").is_in(common_symbols))[
+                "feature_value"
+            ]
+            curr_scores = curr.filter(pl.col("symbol").is_in(common_symbols))[
+                "feature_value"
+            ]
 
             # Rank correlation
             n = len(prev_scores)

@@ -99,7 +99,7 @@ def validate_label_rebalance_consistency(
             "severity": "ok",
             "message": f"Label horizon ({label_horizon}d) ≈ rebalance ({rebalance_freq}d)",
         }
-    elif 0.5 <= ratio <= 2.0:
+    if 0.5 <= ratio <= 2.0:
         return {
             "consistent": True,
             "severity": "warning",
@@ -108,15 +108,14 @@ def validate_label_rebalance_consistency(
                 f"differ by {ratio:.1f}x — moderate mismatch"
             ),
         }
-    else:
-        return {
-            "consistent": False,
-            "severity": "mismatch",
-            "message": (
-                f"Label horizon ({label_horizon}d) and rebalance ({rebalance_freq}d) "
-                f"differ by {ratio:.1f}x — severe mismatch, align them"
-            ),
-        }
+    return {
+        "consistent": False,
+        "severity": "mismatch",
+        "message": (
+            f"Label horizon ({label_horizon}d) and rebalance ({rebalance_freq}d) "
+            f"differ by {ratio:.1f}x — severe mismatch, align them"
+        ),
+    }
 
 
 def check_label_coverage(
@@ -138,7 +137,12 @@ def check_label_coverage(
     n_label = label_df.height
 
     if n_price == 0:
-        return {"coverage_ratio": 0.0, "n_price_rows": 0, "n_label_rows": 0, "sufficient": False}
+        return {
+            "coverage_ratio": 0.0,
+            "n_price_rows": 0,
+            "n_label_rows": 0,
+            "sufficient": False,
+        }
 
     # Count distinct (date, symbol) pairs in both
     price_pairs = set(

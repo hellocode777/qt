@@ -47,7 +47,9 @@ class OnlineCache:
     swap to Redis with the same interface.
     """
 
-    def __init__(self, max_symbols: int = 10_000, ttl_seconds: int | None = None) -> None:
+    def __init__(
+        self, max_symbols: int = 10_000, ttl_seconds: int | None = None
+    ) -> None:
         """Initialize the online cache.
 
         Args:
@@ -117,7 +119,9 @@ class OnlineCache:
 
     # ── Read ──
 
-    def get(self, symbol: str, feature_names: list[str] | None = None) -> dict[str, Any] | None:
+    def get(
+        self, symbol: str, feature_names: list[str] | None = None
+    ) -> dict[str, Any] | None:
         """Get the latest feature snapshot for a symbol.
 
         Args:
