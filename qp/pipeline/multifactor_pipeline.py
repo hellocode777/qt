@@ -2161,7 +2161,9 @@ def _persist_factor_health(
 
             # ── Daily IC series persistence (for correlation analysis) ──
             with contextlib.suppress(Exception):
-                daily_records = compute_daily_ic_series(fdf, price_flat, forward_days=5, min_stocks_per_day=10)
+                daily_records = compute_daily_ic_series(
+                    fdf, price_flat, forward_days=5, min_stocks_per_day=10
+                )
                 health_logger.save_daily_ic_series(fname, daily_records)
 
             # ── Multi-horizon IC decay (1d/3d/5d/10d/20d) ──

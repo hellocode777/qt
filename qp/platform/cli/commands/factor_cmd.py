@@ -7,6 +7,7 @@ Usage:
     qp factor validate <name>      Run validation gate on a single factor
     qp factor update-health        Recompute full-history health for all factors
     qp factor catalog              Show factor catalog by category
+    qp factor compute              Compute daily factor values → factor_values_daily.parquet
 """
 
 from __future__ import annotations
@@ -47,7 +48,10 @@ def cmd_factor_list() -> int:
         "archived": 6,
     }
 
-    items = sorted(latest.items(), key=lambda x: (stage_order.get(x[1].get("stage", ""), 99), -abs(x[1].get("ic_30d", 0))))
+    items = sorted(
+        latest.items(),
+        key=lambda x: (stage_order.get(x[1].get("stage", ""), 99), -abs(x[1].get("ic_30d", 0))),
+    )
 
     icons = {
         "production": "🚀",
@@ -211,11 +215,13 @@ def _compute_factor_scores(
                 if factor_name in row:
                     val = row[factor_name]
                     if val is not None and val == val:
-                        rows.append({
-                            "trade_date": str(row["trade_date"]),
-                            "symbol": symbol,
-                            "score": float(val),
-                        })
+                        rows.append(
+                            {
+                                "trade_date": str(row["trade_date"]),
+                                "symbol": symbol,
+                                "score": float(val),
+                            }
+                        )
         except Exception:
             continue
         if (i + 1) % 500 == 0:
@@ -256,9 +262,18 @@ def cmd_factor_validate(
     if factor_name not in ALL_FACTOR_DIRECTIONS:
         known_valuation = {"PE_TTM", "PB", "PCF_OCF", "Dividend_Yield", "PS_TTM"}
         known_fundamental = {
-            "ROE", "revenue_growth", "net_profit_growth", "gross_margin",
-            "net_margin", "debt_ratio", "EPS", "NAV",
-            "ROE_Level", "Profit_Stability", "Earnings_Quality", "Margin_Composite",
+            "ROE",
+            "revenue_growth",
+            "net_profit_growth",
+            "gross_margin",
+            "net_margin",
+            "debt_ratio",
+            "EPS",
+            "NAV",
+            "ROE_Level",
+            "Profit_Stability",
+            "Earnings_Quality",
+            "Margin_Composite",
         }
         if factor_name not in known_valuation and factor_name not in known_fundamental:
             print(f"Unknown factor: {factor_name}")
@@ -277,7 +292,9 @@ def cmd_factor_validate(
         print("Error: No price dataset found.")
         return 1
 
-    print(f"  Data source: full daily price ({price_df['trade_date'].min()} ~ {price_df['trade_date'].max()})")
+    print(
+        f"  Data source: full daily price ({price_df['trade_date'].min()} ~ {price_df['trade_date'].max()})"
+    )
     print(f"  Stocks:      {price_df['symbol'].n_unique()}")
     print()
     print("Computing cross-sectional Rank IC (full history)...")
@@ -303,8 +320,11 @@ def cmd_factor_validate(
         ("IC IR ≥ 0.30", ic_result.ic_ir >= 0.30, f"{ic_result.ic_ir:.2f}"),
         ("IC t-stat ≥ 2.0", ic_result.ic_t_stat >= 2.0, f"{ic_result.ic_t_stat:.2f}"),
         ("IC>0% ≥ 50%", ic_result.ic_positive_pct >= 50.0, f"{ic_result.ic_positive_pct:.1f}%"),
-        ("Direction match", (ic_result.ic_mean * expected_direction) > 0,
-         "matches" if (ic_result.ic_mean * expected_direction) > 0 else "REVERSED"),
+        (
+            "Direction match",
+            (ic_result.ic_mean * expected_direction) > 0,
+            "matches" if (ic_result.ic_mean * expected_direction) > 0 else "REVERSED",
+        ),
     ]
 
     passed = sum(1 for _, ok, _ in checks if ok)
@@ -336,9 +356,13 @@ def cmd_factor_validate(
 
             status = monitor.check_factor(factor_name, ic_result.daily_ics)
             health_logger.log(status, date_str=today_str)
-            daily_records = compute_daily_ic_series(score_df, price_df, forward_days=5, min_stocks_per_day=10)
+            daily_records = compute_daily_ic_series(
+                score_df, price_df, forward_days=5, min_stocks_per_day=10
+            )
             health_logger.save_daily_ic_series(factor_name, daily_records)
-            print(f"  ✅ Written to factor_health.parquet (stage={status.lifecycle.value}, n_days={ic_result.n_days})")
+            print(
+                f"  ✅ Written to factor_health.parquet (stage={status.lifecycle.value}, n_days={ic_result.n_days})"
+            )
         except Exception as e:
             print(f"  ⚠️ Failed to persist: {e}")
 
@@ -390,7 +414,9 @@ def cmd_factor_update_health() -> int:
                 skip_count += 1
                 continue
 
-            ic_result = evaluate_factor_ic(score_df, price_df, forward_days=5, min_stocks_per_day=10)
+            ic_result = evaluate_factor_ic(
+                score_df, price_df, forward_days=5, min_stocks_per_day=10
+            )
             if ic_result.n_days < 10:
                 print("SKIP (< 10 IC days)")
                 skip_count += 1
@@ -398,14 +424,22 @@ def cmd_factor_update_health() -> int:
 
             status = monitor.check_factor(fname, ic_result.daily_ics)
             health_logger.log(status, date_str=today_str)
-            daily_records = compute_daily_ic_series(score_df, price_df, forward_days=5, min_stocks_per_day=10)
+            daily_records = compute_daily_ic_series(
+                score_df, price_df, forward_days=5, min_stocks_per_day=10
+            )
             health_logger.save_daily_ic_series(fname, daily_records)
-            print(f"OK (IC={ic_result.ic_mean:+.4f} IR={ic_result.ic_ir:.2f} {status.lifecycle.value})")
+            print(
+                f"OK (IC={ic_result.ic_mean:+.4f} IR={ic_result.ic_ir:.2f} {status.lifecycle.value})"
+            )
             ok_count += 1
 
         print()
-        print(f"Done: {ok_count} updated, {skip_count} skipped → factor_health.parquet + factor_ic_series.parquet")
-        print(f"WebUI will now show full-history data ({price_df['trade_date'].min()} ~ {price_df['trade_date'].max()}).")
+        print(
+            f"Done: {ok_count} updated, {skip_count} skipped → factor_health.parquet + factor_ic_series.parquet"
+        )
+        print(
+            f"WebUI will now show full-history data ({price_df['trade_date'].min()} ~ {price_df['trade_date'].max()})."
+        )
     except Exception as e:
         print(f"Error: {e}")
         return 1
@@ -467,3 +501,72 @@ def cmd_factor_catalog() -> int:
     print("  Earnings_Quality, Margin_Composite")
 
     return 0
+
+
+def cmd_factor_compute(
+    target_date: str = "",
+    full_history: bool = False,
+    factor_subset: str = "",
+    output_dir: str = "data/dataset",
+) -> int:
+    """Run daily factor computation → factor_values_daily.parquet.
+
+    Computes all 19 price/volume factor values for all stocks using
+    fixed factor formulas.  This is the Factor Execution Plane —
+    factor formulas are fixed, only the latest market data is substituted.
+
+    Usage:
+        qp factor compute                          # incremental: latest date only
+        qp factor compute --full                   # full history: all dates
+        qp factor compute --date 2026-08-06        # specific date
+        qp factor compute --subset Momentum_3M,Volatility_20D  # subset only
+    """
+    try:
+        from qp.pipeline.factor_calc_pipeline import FactorCalcPipeline
+        from qp.platform.pipeline.context import PipelineContext
+    except ImportError as e:
+        print(f"Error: {e}")
+        return 1
+
+    subset: list[str] | None = None
+    if factor_subset:
+        subset = [s.strip() for s in factor_subset.split(",") if s.strip()]
+
+    print("=== Factor Computation (Factor Execution Plane) ===")
+    if full_history:
+        print("  Mode: full-history (all dates)")
+    elif target_date:
+        print(f"  Mode: single date ({target_date})")
+    else:
+        print("  Mode: incremental (latest date only)")
+    if subset:
+        print(f"  Factors: {len(subset)} selected ({', '.join(subset)})")
+    else:
+        print("  Factors: all 19 price/volume factors")
+    print()
+
+    context = PipelineContext(
+        pipeline_name="factor_calc",
+        parameters={
+            "target_date": target_date or None,
+            "full_history": full_history,
+            "factor_subset": subset,
+            "output_dir": output_dir,
+        },
+    )
+    calc = FactorCalcPipeline()
+    result = calc.run(context)
+
+    if result.status.value == "success":
+        print(f"  ✅ Done — {result.metrics.get('new_rows', 0)} rows")
+        print(f"     Date:     {result.metadata.get('date', 'N/A')}")
+        print(f"     Factors:  {result.metrics.get('n_factors', 0)}")
+        if result.artifacts:
+            print(f"     Output:   {result.artifacts[0]}")
+        return 0
+    elif result.status.value == "partial":
+        print(f"  ⚠️ Partial — {result.metadata.get('warning', 'see details')}")
+        return 0
+    else:
+        print(f"  ❌ Failed: {result.errors}")
+        return 1

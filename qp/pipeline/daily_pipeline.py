@@ -253,6 +253,35 @@ class DailyPipeline(BasePipeline):
                 result.metrics.update({f"data_{k}": v for k, v in data_result.metrics.items()})
 
             # ================================================================
+            # Step 1.5: Factor Calculator — produce factor_values_daily.parquet
+            # ================================================================
+            skip_factor_calc = bool(context.parameters.get("skip_factor_calc", False))
+            if not skip_factor_calc:
+                try:
+                    from qp.pipeline.factor_calc_pipeline import FactorCalcPipeline
+
+                    factor_calc = FactorCalcPipeline()
+                    factor_result = factor_calc.run(context)
+                    if factor_result.status == PipelineStatus.FAILED:
+                        logger.warning(
+                            "Factor calculator failed (non-fatal): {}",
+                            factor_result.errors,
+                        )
+                    else:
+                        result.metrics.update(
+                            {f"factorcalc_{k}": v for k, v in factor_result.metrics.items()}
+                        )
+                        result.artifacts.extend(factor_result.artifacts)
+                        logger.info(
+                            "FactorCalcPipeline: {} rows, {} factors → {}",
+                            factor_result.metrics.get("new_rows", 0),
+                            factor_result.metrics.get("n_factors", 0),
+                            factor_result.artifacts[0] if factor_result.artifacts else "N/A",
+                        )
+                except Exception as e:
+                    logger.warning("Factor calculator unavailable (non-fatal): {}", e)
+
+            # ================================================================
             # Step 2: Feature computation (momentum + volatility)
             # ================================================================
             feature_pipeline = FeaturePipeline()

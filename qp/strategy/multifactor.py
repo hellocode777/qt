@@ -1074,8 +1074,21 @@ def compute_today_signals(
     values, apply frozen weights, cross-sectionally normalize, and return
     the top-N.
 
+    Tries the fast path first: if factor_values_daily.parquet exists and
+    contains the target date, reads pre-computed factor values directly.
+    Falls back to on-the-fly computation if the parquet is unavailable.
+
     Runs in O(stocks) instead of O(stocks × dates).
     """
+    # Fast path: read from factor_values_daily.parquet
+    try:
+        result = _compute_today_from_parquet(weights, today, top_n)
+        if not result.is_empty():
+            return result
+    except Exception:
+        pass
+
+    # Slow path: on-the-fly computation (existing behavior)
     from qp.research.feature.compute import compute_all_factors
 
     today_scores: dict[str, float] = {}
@@ -1128,5 +1141,68 @@ def compute_today_signals(
         # During signal generation, industry exposure is already diversified
         # by the sector overconcentration check in daily_pipeline.
         pass
+
+    return result
+
+
+def _compute_today_from_parquet(
+    weights: dict[str, float],
+    today: str,
+    top_n: int = 10,
+) -> pl.DataFrame:
+    """Compute today's signals from pre-computed factor_values_daily.parquet.
+
+    Fast path of the Factor Execution Plane: reads factor values in one
+    parquet scan, applies frozen weights, and cross-sectionally ranks.
+    No per-stock factor computation loop needed.
+    """
+    from pathlib import Path
+
+    import polars as pl
+
+    parquet_path = Path("data/dataset/factor_values_daily.parquet")
+    if not parquet_path.exists():
+        return pl.DataFrame()
+
+    factor_df = pl.read_parquet(parquet_path)
+    if factor_df.is_empty():
+        return pl.DataFrame()
+
+    # Filter to target date
+    date_col = factor_df["trade_date"].cast(pl.Utf8)
+    date_mask = date_col == today
+    if not date_mask.any():
+        return pl.DataFrame()
+
+    factor_df = factor_df.filter(date_mask)
+
+    # Weighted sum of available factor columns
+    score = pl.lit(0.0)
+    available = [f for f in weights if f in factor_df.columns]
+    if not available:
+        return pl.DataFrame()
+
+    for fname in available:
+        score = score + pl.col(fname).cast(pl.Float64) * weights[fname]
+
+    result = factor_df.select(
+        [
+            pl.col("symbol"),
+            score.alias("raw_score"),
+        ]
+    )
+
+    # Drop rows with null/NaN scores
+    result = result.filter(pl.col("raw_score").is_not_null() & pl.col("raw_score").is_finite())
+
+    if result.is_empty():
+        return pl.DataFrame()
+
+    # Cross-sectionally rank
+    result = result.sort("raw_score", descending=True)
+    result = result.with_columns(
+        pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
+    )
+    result = result.filter(pl.col("rank") <= top_n)
 
     return result

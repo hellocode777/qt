@@ -90,6 +90,7 @@ def cmd_run() -> int:
 
     demo = "--demo" in sys.argv
     skip_fetch = "--skip-fetch" in sys.argv
+    skip_factor_calc = "--skip-factor-calc" in sys.argv
     # Default: fetch last 5 days (Sina, fast with progress).
     # Full backfill via `qp ingest 2015-01-01`.
     recent_start = (date.today() - timedelta(days=5)).isoformat()
@@ -98,6 +99,7 @@ def cmd_run() -> int:
         parameters={
             "demo": demo,
             "skip_fetch": skip_fetch,
+            "skip_factor_calc": skip_factor_calc,
             "start_date": recent_start,
         },
     )

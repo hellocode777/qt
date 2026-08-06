@@ -549,8 +549,7 @@ class FactorHealthService:
                         "type": "psi_warning",
                         "severity": "warning",
                         "message": (
-                            f"⚠️ {name} PSI={psi_30d:.2f} > 0.10 — "
-                            f"因子分布有中度偏移，建议关注。"
+                            f"⚠️ {name} PSI={psi_30d:.2f} > 0.10 — 因子分布有中度偏移，建议关注。"
                         ),
                         "action": "密切监控",
                     }

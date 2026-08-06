@@ -661,7 +661,9 @@ def factor_report(factor_name: str) -> None:
 
 @factor.command("validate")
 @click.argument("factor_name", required=False, default="")
-@click.option("--persist", is_flag=True, default=False, help="Save results to factor_health.parquet")
+@click.option(
+    "--persist", is_flag=True, default=False, help="Save results to factor_health.parquet"
+)
 def factor_validate(factor_name: str, persist: bool) -> None:
     """Run validation gate on a single factor against FULL price history."""
     from qp.platform.cli.commands.factor_cmd import cmd_factor_validate
@@ -683,6 +685,41 @@ def factor_catalog() -> None:
     from qp.platform.cli.commands.factor_cmd import cmd_factor_catalog
 
     raise SystemExit(cmd_factor_catalog())
+
+
+@factor.command("compute")
+@click.option(
+    "--date",
+    "target_date",
+    type=str,
+    default="",
+    help="Target trade date (default: latest in dataset)",
+)
+@click.option(
+    "--full", "full_history", is_flag=True, default=False, help="Recompute full history (all dates)"
+)
+@click.option(
+    "--subset",
+    "factor_subset",
+    type=str,
+    default="",
+    help="Comma-separated factor names (default: all 19)",
+)
+@click.option("--output-dir", type=str, default="data/dataset", help="Output directory")
+def factor_compute(
+    target_date: str, full_history: bool, factor_subset: str, output_dir: str
+) -> None:
+    """Compute daily factor values → factor_values_daily.parquet (Factor Execution Plane)."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_compute
+
+    raise SystemExit(
+        cmd_factor_compute(
+            target_date=target_date,
+            full_history=full_history,
+            factor_subset=factor_subset,
+            output_dir=output_dir,
+        )
+    )
 
 
 # ==================================================================

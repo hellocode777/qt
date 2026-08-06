@@ -102,7 +102,9 @@ class FactorReportGenerator:
                 lines.append("> 如果 IC 在长 horizon 反而上升，可能存在数据泄漏或反向预测问题。")
                 lines.append("")
         except Exception:
-            lines.append("> Multi-horizon IC data not yet available. Run an experiment to populate.")
+            lines.append(
+                "> Multi-horizon IC data not yet available. Run an experiment to populate."
+            )
             lines.append("")
 
         # ── Assessment ──
@@ -147,7 +149,8 @@ class FactorReportGenerator:
         lines.append("")
         corr = overview.get("correlation", {})
         related_pairs = [
-            p for p in corr.get("pairs", [])
+            p
+            for p in corr.get("pairs", [])
             if p["factor_a"] == factor_name or p["factor_b"] == factor_name
         ][:10]
         if related_pairs:
