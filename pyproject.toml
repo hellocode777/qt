@@ -67,6 +67,13 @@ packages = ["qp"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# 告诉 Ruff 忽略 Markdown 文件以及 archive 归档文档
+include = ["*.py", "*.pyi"]
+# 或者明确排除 docs 目录与 markdown 文件
+exclude = [
+    "docs/*",
+    "*.md",
+]
 
 [tool.ruff.lint]
 exclude = ["*.html"]
