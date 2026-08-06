@@ -296,9 +296,7 @@ class MarketRegimeEngine:
                 abs(high[i] - closes[i - 1]),
                 abs(low[i] - closes[i - 1]),
             )
-        atr = np.convolve(
-            tr, np.ones(self._atr_window) / self._atr_window, mode="valid"
-        )
+        atr = np.convolve(tr, np.ones(self._atr_window) / self._atr_window, mode="valid")
 
         # Directional Movement
         up_move = np.diff(high)
@@ -313,16 +311,8 @@ class MarketRegimeEngine:
             return 25.0
 
         atr_smooth = atr[-1]
-        plus_di = (
-            100 * np.mean(plus_dm[-smooth_window:]) / atr_smooth
-            if atr_smooth > 0
-            else 0
-        )
-        minus_di = (
-            100 * np.mean(minus_dm[-smooth_window:]) / atr_smooth
-            if atr_smooth > 0
-            else 0
-        )
+        plus_di = 100 * np.mean(plus_dm[-smooth_window:]) / atr_smooth if atr_smooth > 0 else 0
+        minus_di = 100 * np.mean(minus_dm[-smooth_window:]) / atr_smooth if atr_smooth > 0 else 0
 
         dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di + 1e-10)
         return float(dx)
@@ -561,9 +551,7 @@ class MarketRegimeEngine:
         past = self.classify(past_prices)
 
         transition_detected = current.regime != past.regime
-        confidence = (
-            abs(current.confidence - past.confidence) if transition_detected else 0.0
-        )
+        confidence = abs(current.confidence - past.confidence) if transition_detected else 0.0
 
         return {
             "transition_detected": transition_detected,

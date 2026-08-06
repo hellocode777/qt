@@ -37,9 +37,7 @@ def validate_config(config: Config) -> None:
 
     # Logging
     if config.logging.level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
-        errors.append(
-            f"logging.level '{config.logging.level}' is not a valid log level"
-        )
+        errors.append(f"logging.level '{config.logging.level}' is not a valid log level")
 
     # Model
     if config.model.num_leaves < 2:

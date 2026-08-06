@@ -46,9 +46,7 @@ class IndustryCache:
 
         age_days = self._age_days()
         if age_days > self._ttl_days:
-            logger.info(
-                "行业缓存已过期 ({} 天 > {} 天)，将重新获取", age_days, self._ttl_days
-            )
+            logger.info("行业缓存已过期 ({} 天 > {} 天)，将重新获取", age_days, self._ttl_days)
             return None
 
         try:

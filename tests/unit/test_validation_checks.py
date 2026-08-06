@@ -52,9 +52,7 @@ def _make_test_data(
     """Create synthetic feature + price DataFrames with known IC."""
     rng = np.random.default_rng(seed)
     dates = [
-        f"2024-{m:02d}-{d:02d}"
-        for m in range(1, 3)
-        for d in range(1, min(n_days // 2 + 1, 29))
+        f"2024-{m:02d}-{d:02d}" for m in range(1, 3) for d in range(1, min(n_days // 2 + 1, 29))
     ][:n_days]
     symbols = [f"STK{i:03d}" for i in range(n_stocks)]
 
@@ -64,9 +62,7 @@ def _make_test_data(
         base_price = 10.0 + di * 0.1
         for _si, s in enumerate(symbols):
             feat_val = rng.normal(0, 1)
-            close = (
-                base_price + rng.normal(0, 2) + feat_val * 0.5
-            )  # feature has real signal
+            close = base_price + rng.normal(0, 2) + feat_val * 0.5  # feature has real signal
             rows.append({"trade_date": d, "symbol": s, "feature_value": feat_val})
             px_rows.append({"trade_date": d, "symbol": s, "close": close})
 
@@ -134,9 +130,7 @@ class TestRankICCheck:
     def test_empty_data(self):
         check = RankICCheck()
         ctx = ValidationContext(
-            feature_df=pl.DataFrame(
-                {"trade_date": [], "symbol": [], "feature_value": []}
-            ),
+            feature_df=pl.DataFrame({"trade_date": [], "symbol": [], "feature_value": []}),
             price_df=pl.DataFrame({"trade_date": [], "symbol": [], "close": []}),
         )
         result = check.check(ctx)
@@ -438,9 +432,7 @@ class TestFeatureImportanceCheck:
 
     def test_fails_high_concentration(self):
         check = FeatureImportanceCheck(max_top1_pct=0.80)
-        ctx = ValidationContext(
-            metadata={"feature_importance": np.array([0.9, 0.05, 0.03, 0.02])}
-        )
+        ctx = ValidationContext(metadata={"feature_importance": np.array([0.9, 0.05, 0.03, 0.02])})
         result = check.check(ctx)
         assert result.status == ValidationStatus.FAIL
 
@@ -617,12 +609,8 @@ class TestSignalCorrelationCheck:
         rng = np.random.default_rng(42)
         ctx = ValidationContext(
             metadata={
-                "paper_trading_signals": {
-                    f"day{i}": list(rng.random(10)) for i in range(10)
-                },
-                "backtest_signals": {
-                    f"day{i}": list(rng.random(10)) for i in range(10)
-                },
+                "paper_trading_signals": {f"day{i}": list(rng.random(10)) for i in range(10)},
+                "backtest_signals": {f"day{i}": list(rng.random(10)) for i in range(10)},
             }
         )
         result = check.check(ctx)
@@ -692,9 +680,7 @@ class TestSignalInterruptionCheck:
         check = SignalInterruptionCheck(max_consecutive_missing=2)
         dates = [f"2024-01-{d:02d}" for d in range(1, 31)]
         # Missing 3 consecutive days
-        actual = [
-            d for d in dates if d not in {"2024-01-10", "2024-01-11", "2024-01-12"}
-        ]
+        actual = [d for d in dates if d not in {"2024-01-10", "2024-01-11", "2024-01-12"}]
         ctx = ValidationContext(
             metadata={
                 "paper_trading_expected_dates": dates,

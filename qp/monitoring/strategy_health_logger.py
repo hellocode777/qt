@@ -151,9 +151,7 @@ class StrategyHealthLogger:
         if df.is_empty():
             return None
 
-        filtered = df.filter(pl.col("strategy_id") == strategy_id).sort(
-            "date", descending=True
-        )
+        filtered = df.filter(pl.col("strategy_id") == strategy_id).sort("date", descending=True)
         if filtered.is_empty():
             return None
 
@@ -168,9 +166,7 @@ class StrategyHealthLogger:
 
         result: dict[str, StrategyHealth] = {}
         for sid in df["strategy_id"].unique().to_list():
-            latest = df.filter(pl.col("strategy_id") == sid).sort(
-                "date", descending=True
-            )
+            latest = df.filter(pl.col("strategy_id") == sid).sort("date", descending=True)
             if not latest.is_empty():
                 row = latest.row(0, named=True)
                 result[sid] = self._row_to_health(row)
@@ -202,9 +198,7 @@ class StrategyHealthLogger:
             return []
 
         filtered = (
-            df.filter(pl.col("strategy_id") == strategy_id)
-            .sort("date")
-            .tail(self._window_days)
+            df.filter(pl.col("strategy_id") == strategy_id).sort("date").tail(self._window_days)
         )
 
         records: list[SignalRecord] = []

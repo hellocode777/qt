@@ -69,8 +69,7 @@ def check_gaps(
                 (dates[i] - dates[i - 1]).days
                 if hasattr(dates[i], "days")
                 else (
-                    date.fromisoformat(str(dates[i]))
-                    - date.fromisoformat(str(dates[i - 1]))
+                    date.fromisoformat(str(dates[i])) - date.fromisoformat(str(dates[i - 1]))
                 ).days
             )
             if delta > max_allowed_gap_days:
@@ -532,9 +531,7 @@ def check_null_rate(
             passed=True,
             severity=Severity.ERROR,
             detail=f"All null rates <= {max_null_rate:.1%}",
-            metadata={
-                "null_rates": {c: round(df[c].null_count() / n, 6) for c in available}
-            },
+            metadata={"null_rates": {c: round(df[c].null_count() / n, 6) for c in available}},
         )
 
     detail = ", ".join(f"{c}: {r:.2%}" for c, r in bad_cols.items())
@@ -692,9 +689,7 @@ def check_financial_balance(
     Returns:
         CheckResult with per-row violation details.
     """
-    missing = [
-        c for c in [assets_col, liabilities_col, equity_col] if c not in df.columns
-    ]
+    missing = [c for c in [assets_col, liabilities_col, equity_col] if c not in df.columns]
     if missing:
         return CheckResult(
             check_name="financial_balance_check",
@@ -759,9 +754,7 @@ def check_financial_balance(
 
     # Severity: a few small violations are WARNING, many or large are ERROR
     worst = max(cast("float", v["error_pct"]) for v in violations) if violations else 0
-    severity = (
-        Severity.ERROR if (worst > 5.0 or bad > total * 0.1) else Severity.WARNING
-    )
+    severity = Severity.ERROR if (worst > 5.0 or bad > total * 0.1) else Severity.WARNING
 
     return CheckResult(
         check_name="financial_balance_check",

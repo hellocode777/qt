@@ -77,9 +77,9 @@ class SignalAggregator:
             score_col = "feature_value" if "feature_value" in s.columns else "rank"
             # Rank descending → percentile
             r = s.select(["symbol", score_col]).with_columns(
-                (
-                    pl.col(score_col).rank(descending=True) / pl.col(score_col).count()
-                ).alias(f"pct_{i}")
+                (pl.col(score_col).rank(descending=True) / pl.col(score_col).count()).alias(
+                    f"pct_{i}"
+                )
             )
             ranked_dfs.append(r.select(["symbol", f"pct_{i}"]))
 
@@ -102,9 +102,7 @@ class SignalAggregator:
             (pl.sum_horizontal(pct_cols) / len(pct_cols)).alias("aggregated_score")
         )
         merged = merged.sort("aggregated_score", descending=True)
-        merged = merged.with_columns(
-            pl.col("aggregated_score").rank(descending=True).alias("rank")
-        )
+        merged = merged.with_columns(pl.col("aggregated_score").rank(descending=True).alias("rank"))
         merged = merged.with_columns(pl.lit("BUY").alias("action"))
 
         return merged.select(["symbol", "aggregated_score", "rank", "action"])
@@ -145,9 +143,7 @@ class SignalAggregator:
             (pl.sum_horizontal(z_cols) / len(z_cols)).alias("aggregated_score")
         )
         merged = merged.sort("aggregated_score", descending=True)
-        merged = merged.with_columns(
-            pl.col("aggregated_score").rank(descending=True).alias("rank")
-        )
+        merged = merged.with_columns(pl.col("aggregated_score").rank(descending=True).alias("rank"))
         merged = merged.with_columns(pl.lit("BUY").alias("action"))
 
         return merged.select(["symbol", "aggregated_score", "rank", "action"])
@@ -170,12 +166,9 @@ class SignalAggregator:
             for s in signals:
                 sym_rows = s.filter(pl.col("symbol") == sym)
                 if not sym_rows.is_empty():
-                    score_col = (
-                        "feature_value" if "feature_value" in s.columns else "rank"
-                    )
+                    score_col = "feature_value" if "feature_value" in s.columns else "rank"
                     rank_val = sym_rows.select(
-                        pl.col(score_col).rank(descending=True)
-                        / pl.col(score_col).count()
+                        pl.col(score_col).rank(descending=True) / pl.col(score_col).count()
                     ).item()
                     pct_sum += rank_val
             avg_pct = pct_sum / count if count > 0 else 0.0

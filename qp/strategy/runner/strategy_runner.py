@@ -67,12 +67,8 @@ class RunnerResult:
             "success": self.success_count,
             "skipped": self.skip_count,
             "errors": self.error_count,
-            "skipped_details": [
-                {"strategy_id": s[0], "reason": s[1]} for s in self.skipped
-            ],
-            "error_details": [
-                {"strategy_id": e[0], "error": e[1]} for e in self.errors
-            ],
+            "skipped_details": [{"strategy_id": s[0], "reason": s[1]} for s in self.skipped],
+            "error_details": [{"strategy_id": e[0], "error": e[1]} for e in self.errors],
             "elapsed_ms": self.elapsed_ms,
         }
 
@@ -270,10 +266,7 @@ class StrategyRunner:
             # Find next matching weekday on an even ISO week
             current = run_date + timedelta(days=1)
             for _ in range(21):  # up to 3 weeks ahead
-                if (
-                    current.weekday() == rebalance_day
-                    and current.isocalendar()[1] % 2 == 0
-                ):
+                if current.weekday() == rebalance_day and current.isocalendar()[1] % 2 == 0:
                     return current
                 current += timedelta(days=1)
             return current

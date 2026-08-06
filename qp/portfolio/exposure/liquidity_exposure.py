@@ -132,9 +132,7 @@ class LiquidityExposure:
             # Days to liquidate
             if adv > 0 and wt > 0:
                 daily_capacity = adv * self.participation_rate
-                days = (
-                    wt / (daily_capacity / (adv / 252)) if daily_capacity > 0 else 999
-                )
+                days = wt / (daily_capacity / (adv / 252)) if daily_capacity > 0 else 999
                 max_days = max(max_days, days)
 
         if total_wt > 0:

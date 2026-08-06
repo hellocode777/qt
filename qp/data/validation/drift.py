@@ -272,9 +272,7 @@ def check_summary_stat_drift(
             continue
 
         mean_ratio = (
-            max(cur_mean / base_mean, base_mean / cur_mean)
-            if base_mean != 0
-            else float("inf")
+            max(cur_mean / base_mean, base_mean / cur_mean) if base_mean != 0 else float("inf")
         )
         std_ratio = (
             max(cur_std / base_std, base_std / cur_std)
@@ -366,8 +364,6 @@ def check_all_drift(
         List of [psi_result, summary_stat_result].
     """
     return [
-        check_psi_drift(
-            df, baseline, columns, psi_warning=psi_warning, psi_error=psi_error
-        ),
+        check_psi_drift(df, baseline, columns, psi_warning=psi_warning, psi_error=psi_error),
         check_summary_stat_drift(df, baseline, columns, jump_ratio=jump_ratio),
     ]

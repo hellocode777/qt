@@ -114,9 +114,7 @@ class TestProposalStore:
         try:
             store = ProposalStore()
             prop = store.create(strategy_id="x", target_lifecycle="paper_trading")
-            rejected = store.reject(
-                prop.proposal_id, reviewer="bob", notes="Needs more data"
-            )
+            rejected = store.reject(prop.proposal_id, reviewer="bob", notes="Needs more data")
             assert rejected is not None
             assert rejected.status == "rejected"
             assert rejected.review_notes == "Needs more data"
@@ -169,9 +167,7 @@ class TestProposalStore:
         _redirect_store(tmp_path)
         try:
             store = ProposalStore()
-            prop = store.create(
-                strategy_id="active_test", target_lifecycle="paper_trading"
-            )
+            prop = store.create(strategy_id="active_test", target_lifecycle="paper_trading")
 
             active = store.get_active_for_strategy("active_test")
             assert active is not None

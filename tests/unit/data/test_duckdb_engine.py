@@ -414,9 +414,7 @@ class TestDuckDBIntegration:
         features = pl.DataFrame(
             {
                 "symbol": ["600519", "000001"] * 10,
-                "trade_date": [
-                    f"2024-0{d // 4 + 1}-{(d % 28) + 1:02d}" for d in range(20)
-                ],
+                "trade_date": [f"2024-0{d // 4 + 1}-{(d % 28) + 1:02d}" for d in range(20)],
                 "momentum_20": [0.01 * d for d in range(20)],
                 "rsi_14": [50.0 + d for d in range(20)],
             }

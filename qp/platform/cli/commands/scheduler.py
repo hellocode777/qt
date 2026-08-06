@@ -74,13 +74,7 @@ def format_decision_email(data: dict, date_str: str) -> str:
                 cost = rec.get("estimated_cost", 0)
                 warnings = rec.get("risk_warnings", [])
 
-                action_icon = (
-                    "买入"
-                    if action == "BUY"
-                    else "卖出"
-                    if action == "SELL"
-                    else action
-                )
+                action_icon = "买入" if action == "BUY" else "卖出" if action == "SELL" else action
                 qty_str = f" × {qty}股" if qty else ""
                 price_str = f" @ ¥{price:.2f}" if price else ""
                 cost_str = f"  约¥{cost:.0f}" if cost else ""
@@ -157,9 +151,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         from qp.platform.pipeline.context import PipelineContext
 
         if app is not None:
-            return PipelineContext(
-                pipeline_name=name, parameters=params, runtime=app.context
-            )
+            return PipelineContext(pipeline_name=name, parameters=params, runtime=app.context)
         return PipelineContext(pipeline_name=name, parameters=params)
 
     # ── Watchdog: touch ping file for external monitoring (#12 fix) ──
@@ -243,9 +235,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 f"ks={'YES' if report.kill_switch_triggered else 'no'}"
             )
             if action in (MonitorAction.STOP, MonitorAction.PAUSE_BUY):
-                print(
-                    f"[scheduler] ⚠️  EMERGENCY: {action.value} — review before trading!"
-                )
+                print(f"[scheduler] ⚠️  EMERGENCY: {action.value} — review before trading!")
 
             # Consume pending retrain signals (#13 fix)
             try:
@@ -451,9 +441,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             today_str = datetime.now(UTC).strftime("%Y-%m-%d")
 
             # Try JSON first, then markdown
-            json_files = sorted(
-                decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True
-            )
+            json_files = sorted(decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True)
             md_file = decisions_dir / f"{today_str}.md"
 
             subject = f"QP 每日投资决策 — {today_str}"
@@ -507,14 +495,10 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
     # ── Graceful shutdown ──
     # When running under Application, delegate signal handling to the runtime.
     if app is not None:
-        app.context.logger.info(
-            "Scheduler starting with runtime lifecycle", module="scheduler"
-        )
+        app.context.logger.info("Scheduler starting with runtime lifecycle", module="scheduler")
         _log_jobs(scheduler, log)
         scheduler.start()
-        app.context.logger.info(
-            "Scheduler running, awaiting signals...", module="scheduler"
-        )
+        app.context.logger.info("Scheduler running, awaiting signals...", module="scheduler")
         app.run_forever()
         return 0
 

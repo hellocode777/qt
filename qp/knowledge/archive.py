@@ -86,9 +86,7 @@ class KnowledgeEntry:
             for k, v in self.metadata.items():
                 frontmatter_dict[k] = v
 
-        yaml_str = yaml.dump(
-            frontmatter_dict, allow_unicode=True, sort_keys=False
-        ).strip()
+        yaml_str = yaml.dump(frontmatter_dict, allow_unicode=True, sort_keys=False).strip()
         return f"---\n{yaml_str}\n---\n\n# {self.title}\n\n{self.content}"
 
     @classmethod

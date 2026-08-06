@@ -186,9 +186,7 @@ def rolling_zscore(
                 )
             )
             / (
-                pl.col(value_col).rolling_std(
-                    window_size=window, min_samples=max(10, window // 4)
-                )
+                pl.col(value_col).rolling_std(window_size=window, min_samples=max(10, window // 4))
                 + epsilon
             )
         )
@@ -235,9 +233,7 @@ def shift_features(
             continue
 
         shifted_name = f"{col}{suffix}{shifts}"
-        result = result.with_columns(
-            pl.col(col).shift(shifts).over(symbol_col).alias(shifted_name)
-        )
+        result = result.with_columns(pl.col(col).shift(shifts).over(symbol_col).alias(shifted_name))
 
     return result
 
@@ -397,11 +393,8 @@ def standardize_features(
 
     if apply_shift:
         shifted_cols = [
-            f"{c}_zscore" if method == "cross_sectional" else f"{c}_roll_z"
-            for c in value_cols
+            f"{c}_zscore" if method == "cross_sectional" else f"{c}_roll_z" for c in value_cols
         ]
-        result = shift_features(
-            result, [c for c in shifted_cols if c in result.columns]
-        )
+        result = shift_features(result, [c for c in shifted_cols if c in result.columns])
 
     return result

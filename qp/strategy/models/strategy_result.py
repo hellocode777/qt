@@ -52,9 +52,7 @@ class StrategyResult:
     n_stocks_evaluated: int = 0
     n_stocks_selected: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
-    generated_at: str = field(
-        default_factory=lambda: datetime.now().astimezone().isoformat()
-    )
+    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
     success: bool = True
     error_message: str = ""
 

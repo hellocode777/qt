@@ -59,9 +59,7 @@ class DataLineage:
         notes: Human-readable notes.
     """
 
-    lineage_id: str = field(
-        default_factory=lambda: datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    )
+    lineage_id: str = field(default_factory=lambda: datetime.now(UTC).strftime("%Y%m%dT%H%M%S"))
     recorded_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     source_name: str = ""
     source_version: str = ""
@@ -141,15 +139,11 @@ class LineageTracker:
         """
         self._records.append(lineage)
         self._save_to_disk()
-        logger.info(
-            "血缘记录已保存: {} (共 {} 条)", lineage.chain_str(), len(self._records)
-        )
+        logger.info("血缘记录已保存: {} (共 {} 条)", lineage.chain_str(), len(self._records))
 
     # ── Queries ──
 
-    def find_by_dataset(
-        self, dataset_name: str, version: str | None = None
-    ) -> list[DataLineage]:
+    def find_by_dataset(self, dataset_name: str, version: str | None = None) -> list[DataLineage]:
         """Find all lineage records for a specific dataset.
 
         Args:

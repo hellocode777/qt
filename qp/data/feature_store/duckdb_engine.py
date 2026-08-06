@@ -135,9 +135,7 @@ class DuckDBEngine:
             Polars DataFrame with query results.
         """
         try:
-            result = (
-                self._conn.execute(sql, params) if params else self._conn.execute(sql)
-            )
+            result = self._conn.execute(sql, params) if params else self._conn.execute(sql)
             # DuckDB >= 1.0 supports direct Polars conversion
             return result.pl()
         except Exception as e:
@@ -439,9 +437,7 @@ class DuckDBEngine:
         """
         self.register("_compute_src", df)
 
-        feature_sql = ", ".join(
-            f"{expr} AS {name}" for name, expr in expressions.items()
-        )
+        feature_sql = ", ".join(f"{expr} AS {name}" for name, expr in expressions.items())
 
         sql = f"""
             SELECT *,

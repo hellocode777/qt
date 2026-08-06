@@ -312,21 +312,15 @@ class RiskModel(BaseRiskModel):
         w = np.array(list(weights.values()))
         hhi = float(np.sum(w**2))
         effective_n = float(1.0 / hhi) if hhi > 0 else float(len(w))
-        diversification_score = float(
-            1.0 - 1.0 / effective_n if effective_n > 1 else 0.0
-        )
+        diversification_score = float(1.0 - 1.0 / effective_n if effective_n > 1 else 0.0)
 
         # Top risk contributors — weighted by position size
-        sorted_positions = sorted(
-            weights.items(), key=lambda x: abs(x[1]), reverse=True
-        )
+        sorted_positions = sorted(weights.items(), key=lambda x: abs(x[1]), reverse=True)
         top_contributors = [(sym, wt) for sym, wt in sorted_positions[:5]]
 
         # Concentration: top 5 weight / total
         top5_wt = sum(abs(wt) for _, wt in top_contributors)
-        concentration_ratio = (
-            top5_wt / sum(abs(wt) for wt in weights.values()) if weights else 0.0
-        )
+        concentration_ratio = top5_wt / sum(abs(wt) for wt in weights.values()) if weights else 0.0
 
         return AttributionReport(
             decomposition=decomposition,
@@ -391,11 +385,7 @@ class RiskModel(BaseRiskModel):
 
         # As percentage of total
         total_var = float(np.var(pr) * self._trading_days)
-        pct = (
-            (beta**2 * market_var * self._trading_days) / total_var
-            if total_var > 0
-            else 0.0
-        )
+        pct = (beta**2 * market_var * self._trading_days) / total_var if total_var > 0 else 0.0
 
         return market_risk, min(pct, 1.0)
 
@@ -411,9 +401,7 @@ class RiskModel(BaseRiskModel):
         if style_factors is not None and not style_factors.is_empty():
             # Use provided style factor returns
             factor_names = [c for c in style_factors.columns if c != "trade_date"]
-            port_ret = (
-                ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights
-            ).sum(axis=1)  # type: ignore[assignment]
+            port_ret = (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(axis=1)  # type: ignore[assignment]
 
             style_var_total = 0.0
             for fname in factor_names:
@@ -437,9 +425,7 @@ class RiskModel(BaseRiskModel):
 
         total_var = float(
             np.var(
-                (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(
-                    axis=1
-                )  # type: ignore[assignment]
+                (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(axis=1)  # type: ignore[assignment]
             )
             * self._trading_days
         )
@@ -472,9 +458,7 @@ class RiskModel(BaseRiskModel):
 
         total_var = float(
             np.var(
-                (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(
-                    axis=1
-                )  # type: ignore[assignment]
+                (ret_pivot.select(pl.exclude("trade_date")).to_numpy() * weights).sum(axis=1)  # type: ignore[assignment]
             )
             * self._trading_days
         )

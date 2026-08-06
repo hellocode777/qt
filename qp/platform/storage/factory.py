@@ -39,13 +39,9 @@ class StorageFactory:
             return self._instance
 
         if self._backend_name == "duckdb":
-            self._instance = DuckDBStorage(
-                self._kwargs.get("duckdb_path", "data/qp.duckdb")
-            )
+            self._instance = DuckDBStorage(self._kwargs.get("duckdb_path", "data/qp.duckdb"))
         elif self._backend_name == "sqlite":
-            self._instance = SQLiteStorage(
-                self._kwargs.get("sqlite_path", "data/qp.sqlite")
-            )
+            self._instance = SQLiteStorage(self._kwargs.get("sqlite_path", "data/qp.sqlite"))
         else:
             raise ValueError(f"Unknown storage backend: {self._backend_name}")
 

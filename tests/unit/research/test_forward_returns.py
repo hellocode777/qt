@@ -94,9 +94,7 @@ class TestBuildForwardReturns:
         assert result["label"][0] == pytest.approx(0.10, abs=1e-4)
 
     def test_empty_input(self) -> None:
-        df = pl.DataFrame(
-            schema={"trade_date": pl.Date, "symbol": pl.Utf8, "close": pl.Float64}
-        )
+        df = pl.DataFrame(schema={"trade_date": pl.Date, "symbol": pl.Utf8, "close": pl.Float64})
         result = build_forward_returns(df, forward_days=5)
         assert result.is_empty()
 
@@ -171,9 +169,7 @@ class TestBuildIndustryNeutralLabels:
         assert result["label"][0] == pytest.approx(0.5)
 
     def test_empty_input(self) -> None:
-        df = pl.DataFrame(
-            schema={"trade_date": pl.Date, "symbol": pl.Utf8, "close": pl.Float64}
-        )
+        df = pl.DataFrame(schema={"trade_date": pl.Date, "symbol": pl.Utf8, "close": pl.Float64})
         result = build_industry_neutral_labels(df, {}, forward_days=5)
         assert result.is_empty()
 

@@ -374,9 +374,7 @@ def run_alpha_multi_factor_v2(
     )
 
 
-def _apply_overrides(
-    config: StrategyConfig, overrides: dict[str, Any]
-) -> StrategyConfig:
+def _apply_overrides(config: StrategyConfig, overrides: dict[str, Any]) -> StrategyConfig:
     """Apply **overrides key-value pairs to a copy of config."""
     import copy
 

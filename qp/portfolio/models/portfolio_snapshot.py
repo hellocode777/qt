@@ -78,9 +78,7 @@ class PortfolioSnapshot:
 
     # Meta
     positions: int = 0
-    generated_at: str = field(
-        default_factory=lambda: datetime.now().astimezone().isoformat()
-    )
+    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
     metadata: dict[str, Any] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
@@ -115,9 +113,7 @@ class PortfolioSnapshot:
             "cvar_95": round(self.cvar_95, 2),
             "turnover": f"{self.turnover_pct:.1%}",
             "cost_est": f"{self.estimated_cost_pct:.3%}",
-            "top_sectors": sorted(self.sector_exposure.items(), key=lambda x: -x[1])[
-                :3
-            ],
+            "top_sectors": sorted(self.sector_exposure.items(), key=lambda x: -x[1])[:3],
         }
 
     # ------------------------------------------------------------------
@@ -229,9 +225,7 @@ class PortfolioSnapshot:
             sector_exposure=sectors,
             cluster_exposure=clusters,
             liquidity_score=(
-                liquidity_report.get("weighted_liquidity_score", 0.0)
-                if liquidity_report
-                else 0.0
+                liquidity_report.get("weighted_liquidity_score", 0.0) if liquidity_report else 0.0
             ),
             total_risk=(risk_decomposition.total_risk if risk_decomposition else 0.0),
         )

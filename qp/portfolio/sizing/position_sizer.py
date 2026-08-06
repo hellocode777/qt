@@ -78,20 +78,14 @@ class PositionSizer:
 
         # Enrich with Layer 7 metadata
         if "risk_cluster" in candidates.columns:
-            cluster_map = dict(
-                zip(candidates["symbol"], candidates["risk_cluster"], strict=False)
-            )
-            result["risk_cluster"] = result["symbol"].map(
-                lambda s: cluster_map.get(s, "")
-            )
+            cluster_map = dict(zip(candidates["symbol"], candidates["risk_cluster"], strict=False))
+            result["risk_cluster"] = result["symbol"].map(lambda s: cluster_map.get(s, ""))
 
         if "max_weight_limit" in candidates.columns:
             limit_map = dict(
                 zip(candidates["symbol"], candidates["max_weight_limit"], strict=False)
             )
-            result["max_weight_limit"] = result["symbol"].map(
-                lambda s: limit_map.get(s, 0.15)
-            )
+            result["max_weight_limit"] = result["symbol"].map(lambda s: limit_map.get(s, 0.15))
 
         result["allocator_used"] = self._allocator.name
 

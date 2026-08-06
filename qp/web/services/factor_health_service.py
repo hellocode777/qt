@@ -90,9 +90,7 @@ class FactorHealthService:
                     "n_days": record.get("n_days", 0),
                     "retired_reason": record.get("retired_reason", ""),
                     "direction_flipped": record.get("direction_flipped", False),
-                    "consecutive_degraded_days": record.get(
-                        "consecutive_degraded_days", 0
-                    ),
+                    "consecutive_degraded_days": record.get("consecutive_degraded_days", 0),
                     "recommended_action": record.get("recommended_action", ""),
                 }
             )
@@ -108,8 +106,7 @@ class FactorHealthService:
             "archived": 0.0,
         }
         total_contrib = sum(
-            abs(f["ic_30d"]) * weight_map.get(f.get("stage", "research"), 0.25)
-            for f in factors
+            abs(f["ic_30d"]) * weight_map.get(f.get("stage", "research"), 0.25) for f in factors
         )
         for f in factors:
             raw = abs(f["ic_30d"]) * weight_map.get(f.get("stage", "research"), 0.25)
@@ -172,18 +169,10 @@ class FactorHealthService:
             "n_healthy": counts.get("production", 0),
             "n_warning": counts.get("validated", 0),
             "n_stale": counts.get("retired", 0),
-            "healthy_factors": [
-                f["name"] for f in factors if f["stage"] == "production"
-            ],
-            "warning_factors": [
-                f["name"] for f in factors if f["stage"] == "validated"
-            ],
-            "degraded_factors": [
-                f["name"] for f in factors if f["stage"] == "degraded"
-            ],
-            "stale_factors": [
-                f["name"] for f in factors if f["stage"] in ("retired", "archived")
-            ],
+            "healthy_factors": [f["name"] for f in factors if f["stage"] == "production"],
+            "warning_factors": [f["name"] for f in factors if f["stage"] == "validated"],
+            "degraded_factors": [f["name"] for f in factors if f["stage"] == "degraded"],
+            "stale_factors": [f["name"] for f in factors if f["stage"] in ("retired", "archived")],
             # New
             "correlation": correlation,
             "families": families,
@@ -305,8 +294,7 @@ class FactorHealthService:
             total_abs_ic = sum(abs(m["ic_30d"]) for m in members)
             if total_abs_ic > 0:
                 fam["ic_30d_weighted"] = round(
-                    sum(abs(m["ic_30d"]) * abs(m["ic_30d"]) for m in members)
-                    / total_abs_ic,
+                    sum(abs(m["ic_30d"]) * abs(m["ic_30d"]) for m in members) / total_abs_ic,
                     4,
                 )
 
@@ -320,9 +308,9 @@ class FactorHealthService:
                     "degraded": 2,
                     "research": 1,
                 }
-                fam["dominant_stage"] = min(
-                    active, key=lambda m: stage_order.get(m["stage"], 0)
-                )["stage"]
+                fam["dominant_stage"] = min(active, key=lambda m: stage_order.get(m["stage"], 0))[
+                    "stage"
+                ]
 
             # Suggest composite if >2 members with high mutual correlation
             fam["suggest_composite"] = len(members) >= 3
@@ -341,9 +329,7 @@ class FactorHealthService:
             "families": result_list,
             "n_families": len(result_list),
             "n_active_families": sum(
-                1
-                for f in result_list
-                if f["dominant_stage"] in ("production", "weakening")
+                1 for f in result_list if f["dominant_stage"] in ("production", "weakening")
             ),
             "has_data": len(result_list) > 0,
         }

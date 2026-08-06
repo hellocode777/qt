@@ -165,9 +165,7 @@ class WalkForwardScorer:
 
             # 训练窗口: [pred_date - train_window, pred_date - GAP]
             pred_dt = np.datetime64(pred_date)
-            train_start = str(pred_dt - np.timedelta64(self.train_window_days, "D"))[
-                :10
-            ]
+            train_start = str(pred_dt - np.timedelta64(self.train_window_days, "D"))[:10]
             train_end = str(pred_dt - np.timedelta64(GAP_DAYS, "D"))[:10]
 
             # 筛选训练 / 预测数据
@@ -226,9 +224,7 @@ class WalkForwardScorer:
             # 6. 记录特征重要性（G-008 稳定性检查）
             fi_df = model.feature_importance
             if not fi_df.empty:
-                curr_importance = dict(
-                    zip(fi_df["feature"], fi_df["gain"], strict=True)
-                )
+                curr_importance = dict(zip(fi_df["feature"], fi_df["gain"], strict=True))
                 if prev_importance is not None and total_pred_dates % 20 == 0:
                     self._check_importance_stability(prev_importance, curr_importance)
                 prev_importance = curr_importance
@@ -267,9 +263,7 @@ class WalkForwardScorer:
 
         dates_for_cv = train_df["date"].unique()
         if len(dates_for_cv) < 50:
-            return self._train_single(
-                X, y, group_sizes, monotone_constraints, active_features
-            )
+            return self._train_single(X, y, group_sizes, monotone_constraints, active_features)
 
         cv = PurgedKFold(
             n_splits=CV_FOLDS,
@@ -281,14 +275,10 @@ class WalkForwardScorer:
         try:
             folds = cv.split(dates_for_cv)
         except ValueError:
-            return self._train_single(
-                X, y, group_sizes, monotone_constraints, active_features
-            )
+            return self._train_single(X, y, group_sizes, monotone_constraints, active_features)
 
         if not folds:
-            return self._train_single(
-                X, y, group_sizes, monotone_constraints, active_features
-            )
+            return self._train_single(X, y, group_sizes, monotone_constraints, active_features)
 
         # 只用最后 2 折做 CV 估计（节省时间）
         cv_ics: list[float] = []
@@ -533,9 +523,7 @@ class WalkForwardScorer:
                 method="gain",
             )
 
-            drift = compare_importance_versions(
-                prev_rec, curr_rec, top_n=5, surge_threshold=0.5
-            )
+            drift = compare_importance_versions(prev_rec, curr_rec, top_n=5, surge_threshold=0.5)
 
             if drift.has_drift and drift.drift_severity in ("moderate", "severe"):
                 logger.warning(
@@ -546,9 +534,7 @@ class WalkForwardScorer:
                     drift.departed,
                 )
                 if drift.drift_severity == "severe":
-                    logger.warning(
-                        "!!! 建议人工复核后再上线新模型版本 (rule.md §7.9.7)"
-                    )
+                    logger.warning("!!! 建议人工复核后再上线新模型版本 (rule.md §7.9.7)")
         except Exception:
             pass  # 非关键路径，静默失败
 
@@ -575,9 +561,7 @@ class WalkForwardScorer:
                     "gap_days": GAP_DAYS,
                     "purge_days": PURGE_DAYS,
                     "cv_folds": CV_FOLDS,
-                    "monotone_constraints": self._build_monotone_constraints(
-                        feature_names
-                    ),
+                    "monotone_constraints": self._build_monotone_constraints(feature_names),
                 },
                 metrics=self._latest_feature_importance,
             )
@@ -601,9 +585,7 @@ class WalkForwardScorer:
         if valid.sum() < 5:
             return 0.0
         result: Any = spearmanr(predictions[valid], targets[valid])
-        corr: float = float(
-            result.statistic if hasattr(result, "statistic") else result[0]
-        )
+        corr: float = float(result.statistic if hasattr(result, "statistic") else result[0])
         return corr
 
     @property

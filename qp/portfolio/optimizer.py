@@ -160,18 +160,13 @@ class MeanVarianceOptimizer:
                 weights_raw *= 1.0 - self._cash_buffer
 
                 w_dict = {
-                    sym: round(float(weights_raw[i]), 6)
-                    for i, sym in enumerate(valid_symbols)
+                    sym: round(float(weights_raw[i]), 6) for i, sym in enumerate(valid_symbols)
                 }
 
                 port_ret = float(np.dot(weights_raw, mu))
-                port_vol = float(
-                    np.sqrt(np.dot(weights_raw.T, np.dot(sigma, weights_raw)))
-                )
+                port_vol = float(np.sqrt(np.dot(weights_raw.T, np.dot(sigma, weights_raw))))
                 sharpe = (
-                    float((port_ret - self._risk_free_rate) / port_vol)
-                    if port_vol > 0
-                    else 0.0
+                    float((port_ret - self._risk_free_rate) / port_vol) if port_vol > 0 else 0.0
                 )
 
                 return OptimizationResult(
@@ -220,9 +215,7 @@ class MeanVarianceOptimizer:
 
         px = px.sort(["symbol", "trade_date"])
         px = px.with_columns(
-            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias(
-                "daily_return"
-            )
+            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("daily_return")
         )
         px = px.drop_nulls(subset=["daily_return"])
         px = px.group_by("symbol").tail(self._lookback)
@@ -239,9 +232,7 @@ class MeanVarianceOptimizer:
 
         # Keep only columns with sufficient data
         return_cols = [c for c in wide.columns if c != "trade_date"]
-        valid_cols = [
-            c for c in return_cols if wide[c].drop_nulls().len() >= MIN_OBSERVATIONS
-        ]
+        valid_cols = [c for c in return_cols if wide[c].drop_nulls().len() >= MIN_OBSERVATIONS]
 
         if len(valid_cols) < 2:
             return np.array([]), valid_cols

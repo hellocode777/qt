@@ -154,9 +154,7 @@ class FactorHealthLogger:
             return {}
 
         # Get max date per factor
-        latest_dates = df.group_by("factor_name").agg(
-            pl.col("date").max().alias("max_date")
-        )
+        latest_dates = df.group_by("factor_name").agg(pl.col("date").max().alias("max_date"))
 
         # Join back to get full row
         latest = df.join(
@@ -266,8 +264,7 @@ class FactorHealthLogger:
             # Backward compat
             "n_healthy": len(by_stage.get("production", [])),
             "n_warning": len(by_stage.get("validated", [])),
-            "n_stale": len(by_stage.get("retired", []))
-            + len(by_stage.get("archived", [])),
+            "n_stale": len(by_stage.get("retired", [])) + len(by_stage.get("archived", [])),
             "research_factors": by_stage.get("research", []),
             "validated_factors": by_stage.get("validated", []),
             "production_factors": by_stage.get("production", []),

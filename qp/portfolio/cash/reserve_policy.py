@@ -47,12 +47,8 @@ class ReservePolicy:
         """Clamp values to valid ranges."""
         self.min_cash = max(0.0, min(1.0, self.min_cash))
         self.max_cash = max(self.min_cash, min(1.0, self.max_cash))
-        self.defensive_cash = max(
-            self.min_cash, min(self.max_cash, self.defensive_cash)
-        )
-        self.max_equity_exposure = max(
-            1.0 - self.max_cash, min(1.0, self.max_equity_exposure)
-        )
+        self.defensive_cash = max(self.min_cash, min(self.max_cash, self.defensive_cash))
+        self.max_equity_exposure = max(1.0 - self.max_cash, min(1.0, self.max_equity_exposure))
 
     # ------------------------------------------------------------------
     # Convenience
@@ -66,9 +62,7 @@ class ReservePolicy:
     @classmethod
     def conservative(cls) -> ReservePolicy:
         """Conservative policy: high cash buffer, strong defense."""
-        return cls(
-            min_cash=0.10, max_cash=0.60, defensive_cash=0.40, scarcity_threshold=8
-        )
+        return cls(min_cash=0.10, max_cash=0.60, defensive_cash=0.40, scarcity_threshold=8)
 
     @classmethod
     def default(cls) -> ReservePolicy:

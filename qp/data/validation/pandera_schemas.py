@@ -136,9 +136,7 @@ class BalanceSheetSchema(DataFrameModel):
     symbol: Series[pl.Utf8] = pa.Field(nullable=False)
     report_date: Series[pl.Date] = pa.Field(nullable=False)
 
-    total_assets: Series[pl.Float64] = pa.Field(
-        nullable=False, description="Total assets"
-    )
+    total_assets: Series[pl.Float64] = pa.Field(nullable=False, description="Total assets")
     total_liabilities: Series[pl.Float64] = pa.Field(
         nullable=False, description="Total liabilities"
     )

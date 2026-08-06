@@ -298,9 +298,7 @@ class DecisionAuditLogger:
             action=override_action,
             reason_tags=[ReasonTag.MANUAL_OVERRIDE],
             human_override=True,
-            override_reason=(
-                f"Override {original_action} → {override_action}: {reason}"
-            ),
+            override_reason=(f"Override {original_action} → {override_action}: {reason}"),
             strategy_name=strategy_name,
         )
 

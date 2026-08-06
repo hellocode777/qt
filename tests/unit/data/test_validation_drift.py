@@ -66,9 +66,7 @@ class TestComputePsi:
 
     def test_with_nulls(self):
         """PSI should handle nulls by dropping them — similar distributions with nulls."""
-        expected = pl.Series(
-            "x", [1.0, 2.0, None, 3.0, 4.0, 5.0] * 20, dtype=pl.Float64
-        )
+        expected = pl.Series("x", [1.0, 2.0, None, 3.0, 4.0, 5.0] * 20, dtype=pl.Float64)
         actual = pl.Series("x", [1.0, 2.0, None, 3.0, 4.0, 5.0] * 20, dtype=pl.Float64)
         result = compute_psi(expected, actual)
         assert "psi" in result

@@ -240,9 +240,7 @@ class TestIndustryNeutralize:
         assert result.height == 4
         assert "factor_x" in result.columns
         # Same industry should be centered around 0 after neutralization
-        tech_vals = result.filter(pl.col("symbol").is_in(["A", "B"]))[
-            "factor_x"
-        ].to_list()
+        tech_vals = result.filter(pl.col("symbol").is_in(["A", "B"]))["factor_x"].to_list()
         assert all(abs(v) < 0.15 for v in tech_vals)  # Nearly zero-mean
 
     def test_zero_strength_unchanged(self) -> None:

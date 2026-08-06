@@ -86,9 +86,7 @@ class OfflineStore:
             and "trade_date" in write_df.columns
             and "year" not in write_df.columns
         ):
-            write_df = write_df.with_columns(
-                pl.col("trade_date").dt.year().alias("year")
-            )
+            write_df = write_df.with_columns(pl.col("trade_date").dt.year().alias("year"))
 
         # Write metadata
         self._write_metadata(factor_group, df)
@@ -260,16 +258,10 @@ class OfflineStore:
             return {
                 "factor_group": factor_group,
                 "row_count": df.height,
-                "symbol_count": df["symbol"].n_unique()
-                if "symbol" in df.columns
-                else 0,
+                "symbol_count": df["symbol"].n_unique() if "symbol" in df.columns else 0,
                 "columns": [c for c in df.columns if c not in ("year",)],
-                "min_date": str(df["trade_date"].min())
-                if "trade_date" in df.columns
-                else None,
-                "max_date": str(df["trade_date"].max())
-                if "trade_date" in df.columns
-                else None,
+                "min_date": str(df["trade_date"].min()) if "trade_date" in df.columns else None,
+                "max_date": str(df["trade_date"].max()) if "trade_date" in df.columns else None,
             }
         except Exception:
             return {}
@@ -297,12 +289,8 @@ class OfflineStore:
             "row_count": df.height,
             "symbol_count": df["symbol"].n_unique() if "symbol" in df.columns else 0,
             "columns": [c for c in df.columns if c not in ("year",)],
-            "min_date": str(df["trade_date"].min())
-            if "trade_date" in df.columns
-            else None,
-            "max_date": str(df["trade_date"].max())
-            if "trade_date" in df.columns
-            else None,
+            "min_date": str(df["trade_date"].min()) if "trade_date" in df.columns else None,
+            "max_date": str(df["trade_date"].max()) if "trade_date" in df.columns else None,
             "last_updated": datetime.now().isoformat(),
         }
 

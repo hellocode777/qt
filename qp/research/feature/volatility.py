@@ -36,13 +36,10 @@ class Volatility20D(BaseFeature):
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
 
-        df = df.with_columns(
-            pl.col("close").log().diff().over("symbol").alias("log_return")
-        )
+        df = df.with_columns(pl.col("close").log().diff().over("symbol").alias("log_return"))
         df = df.with_columns(
             (
-                -pl.col("log_return").rolling_std(20).over("symbol")
-                * (TRADING_DAYS_PER_YEAR**0.5)
+                -pl.col("log_return").rolling_std(20).over("symbol") * (TRADING_DAYS_PER_YEAR**0.5)
             ).alias("feature_value")
         )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
@@ -66,13 +63,10 @@ class Volatility60D(BaseFeature):
         df = data_map["daily_price"].clone()
         df = df.sort(["symbol", "trade_date"])
 
-        df = df.with_columns(
-            pl.col("close").log().diff().over("symbol").alias("log_return")
-        )
+        df = df.with_columns(pl.col("close").log().diff().over("symbol").alias("log_return"))
         df = df.with_columns(
             (
-                -pl.col("log_return").rolling_std(60).over("symbol")
-                * (TRADING_DAYS_PER_YEAR**0.5)
+                -pl.col("log_return").rolling_std(60).over("symbol") * (TRADING_DAYS_PER_YEAR**0.5)
             ).alias("feature_value")
         )
         # shift(1): prevent future information leakage — factor for day T only uses data ≤ T-1
@@ -155,9 +149,7 @@ def compute_volatility_factors(df: pl.DataFrame) -> pl.DataFrame:
 
     rolling_max = pl.col("close").rolling_max(60)
     df = df.with_columns(
-        ((pl.col("close") - rolling_max) / rolling_max.replace(0.0, None)).alias(
-            "MaxDD_60D"
-        )
+        ((pl.col("close") - rolling_max) / rolling_max.replace(0.0, None)).alias("MaxDD_60D")
     )
 
     factor_names = ["Volatility_20D", "Volatility_60D", "MaxDD_60D"]

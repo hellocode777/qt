@@ -139,9 +139,7 @@ def filter_by_liquidity(
     excluded_count = vol_df.height - liquid.height
 
     if excluded_count > 0:
-        excluded_syms = vol_df.filter(pl.col(vol_col) < min_volume)[
-            symbol_col
-        ].to_list()
+        excluded_syms = vol_df.filter(pl.col(vol_col) < min_volume)[symbol_col].to_list()
         logger.info(
             "流动性筛选: {} 只排除 (<{} 股/日, {}日{})",
             excluded_count,

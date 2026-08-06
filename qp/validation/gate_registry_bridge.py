@@ -32,9 +32,7 @@ GATE_TO_LIFECYCLE: dict[GateDecision, StrategyLifecycle] = {
     # OVERRIDDEN: no automatic promotion — human decision overrides
 }
 
-LIFECYCLE_TRANSITION_LOG: dict[
-    tuple[StrategyLifecycle, GateDecision], StrategyLifecycle
-] = {
+LIFECYCLE_TRANSITION_LOG: dict[tuple[StrategyLifecycle, GateDecision], StrategyLifecycle] = {
     # Current state → Gate decision → New state
     (
         StrategyLifecycle.RESEARCH,

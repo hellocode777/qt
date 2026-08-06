@@ -106,14 +106,11 @@ class VaRBudget:
             per_stock_var_pct[sym] = round(var_pct, 4)
 
         # 2. Portfolio VaR
-        portfolio_values = np.array(
-            [total_capital * weights.get(s, 0.0) for s in symbols]
-        )
+        portfolio_values = np.array([total_capital * weights.get(s, 0.0) for s in symbols])
         portfolio_var = float(
             np.sqrt(
                 sum(
-                    (per_stock_var_pct[s] * portfolio_values[i]) ** 2
-                    for i, s in enumerate(symbols)
+                    (per_stock_var_pct[s] * portfolio_values[i]) ** 2 for i, s in enumerate(symbols)
                 )
             )
         )

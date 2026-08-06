@@ -83,9 +83,9 @@ def compute_layered_returns(
     # Compute forward returns
     px = price_df.sort(["symbol", "trade_date"])
     px = px.with_columns(
-        (
-            pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1
-        ).alias("forward_return")
+        (pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1).alias(
+            "forward_return"
+        )
     )
     px = px.drop_nulls(subset=["forward_return"])
 
@@ -114,9 +114,7 @@ def compute_layered_returns(
     dates = sorted(merged["trade_date"].unique().to_list())
 
     # Accumulate returns per quantile across dates
-    quantile_daily_rets: dict[int, list[float]] = {
-        q: [] for q in range(1, n_quantiles + 1)
-    }
+    quantile_daily_rets: dict[int, list[float]] = {q: [] for q in range(1, n_quantiles + 1)}
     quantile_total_count: dict[int, int] = dict.fromkeys(range(1, n_quantiles + 1), 0)
 
     for d in dates:
@@ -165,11 +163,7 @@ def compute_layered_returns(
         spread_daily = top_daily[:min_len] - bottom_daily[:min_len]
         spread_mean = float(np.mean(spread_daily))
         spread_std = float(np.std(spread_daily, ddof=1))
-        spread_t = (
-            abs(spread_mean) / (spread_std / np.sqrt(min_len))
-            if spread_std > 0
-            else 0.0
-        )
+        spread_t = abs(spread_mean) / (spread_std / np.sqrt(min_len)) if spread_std > 0 else 0.0
     else:
         spread_t = 0.0
 
@@ -230,9 +224,9 @@ def compute_quantile_spread_series(
     """
     px = price_df.sort(["symbol", "trade_date"])
     px = px.with_columns(
-        (
-            pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1
-        ).alias("forward_return")
+        (pl.col("close").shift(-forward_days).over("symbol") / pl.col("close") - 1).alias(
+            "forward_return"
+        )
     )
     px = px.drop_nulls(subset=["forward_return"])
 

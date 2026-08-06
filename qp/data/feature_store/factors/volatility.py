@@ -48,9 +48,9 @@ class RollingVolatility(BaseFeature):
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
         daily_ret = pl.col("close").pct_change().over("symbol")
-        vol = daily_ret.rolling_std(
-            window_size=self.window, min_samples=self.window // 2
-        ).over("symbol")
+        vol = daily_ret.rolling_std(window_size=self.window, min_samples=self.window // 2).over(
+            "symbol"
+        )
 
         if self._annualize:
             vol = vol * (252.0**0.5)

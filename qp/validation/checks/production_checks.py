@@ -67,9 +67,7 @@ class KillSwitchHistoryCheck(BaseRule):
         if passed:
             detail = "No Kill Switch triggers during Paper Trading period."
         else:
-            trigger_list = (
-                ", ".join(str(t) for t in ks_triggers) if ks_triggers else "unknown"
-            )
+            trigger_list = ", ".join(str(t) for t in ks_triggers) if ks_triggers else "unknown"
             detail = (
                 f"Kill Switch triggered {count} time(s) during Paper Trading: "
                 f"[{trigger_list}]. Strategy must not be promoted to Production "

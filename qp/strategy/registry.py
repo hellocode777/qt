@@ -118,10 +118,7 @@ class StrategyMeta:
 
         weights_raw = data.get("weights", {})
         weights: dict[str, float] = (
-            {
-                str(k): float(str(v))
-                for k, v in cast("dict[object, object]", weights_raw).items()
-            }
+            {str(k): float(str(v)) for k, v in cast("dict[object, object]", weights_raw).items()}
             if weights_raw
             else {}
         )
@@ -180,9 +177,7 @@ class StrategyRegistry:
         self._approved: dict[str, object] = {}  # ApprovedStrategy snapshots (ADR-031)
         self._active_versions: dict[str, bool] = {}  # Which versions are active
         self._lineage_registry: LineageRegistry | None = None
-        self._registry_file: Path = (
-            Path(registry_path) if registry_path else _REGISTRY_FILE
-        )
+        self._registry_file: Path = Path(registry_path) if registry_path else _REGISTRY_FILE
         self._load()
 
     # ------------------------------------------------------------------
@@ -377,9 +372,7 @@ class StrategyRegistry:
             StrategyLifecycle.PRODUCTION,
         }
         return [
-            s
-            for sid, s in self._strategies.items()
-            if self._lifecycles.get(sid) in active_states
+            s for sid, s in self._strategies.items() if self._lifecycles.get(sid) in active_states
         ]
 
     def get_backtest_ready(self) -> list[BaseStrategy]:
@@ -392,9 +385,7 @@ class StrategyRegistry:
             StrategyLifecycle.BACKTEST_PASSED,
         }
         return [
-            s
-            for sid, s in self._strategies.items()
-            if self._lifecycles.get(sid) in ready_states
+            s for sid, s in self._strategies.items() if self._lifecycles.get(sid) in ready_states
         ]
 
     def set_lifecycle(
@@ -591,9 +582,7 @@ class StrategyRegistry:
         """
         results: list[StrategyMeta] = []
         for sid, lifecycle in self._lifecycles.items():
-            if lifecycle == StrategyLifecycle.APPROVED and self._active_versions.get(
-                sid, False
-            ):
+            if lifecycle == StrategyLifecycle.APPROVED and self._active_versions.get(sid, False):
                 meta = self._metadata.get(sid)
                 if meta and meta.weights:
                     results.append(meta)

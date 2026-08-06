@@ -126,9 +126,7 @@ class MomentumStrategy(BaseStrategy):
             )
 
         df = pl.DataFrame(results).sort("raw_score", descending=True)
-        df = df.with_columns(
-            pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
-        )
+        df = df.with_columns(pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank"))
         return df.head(top_n)
 
     # ------------------------------------------------------------------

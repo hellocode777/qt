@@ -331,8 +331,7 @@ class DecisionService:
 
         # Build strategy signals list for display
         strategy_signals = [
-            {"strategy_id": sid, "count": count}
-            for sid, count in pkg.strategy_signals.items()
+            {"strategy_id": sid, "count": count} for sid, count in pkg.strategy_signals.items()
         ]
 
         # Build validation summary
@@ -439,9 +438,7 @@ class DecisionService:
                 "is_terminal": pkg.human_review.is_terminal,
                 "status_history": pkg.human_review.status_history,
                 # Allowed next transitions (for UI buttons)
-                "_next": sorted(
-                    s.value for s in _allowed_next(pkg.human_review.current_status)
-                ),
+                "_next": sorted(s.value for s in _allowed_next(pkg.human_review.current_status)),
             },
         }
 

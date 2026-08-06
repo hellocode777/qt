@@ -135,9 +135,7 @@ class CVaRBudget:
         # 3. CVaR contributions
         cvar_contribs: dict[str, float] = {}
         for s in symbols:
-            cvar_contribs[s] = round(
-                per_stock_cvar.get(s, 0.0) / max(portfolio_cvar, 0.01), 4
-            )
+            cvar_contribs[s] = round(per_stock_cvar.get(s, 0.0) / max(portfolio_cvar, 0.01), 4)
 
         # 4. Violations
         violations: list[tuple[str, str]] = []
@@ -155,11 +153,7 @@ class CVaRBudget:
 
         var_budget = VaRBudget(method=self.method, confidence=self.confidence)
         var_result = var_budget.compute_var(returns, symbols, weights, total_capital)
-        var_pct = (
-            var_result.get("portfolio_var", 0.0) / total_capital
-            if total_capital > 0
-            else 0.0
-        )
+        var_pct = var_result.get("portfolio_var", 0.0) / total_capital if total_capital > 0 else 0.0
         cvar_ratio = portfolio_cvar_pct / var_pct if var_pct > 0 else 1.0
 
         return {
@@ -249,9 +243,7 @@ class CVaRBudget:
             return None
 
         try:
-            wide = ret_px.pivot(
-                values="ret", index="trade_date", on="symbol"
-            ).drop_nulls()
+            wide = ret_px.pivot(values="ret", index="trade_date", on="symbol").drop_nulls()
         except Exception:
             return None
 

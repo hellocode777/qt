@@ -27,9 +27,7 @@ def main() -> None:
     conn = sqlite3.connect(DB)
 
     # ── 1. Names & board_type ──
-    name_rows = conn.execute(
-        "SELECT code, name, board_type FROM security_info"
-    ).fetchall()
+    name_rows = conn.execute("SELECT code, name, board_type FROM security_info").fetchall()
     name_map = {r[0]: r[1] for r in name_rows}
     board_map = {r[0]: r[2] or "main" for r in name_rows}
     codes = list(name_map.keys())

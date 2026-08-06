@@ -53,11 +53,7 @@ class TradeRecommendation:
     @property
     def cost_pct(self) -> float:
         """Estimated cost as % of trade value."""
-        return (
-            (self.estimated_cost / self.trade_value * 100)
-            if self.trade_value > 0
-            else 0.0
-        )
+        return (self.estimated_cost / self.trade_value * 100) if self.trade_value > 0 else 0.0
 
     @property
     def weight_change_pct(self) -> float:

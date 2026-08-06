@@ -275,9 +275,7 @@ class TelegramAlert(_BaseAlertChannel):
     def test(self) -> bool:
         """Send a test message to verify Telegram configuration."""
         if not self._token or not self._chat_id:
-            print(
-                "Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)"
-            )
+            print("Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)")
             return False
 
         alert = Alert(
@@ -646,9 +644,9 @@ class AlertManager:
         """
         results: dict[str, bool] = {}
         for channel, min_sev in self._channels:
-            if min_sev is None or self._severity_rank(
-                alert.severity
-            ) >= self._severity_rank(min_sev):
+            if min_sev is None or self._severity_rank(alert.severity) >= self._severity_rank(
+                min_sev
+            ):
                 ch_name = type(channel).__name__
                 results[ch_name] = channel.send(alert)
         return results
@@ -658,25 +656,19 @@ class AlertManager:
         self, title: str, message: str, source: str = "monitoring", **metadata: str
     ) -> dict[str, bool]:
         """Send INFO alert."""
-        return self.send(
-            Alert(AlertSeverity.INFO, title, message, source, metadata=metadata)
-        )
+        return self.send(Alert(AlertSeverity.INFO, title, message, source, metadata=metadata))
 
     def warning(
         self, title: str, message: str, source: str = "monitoring", **metadata: str
     ) -> dict[str, bool]:
         """Send WARNING alert."""
-        return self.send(
-            Alert(AlertSeverity.WARNING, title, message, source, metadata=metadata)
-        )
+        return self.send(Alert(AlertSeverity.WARNING, title, message, source, metadata=metadata))
 
     def critical(
         self, title: str, message: str, source: str = "monitoring", **metadata: str
     ) -> dict[str, bool]:
         """Send CRITICAL alert."""
-        return self.send(
-            Alert(AlertSeverity.CRITICAL, title, message, source, metadata=metadata)
-        )
+        return self.send(Alert(AlertSeverity.CRITICAL, title, message, source, metadata=metadata))
 
     def test_all(self) -> dict[str, bool]:
         """Send test alerts to all channels."""

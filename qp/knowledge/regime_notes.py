@@ -188,14 +188,8 @@ class RegimeNoteLogger:
             )
 
         # Build indicator strings
-        lud_str = (
-            f"{limit_up_down_ratio:.3f}" if limit_up_down_ratio is not None else "N/A"
-        )
-        rot_str = (
-            f"{sector_rotation_speed:.3f}"
-            if sector_rotation_speed is not None
-            else "N/A"
-        )
+        lud_str = f"{limit_up_down_ratio:.3f}" if limit_up_down_ratio is not None else "N/A"
+        rot_str = f"{sector_rotation_speed:.3f}" if sector_rotation_speed is not None else "N/A"
         vol_str = f"{annualized_vol:.1%}" if annualized_vol is not None else "N/A"
         adx_str = f"{adx:.1f}" if adx is not None else "N/A"
 
@@ -348,7 +342,5 @@ class RegimeNoteLogger:
         return {
             "n_events": len(all_entries),
             "regime_distribution": regime_counts,
-            "auto_labeled": sum(
-                1 for e in all_entries if e.metadata.get("labeled_by") == "auto"
-            ),
+            "auto_labeled": sum(1 for e in all_entries if e.metadata.get("labeled_by") == "auto"),
         }

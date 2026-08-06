@@ -351,9 +351,7 @@ class RiskExitManager:
             if not path.exists():
                 # Create empty blacklist template
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(
-                    '{"symbols": [], "reason": "人工维护的黑名单"}', encoding="utf-8"
-                )
+                path.write_text('{"symbols": [], "reason": "人工维护的黑名单"}', encoding="utf-8")
                 return set()
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, list):
@@ -373,10 +371,7 @@ class RiskExitManager:
             return Priority.CRITICAL
         if TradeReason.STOP_LOSS in reasons:
             return Priority.HIGH
-        if (
-            TradeReason.RISK_SUSPENSION in reasons
-            or TradeReason.RISK_LIQUIDITY in reasons
-        ):
+        if TradeReason.RISK_SUSPENSION in reasons or TradeReason.RISK_LIQUIDITY in reasons:
             return Priority.MEDIUM
         # RANK_DROP, FUNDAMENTAL_DETERIORATION, REBALANCE, SECTOR_OVERWEIGHT → LOW
         return Priority.LOW

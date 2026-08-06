@@ -246,11 +246,7 @@ class DriftMonitor:
 
         ref_mean = float(np.mean(reference[np.isfinite(reference)]))
         cur_mean = float(np.mean(current[np.isfinite(current)]))
-        mean_shift = (
-            abs(cur_mean - ref_mean) / abs(ref_mean) * 100
-            if abs(ref_mean) > 1e-8
-            else 0.0
-        )
+        mean_shift = abs(cur_mean - ref_mean) / abs(ref_mean) * 100 if abs(ref_mean) > 1e-8 else 0.0
 
         if psi >= self._psi_threshold:
             severity = DriftSeverity.SIGNIFICANT
@@ -287,9 +283,7 @@ class DriftMonitor:
         results: list[DriftResult] = []
 
         # Find common feature columns
-        ref_features = [
-            c for c in reference.columns if c not in ("symbol", "trade_date")
-        ]
+        ref_features = [c for c in reference.columns if c not in ("symbol", "trade_date")]
         cur_features = [c for c in current.columns if c not in ("symbol", "trade_date")]
         common = sorted(set(ref_features) & set(cur_features))
 
@@ -311,17 +305,13 @@ class DriftMonitor:
 
         any_sig = any(r.severity == DriftSeverity.SIGNIFICANT for r in results)
 
-        sig_features = [
-            r.feature_name for r in results if r.severity == DriftSeverity.SIGNIFICANT
-        ]
+        sig_features = [r.feature_name for r in results if r.severity == DriftSeverity.SIGNIFICANT]
         summary_parts = [f"{len(results)} features checked"]
         if sig_features:
             summary_parts.append(f"SIGNIFICANT DRIFT in: {', '.join(sig_features[:5])}")
         else:
             mild_count = sum(1 for r in results if r.severity == DriftSeverity.MILD)
-            summary_parts.append(
-                f"OK ({mild_count} mild, {len(results) - mild_count} clean)"
-            )
+            summary_parts.append(f"OK ({mild_count} mild, {len(results) - mild_count} clean)")
 
         return DriftReport(
             timestamp=datetime.now(UTC).isoformat(),

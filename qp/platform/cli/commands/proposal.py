@@ -68,18 +68,12 @@ def cmd_proposal_create(
 ) -> int:
     """Create a new strategy promotion proposal."""
     if not strategy_id:
-        print(
-            "用法: qp proposal create --strategy <id> --target <lifecycle> [--justification ...]"
-        )
-        print(
-            "Usage: qp proposal create --strategy momentum_v1.0 --target paper_trading"
-        )
+        print("用法: qp proposal create --strategy <id> --target <lifecycle> [--justification ...]")
+        print("Usage: qp proposal create --strategy momentum_v1.0 --target paper_trading")
         return 1
 
     if not target:
-        print(
-            "错误: 缺少 --target 参数 (如 paper_trading, shadow_production, production)"
-        )
+        print("错误: 缺少 --target 参数 (如 paper_trading, shadow_production, production)")
         return 1
 
     from qp.platform.proposals.store import ProposalStore

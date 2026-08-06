@@ -53,9 +53,7 @@ class ROELevel(BaseFeature):
 
     @property
     def description(self) -> str:
-        return (
-            "Return on Equity — raw profitability level, cross-sectionally normalized"
-        )
+        return "Return on Equity — raw profitability level, cross-sectionally normalized"
 
     @property
     def neutralize(self) -> list[str]:
@@ -82,9 +80,7 @@ class ROELevel(BaseFeature):
                 }
             )
 
-        df = fund.select(["trade_date", "symbol", "ROE"]).rename(
-            {"ROE": "feature_value"}
-        )
+        df = fund.select(["trade_date", "symbol", "ROE"]).rename({"ROE": "feature_value"})
         return df.drop_nulls(subset=["feature_value"])
 
 
@@ -155,10 +151,7 @@ class ProfitStability(BaseFeature):
         df = fund.sort(["symbol", "trade_date"])
         # Expanding std of ROE over available history per stock
         df = df.with_columns(
-            pl.col("ROE")
-            .rolling_std(window_size=20, min_samples=5)
-            .over("symbol")
-            .alias("roe_std")
+            pl.col("ROE").rolling_std(window_size=20, min_samples=5).over("symbol").alias("roe_std")
         )
         # Negate: lower std = higher stability score
         df = df.with_columns((-pl.col("roe_std")).alias("feature_value"))
@@ -232,9 +225,7 @@ class EarningsQuality(BaseFeature):
 
         df = fund.select(["trade_date", "symbol", "cashflow_per_share", "EPS"])
         df = df.with_columns(
-            (pl.col("cashflow_per_share") / pl.col("EPS").replace(0.0, None)).alias(
-                "feature_value"
-            )
+            (pl.col("cashflow_per_share") / pl.col("EPS").replace(0.0, None)).alias("feature_value")
         )
         # Clip extreme values
         df = df.with_columns(pl.col("feature_value").clip(-5.0, 5.0))
@@ -307,9 +298,7 @@ class MarginComposite(BaseFeature):
 
         df = fund.select(["trade_date", "symbol", "gross_margin", "net_margin"])
         df = df.with_columns(
-            ((pl.col("gross_margin") + pl.col("net_margin")) / 2.0).alias(
-                "feature_value"
-            )
+            ((pl.col("gross_margin") + pl.col("net_margin")) / 2.0).alias("feature_value")
         )
         df = df.drop_nulls(subset=["feature_value"])
         return df.select(["trade_date", "symbol", "feature_value"])

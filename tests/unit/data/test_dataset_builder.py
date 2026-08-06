@@ -188,9 +188,7 @@ class TestBuildResult:
 
 class TestDatasetBuilder:
     def test_build_successful(self, tmp_path):
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=False)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=False))
         df = _make_price_df(n_days=10)
         meta = _make_valid_metadata()
 
@@ -247,9 +245,7 @@ class TestDatasetBuilder:
 
     def test_build_no_contract_registered_strict(self, tmp_path):
         """With require_contract=True and no registered contract, build fails."""
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=True)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=True))
         # NOT calling register_source()
         df = _make_price_df(n_days=5)
         meta = _make_valid_metadata()
@@ -260,9 +256,7 @@ class TestDatasetBuilder:
 
     def test_build_no_contract_but_not_required(self, tmp_path):
         """With require_contract=False, builds succeed without a contract."""
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=False)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=False))
         df = _make_price_df(n_days=5)
         meta = _make_valid_metadata()
 
@@ -287,9 +281,7 @@ class TestDatasetBuilder:
         assert result.success
 
     def test_version_auto_assign(self, tmp_path):
-        builder = DatasetBuilder(
-            BuildConfig(output_dir=str(tmp_path), require_contract=False)
-        )
+        builder = DatasetBuilder(BuildConfig(output_dir=str(tmp_path), require_contract=False))
         df = _make_price_df(n_days=5)
         meta = _make_valid_metadata()
         meta.version = ""  # empty → auto-assigned

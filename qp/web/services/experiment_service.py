@@ -172,9 +172,7 @@ class ExperimentService:
         features = cfg.get("features", [])
         weights = cfg.get("model_params", {})
         top_n = (
-            int(cfg.get("tags", {}).get("top_n", 10))
-            if isinstance(cfg.get("tags"), dict)
-            else 10
+            int(cfg.get("tags", {}).get("top_n", 10)) if isinstance(cfg.get("tags"), dict) else 10
         )
         rebalance_freq = (
             int(cfg.get("tags", {}).get("rebalance_freq", 20))
@@ -191,9 +189,7 @@ class ExperimentService:
                         top_n = int(t.replace("top", ""))
                 if t.startswith("rebalance") and t.endswith("d"):
                     with contextlib.suppress(ValueError):
-                        rebalance_freq = int(
-                            t.replace("rebalance", "").replace("d", "")
-                        )
+                        rebalance_freq = int(t.replace("rebalance", "").replace("d", ""))
 
         # Load price data
         price_path = exp_dir / "price_data.parquet"
@@ -220,9 +216,9 @@ class ExperimentService:
 
         # Pivot close prices to wide format (date × symbol)
         try:
-            price_wide = prices.pivot(
-                index="trade_date", on="symbol", values="close"
-            ).sort("trade_date")
+            price_wide = prices.pivot(index="trade_date", on="symbol", values="close").sort(
+                "trade_date"
+            )
         except Exception:
             return {"error": "Failed to pivot price data"}
 
@@ -305,11 +301,7 @@ class ExperimentService:
                     px = float(price_wide[sym][row_idx] or 0)
                 except Exception:
                     px = 0.0
-                rank = (
-                    [s for s, _ in ranked].index(sym) + 1
-                    if sym in {s for s, _ in ranked}
-                    else 0
-                )
+                rank = [s for s, _ in ranked].index(sym) + 1 if sym in {s for s, _ in ranked} else 0
                 buy_details.append(
                     {
                         "symbol": sym,
@@ -343,9 +335,7 @@ class ExperimentService:
         return periods
 
     @staticmethod
-    def _enrich_with_timeline(
-        result: dict[str, Any], periods: list[dict[str, Any]]
-    ) -> None:
+    def _enrich_with_timeline(result: dict[str, Any], periods: list[dict[str, Any]]) -> None:
         """Add timeline heatmap and turnover stats to result dict (mutates)."""
         all_symbols: list[str] = []
         symbol_periods: dict[str, dict[str, Any]] = {}
@@ -363,9 +353,7 @@ class ExperimentService:
                 symbol_periods[sym]["count"] += 1
                 symbol_periods[sym]["last"] = p["date"]
 
-        all_symbols.sort(
-            key=lambda s: symbol_periods.get(s, {}).get("count", 0), reverse=True
-        )
+        all_symbols.sort(key=lambda s: symbol_periods.get(s, {}).get("count", 0), reverse=True)
 
         timeline_symbols = all_symbols[:30]
         timeline_periods = periods[-12:]
@@ -398,9 +386,7 @@ class ExperimentService:
 
         total_buys = sum(p.get("n_buys", 0) for p in periods)
         total_sells = sum(p.get("n_sells", 0) for p in periods)
-        avg_hold = sum(v["count"] for v in symbol_periods.values()) / max(
-            len(symbol_periods), 1
-        )
+        avg_hold = sum(v["count"] for v in symbol_periods.values()) / max(len(symbol_periods), 1)
 
         result.update(
             {
@@ -480,9 +466,7 @@ class ExperimentService:
             if hasattr(record.status, "value")
             else str(record.status),
             "created_at": str(cfg.created_at)[:19] if cfg.created_at else "",
-            "completed_at": str(record.completed_at)[:19]
-            if record.completed_at
-            else "",
+            "completed_at": str(record.completed_at)[:19] if record.completed_at else "",
             # Nested config block (matches experiment_detail.html)
             "config": {
                 "strategy_name": cfg.strategy_name,
@@ -512,8 +496,6 @@ class ExperimentService:
             "lineage": {
                 "model_algo": lin.model_algo,
                 "strategy_id": lin.strategy_id,
-                "dataset": f"{lin.dataset_name}@{lin.dataset_version}"
-                if lin.dataset_name
-                else "",
+                "dataset": f"{lin.dataset_name}@{lin.dataset_version}" if lin.dataset_name else "",
             },
         }

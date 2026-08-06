@@ -130,9 +130,7 @@ class FundamentalAdapter(BaseDataSource):
                 if cn_name in raw.columns:
                     val = row[cn_name]
                     item[en_name] = (
-                        None
-                        if (val is None or (isinstance(val, float) and val != val))
-                        else val
+                        None if (val is None or (isinstance(val, float) and val != val)) else val
                     )
             rows.append(item)
 

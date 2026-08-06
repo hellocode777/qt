@@ -58,9 +58,7 @@ def cmd_portfolio_report() -> int:
 
     # Load data
     try:
-        prices = pl.read_parquet(
-            "data/dataset/daily_price_" + today.isoformat() + ".parquet"
-        )
+        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
     except FileNotFoundError:
         print("❌ 错误: 未找到数据文件，请先运行 'qp run daily'")
         print("   Error: No data found. Run 'qp run daily' first.")
@@ -93,9 +91,7 @@ def cmd_portfolio_report() -> int:
     # ── 风控限额 ──
     print("── 风控限额 / Risk Limits ──")
     risk_manager = PortfolioRiskManager()
-    _filtered, risk_report = risk_manager.apply_risk_limits_with_prices(
-        combined, prices
-    )
+    _filtered, risk_report = risk_manager.apply_risk_limits_with_prices(combined, prices)
     print(
         f"  持仓数量 / Positions:     {risk_report.candidates_in} → {risk_report.candidates_out} (过滤后)"
     )
@@ -128,9 +124,7 @@ def cmd_portfolio_report() -> int:
     total_cost = 0.0
     per_symbol_cap = total_capital / max(len(symbols), 1)
     for s in symbols:
-        c = cost_model.estimate_trade(
-            s, per_symbol_cap, "BUY", daily_volume=adv_map.get(s)
-        )
+        c = cost_model.estimate_trade(s, per_symbol_cap, "BUY", daily_volume=adv_map.get(s))
         total_cost += c.total_cost
     print(f"  印花税 / Stamp Tax:          {cost_model.stamp_tax_rate:.3%} (仅卖出)")
     print(f"  佣金 / Commission:           {cost_model.commission_rate:.3%} (买卖双向)")
@@ -227,9 +221,7 @@ def cmd_portfolio_risk() -> int:
     today = date.today()
 
     try:
-        prices = pl.read_parquet(
-            "data/dataset/daily_price_" + today.isoformat() + ".parquet"
-        )
+        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
     except FileNotFoundError:
         print("❌ 错误: 未找到数据文件，请先运行 'qp run daily'")
         print("   Error: No data found. Run 'qp run daily' first.")
@@ -246,9 +238,7 @@ def cmd_portfolio_risk() -> int:
     # ── 行业集中度 ──
     print("── 行业集中度 / Sector Concentration ──")
     industry = IndustryMapper()
-    sector_weights = industry.get_sector_weights(
-        dict.fromkeys(symbols_all, 1.0 / len(symbols_all))
-    )
+    sector_weights = industry.get_sector_weights(dict.fromkeys(symbols_all, 1.0 / len(symbols_all)))
     for sector, wt in sorted(sector_weights.items(), key=lambda x: -x[1]):
         zh = sector_zh(sector)
         bar = "█" * int(wt * 100)

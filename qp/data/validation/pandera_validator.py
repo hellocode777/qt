@@ -100,9 +100,7 @@ class PanderaValidator:
                 metadata={"schema_name": name, "exception": str(exc)},
             )
 
-        logger.info(
-            "Pandera({}): 校验通过 ({} 行, {} 列)", name, df.height, len(df.columns)
-        )
+        logger.info("Pandera({}): 校验通过 ({} 行, {} 列)", name, df.height, len(df.columns))
         return CheckResult(
             check_name=check_name,
             passed=True,

@@ -46,9 +46,7 @@ class CorrelationAnalyzer:
 
         px = px.sort(["symbol", "trade_date"])
         px = px.with_columns(
-            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias(
-                "daily_return"
-            )
+            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("daily_return")
         )
         px = px.drop_nulls(subset=["daily_return"])
 
@@ -103,9 +101,7 @@ class CorrelationAnalyzer:
 
         px = px.sort(["symbol", "trade_date"])
         px = px.with_columns(
-            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias(
-                "daily_return"
-            )
+            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("daily_return")
         )
         px = px.drop_nulls(subset=["daily_return"])
 

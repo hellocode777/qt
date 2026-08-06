@@ -153,9 +153,7 @@ class ModelDecayLifecycle:
         """
         # Detect decay
         if daily_ic_series:
-            decay_status = self._detector.check_series(
-                daily_ic_series, consecutive_decay_days
-            )
+            decay_status = self._detector.check_series(daily_ic_series, consecutive_decay_days)
         elif force:
             decay_status = self._detector.check(rolling_ic)
         else:
@@ -245,7 +243,5 @@ class ModelDecayLifecycle:
                 source="model_decay_lifecycle",
                 strategy_id=action.strategy_id,
                 old_state=action.old_lifecycle.value,
-                new_state=action.new_lifecycle.value
-                if action.new_lifecycle
-                else "unchanged",
+                new_state=action.new_lifecycle.value if action.new_lifecycle else "unchanged",
             )

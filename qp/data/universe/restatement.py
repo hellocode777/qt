@@ -128,9 +128,7 @@ class RestatementTracker:
 
                 existing = self._get_existing_versions(sym, pe)
                 existing_pub_dates = (
-                    set(existing["publish_date"].to_list())
-                    if not existing.is_empty()
-                    else set()
+                    set(existing["publish_date"].to_list()) if not existing.is_empty() else set()
                 )
 
                 for pub_date in pub_dates:
@@ -141,9 +139,7 @@ class RestatementTracker:
                         row = row.with_columns(
                             pl.lit(version).alias("version"),
                             pl.lit(version > 1).alias("is_restated"),
-                            pl.lit(
-                                max(existing_pub_dates) if existing_pub_dates else None
-                            )
+                            pl.lit(max(existing_pub_dates) if existing_pub_dates else None)
                             .cast(pl.Date)
                             .alias("prev_publish_date"),
                         )
@@ -168,9 +164,7 @@ class RestatementTracker:
                         if self._store is None:
                             self._store = entry
                         else:
-                            self._store = pl.concat(
-                                [self._store, entry], how="diagonal_relaxed"
-                            )
+                            self._store = pl.concat([self._store, entry], how="diagonal_relaxed")
                         existing_pub_dates.add(pub_date)
                         versions_added += 1
 
@@ -183,9 +177,7 @@ class RestatementTracker:
                                 str(pub_date)[:10],
                             )
 
-        logger.info(
-            "RestatementTracker: 新增 {} 个版本 (总 {} 条)", versions_added, self.count
-        )
+        logger.info("RestatementTracker: 新增 {} 个版本 (总 {} 条)", versions_added, self.count)
         if self.restatement_count > 0:
             logger.info("  其中 {} 条为重述修正", self.restatement_count)
         return versions_added

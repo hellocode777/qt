@@ -48,9 +48,7 @@ class SharpeCheck(BaseRule):
             score=round(score, 2),
             threshold=self._min_sharpe,
             actual_value=round(sharpe, 2),
-            detail=(
-                f"Sharpe = {sharpe:.2f} {'≥' if passed else '<'} threshold {self._min_sharpe}"
-            ),
+            detail=(f"Sharpe = {sharpe:.2f} {'≥' if passed else '<'} threshold {self._min_sharpe}"),
         )
 
 

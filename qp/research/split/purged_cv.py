@@ -190,11 +190,7 @@ def _days_between(d1: Any, d2: Any) -> int:  # type: ignore[misc]
     try:
         # numpy datetime64
         return abs(
-            int(
-                (np.datetime64(d2) - np.datetime64(d1))
-                .astype("timedelta64[D]")
-                .astype(int)
-            )
+            int((np.datetime64(d2) - np.datetime64(d1)).astype("timedelta64[D]").astype(int))
         )
     except Exception:
         pass

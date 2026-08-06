@@ -164,9 +164,7 @@ def compute_composite_factors(
         if ranked_cols:
             rank_exprs = [pl.col(c) for c in ranked_cols]
             df = df.with_columns(
-                (pl.sum_horizontal(rank_exprs) / len(ranked_cols) * direction).alias(
-                    comp_name
-                )
+                (pl.sum_horizontal(rank_exprs) / len(ranked_cols) * direction).alias(comp_name)
             )
 
             # Cleanup temp columns

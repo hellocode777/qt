@@ -220,9 +220,7 @@ class SystemHealthLogger:
             return None
 
         row = df.head(1).to_dicts()[0]
-        return HealthRecord(
-            **{k: row.get(k, "") for k in HealthRecord.__dataclass_fields__}
-        )
+        return HealthRecord(**{k: row.get(k, "") for k in HealthRecord.__dataclass_fields__})
 
     def query_regime_changes(self, days: int = 90) -> pl.DataFrame:
         """Find regime transition dates in recent history.
@@ -247,9 +245,7 @@ class SystemHealthLogger:
             return {"n_days": 0}
 
         n_kill_switch = df.filter(pl.col("kill_switch_triggered")).height
-        n_crisis = df.filter(
-            pl.col("regime").is_in(["LIQUIDITY_CRUNCH", "STYLE_REVERSAL"])
-        ).height
+        n_crisis = df.filter(pl.col("regime").is_in(["LIQUIDITY_CRUNCH", "STYLE_REVERSAL"])).height
 
         return {
             "n_days": df.height,

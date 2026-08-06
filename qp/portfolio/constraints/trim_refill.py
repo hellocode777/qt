@@ -103,9 +103,7 @@ class TrimAndRefill:
             return TrimResult(summary="No candidates to process")
 
         # Sort by alpha_score descending
-        sorted_candidates = sorted(
-            candidates, key=lambda c: c.alpha_score, reverse=True
-        )
+        sorted_candidates = sorted(candidates, key=lambda c: c.alpha_score, reverse=True)
 
         # Track cumulative weights
         cum_sector: dict[str, float] = {}
@@ -208,16 +206,9 @@ class TrimAndRefill:
                 sector = getattr(c, "sector", sector_map.get(c.symbol, "Other"))
                 cluster = cluster_labels.get(c.symbol, "")
                 if cum_sector.get(sector, 0.0) + new_wt > self.max_single_sector:
-                    new_wt = max(
-                        0.0, self.max_single_sector - cum_sector.get(sector, 0.0)
-                    )
-                if (
-                    cluster
-                    and cum_cluster.get(cluster, 0.0) + new_wt > self.max_single_cluster
-                ):
-                    new_wt = max(
-                        0.0, self.max_single_cluster - cum_cluster.get(cluster, 0.0)
-                    )
+                    new_wt = max(0.0, self.max_single_sector - cum_sector.get(sector, 0.0))
+                if cluster and cum_cluster.get(cluster, 0.0) + new_wt > self.max_single_cluster:
+                    new_wt = max(0.0, self.max_single_cluster - cum_cluster.get(cluster, 0.0))
 
                 if new_wt > 0:
                     old_wt = getattr(c, "max_weight_limit", 0.0)

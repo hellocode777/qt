@@ -152,16 +152,12 @@ class OnlineSignalMonitor:
 
         # Signal concentration check
         if concentration > CONCENTRATION_WARN:
-            alerts.append(
-                f"Signal concentration={concentration:.1%} > {CONCENTRATION_WARN:.0%}"
-            )
+            alerts.append(f"Signal concentration={concentration:.1%} > {CONCENTRATION_WARN:.0%}")
             score -= 15
 
         # Signal dispersion check
         if 0 < dispersion < SIGNAL_DISPERSION_MIN:
-            alerts.append(
-                f"Signal dispersion={dispersion:.6f} < {SIGNAL_DISPERSION_MIN}"
-            )
+            alerts.append(f"Signal dispersion={dispersion:.6f} < {SIGNAL_DISPERSION_MIN}")
             score -= 10
 
         score = max(0.0, score)
@@ -244,9 +240,7 @@ class OnlineSignalMonitor:
             return 0.0
 
         # Get recent signal dates (last window entries by unique date)
-        dates = (
-            history.select("date").unique().sort("date").tail(window)["date"].to_list()
-        )
+        dates = history.select("date").unique().sort("date").tail(window)["date"].to_list()
         if len(dates) < 5:
             return 0.0
 
@@ -380,9 +374,7 @@ class OnlineSignalMonitor:
             return []
         try:
             df = pl.read_parquet(str(_ONLINE_HEALTH_PARQUET))
-            result = (
-                df.filter(pl.col("strategy_id") == strategy_id).sort("date").tail(days)
-            )
+            result = df.filter(pl.col("strategy_id") == strategy_id).sort("date").tail(days)
             return result.to_dicts()
         except OSError:
             return []

@@ -55,8 +55,7 @@ def cmd_monitor_check() -> int:
     print()
     print("── 特征漂移 / Drift ──")
     print(
-        f"  PSI:               {report.psi_value:.3f}"
-        + (" ⚠" if report.psi_value >= 0.25 else "")
+        f"  PSI:               {report.psi_value:.3f}" + (" ⚠" if report.psi_value >= 0.25 else "")
     )
 
     print()
@@ -67,9 +66,7 @@ def cmd_monitor_check() -> int:
     print("── 策略健康 / Strategy Health ──")
     if report.strategy_health:
         print(f"  分数:              {report.strategy_health.health_score:.0f}/100")
-        print(
-            f"  等级:              {report.strategy_health.health_level.value.upper()}"
-        )
+        print(f"  等级:              {report.strategy_health.health_level.value.upper()}")
 
     print()
     print("── 建议操作 / Action ──")

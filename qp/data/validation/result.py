@@ -58,9 +58,7 @@ class ValidationReport:
 
     @property
     def passed(self) -> bool:
-        errors = [
-            c for c in self.checks if c.severity == Severity.ERROR and not c.passed
-        ]
+        errors = [c for c in self.checks if c.severity == Severity.ERROR and not c.passed]
         return len(errors) == 0
 
     @property
@@ -77,12 +75,8 @@ class ValidationReport:
 
     @property
     def summary(self) -> str:
-        errors = [
-            c for c in self.checks if c.severity == Severity.ERROR and not c.passed
-        ]
-        warnings = [
-            c for c in self.checks if c.severity == Severity.WARNING and not c.passed
-        ]
+        errors = [c for c in self.checks if c.severity == Severity.ERROR and not c.passed]
+        warnings = [c for c in self.checks if c.severity == Severity.WARNING and not c.passed]
         parts = [f"{self.passed_checks}/{self.total_checks} checks passed"]
         if errors:
             parts.append(f"{len(errors)} errors")

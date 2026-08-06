@@ -149,9 +149,7 @@ class PortfolioMetrics:
             bench_returns: list[float] = []
             for i in range(1, len(bench_nav)):
                 if bench_nav[i - 1] > 0:
-                    bench_returns.append(
-                        (bench_nav[i] - bench_nav[i - 1]) / bench_nav[i - 1]
-                    )
+                    bench_returns.append((bench_nav[i] - bench_nav[i - 1]) / bench_nav[i - 1])
                 else:
                     bench_returns.append(0.0)
             # Align lengths
@@ -174,16 +172,12 @@ class PortfolioMetrics:
                 )
                 var_b = statistics.variance(bench_slice) if common_n > 1 else 1.0
                 beta = cov / var_b if var_b > 0 else 1.0
-                alpha = (mean_p - risk_free_rate / 252) - beta * (
-                    mean_b - risk_free_rate / 252
-                )
+                alpha = (mean_p - risk_free_rate / 252) - beta * (mean_b - risk_free_rate / 252)
                 alpha = alpha * 252  # Annualize
 
                 bench_first = bench_nav[0] if bench_nav else 1.0
                 bench_last = bench_nav[-1] if bench_nav else 1.0
-                benchmark_ret = (
-                    (bench_last - bench_first) / bench_first if bench_first > 0 else 0.0
-                )
+                benchmark_ret = (bench_last - bench_first) / bench_first if bench_first > 0 else 0.0
 
         return PortfolioMetrics(
             sharpe_ratio=round(sharpe, 4),

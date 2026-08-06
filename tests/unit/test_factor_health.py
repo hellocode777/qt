@@ -116,9 +116,7 @@ class TestFactorHealthMonitor:
         monitor = FactorHealthMonitor(decay_slope=-0.0005)
         # Steadily declining IC
         np.random.seed(42)
-        daily_ics = list(
-            np.linspace(0.06, 0.005, 100) + np.random.normal(0, 0.005, 100)
-        )
+        daily_ics = list(np.linspace(0.06, 0.005, 100) + np.random.normal(0, 0.005, 100))
         status = monitor.check_factor("trend_factor", daily_ics)
         # Should detect strong negative trend
         assert status.ic_decay_rate < 0

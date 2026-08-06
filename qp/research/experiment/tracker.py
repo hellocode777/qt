@@ -114,9 +114,7 @@ class ExperimentTracker(BaseExperimentTracker):
             features=config.get("features", []),
             model_id=lineage_graph.get("model_id", lineage_graph.get("model", "")),
             model_algo=lineage_graph.get("model_algo", ""),
-            strategy_id=lineage_graph.get(
-                "strategy_id", lineage_graph.get("strategy", "")
-            ),
+            strategy_id=lineage_graph.get("strategy_id", lineage_graph.get("strategy", "")),
         )
 
         record = ExperimentRecord(
@@ -247,9 +245,7 @@ class ExperimentTracker(BaseExperimentTracker):
             cfg_data = data.get("config")
             if not isinstance(cfg_data, dict):
                 return None
-            experiment_id = data.get("experiment_id") or cfg_data.get(
-                "experiment_id", ""
-            )
+            experiment_id = data.get("experiment_id") or cfg_data.get("experiment_id", "")
             if not experiment_id:
                 return None
 
@@ -257,17 +253,13 @@ class ExperimentTracker(BaseExperimentTracker):
             created_at_raw = cfg_data.get("created_at") or data.get("created_at")
             try:
                 created_at = (
-                    datetime.fromisoformat(created_at_raw)
-                    if created_at_raw
-                    else datetime.now(UTC)
+                    datetime.fromisoformat(created_at_raw) if created_at_raw else datetime.now(UTC)
                 )
             except (ValueError, TypeError):
                 created_at = datetime.now(UTC)
 
             config = ExperimentConfig(
-                experiment_id=data.get(
-                    "experiment_id", cfg_data.get("experiment_id", "")
-                ),
+                experiment_id=data.get("experiment_id", cfg_data.get("experiment_id", "")),
                 created_at=created_at,
                 description=cfg_data.get("description", ""),
                 strategy_name=cfg_data.get("strategy_name", ""),

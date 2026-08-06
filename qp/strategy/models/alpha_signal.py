@@ -40,9 +40,7 @@ class AlphaSignal:
     raw_components: dict[str, float] = field(default_factory=dict)
     confidence: float = 1.0
     strategy_id: str = ""
-    generated_at: str = field(
-        default_factory=lambda: datetime.now().astimezone().isoformat()
-    )
+    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
 
     # ------------------------------------------------------------------
     # Validation
@@ -239,9 +237,7 @@ class AlphaSignalBatch:
                 AlphaSignal(
                     date=date_str or str(row.get("date", "")),
                     symbol=str(row.get("symbol", "")),
-                    alpha_score=float(
-                        row.get("alpha_score", row.get("raw_score", 0.0))
-                    ),
+                    alpha_score=float(row.get("alpha_score", row.get("raw_score", 0.0))),
                     confidence=float(row.get("confidence", 1.0)),
                     strategy_id=str(row.get("strategy_id", "")),
                 )

@@ -191,9 +191,7 @@ class ArtifactManager:
             "feature_names": feature_names
             or [c for c in factor_df.columns if c not in ("trade_date", "symbol")],
             "n_rows": factor_df.height,
-            "n_symbols": factor_df["symbol"].n_unique()
-            if "symbol" in factor_df.columns
-            else 0,
+            "n_symbols": factor_df["symbol"].n_unique() if "symbol" in factor_df.columns else 0,
             "date_range": (
                 f"{factor_df['trade_date'].min()} → {factor_df['trade_date'].max()}"
                 if "trade_date" in factor_df.columns
@@ -205,9 +203,7 @@ class ArtifactManager:
 
         return str(snap_dir)
 
-    def load_factor_snapshot(
-        self, snapshot_id: str
-    ) -> tuple[pl.DataFrame, dict[str, Any]]:
+    def load_factor_snapshot(self, snapshot_id: str) -> tuple[pl.DataFrame, dict[str, Any]]:
         """Load a saved factor snapshot.
 
         Returns:
@@ -303,9 +299,7 @@ class ArtifactManager:
 
         to_remove: list[str] = []
         cutoff_date = (
-            datetime.now(UTC) - timedelta(days=older_than_days)
-            if older_than_days
-            else None
+            datetime.now(UTC) - timedelta(days=older_than_days) if older_than_days else None
         )
 
         for i, model in enumerate(models):

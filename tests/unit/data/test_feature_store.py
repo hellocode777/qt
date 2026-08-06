@@ -34,9 +34,7 @@ class Momentum5(BaseFeature):
     window = 5
 
     def transform_batch(self, df: pl.DataFrame) -> pl.DataFrame:
-        return df.with_columns(
-            pl.col("close").pct_change(5).over("symbol").alias("momentum_5")
-        )
+        return df.with_columns(pl.col("close").pct_change(5).over("symbol").alias("momentum_5"))
 
     def update_stream(self, new_value: float) -> float | None:
         if self._buffer is None:
@@ -395,9 +393,7 @@ class TestStandardization:
             }
         )
         # With n=200, ~1/sqrt(n) ≈ 0.07 sampling noise; 0.20 safe threshold
-        assert (
-            validate_no_future_leakage(df, "feature", "return", max_corr=0.20) is True
-        )
+        assert validate_no_future_leakage(df, "feature", "return", max_corr=0.20) is True
 
     def test_validate_no_future_leakage_suspicious(self):
         """If features have strong same-day correlation with returns, flag it."""
@@ -421,9 +417,7 @@ class TestStandardization:
         assert "close_zscore" in result.columns
 
     def test_empty_dataframe_handling(self):
-        df = pl.DataFrame(
-            schema={"symbol": pl.Utf8, "trade_date": pl.Date, "value": pl.Float64}
-        )
+        df = pl.DataFrame(schema={"symbol": pl.Utf8, "trade_date": pl.Date, "value": pl.Float64})
         result_z = cross_sectional_zscore(df, "value")
         assert result_z.is_empty()
         result_r = rolling_zscore(df, "value")
@@ -788,9 +782,7 @@ class TestOnlineCache:
         offline.write(df, factor_group="test")
 
         cache = OnlineCache()
-        n = cache.refresh_from_offline(
-            offline, as_of_date="2024-06-15", factor_groups=["test"]
-        )
+        n = cache.refresh_from_offline(offline, as_of_date="2024-06-15", factor_groups=["test"])
         assert n == 2
         assert cache.is_cached("600519")
         assert cache.get_feature_value("600519", "mom") == 0.05

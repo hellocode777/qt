@@ -262,9 +262,7 @@ class FactorEnsemble:
         Returns:
             {factor_name: signed_effective_weight} with health adjustments.
         """
-        base_weights = self.get_active_weights(
-            regime=regime, layer_overrides=layer_overrides
-        )
+        base_weights = self.get_active_weights(regime=regime, layer_overrides=layer_overrides)
 
         if not health_multipliers:
             return base_weights

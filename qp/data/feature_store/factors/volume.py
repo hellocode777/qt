@@ -47,9 +47,7 @@ class VolumeRatio(BaseFeature):
             .rolling_mean(window_size=self.window, min_samples=self.window // 2)
             .over("symbol")
         )
-        return df.with_columns(
-            (pl.col("volume") / (avg_vol + 1e-10)).alias(self.feature_name)
-        )
+        return df.with_columns((pl.col("volume") / (avg_vol + 1e-10)).alias(self.feature_name))
 
     def update_stream(self, new_value: float) -> float | None:
         if self._buffer is None:

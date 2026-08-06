@@ -326,9 +326,7 @@ class MarketRegimeDetector:
         short_mom = close[-1] / close[-20] - 1 if len(close) >= 20 else 0.0
 
         combined = (
-            float(price_score) * 0.4
-            + ma_alignment * 0.3
-            + np.clip(short_mom * 10, -1, 1) * 0.3
+            float(price_score) * 0.4 + ma_alignment * 0.3 + np.clip(short_mom * 10, -1, 1) * 0.3
         )
 
         direction = "多头" if combined > 0.2 else "空头" if combined < -0.2 else "中性"

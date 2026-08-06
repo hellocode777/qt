@@ -238,9 +238,7 @@ class DatasetBuilder:
         df: pl.DataFrame,
     ) -> None:
         """Write a _metadata.json companion file alongside the parquet."""
-        meta_path = output_path.with_suffix("").with_name(
-            f"{output_path.stem}_metadata.json"
-        )
+        meta_path = output_path.with_suffix("").with_name(f"{output_path.stem}_metadata.json")
         payload: dict[str, Any] = {
             **metadata.to_dict(),
             "rows": df.height,

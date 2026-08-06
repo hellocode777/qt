@@ -168,9 +168,7 @@ class FundamentalAdapter(BaseDataSource):
                 break
 
         # Rename columns
-        df = df.rename(
-            columns={k: v for k, v in _COLUMN_MAP.items() if k in df.columns}
-        )
+        df = df.rename(columns={k: v for k, v in _COLUMN_MAP.items() if k in df.columns})
 
         # Keep only report date + mapped columns
         keep_cols = ["报告期"] + [v for v in _COLUMN_MAP.values() if v in df.columns]
@@ -189,11 +187,7 @@ class FundamentalAdapter(BaseDataSource):
                 df[col] = df[col].apply(
                     lambda x: (
                         float(
-                            str(x)
-                            .replace("%", "")
-                            .replace("亿", "")
-                            .replace("万", "")
-                            .strip(),
+                            str(x).replace("%", "").replace("亿", "").replace("万", "").strip(),
                         )
                         if x is not None and x is not False and str(x).strip()
                         else np.nan
@@ -210,9 +204,7 @@ class FundamentalAdapter(BaseDataSource):
             df["publish_date"] = df.index.map(_estimate_publish_date)  # type: ignore[arg-type]
 
         # Reset index to make report_date a column
-        df = df.reset_index().rename(
-            columns={"报告期": "report_date", "index": "report_date"}
-        )
+        df = df.reset_index().rename(columns={"报告期": "report_date", "index": "report_date"})
         if "report_date" not in df.columns:
             df["report_date"] = report_dates.values  # type: ignore[reportAttributeAccessIssue]
 
@@ -275,8 +267,6 @@ class FundamentalAdapter(BaseDataSource):
                 if pd.api.types.is_datetime64_any_dtype(records[col]):
                     records[col] = records[col].dt.strftime("%Y-%m-%d")
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(
-                    records.to_dict("records"), f, ensure_ascii=False, default=str
-                )
+                json.dump(records.to_dict("records"), f, ensure_ascii=False, default=str)
         except OSError as e:
             logger.debug("{} 基本面缓存保存失败: {}", symbol, e)

@@ -108,9 +108,7 @@ class TierMetadata:
         )
 
         # Identify factor columns (not trade_date, symbol)
-        factor_cols = factors or [
-            c for c in df.columns if c not in ("trade_date", "symbol")
-        ]
+        factor_cols = factors or [c for c in df.columns if c not in ("trade_date", "symbol")]
         content = df.select(factor_cols).to_pandas().to_csv(index=False).encode()
         content_hash = hashlib.sha256(content).hexdigest()[:16]
 
@@ -360,11 +358,7 @@ class FactorStore:
         tier_dir = self._root / tier
         if not tier_dir.exists():
             return []
-        return sorted(
-            f.stem
-            for f in tier_dir.glob("*.parquet")
-            if not f.stem.startswith("_meta_")
-        )
+        return sorted(f.stem for f in tier_dir.glob("*.parquet") if not f.stem.startswith("_meta_"))
 
     def tier_summary(self, tier: str) -> dict[str, Any]:
         """Return summary of all factors in a tier."""

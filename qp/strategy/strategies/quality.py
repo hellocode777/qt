@@ -101,9 +101,7 @@ class QualityStrategy(BaseStrategy):
         metrics_weights: dict[str, float] = cfg.get("metrics", DEFAULT_QUALITY_METRICS)
         top_n: int = cfg.get("top_n", 30)
         fundamental_data: dict[str, pl.DataFrame] = cfg.get("fundamental_data", {})
-        hard_cutoffs: dict[str, tuple[str, float]] = cfg.get(
-            "hard_cutoffs", HARD_CUTOFFS
-        )
+        hard_cutoffs: dict[str, tuple[str, float]] = cfg.get("hard_cutoffs", HARD_CUTOFFS)
         min_metrics: int = cfg.get("min_metrics", 3)
         require_growth: bool = cfg.get("require_growth", True)
 
@@ -175,9 +173,7 @@ class QualityStrategy(BaseStrategy):
             )
 
         df = pl.DataFrame(results).sort("raw_score", descending=True)
-        df = df.with_columns(
-            pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
-        )
+        df = df.with_columns(pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank"))
         return df.head(top_n)
 
     # ------------------------------------------------------------------

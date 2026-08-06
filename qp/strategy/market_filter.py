@@ -101,9 +101,7 @@ def check_market_environment(
         confirmed = pl.Series("confirmed", [False] * df.height)
         for i in range(df.height):
             if i >= confirmation_days - 1:
-                confirmed[i] = above_ma.slice(
-                    i - confirmation_days + 1, confirmation_days
-                ).all()
+                confirmed[i] = above_ma.slice(i - confirmation_days + 1, confirmation_days).all()
         above_ma = confirmed
 
     is_above = bool(above_ma.tail(1).item() or False)

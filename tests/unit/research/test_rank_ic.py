@@ -165,9 +165,7 @@ class TestComputeDailyICSeries:
             }
         ).with_columns(pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d"))
 
-        series = compute_daily_ic_series(
-            score_df, price_df, forward_days=1, min_stocks_per_day=10
-        )
+        series = compute_daily_ic_series(score_df, price_df, forward_days=1, min_stocks_per_day=10)
         assert len(series) >= 1
         for item in series:
             assert "date" in item
@@ -222,9 +220,7 @@ class TestEvaluateFactorIC:
             pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d")
         )
 
-        rec = evaluate_factor_ic(
-            score_df, price_df, forward_days=1, min_stocks_per_day=10
-        )
+        rec = evaluate_factor_ic(score_df, price_df, forward_days=1, min_stocks_per_day=10)
         assert isinstance(rec, ICRecord)
         assert rec.n_days >= 1
 
@@ -275,9 +271,7 @@ class TestComputeICDecay:
             pl.col("trade_date").str.strptime(pl.Date, "%Y-%m-%d")
         )
 
-        results = compute_ic_decay(
-            score_df, price_df, horizons=[1, 5], min_stocks_per_day=10
-        )
+        results = compute_ic_decay(score_df, price_df, horizons=[1, 5], min_stocks_per_day=10)
         assert len(results) == 2
         assert 1 in results
         assert 5 in results

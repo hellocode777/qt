@@ -96,9 +96,7 @@ class CrossSectionalStandardizer:
     def __init__(self) -> None:
         self._stats: dict[str, tuple[float, float]] | None = None  # col -> (mean, std)
 
-    def fit(
-        self, df: pd.DataFrame, date_col: str = "trade_date"
-    ) -> CrossSectionalStandardizer:
+    def fit(self, df: pd.DataFrame, date_col: str = "trade_date") -> CrossSectionalStandardizer:
         """Compute per-date mean/std for each feature column."""
         feature_cols = [c for c in df.columns if c not in (date_col, "symbol", "label")]
         self._stats = {}
@@ -116,9 +114,7 @@ class CrossSectionalStandardizer:
                 result[col] = (result[col] - mean) / std
         return result
 
-    def fit_transform(
-        self, df: pd.DataFrame, date_col: str = "trade_date"
-    ) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, date_col: str = "trade_date") -> pd.DataFrame:
         """Fit and transform in one step."""
         return self.fit(df, date_col).transform(df, date_col)
 
@@ -207,9 +203,7 @@ class LightGBMRankModel(BaseModel):
         if eval_set is not None:
             for i, (vX, vy) in enumerate(eval_set):
                 vg = eval_group[i] if eval_group and i < len(eval_group) else None
-                valid_sets.append(
-                    lgb.Dataset(vX, label=vy, group=vg, reference=train_data)
-                )
+                valid_sets.append(lgb.Dataset(vX, label=vy, group=vg, reference=train_data))
                 valid_names.append(f"validation_{i}")
 
         self._model = lgb.train(
@@ -222,9 +216,7 @@ class LightGBMRankModel(BaseModel):
         )
 
         self._best_iteration = (
-            self._model.best_iteration
-            if self._model.best_iteration > 0
-            else n_estimators
+            self._model.best_iteration if self._model.best_iteration > 0 else n_estimators
         )
 
     def predict(self, X: pd.DataFrame) -> pd.Series:

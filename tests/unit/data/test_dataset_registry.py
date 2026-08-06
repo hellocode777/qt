@@ -83,9 +83,7 @@ class TestList:
         with tempfile.TemporaryDirectory() as tmpdir:
             registry = DatasetRegistry(base_dir=tmpdir)
             registry.register("daily_price", "2024-07-21", path=f"{tmpdir}/dp.parquet")
-            registry.register(
-                "fundamentals", "2024-07-21", path=f"{tmpdir}/fund.parquet"
-            )
+            registry.register("fundamentals", "2024-07-21", path=f"{tmpdir}/fund.parquet")
 
             names = registry.list_datasets()
             assert "daily_price" in names

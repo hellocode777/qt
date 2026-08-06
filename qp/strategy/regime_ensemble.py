@@ -68,9 +68,7 @@ REGIME_ALLOCATION_RATIONALE: dict[str, str] = {
         "震荡偏多：均衡偏 Price(30%) + Quality(30%)。"
         "方向不明确时质量因子提供防御，反转因子在震荡中有交易机会。"
     ),
-    "neutral": (
-        "中性：四层均等(25%)。信号不明确时不做风格倾斜，靠多来源分散获取 alpha。"
-    ),
+    "neutral": ("中性：四层均等(25%)。信号不明确时不做风格倾斜，靠多来源分散获取 alpha。"),
     "sideways_down": (
         "震荡偏空：重 Value(35%) + Quality(30%)。"
         "价格下行时便宜货 + 优质股提供安全边际。"
@@ -118,9 +116,7 @@ def get_regime_layer_weights(regime: str) -> dict[str, float]:
 
 def get_regime_rationale(regime: str) -> str:
     """Get the rationale for a regime's layer allocation."""
-    return REGIME_ALLOCATION_RATIONALE.get(
-        regime, f"未知市场状态 '{regime}'：使用默认均衡配置。"
-    )
+    return REGIME_ALLOCATION_RATIONALE.get(regime, f"未知市场状态 '{regime}'：使用默认均衡配置。")
 
 
 def get_disabled_layers(regime: str) -> list[str]:

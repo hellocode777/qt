@@ -310,9 +310,7 @@ class FactorHealthPipeline(BasePipeline):
         # Build alerts
         alerts: list[str] = []
         degraded = [
-            s
-            for s in statuses
-            if s.stage in (FactorHealthStage.DEGRADED, FactorLifecycle.RETIRED)
+            s for s in statuses if s.stage in (FactorHealthStage.DEGRADED, FactorLifecycle.RETIRED)
         ]
         if degraded:
             names = ", ".join(s.factor_name for s in degraded)

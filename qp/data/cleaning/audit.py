@@ -268,12 +268,8 @@ def audit_summary(
     by_stage = audit_df.group_by("stage").len().to_dict(as_series=False)
     by_action = audit_df.group_by("action").len().to_dict(as_series=False)
 
-    stage_counts = dict(
-        zip(by_stage.get("stage", []), by_stage.get("len", []), strict=False)
-    )
-    action_counts = dict(
-        zip(by_action.get("action", []), by_action.get("len", []), strict=False)
-    )
+    stage_counts = dict(zip(by_stage.get("stage", []), by_stage.get("len", []), strict=False))
+    action_counts = dict(zip(by_action.get("action", []), by_action.get("len", []), strict=False))
 
     return {
         "total": audit_df.height,

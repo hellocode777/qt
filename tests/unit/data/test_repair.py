@@ -207,9 +207,7 @@ class TestFillMissingDates:
                 "volume": [1000000.0, 800000.0],
             }
         )
-        result = fill_missing_trading_dates(
-            df, ["2024-01-15", "2024-01-16", "2024-01-17"]
-        )
+        result = fill_missing_trading_dates(df, ["2024-01-15", "2024-01-16", "2024-01-17"])
         assert result.height == 3
         # The middle row should be inserted
         inserted = result.filter(pl.col("_inserted"))

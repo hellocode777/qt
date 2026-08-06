@@ -74,9 +74,7 @@ def cmd_position_show(position_id: str) -> int:
     return 0
 
 
-def cmd_position_close(
-    position_id: str, exit_price: float = 0.0, reason: str = ""
-) -> int:
+def cmd_position_close(position_id: str, exit_price: float = 0.0, reason: str = "") -> int:
     """Close an active position.
 
     Args:
@@ -88,9 +86,7 @@ def cmd_position_close(
 
     if exit_price <= 0:
         print("❌ 请提供出场价格: qp position close <id> --price <value>")
-        print(
-            "   Example: qp position close P-00001 --price 15.50 --reason target_reached"
-        )
+        print("   Example: qp position close P-00001 --price 15.50 --reason target_reached")
         return 1
 
     ledger = PositionLedger()

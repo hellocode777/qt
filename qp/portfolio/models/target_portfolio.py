@@ -83,9 +83,7 @@ class TargetPortfolio:
     def total_equity_weight(self) -> float:
         """Sum of equity target weights."""
         return sum(
-            float(p.get("target_weight", 0))
-            for p in self.positions
-            if str(p["symbol"]) != "CASH"
+            float(p.get("target_weight", 0)) for p in self.positions if str(p["symbol"]) != "CASH"
         )
 
     @property
@@ -275,8 +273,6 @@ class TargetPortfolio:
             lines.append(f"  {symbol:<12s} {wt:7.2%}  ¥{cap:>13,.0f}")
 
         lines.append(f"  {'-' * 12} {'-' * 8}  {'-' * 14}")
-        lines.append(
-            f"  {'Total':<12s} {self.weight_sum:7.2%}  ¥{self.total_capital:>13,.0f}"
-        )
+        lines.append(f"  {'Total':<12s} {self.weight_sum:7.2%}  ¥{self.total_capital:>13,.0f}")
         lines.append(sep)
         return "\n".join(lines)

@@ -109,9 +109,7 @@ class UniverseBuilder:
 
     def __init__(self, config: UniverseConfig | None = None) -> None:
         self.config = config or UniverseConfig()
-        self._listing_registry = ListingDateRegistry(
-            min_listing_days=self.config.min_listing_days
-        )
+        self._listing_registry = ListingDateRegistry(min_listing_days=self.config.min_listing_days)
         self._delisted_handler = DelistedHandler()
 
     # ------------------------------------------------------------------
@@ -159,9 +157,7 @@ class UniverseBuilder:
             seasoned = self._listing_registry.filter_seasoned(
                 working_df["symbol"].unique().to_list(), as_of_date
             )
-            excluded = [
-                s for s in working_df["symbol"].unique().to_list() if s not in seasoned
-            ]
+            excluded = [s for s in working_df["symbol"].unique().to_list() if s not in seasoned]
             working_df = working_df.filter(pl.col("symbol").is_in(seasoned))
             after = working_df["symbol"].n_unique()
             stats["ipo_excluded"] = before - after
@@ -221,9 +217,7 @@ class UniverseBuilder:
 
         # Liquidity statistics (for audit)
         if self.config.enable_liquidity_filter and not working_df.is_empty():
-            liq_stats = get_liquidity_stats(
-                working_df, lookback_days=self.config.volume_lookback
-            )
+            liq_stats = get_liquidity_stats(working_df, lookback_days=self.config.volume_lookback)
             stats["liquidity_stats"] = liq_stats  # type: ignore[assignment]
 
         logger.info(

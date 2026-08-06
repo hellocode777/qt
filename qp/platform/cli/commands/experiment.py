@@ -132,9 +132,7 @@ def cmd_experiment_list() -> int:
         print(f"过滤条件: {', '.join(filters)}")
         print()
 
-    print(
-        f"{'ID':<32s} {'策略':>16s} {'Sharpe':>7s} {'IC':>8s} {'Ret':>8s} {'回撤':>7s}  Lineage"
-    )
+    print(f"{'ID':<32s} {'策略':>16s} {'Sharpe':>7s} {'IC':>8s} {'Ret':>8s} {'回撤':>7s}  Lineage")
     print("-" * 110)
     for r in records:
         strategy = r.config.strategy_name or "?"
@@ -440,9 +438,7 @@ def cmd_experiment_run() -> int:
             print(f"\n{'=' * 60}")
             print(f"  运行策略: {strat}")
             print(f"{'=' * 60}")
-            ctx = PipelineContext(
-                pipeline_name="multifactor_experiment", parameters=strat_params
-            )
+            ctx = PipelineContext(pipeline_name="multifactor_experiment", parameters=strat_params)
             pipeline = MultiFactorPipeline()
             result = pipeline.run(ctx)
             all_results.append(
@@ -503,9 +499,7 @@ def cmd_experiment_validate(experiment_id: str | None = None) -> int:
     """Validate an experiment against Layer 5 Gate criteria."""
     if not experiment_id:
         print("qp experiment validate <experiment_id>", file=sys.stderr)
-        print(
-            "  Loads a completed experiment and runs the full Layer 5", file=sys.stderr
-        )
+        print("  Loads a completed experiment and runs the full Layer 5", file=sys.stderr)
         print("  Validation Gate, printing a structured report.", file=sys.stderr)
         return 1
 
@@ -622,8 +616,7 @@ def cmd_experiment_validate(experiment_id: str | None = None) -> int:
         if ic_pass and sharpe >= 0.5 and max_dd <= 30
         else GateDecision.BLOCKED,
         score=sum(r.score for r in rules) / len(rules) if rules else 0,
-        confidence=sum(1 for r in rules if r.status == ValidationStatus.PASS)
-        / len(rules)
+        confidence=sum(1 for r in rules if r.status == ValidationStatus.PASS) / len(rules)
         if rules
         else 0,
         data_integrity="PASS",
@@ -658,9 +651,7 @@ def cmd_experiment_clean() -> int:
         elif a == "--dry-run":
             dry_run = True
 
-    files = sorted(
-        exp_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True
-    )
+    files = sorted(exp_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
     if len(files) <= keep:
         print(f"共 {len(files)} 个文件， ≤ {keep}，无需清理")
         return 0

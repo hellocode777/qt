@@ -65,9 +65,7 @@ def load_valuation_data(
         remaining = list(symbols)
 
     if remaining:
-        logger.info(
-            "📊 计算估值数据: {} 只待计算 (缓存命中 {} 只)", len(remaining), len(result)
-        )
+        logger.info("📊 计算估值数据: {} 只待计算 (缓存命中 {} 只)", len(remaining), len(result))
 
         # Load fundamental per-share data from quant.db
         fund_map = _load_fund_per_share(remaining, db_path)
@@ -135,9 +133,7 @@ def _load_fund_per_share(
     from collections import defaultdict
 
     conn = sqlite3.connect(db_path)
-    pivot: dict[str, dict[str, dict[str, float | str]]] = defaultdict(
-        lambda: defaultdict(dict)
-    )
+    pivot: dict[str, dict[str, dict[str, float | str]]] = defaultdict(lambda: defaultdict(dict))
     field_phs = ",".join("?" for _ in _VALUATION_FIELDS)
 
     # Batch queries to respect SQLite's variable limit (~999)
@@ -269,10 +265,7 @@ def _load_from_cache(symbol: str) -> pl.DataFrame | None:
         return None
 
     # 7-day TTL
-    age = (
-        datetime.now(tz=UTC)
-        - datetime.fromtimestamp(cache_file.stat().st_mtime, tz=UTC)
-    ).days
+    age = (datetime.now(tz=UTC) - datetime.fromtimestamp(cache_file.stat().st_mtime, tz=UTC)).days
     if age > 7:
         return None
 

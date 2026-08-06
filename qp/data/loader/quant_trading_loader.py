@@ -59,9 +59,7 @@ def load_price_data(
     else:
         codes = [
             row["code"]
-            for row in conn.execute(
-                "SELECT code FROM security_info WHERE is_active = 1"
-            )
+            for row in conn.execute("SELECT code FROM security_info WHERE is_active = 1")
         ]
 
     # 2. Get stock names

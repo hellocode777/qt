@@ -38,12 +38,8 @@ class TestDemoAdapter:
         """Same inputs produce same outputs (seed 42)."""
         adapter1 = DemoAdapter()
         adapter2 = DemoAdapter()
-        df1 = adapter1.fetch_raw(
-            date(2024, 1, 15), date(2024, 1, 19), symbols=["600519"]
-        )
-        df2 = adapter2.fetch_raw(
-            date(2024, 1, 15), date(2024, 1, 19), symbols=["600519"]
-        )
+        df1 = adapter1.fetch_raw(date(2024, 1, 15), date(2024, 1, 19), symbols=["600519"])
+        df2 = adapter2.fetch_raw(date(2024, 1, 15), date(2024, 1, 19), symbols=["600519"])
         assert df1["收盘"].to_list() == df2["收盘"].to_list()
 
     def test_ohlc_values_reasonable(self):

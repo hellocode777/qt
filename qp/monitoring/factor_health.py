@@ -382,11 +382,7 @@ class FactorHealthMonitor:
 
         ic_30d = self._rolling_mean(valid, 30)
         ic_90d = self._rolling_mean(valid, 90)
-        ic_252d = (
-            self._rolling_mean(valid, 252)
-            if n_valid >= self._min_days_252d
-            else float("nan")
-        )
+        ic_252d = self._rolling_mean(valid, 252) if n_valid >= self._min_days_252d else float("nan")
 
         # ── IC decay rates (rolling windows, NOT full period) ──
         decay_rate = self._compute_decay_slope(valid)  # full-period (backward compat)
@@ -425,9 +421,7 @@ class FactorHealthMonitor:
         if retired_reason:
             retirement_note = f" RETIRED({retired_reason.value}): {stale_days}d stale."
         elif should_retire:
-            retirement_note = (
-                f" AUTO-RETIRE: |IC| below {self._absolute_min_ic} for {stale_days}d."
-            )
+            retirement_note = f" AUTO-RETIRE: |IC| below {self._absolute_min_ic} for {stale_days}d."
 
         summary = (
             f"Factor [{factor_name}] {lifecycle.value.upper()}: "
@@ -531,10 +525,7 @@ class FactorHealthMonitor:
             )
 
         # Pattern 2: IC near zero for extended period
-        if (
-            abs_ic < self._absolute_min_ic
-            and stale_days >= self._retirement_consecutive
-        ):
+        if abs_ic < self._absolute_min_ic and stale_days >= self._retirement_consecutive:
             reason = RetiredReason.IC_BELOW_THRESHOLD
             return (
                 FactorLifecycle.RETIRED,
@@ -544,10 +535,7 @@ class FactorHealthMonitor:
             )
 
         # Pattern 3: Terminal decay
-        if (
-            decay_rate < self._decay_slope
-            and stale_days >= self._retirement_consecutive
-        ):
+        if decay_rate < self._decay_slope and stale_days >= self._retirement_consecutive:
             reason = RetiredReason.DECAY_TERMINAL
             return (
                 FactorLifecycle.RETIRED,
@@ -624,8 +612,7 @@ class FactorHealthMonitor:
             return (
                 FactorLifecycle.RESEARCH,
                 None,
-                f"研究中: |IC|={abs_ic:.4f} 但 IR 或稳定性不足。"
-                "继续观察，积累更多数据。",
+                f"研究中: |IC|={abs_ic:.4f} 但 IR 或稳定性不足。继续观察，积累更多数据。",
             )
         return (
             FactorLifecycle.RESEARCH,
@@ -649,9 +636,7 @@ class FactorHealthMonitor:
         for val in reversed(valid):
             abs_val = abs(val)
             degraded = (
-                abs_val < 0.02
-                or decay_rate < self._decay_slope
-                or ic_ir < self._degraded_ic_ir
+                abs_val < 0.02 or decay_rate < self._decay_slope or ic_ir < self._degraded_ic_ir
             )
             if degraded:
                 count += 1
@@ -785,9 +770,7 @@ class FactorHealthMonitor:
         current_pct = current_hist / current_hist.sum() + eps
 
         # PSI = sum((actual - expected) * ln(actual / expected))
-        psi = float(
-            np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
-        )
+        psi = float(np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct)))
         return max(0.0, psi)
 
     def check_psi_for_factor(
@@ -923,8 +906,7 @@ class FactorHealthMonitor:
 
         tail = daily_scores[-min(window, len(daily_scores)) :]
         turnovers = [
-            FactorHealthMonitor.compute_turnover(tail[i], tail[i - 1])
-            for i in range(1, len(tail))
+            FactorHealthMonitor.compute_turnover(tail[i], tail[i - 1]) for i in range(1, len(tail))
         ]
         return round(float(sum(turnovers) / len(turnovers)), 4) if turnovers else 0.0
 

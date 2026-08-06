@@ -137,9 +137,7 @@ class ValueStrategy(BaseStrategy):
 
         # ── Industry-relative adjustment ──
         if industry_neutral and industry_map:
-            stock_metrics = self._make_industry_relative(
-                stock_metrics, metric_names, industry_map
-            )
+            stock_metrics = self._make_industry_relative(stock_metrics, metric_names, industry_map)
 
         # ── Compute percentile ranks per metric ──
         percentiles = self._compute_percentiles(stock_metrics, metric_names)
@@ -173,9 +171,7 @@ class ValueStrategy(BaseStrategy):
             )
 
         df = pl.DataFrame(results).sort("raw_score", descending=True)
-        df = df.with_columns(
-            pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
-        )
+        df = df.with_columns(pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank"))
         return df.head(top_n)
 
     # ------------------------------------------------------------------

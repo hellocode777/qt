@@ -366,9 +366,7 @@ def industry_group_score(
 
     for industry in df["_industry"].unique().to_list():
         mask = df["_industry"] == industry
-        group_indices = [
-            i for i, v in enumerate(df["_industry"].to_list()) if v == industry
-        ]
+        group_indices = [i for i, v in enumerate(df["_industry"].to_list()) if v == industry]
         group_df = df.filter(mask)
 
         if group_df.height < 3:
@@ -786,18 +784,14 @@ def orthogonalize_factors(
             clean_idx = 0
             for row_i in range(factor_df.height):
                 row = factor_df.row(row_i)
-                vals = [
-                    row[factor_df.columns.index(c)] for c in [target, *control_cols]
-                ]
+                vals = [row[factor_df.columns.index(c)] for c in [target, *control_cols]]
                 if any(v is None or (isinstance(v, float) and v != v) for v in vals):
                     residual_list.append(row[factor_df.columns.index(target)] or 0.0)
                 else:
                     residual_list.append(float(residual[clean_idx]))
                     clean_idx += 1
 
-            df_result = df_result.drop(target).with_columns(
-                pl.Series(target, residual_list)
-            )
+            df_result = df_result.drop(target).with_columns(pl.Series(target, residual_list))
         except np.linalg.LinAlgError:
             continue
 
@@ -1017,14 +1011,10 @@ def factor_pipeline(
                 df = df.with_columns(factor_orth[col])
             factor_cols = factor_orth.columns
             if i == 0:
-                diagnostics["orthogonalized_factors"] = _vif_cache.get(
-                    frozenset(factor_cols), []
-                )
+                diagnostics["orthogonalized_factors"] = _vif_cache.get(frozenset(factor_cols), [])
 
         # Step 1-3: Neutralization
-        has_industries = (
-            industry_map is not None and len(set(industry_map.values())) > 1
-        )
+        has_industries = industry_map is not None and len(set(industry_map.values())) > 1
         has_market_cap = market_cap_map is not None and len(market_cap_map) > 0
 
         if neutralize_method == "ols" and (
@@ -1041,9 +1031,7 @@ def factor_pipeline(
                 min_stocks_per_industry=ols_min_stocks_per_industry,
                 min_samples=ols_min_samples,
             )
-            factor_cols_neutral = [
-                c for c in factor_df_neutral.columns if c != "symbol"
-            ]
+            factor_cols_neutral = [c for c in factor_df_neutral.columns if c != "symbol"]
             factor_only = factor_df_neutral.select(factor_cols_neutral)
             scores = combine_factors(
                 factor_only,
@@ -1075,9 +1063,7 @@ def factor_pipeline(
         # Collect results
         for j, symbol in enumerate(symbols):
             score_val = scores[j] if j < len(scores) else 0.0
-            if score_val is None or (
-                isinstance(score_val, float) and score_val != score_val
-            ):
+            if score_val is None or (isinstance(score_val, float) and score_val != score_val):
                 score_val = 0.0
             all_rows.append(
                 {

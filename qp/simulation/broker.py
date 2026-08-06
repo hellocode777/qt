@@ -274,9 +274,7 @@ class SimulatedBroker(BaseBroker):
                 side=side,
                 daily_volume=self._adv_map.get(symbol),
             )
-            fill_price = price + (
-                slippage_per_share if side == "BUY" else -slippage_per_share
-            )
+            fill_price = price + (slippage_per_share if side == "BUY" else -slippage_per_share)
             fill_price = max(fill_price, 0.01)
 
             trade_value = fill_price * quantity
@@ -289,9 +287,7 @@ class SimulatedBroker(BaseBroker):
                 daily_volume=self._adv_map.get(symbol),
             )
 
-            net_amount = trade_value + (
-                cost.total_cost if side == "BUY" else -cost.total_cost
-            )
+            net_amount = trade_value + (cost.total_cost if side == "BUY" else -cost.total_cost)
             net_amount = net_amount if side == "BUY" else -net_amount
 
             # Cash check
@@ -339,9 +335,7 @@ class SimulatedBroker(BaseBroker):
                 total_shares = pos.shares + quantity
                 total_cost_basis = pos.shares * pos.avg_cost + fill_price * quantity
                 pos.shares = total_shares
-                pos.avg_cost = (
-                    total_cost_basis / total_shares if total_shares > 0 else 0.0
-                )
+                pos.avg_cost = total_cost_basis / total_shares if total_shares > 0 else 0.0
             else:
                 pos.shares -= quantity
                 if pos.shares == 0:

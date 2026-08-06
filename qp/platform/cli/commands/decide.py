@@ -116,9 +116,7 @@ def cmd_decide() -> int:
     print()
 
     try:
-        prices = pl.read_parquet(
-            "data/dataset/daily_price_" + today.isoformat() + ".parquet"
-        )
+        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
     except FileNotFoundError:
         print("❌ 未找到数据文件。请先运行 qp run daily")
         print("   No data found. Run 'qp run daily' first.")
@@ -159,9 +157,7 @@ def cmd_decide() -> int:
 
     # Risk check
     risk_manager = PortfolioRiskManager()
-    filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(
-        signals, prices
-    )
+    filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(signals, prices)
     print(
         f"  风控过滤 / Risk Filter: {risk_report.candidates_out}/{risk_report.candidates_in} 通过"
     )
@@ -216,9 +212,7 @@ def print_decision_package_summary(pkg: DecisionPackage) -> None:
 
     print("  ── 数据血缘 / Lineage ──")
     print(f"  数据集: {pkg.lineage.dataset_name} v{pkg.lineage.dataset_version}")
-    print(
-        f"  覆盖: {pkg.lineage.dataset_symbols} stocks, {pkg.lineage.dataset_rows:,} rows"
-    )
+    print(f"  覆盖: {pkg.lineage.dataset_symbols} stocks, {pkg.lineage.dataset_rows:,} rows")
     print()
 
     print("  ── 市场状态 / Regime ──")
@@ -279,9 +273,7 @@ def print_decision_package_summary(pkg: DecisionPackage) -> None:
     if hr.status_history:
         print(f"  状态历史: {len(hr.status_history)} 条记录")
         for entry in hr.status_history[-3:]:
-            print(
-                f"    {entry['from_status']} → {entry['to_status']} ({entry['timestamp'][:19]})"
-            )
+            print(f"    {entry['from_status']} → {entry['to_status']} ({entry['timestamp'][:19]})")
     if not hr.reviewed:
         print("  ❌ 待审核 — 运行 'qp decide --review' 进行审核")
     print()

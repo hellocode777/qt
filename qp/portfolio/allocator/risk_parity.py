@@ -188,9 +188,7 @@ class RiskParityAllocator(BaseCapitalAllocator):
             return {}
 
         px = px.sort(["symbol", "trade_date"])
-        px = px.with_columns(
-            (pl.col("close").log().diff().over("symbol")).alias("log_return")
-        )
+        px = px.with_columns((pl.col("close").log().diff().over("symbol")).alias("log_return"))
         px = px.drop_nulls(subset=["log_return"])
 
         # Last N days per symbol
@@ -203,9 +201,7 @@ class RiskParityAllocator(BaseCapitalAllocator):
         for row in vols.iter_rows(named=True):
             symbol = str(row["symbol"])
             vol = row["annual_vol"]
-            if vol is not None and not (
-                isinstance(vol, float) and vol != vol
-            ):  # skip NaN
+            if vol is not None and not (isinstance(vol, float) and vol != vol):  # skip NaN
                 result[symbol] = float(vol)
 
         return result

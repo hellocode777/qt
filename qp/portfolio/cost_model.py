@@ -130,9 +130,7 @@ class CostModel:
         return {
             "total_trade_value": round(total_value, 2),
             "total_cost": round(total_cost, 2),
-            "total_cost_pct": round(total_cost / total_value * 100, 4)
-            if total_value > 0
-            else 0.0,
+            "total_cost_pct": round(total_cost / total_value * 100, 4) if total_value > 0 else 0.0,
             "stamp_tax": round(sum(o.stamp_tax for o in orders), 2),
             "commission": round(sum(o.commission for o in orders), 2),
             "slippage": round(sum(o.slippage for o in orders), 2),
@@ -249,9 +247,7 @@ class MarketImpactModel:
 
         # Estimate daily volume in CNY (close * volume)
         if "volume" in df.columns:
-            df = df.with_columns(
-                (pl.col("close") * pl.col("volume")).alias("daily_value")
-            )
+            df = df.with_columns((pl.col("close") * pl.col("volume")).alias("daily_value"))
         else:
             return {}
 

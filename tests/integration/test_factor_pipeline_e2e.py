@@ -20,9 +20,7 @@ def _make_test_data(n_stocks: int = 50, n_days: int = 100) -> dict[str, pl.DataF
 
     symbols = [f"00000{i:03d}" for i in range(n_stocks)]
     dates = [
-        f"2024-{m:02d}-{d:02d}"
-        for m in range(1, 4)
-        for d in range(1, min(29, n_days // 3 + 1))
+        f"2024-{m:02d}-{d:02d}" for m in range(1, 4) for d in range(1, min(29, n_days // 3 + 1))
     ]
     dates = sorted(set(dates))[:n_days]
 
@@ -468,15 +466,11 @@ class TestValidationGateExtended:
         bridge = GateRegistryBridge()
 
         # Test PASSED → BACKTEST_PASSED
-        lifecycle = bridge._resolve_lifecycle(
-            StrategyLifecycle.RESEARCH, GateDecision.PASSED
-        )
+        lifecycle = bridge._resolve_lifecycle(StrategyLifecycle.RESEARCH, GateDecision.PASSED)
         assert lifecycle == StrategyLifecycle.BACKTEST_PASSED
 
         # Test BLOCKED → DEPRECATED
-        lifecycle = bridge._resolve_lifecycle(
-            StrategyLifecycle.RESEARCH, GateDecision.BLOCKED
-        )
+        lifecycle = bridge._resolve_lifecycle(StrategyLifecycle.RESEARCH, GateDecision.BLOCKED)
         assert lifecycle == StrategyLifecycle.DEPRECATED
 
         # Test OVERRIDDEN → keeps current
@@ -576,9 +570,7 @@ class TestFactorEnsembleOptimization:
             "net_profit_growth": 0.025,
         }
 
-        optimized = ensemble.optimize_layer_weights_from_ic(
-            factor_ics=factor_ics, shrinkage=0.0
-        )
+        optimized = ensemble.optimize_layer_weights_from_ic(factor_ics=factor_ics, shrinkage=0.0)
 
         # Quality should get the most weight
         assert optimized["quality"] > optimized["price_alpha"]

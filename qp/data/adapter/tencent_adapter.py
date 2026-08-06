@@ -138,9 +138,7 @@ class TencentAdapter(BaseDataSource):
                 time.sleep(0.2)  # gap between segments for same stock
             param = f"{tc},day,{seg_start},{seg_end},2000,qfq"
             try:
-                r = requests.get(
-                    url, params={"param": param}, headers=headers, timeout=30
-                )
+                r = requests.get(url, params={"param": param}, headers=headers, timeout=30)
                 if not r.text or not r.text.strip():
                     continue
                 data = r.json()
@@ -198,8 +196,6 @@ class TencentAdapter(BaseDataSource):
                 segments.append((cur.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")))
             else:
                 nxt_end = nxt - timedelta(days=1)
-                segments.append(
-                    (cur.strftime("%Y-%m-%d"), nxt_end.strftime("%Y-%m-%d"))
-                )
+                segments.append((cur.strftime("%Y-%m-%d"), nxt_end.strftime("%Y-%m-%d")))
             cur = nxt
         return segments

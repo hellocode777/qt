@@ -272,9 +272,7 @@ class FeatureRegistry:
                 direction = "↑" if d > 0 else "↓"
                 lookback = meta.get("lookback", 0)
                 ver = meta.get("version", "")
-                lines.append(
-                    f"    {direction} {fname:35s} v{ver}  lookback={lookback}d"
-                )
+                lines.append(f"    {direction} {fname:35s} v{ver}  lookback={lookback}d")
         return "\n".join(lines)
 
     def check_consistency(self, other: FeatureRegistry) -> dict[str, str]:

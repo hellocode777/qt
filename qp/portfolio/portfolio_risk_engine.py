@@ -161,9 +161,7 @@ class PortfolioRiskEngine:
         if self.config.enable_clustering and len(symbols) >= 3:
             # Only cluster symbols that exist in price data
             price_symbols = (
-                set(prices["symbol"].unique().to_list())
-                if "symbol" in prices.columns
-                else set()
+                set(prices["symbol"].unique().to_list()) if "symbol" in prices.columns else set()
             )
             clusterable = [s for s in symbols if s in price_symbols]
             if len(clusterable) >= 3:
@@ -263,18 +261,14 @@ class PortfolioRiskEngine:
         # Correlation pairs
         correlated_pairs: list[tuple[str, str, float]] = []
         if len(symbols) >= 2:
-            correlated_pairs = self._correlation.find_high_correlation_pairs(
-                prices, symbols
-            )
+            correlated_pairs = self._correlation.find_high_correlation_pairs(prices, symbols)
 
         # Build rank map for redundancy detection
         rank_map = {s: i + 1 for i, s in enumerate(symbols)}
         redundant = set()
         if correlated_pairs:
             redundant = set(
-                CorrelationAnalyzer.flag_redundant_candidates(
-                    correlated_pairs, rank_map
-                )
+                CorrelationAnalyzer.flag_redundant_candidates(correlated_pairs, rank_map)
             )
 
         # Evaluate each candidate
@@ -324,9 +318,7 @@ class PortfolioRiskEngine:
                     eq_wt for s2 in symbols if exposures[s2]["market_cap"] == "small"
                 )
                 if small_wt_total > max_small:
-                    reasons.append(
-                        f"Small-cap total {small_wt_total:.1%} > {max_small:.0%}"
-                    )
+                    reasons.append(f"Small-cap total {small_wt_total:.1%} > {max_small:.0%}")
 
             # Top 3 concentration
             if n >= 3:
@@ -435,14 +427,10 @@ class PortfolioRiskEngine:
             "sectors_represented": len(sectors),
             "risk_clusters": len(clusters),
             "avg_max_weight": (
-                round(float(np.mean([c.max_weight_limit for c in passed])), 4)
-                if passed
-                else 0.0
+                round(float(np.mean([c.max_weight_limit for c in passed])), 4) if passed else 0.0
             ),
             "avg_volatility": (
-                round(float(np.mean([c.risk_volatility for c in passed])), 4)
-                if passed
-                else 0.0
+                round(float(np.mean([c.risk_volatility for c in passed])), 4) if passed else 0.0
             ),
             "rejection_reasons": [
                 {"symbol": c.symbol, "reason": c.rejection_reason} for c in rejected
