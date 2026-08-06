@@ -85,6 +85,10 @@ select = [
 ignore = [
     "E501", # line too long (handled by formatter)
     "S608", # 忽略 SQL 字符串拼接安全警报
+    "S101", # 允许 assert（如果需要）
+    "RUF001", # 字符串中的模糊 Unicode 字符
+    "RUF002", # Docstring 中的模糊 Unicode 字符
+    "RUF003", # 注释中的模糊 Unicode 字符
 ]
 
 [tool.ruff.lint.per-file-ignores]
