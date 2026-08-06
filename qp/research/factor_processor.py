@@ -153,6 +153,27 @@ def minmax_scale(values: pl.Series) -> pl.Series:
     return ((values - v_min) / (v_max - v_min)).fill_null(0.0)  # type: ignore[reportOperatorIssue]
 
 
+def fill_cross_sectional_median(values: pl.Series) -> pl.Series:
+    """Fill missing factor values with the cross-sectional median.
+
+    DP-002 §4.2 R8: Missing value handling for price factors.
+    Uses the cross-section median rather than zero (biased) or
+    column mean (distorted by outliers).
+
+    Args:
+        values: Cross-sectional factor values for one date.
+
+    Returns:
+        Series with null values replaced by the median.
+    """
+    if values.null_count() == 0:
+        return values
+    median = values.median()
+    if median is None:
+        return values.fill_null(0.0)
+    return values.fill_null(median)
+
+
 def normalize(values: pl.Series, method: str = "rank") -> pl.Series:
     """Unified normalization interface.
 

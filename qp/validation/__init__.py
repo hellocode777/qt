@@ -1,10 +1,11 @@
 """Validation Layer — Gate between Research and Strategy.
 
-Exports the Rule Engine, all 14 built-in checks across 4 stages, and the
+Exports the Rule Engine, all 18 built-in checks across 4 stages, and the
 ValidationResult model.  See rule.md §7.9, §10.1–§10.2.
 
-Check inventory (16 total):
-  Factor (6): RankIC, IC_IR, t-stat, Stratification, Neutralization, MinSample
+Check inventory (20 total):
+  Factor (10): RankIC, IC_IR, t-stat, Stratification, Neutralization, MinSample,
+               Coverage, MissingRate, MaxCorrelation, TurnoverLimit
   Backtest (4): Sharpe, MaxDrawdown, Turnover, CostAdjusted
   Overfit (2): Overfit (OOS/IS), FeatureImportance
   Paper Trading (3): SignalCorrelation, Slippage, SignalInterruption
@@ -19,12 +20,16 @@ from qp.validation.checks.backtest_checks import (
     TurnoverCheck,
 )
 from qp.validation.checks.factor_checks import (
+    CoverageCheck,
     ICIRCheck,
+    MaxCorrelationCheck,
     MinSamplePeriodCheck,
+    MissingRateCheck,
     NeutralizationCheck,
     RankICCheck,
     StratificationCheck,
     TStatCheck,
+    TurnoverLimitCheck,
 )
 from qp.validation.checks.overfit_checks import (
     FeatureImportanceCheck,
@@ -44,8 +49,12 @@ from qp.validation.checks.production_checks import (
     KillSwitchHistoryCheck,
 )
 from qp.validation.engine import BaseRule, RuleEngine, ValidationContext
+from qp.validation.gate_registry_bridge import (
+    GateRegistryBridge,
+    gate_and_promote,
+)
 from qp.validation.pipeline import ValidationPipeline, ValidationPipelineConfig
-from qp.validation.result import RuleResult, ValidationResult
+from qp.validation.result import GateDecision, GateResult, RuleResult, ValidationResult
 
 __all__ = [
     # Framework
@@ -54,15 +63,23 @@ __all__ = [
     "RuleResult",
     "ValidationContext",
     "ValidationResult",
+    "GateDecision",
+    "GateResult",
+    "GateRegistryBridge",
+    "gate_and_promote",
     "ValidationPipeline",
     "ValidationPipelineConfig",
-    # Factor (6)
+    # Factor (10)
     "RankICCheck",
     "ICIRCheck",
     "TStatCheck",
     "StratificationCheck",
     "NeutralizationCheck",
     "MinSamplePeriodCheck",
+    "CoverageCheck",
+    "MissingRateCheck",
+    "MaxCorrelationCheck",
+    "TurnoverLimitCheck",
     # Backtest (4)
     "SharpeCheck",
     "MaxDrawdownCheck",

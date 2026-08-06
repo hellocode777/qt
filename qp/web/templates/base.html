@@ -28,6 +28,7 @@
       <a href="/portfolio" class="{% if request.url.path == '/portfolio' %}active{% endif %}" hx-boost="true">投资组合 Portfolio</a>
       <a href="/simulation" class="{% if request.url.path == '/simulation' %}active{% endif %}" hx-boost="true">影子运行 Shadow</a>
       <a href="/health" class="{% if request.url.path == '/health' %}active{% endif %}" hx-boost="true">系统健康 Health</a>
+      <a href="/health/factors" class="{% if request.url.path.startswith('/health/factors') %}active{% endif %}" hx-boost="true">因子健康 Factors</a>
       <a href="/strategies" class="{% if request.url.path.startswith('/strategies') %}active{% endif %}" hx-boost="true">策略 Strategies</a>
       <a href="/models" class="{% if request.url.path.startswith('/models') %}active{% endif %}" hx-boost="true">模型 Models</a>
       <a href="/experiments" class="{% if request.url.path.startswith('/experiments') %}active{% endif %}" hx-boost="true">实验 Experiments</a>

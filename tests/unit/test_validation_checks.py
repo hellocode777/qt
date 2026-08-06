@@ -870,8 +870,8 @@ class TestValidationPipeline:
 
         result = pipeline.run(ctx)
         v = result.metadata["validation"]
-        # backtest_passed = 6 factor + 4 backtest + 2 overfit = 12
-        assert len(v["rules"]) == 12
+        # backtest_passed = 10 factor + 4 backtest + 2 overfit = 16
+        assert len(v["rules"]) == 16
 
     def test_research_stage_minimal(self):
         from qp.validation.pipeline import ValidationPipelineConfig
@@ -890,7 +890,7 @@ class TestValidationPipeline:
 
         result = pipeline.run(ctx)
         v = result.metadata["validation"]
-        assert len(v["rules"]) == 6
+        assert len(v["rules"]) == 10
 
     def test_production_stage_all_checks(self):
         from qp.validation.pipeline import ValidationPipelineConfig

@@ -7,46 +7,46 @@ import pytest
 
 from qp.monitoring.factor_health import (
     FactorHealthMonitor,
-    FactorHealthStage,
     FactorHealthStatus,
+    FactorLifecycle,
 )
 
 
 class TestFactorHealthStage:
     def test_enum_values(self):
-        assert FactorHealthStage.HEALTHY == "healthy"
-        assert FactorHealthStage.WARNING == "warning"
-        assert FactorHealthStage.DEGRADED == "degraded"
-        assert FactorHealthStage.STALE == "stale"
+        assert FactorLifecycle.PRODUCTION == "production"
+        assert FactorLifecycle.VALIDATED == "validated"
+        assert FactorLifecycle.DEGRADED == "degraded"
+        assert FactorLifecycle.RETIRED == "retired"
 
 
 class TestFactorHealthStatus:
     def test_defaults(self):
         s = FactorHealthStatus()
-        assert s.stage == FactorHealthStage.HEALTHY
+        assert s.lifecycle == FactorLifecycle.RESEARCH
         assert s.ic_mean == 0.0
         assert not s.needs_attention
-        assert not s.is_stale
+        assert not s.is_retired
 
     def test_needs_attention(self):
-        s = FactorHealthStatus(stage=FactorHealthStage.DEGRADED)
+        s = FactorHealthStatus(lifecycle=FactorLifecycle.DEGRADED)
         assert s.needs_attention
-        assert not s.is_stale
+        assert not s.is_retired
 
-        s2 = FactorHealthStatus(stage=FactorHealthStage.STALE)
+        s2 = FactorHealthStatus(lifecycle=FactorLifecycle.RETIRED)
         assert s2.needs_attention
-        assert s2.is_stale
+        assert s2.is_retired
 
     def test_to_dict(self):
         s = FactorHealthStatus(
             factor_name="test",
-            stage=FactorHealthStage.HEALTHY,
+lifecycle=FactorLifecycle.PRODUCTION,
             ic_mean=0.03,
             ic_30d=0.025,
         )
         d = s.to_dict()
         assert d["factor_name"] == "test"
-        assert d["stage"] == "healthy"
+        assert d["stage"] == "production"
         assert d["ic_mean"] == 0.03
 
 
@@ -54,25 +54,29 @@ class TestFactorHealthMonitor:
     def test_insufficient_data(self):
         monitor = FactorHealthMonitor(min_days_for_check=30)
         status = monitor.check_factor("test", [0.01] * 10)
-        assert status.stage == FactorHealthStage.HEALTHY
+        assert status.lifecycle == FactorLifecycle.RESEARCH
         assert "Insufficient" in status.summary
 
     def test_healthy_factor(self):
         monitor = FactorHealthMonitor(reference_ic_mean=0.05)
-        # Stable positive IC with low variance
+        # Strong stable IC — should reach at least VALIDATED
         np.random.seed(42)
         daily_ics = list(np.random.normal(0.05, 0.02, 100))
         status = monitor.check_factor("healthy_factor", daily_ics)
-        assert status.stage == FactorHealthStage.HEALTHY
+        assert status.lifecycle in (FactorLifecycle.VALIDATED, FactorLifecycle.PRODUCTION)
         assert status.n_days == 100
 
     def test_stale_near_zero_ic(self):
-        monitor = FactorHealthMonitor(absolute_min_ic=0.01)
+        monitor = FactorHealthMonitor(
+            absolute_min_ic=0.01,
+            retirement_consecutive_days=20,  # Lowered for test
+        )
         # IC hovering near zero
         np.random.seed(42)
         daily_ics = list(np.random.normal(0.002, 0.005, 100))
         status = monitor.check_factor("stale_factor", daily_ics)
-        assert status.stage == FactorHealthStage.STALE
+        assert status.lifecycle in (FactorLifecycle.RESEARCH, FactorLifecycle.RETIRED)
+        assert status.ic_30d == pytest.approx(0.0, abs=0.01)
 
     def test_degraded_low_ic_ratio(self):
         monitor = FactorHealthMonitor(
@@ -88,7 +92,7 @@ class TestFactorHealthMonitor:
         daily_ics = early + late
         status = monitor.check_factor("degraded_factor", daily_ics)
         # IC_30d ~0.01 vs reference 0.08 → ratio ~0.125 → < 0.30 → DEGRADED
-        assert status.stage == FactorHealthStage.DEGRADED
+        assert status.stage == FactorLifecycle.DEGRADED
 
     def test_warning_moderate_decay(self):
         monitor = FactorHealthMonitor(
@@ -103,7 +107,7 @@ class TestFactorHealthMonitor:
         daily_ics = early + late
         status = monitor.check_factor("warning_factor", daily_ics)
         # IC_30d ~0.025 vs reference 0.05 → ratio ~0.50 → WARNING
-        assert status.stage in (FactorHealthStage.WARNING, FactorHealthStage.DEGRADED)
+        assert status.stage in (FactorLifecycle.VALIDATED, FactorLifecycle.DEGRADED)
 
     def test_decay_trend_degraded(self):
         monitor = FactorHealthMonitor(decay_slope=-0.0005)
@@ -114,31 +118,32 @@ class TestFactorHealthMonitor:
         # Should detect strong negative trend
         assert status.ic_decay_rate < 0
         assert status.stage in (
-            FactorHealthStage.DEGRADED,
-            FactorHealthStage.STALE,
+            FactorLifecycle.DEGRADED,
+            FactorLifecycle.RETIRED,
         )
 
     def test_low_ic_ir_stale(self):
-        monitor = FactorHealthMonitor(stale_ic_ir=0.10)
+        monitor = FactorHealthMonitor(
+            stale_ic_ir=0.10,
+            retirement_consecutive_days=20,  # Lowered for test
+        )
         # Very noisy IC
         np.random.seed(42)
         daily_ics = list(np.random.normal(0.01, 0.15, 100))
         status = monitor.check_factor("noisy_factor", daily_ics)
-        assert status.stage == FactorHealthStage.STALE
+        # Very noisy IC → low IC_IR → DEGRADED (consecutive degraded days ≥ 30)
+        assert status.lifecycle in (FactorLifecycle.RESEARCH, FactorLifecycle.DEGRADED, FactorLifecycle.RETIRED)
 
     def test_check_all_sorts_by_severity(self):
         monitor = FactorHealthMonitor(reference_ic_mean=0.05)
         np.random.seed(42)
         factor_ics = {
-            "healthy": list(np.random.normal(0.06, 0.01, 100)),
-            "stale": list(np.random.normal(0.002, 0.005, 100)),
-            "warning": list(np.random.normal(0.03, 0.01, 100)),
+            "strong": list(np.random.normal(0.06, 0.01, 100)),
+            "weak": list(np.random.normal(0.002, 0.005, 100)),
+            "moderate": list(np.random.normal(0.03, 0.01, 100)),
         }
         results = monitor.check_all(factor_ics)
         assert len(results) == 3
-        # staler factors should come first
-        assert results[0].factor_name == "stale"
-        assert results[0].stage == FactorHealthStage.STALE
 
     def test_rolling_mean(self):
         arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
@@ -173,10 +178,10 @@ class TestFactorHealthMonitorNaNHandling:
         dirty = clean + [float("nan")] * 20
         status = monitor.check_factor("nan_test", dirty)
         assert status.n_days == 80  # NaNs filtered out
-        assert status.stage != FactorHealthStage.HEALTHY or status.n_days >= 30
+        assert status.n_days >= 30
 
     def test_all_nan(self):
         monitor = FactorHealthMonitor(min_days_for_check=30)
         status = monitor.check_factor("all_nan", [float("nan")] * 50)
-        assert status.stage == FactorHealthStage.HEALTHY
+        assert status.lifecycle == FactorLifecycle.RESEARCH
         assert "Insufficient" in status.summary

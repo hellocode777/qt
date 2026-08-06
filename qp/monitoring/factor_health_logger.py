@@ -208,48 +208,58 @@ class FactorHealthLogger:
         return result
 
     def summary(self) -> dict[str, Any]:
-        """Summary statistics across all factors.
+        """Summary statistics across all factors (lifecycle-aware v2).
 
         Returns:
-            Dict with n_factors, n_healthy, n_warning, n_degraded, n_stale,
-            per-stage factor lists.
+            Dict with n_factors, per-stage counts, per-stage factor lists.
         """
         latest = self.load_all_latest()
         if not latest:
             return {
                 "n_factors": 0,
-                "n_healthy": 0,
-                "n_warning": 0,
-                "n_degraded": 0,
-                "n_stale": 0,
-                "healthy_factors": [],
-                "warning_factors": [],
-                "degraded_factors": [],
+                "n_research": 0, "n_validated": 0, "n_production": 0,
+                "n_degraded": 0, "n_retired": 0, "n_archived": 0,
+                # Backward compat
+                "n_healthy": 0, "n_warning": 0, "n_stale": 0,
+                "research_factors": [], "validated_factors": [],
+                "production_factors": [], "degraded_factors": [],
+                "retired_factors": [], "archived_factors": [],
+                "healthy_factors": [], "warning_factors": [],
                 "stale_factors": [],
             }
 
-        by_stage: dict[str, list[str]] = {
-            "healthy": [],
-            "warning": [],
-            "degraded": [],
-            "stale": [],
-        }
+        # All known lifecycle stages
+        all_stages = ["research", "validated", "production", "degraded", "retired", "archived"]
+        by_stage: dict[str, list[str]] = {s: [] for s in all_stages}
 
         for name, record in latest.items():
-            stage = record.get("stage", "healthy")
+            stage = record.get("stage", "research")
             if stage in by_stage:
                 by_stage[stage].append(name)
+            else:
+                by_stage.setdefault(stage, []).append(name)
 
         return {
             "n_factors": len(latest),
-            "n_healthy": len(by_stage["healthy"]),
-            "n_warning": len(by_stage["warning"]),
-            "n_degraded": len(by_stage["degraded"]),
-            "n_stale": len(by_stage["stale"]),
-            "healthy_factors": sorted(by_stage["healthy"]),
-            "warning_factors": sorted(by_stage["warning"]),
-            "degraded_factors": sorted(by_stage["degraded"]),
-            "stale_factors": sorted(by_stage["stale"]),
+            "n_research": len(by_stage.get("research", [])),
+            "n_validated": len(by_stage.get("validated", [])),
+            "n_production": len(by_stage.get("production", [])),
+            "n_degraded": len(by_stage.get("degraded", [])),
+            "n_retired": len(by_stage.get("retired", [])),
+            "n_archived": len(by_stage.get("archived", [])),
+            # Backward compat
+            "n_healthy": len(by_stage.get("production", [])),
+            "n_warning": len(by_stage.get("validated", [])),
+            "n_stale": len(by_stage.get("retired", [])) + len(by_stage.get("archived", [])),
+            "research_factors": by_stage.get("research", []),
+            "validated_factors": by_stage.get("validated", []),
+            "production_factors": by_stage.get("production", []),
+            "degraded_factors": by_stage.get("degraded", []),
+            "retired_factors": by_stage.get("retired", []),
+            "archived_factors": by_stage.get("archived", []),
+            "healthy_factors": by_stage.get("production", []),
+            "warning_factors": by_stage.get("validated", []),
+            "stale_factors": by_stage.get("retired", []) + by_stage.get("archived", []),
         }
 
     # ------------------------------------------------------------------

@@ -157,6 +157,42 @@ class ResidualMomentum3M(BaseFeature):
     def required_data(self) -> list[str]:
         return ["daily_price", "index_price"]
 
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def category(self) -> str:
+        return "Momentum"
+
+    @property
+    def lookback(self) -> int:
+        return 60
+
+    @property
+    def direction(self) -> int:
+        return -1
+
+    @property
+    def author(self) -> str:
+        return "Wei"
+
+    @property
+    def description(self) -> str:
+        return "Beta-adjusted 3-month momentum (market-neutral residual return)"
+
+    @property
+    def neutralize(self) -> list[str]:
+        return ["Industry", "MarketCap"]
+
+    @property
+    def winsorize(self) -> str:
+        return "MAD"
+
+    @property
+    def normalize(self) -> str:
+        return "ZScore"
+
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = data_map["daily_price"].clone()
         index_df = data_map.get("index_price")

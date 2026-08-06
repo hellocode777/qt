@@ -7,95 +7,266 @@
 
   {% if overview.is_empty %}
   <div class="alert alert-info">
-    <strong>暂无数据</strong> — 因子健康数据尚未生成。运行 <code>qp monitor check</code> 后将自动记录。
+    <strong>暂无数据</strong> — 因子健康数据尚未生成。运行实验后将自动记录。
   </div>
   {% else %}
 
-  <!-- Summary cards -->
+  <!-- Lifecycle summary cards -->
   <div class="row mb-4">
-    <div class="col-md-3">
+    <div class="col-md-2">
       <div class="card bg-success text-white">
-        <div class="card-body text-center">
-          <h5 class="card-title">健康</h5>
-          <h2>{{ overview.n_healthy }}</h2>
+        <div class="card-body text-center py-3">
+          <div style="font-size: 24px;">🚀</div>
+          <h5>生产中</h5>
+          <h3>{{ overview.n_production }}</h3>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
+      <div class="card bg-info text-white">
+        <div class="card-body text-center py-3">
+          <div style="font-size: 24px;">✅</div>
+          <h5>已验证</h5>
+          <h3>{{ overview.n_validated }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card bg-secondary text-white">
+        <div class="card-body text-center py-3">
+          <div style="font-size: 24px;">🔬</div>
+          <h5>研究中</h5>
+          <h3>{{ overview.n_research }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col">
       <div class="card bg-warning text-dark">
-        <div class="card-body text-center">
-          <h5 class="card-title">预警</h5>
-          <h2>{{ overview.n_warning }}</h2>
+        <div class="card-body text-center py-3">
+          <div style="font-size: 24px;">🟠</div>
+          <h5>衰退中</h5>
+          <h3>{{ overview.counts.weakening | default(0) }}</h3>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
+    <div class="col">
       <div class="card bg-danger text-white">
-        <div class="card-body text-center">
-          <h5 class="card-title">衰减</h5>
-          <h2>{{ overview.n_degraded }}</h2>
+        <div class="card-body text-center py-3">
+          <div style="font-size: 24px;">🔴</div>
+          <h5>衰减</h5>
+          <h3>{{ overview.n_degraded }}</h3>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
+    <div class="col">
       <div class="card bg-dark text-white">
-        <div class="card-body text-center">
-          <h5 class="card-title">失效</h5>
-          <h2>{{ overview.n_stale }}</h2>
+        <div class="card-body text-center py-3">
+          <div style="font-size: 24px;">💀</div>
+          <h5>已淘汰</h5>
+          <h3>{{ overview.n_retired }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card bg-light text-dark border">
+        <div class="card-body text-center py-3">
+          <div style="font-size: 24px;">📦</div>
+          <h5>已归档</h5>
+          <h3>{{ overview.n_archived }}</h3>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Factor table -->
-  <div class="card">
-    <div class="card-header">
-      <strong>因子健康总览</strong>
-      <span class="text-muted ms-2">共 {{ overview.n_factors }} 个因子</span>
+  <!-- Auto Recommendations -->
+  {% if overview.recommendations %}
+  <div class="card mb-4 border-warning">
+    <div class="card-header bg-warning text-dark">
+      <strong>💡 系统建议</strong>
+      <span class="text-muted ms-2" style="font-size: 13px;">自动生成 — 基于最新因子健康评估</span>
     </div>
-    <div class="card-body p-0">
-      <table class="table table-hover mb-0">
-        <thead>
-          <tr>
-            <th>状态</th>
-            <th>因子</th>
-            <th class="text-end">IC₃₀</th>
-            <th class="text-end">IC₉₀</th>
-            <th class="text-end">IC IR</th>
-            <th class="text-end">衰减率/d</th>
-            <th class="text-end">IC占比</th>
-            <th>建议动作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for f in overview.factors %}
-          <tr>
-            <td>
-              <span class="badge {{ f.badge_class }}">{{ f.icon }} {{ f.stage_label }}</span>
-            </td>
-            <td>
-              <a href="/health/factors/{{ f.name }}"><strong>{{ f.name }}</strong></a>
-            </td>
-            <td class="text-end">
-              <span class="{{ 'text-danger' if f.ic_30d < 0 else 'text-success' }}">
-                {{ "%+.4f"|format(f.ic_30d) }}
-              </span>
-            </td>
-            <td class="text-end">{{ "%+.4f"|format(f.ic_90d) }}</td>
-            <td class="text-end">{{ "%.2f"|format(f.ic_ir) }}</td>
-            <td class="text-end">
-              <span class="{{ 'text-danger' if f.ic_decay_rate < 0 else 'text-success' }}">
-                {{ "%+.5f"|format(f.ic_decay_rate) }}
-              </span>
-            </td>
-            <td class="text-end">{{ "%.0f%%"|format(f.ic_ratio * 100) }}</td>
-            <td>
-              <small class="text-muted">{{ f.recommended_action[:60] if f.recommended_action else '—' }}</small>
-            </td>
-          </tr>
+    <div class="card-body p-2">
+      {% for rec in overview.recommendations[:8] %}
+      <div style="padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px;
+           {% if rec.severity == 'danger' %}border-left: 3px solid #dc3545;{% elif rec.severity == 'warning' %}border-left: 3px solid #ffc107;{% elif rec.severity == 'success' %}border-left: 3px solid #28a745;{% else %}border-left: 3px solid #6c757d;{% endif %}">
+        <span class="badge {% if rec.type == 'retire_confirm' %}badge-dark{% elif rec.type == 'retire_soon' %}badge-danger{% elif rec.type == 'reduce_weight' %}badge-warning{% elif rec.type == 'promote' %}badge-success{% elif rec.type == 'decay_warning' %}badge-danger{% else %}badge-secondary{% endif %}" style="font-size: 10px; margin-right: 8px;">{{ rec.action }}</span>
+        {{ rec.message }}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Alpha Families -->
+  {% if overview.families and overview.families.has_data %}
+  <div class="card mb-4">
+    <div class="card-header">
+      <strong>🧬 Alpha 来源聚类</strong>
+      <span class="text-muted ms-2" style="font-size: 13px;">{{ overview.families.n_families }} 个因子族，{{ overview.families.n_active_families }} 个活跃</span>
+    </div>
+    <div class="card-body p-2">
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;">
+        {% for fam in overview.families.families %}
+        <div style="padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px;
+             {% if fam.dominant_stage == 'production' %}border-left: 3px solid #28a745;{% elif fam.dominant_stage == 'weakening' %}border-left: 3px solid #fd7e14;{% elif fam.dominant_stage == 'degraded' %}border-left: 3px solid #dc3545;{% else %}border-left: 3px solid #dee2e6;{% endif %}">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <strong style="font-size: 14px;">{{ fam.name }}</strong>
+            <span class="font-mono" style="font-size: 13px; font-weight: 700; color: {% if fam.ic_30d_weighted > 0 %}#2e7d32{% else %}#c62828{% endif %};">
+              IC {{ "%+.4f"|format(fam.ic_30d_weighted) }}
+            </span>
+          </div>
+          <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
+            {% for m in fam.members %}
+            <span style="display: inline-block; margin: 1px 3px; padding: 1px 6px; border-radius: 3px;
+                         {% if m.stage == 'production' %}background: #e8f5e9;{% elif m.stage == 'weakening' %}background: #fff3e0;{% elif m.stage == 'degraded' %}background: #ffebee;{% elif m.stage in ('retired','archived') %}background: #f5f5f5; opacity: 0.5;{% else %}background: #f5f5f5;{% endif %}">
+              {{ m.icon }} {{ m.name }}
+            </span>
+            {% endfor %}
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999;">
+            <span>最佳: {{ fam.best_factor }} ({{ "%+.4f"|format(fam.best_ic) }})</span>
+            {% if fam.suggest_composite and fam.members|length >= 3 %}
+            <span style="color: #e65100;" title="建议合并为 Composite">⚠️ 建议 Composite</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Factor Table + Correlation side-by-side -->
+  <div class="row">
+    <div class="col-md-9">
+      <div class="card">
+        <div class="card-header">
+          <strong>因子生命周期总览</strong>
+          <span class="text-muted ms-2">共 {{ overview.n_factors }} 个因子</span>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover mb-0" style="font-size: 13px;">
+            <thead>
+              <tr>
+                <th>生命周期</th>
+                <th>因子</th>
+                <th class="text-end">IC₃₀</th>
+                <th class="text-end">IC₉₀</th>
+                <th class="text-end">IC IR</th>
+                <th class="text-end">衰减/d</th>
+                <th class="text-end">贡献%</th>
+                <th class="text-end">连续</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in overview.factors %}
+              <tr style="{% if f.stage == 'retired' %}opacity: 0.5;{% endif %}">
+                <td>
+                  <span class="badge {{ f.badge_class }}">{{ f.icon }} {{ f.stage_label }}</span>
+                  {% if f.retired_reason %}
+                  <div style="font-size: 10px; color: #999; margin-top: 2px;">{{ f.retired_reason }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <a href="/health/factors/{{ f.name }}"><strong>{{ f.name }}</strong></a>
+                  {% if f.direction_flipped %}
+                  <span class="badge badge-danger" style="font-size: 9px;" title="IC 方向反转">⚠️反转</span>
+                  {% endif %}
+                </td>
+                <td class="text-end font-mono">
+                  <span style="color: {% if f.ic_30d > 0 %}#2e7d32{% else %}#c62828{% endif %};">
+                    {{ "%+.4f"|format(f.ic_30d) }}
+                  </span>
+                </td>
+                <td class="text-end font-mono">{{ "%+.4f"|format(f.ic_90d) }}</td>
+                <td class="text-end font-mono">
+                  <span style="color: {% if f.ic_ir >= 0.3 %}#2e7d32{% elif f.ic_ir >= 0.1 %}#e65100{% else %}#c62828{% endif %};">
+                    {{ "%.2f"|format(f.ic_ir) }}
+                  </span>
+                </td>
+                <td class="text-end font-mono">
+                  <span style="color: {% if f.ic_decay_rate < -0.001 %}#c62828{% elif f.ic_decay_rate < 0 %}#e65100{% else %}#2e7d32{% endif %};">
+                    {{ "%+.5f"|format(f.ic_decay_rate) }}
+                  </span>
+                </td>
+                <td class="text-end font-mono" style="font-size: 12px; font-weight: 600;">
+                  <span style="color: {% if f.contribution_pct > 20 %}#28a745{% elif f.contribution_pct > 10 %}#fd7e14{% else %}#999{% endif %};">
+                    {{ "%.1f"|format(f.contribution_pct) }}%
+                  </span>
+                </td>
+                <td class="text-end font-mono" style="font-size: 11px;">
+                  {% if f.stage == 'degraded' %}
+                  <span style="color: #c62828;">⚠{{ f.consecutive_degraded_days }}d</span>
+                  {% elif f.stage == 'weakening' %}
+                  <span style="color: #fd7e14;">{{ f.consecutive_degraded_days }}d↓</span>
+                  {% elif f.stage == 'production' %}
+                  <span style="color: #2e7d32;">—</span>
+                  {% else %}
+                  <span style="color: #999;">—</span>
+                  {% endif %}
+                </td>
+                <td style="max-width: 200px;">
+                  <small style="color: #666; line-height: 1.3;">{{ f.recommended_action[:80] if f.recommended_action else '—' }}</small>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Correlation sidebar -->
+    <div class="col-md-3">
+      {% if overview.correlation and overview.correlation.has_data %}
+      <div class="card mb-3">
+        <div class="card-header">
+          <strong>🔗 因子相关性</strong>
+          {% if overview.correlation.n_redundant > 0 %}
+          <span class="badge badge-warning ms-1">{{ overview.correlation.n_redundant }} 对冗余</span>
+          {% endif %}
+        </div>
+        <div class="card-body p-2" style="max-height: 500px; overflow-y: auto;">
+          {% for pair in overview.correlation.pairs[:12] %}
+          <div style="padding: 4px 8px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;
+               {% if pair.similarity > 0.70 %}background: #fff3e0; border-radius: 4px;{% endif %}">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              <span title="{{ pair.factor_a }}">{{ pair.factor_a[:15] }}</span>
+              <span style="color: #999;"> ↔ </span>
+              <span title="{{ pair.factor_b }}">{{ pair.factor_b[:15] }}</span>
+            </span>
+            <span class="font-mono" style="font-weight: 600; margin-left: 8px;
+                 color: {% if pair.similarity > 0.70 %}#e65100{% else %}#999{% endif %};">
+              {{ "%.2f"|format(pair.similarity) }}
+            </span>
+          </div>
           {% endfor %}
-        </tbody>
-      </table>
+        </div>
+        {% if overview.correlation.n_redundant > 0 %}
+        <div class="card-footer bg-warning text-dark" style="font-size: 11px; padding: 6px 12px;">
+          ⚠️ 相似度 > 0.70: 因子可能捕捉同一 Alpha 源，考虑合并或只保留 IC 更强的。
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Legend -->
+      <div class="card">
+        <div class="card-header"><strong>图例</strong></div>
+        <div class="card-body p-2" style="font-size: 12px;">
+          <div>🚀 生产中 — IC 稳定，全权重 (1.0x)</div>
+          <div>🟠 衰退中 — 历史上强但近期衰减，降权 25% (0.75x)</div>
+          <div>✅ 已验证 — 通过检验，半权重 (0.5x)</div>
+          <div>🔬 研究中 — 新因子，评估中 (0.25x)</div>
+          <div>🔴 衰减   — IC 下行，降权 50% (0.5x)</div>
+          <div>💀 已淘汰 — 不再使用 (0.0x)</div>
+          <div>📦 已归档 — 历史记录</div>
+          <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #eee; color: #999;">
+            贡献% = 权重 × |IC₃₀| / Σ(权重 × |IC|)
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -102,6 +102,57 @@
   </div>
 </div>
 
+<!-- Factor Health Summary -->
+{% if factor_health %}
+<div class="card mt-4">
+  <div class="card-header">
+    <span>&#129518; 因子健康 Factor Health</span>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span class="c-muted" style="font-size: 13px;">{{ factor_health.n_factors }} 个因子</span>
+      {% if factor_health.n_production %}<span class="badge badge-green" style="font-size: 11px;">🚀 {{ factor_health.n_production }} 生产</span>{% endif %}
+      {% if factor_health.n_validated %}<span class="badge badge-yellow" style="font-size: 11px;">✅ {{ factor_health.n_validated }} 验证</span>{% endif %}
+      {% if factor_health.n_degraded %}<span class="badge badge-red" style="font-size: 11px;">🔴 {{ factor_health.n_degraded }} 衰减</span>{% endif %}
+      {% if factor_health.n_retired %}<span class="badge badge-dark" style="font-size: 11px;">💀 {{ factor_health.n_retired }} 淘汰</span>{% endif %}
+    </div>
+  </div>
+  <div class="card-body">
+    {% if factor_health.is_empty %}
+    <div class="empty-state" style="padding: 20px;">
+      <div class="icon">&#128300;</div>
+      <p style="margin: 8px 0; color: #999;">暂无因子健康数据</p>
+      <p style="font-size: 13px; color: #bbb;">运行实验后将自动收集因子 IC 数据</p>
+    </div>
+    {% else %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
+      {% for f in factor_health.factors[:12] %}
+      <a href="/health/factors/{{ f.name }}" style="text-decoration: none; color: inherit;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; transition: box-shadow 0.15s;"
+             onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'"
+             onmouseout="this.style.boxShadow='none'">
+          <div style="min-width: 0;">
+            <div style="font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ f.name }}">{{ f.name }}</div>
+            <div style="font-size: 12px; color: #999; margin-top: 2px;">
+              IC<sub>30d</sub> <span class="font-mono" style="color: {% if f.ic_30d > 0 %}#2e7d32{% else %}#c62828{% endif %};">{{ "%.4f" | format(f.ic_30d) }}</span>
+              &nbsp;|&nbsp; IR <span class="font-mono">{{ "%.2f" | format(f.ic_ir) }}</span>
+            </div>
+          </div>
+          <span class="badge {{ f.badge_class }}" style="font-size: 10px; flex-shrink: 0; margin-left: 8px;">{{ f.icon }} {{ f.stage_label }}</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% if factor_health.n_factors > 12 %}
+    <div style="text-align: center; margin-top: 12px;">
+      <a href="/health/factors" class="btn btn-outline" style="font-size: 13px;">
+        查看全部 {{ factor_health.n_factors }} 个因子 →
+      </a>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- System State -->
 <div class="card">
   <div class="card-header"><span>&#127973; 系统状态 System State</span></div>

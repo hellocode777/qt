@@ -119,3 +119,70 @@ def compute_all_factors(
     if subset:
         return result.drop_nulls(subset=subset)
     return result.drop_nulls()
+
+
+def compute_composite_factors(
+    factor_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Merge raw factors into composite Alpha Sources (DP-002 v3).
+
+    Transforms 16 raw factors → 6 composites:
+      LowVol_Composite, Momentum_Composite, Value_Composite,
+      Quality_Composite, Volume_Composite, Reversal_Composite
+
+    Each composite = rank-based average of its member factors.
+    Missing members are skipped (composite still computed from available).
+
+    Args:
+        factor_df: DataFrame with [trade_date, symbol, factor_1, factor_2, ...].
+            Must contain at least one member for each composite.
+
+    Returns:
+        Same DataFrame with composite columns added.
+    """
+    from qp.strategy.factor_composite import COMPOSITE_DEFINITIONS
+
+    df = factor_df.clone()
+
+    for comp_name, cfg in COMPOSITE_DEFINITIONS.items():
+        members = cfg["members"]
+        direction = cfg["direction"]
+
+        # Find available members
+        available = [m for m in members if m in df.columns]
+        if not available:
+            continue
+
+        # Rank each member within cross-section (per date)
+        ranked_cols = []
+        for m in available:
+            rank_col = f"__rank_{m}"
+            df = df.with_columns(
+                pl.col(m).rank().over("trade_date").alias(rank_col)
+            )
+            ranked_cols.append(rank_col)
+
+        # Composite = mean of ranks × direction
+        if ranked_cols:
+            rank_exprs = [pl.col(c) for c in ranked_cols]
+            df = df.with_columns(
+                (pl.sum_horizontal(rank_exprs) / len(ranked_cols) * direction).alias(comp_name)
+            )
+
+            # Cleanup temp columns
+            df = df.drop(ranked_cols)
+
+    return df
+
+
+# Update PRICE_VOLUME_FACTORS to include composites
+COMPOSITE_FACTORS: list[str] = [
+    "LowVol_Composite",
+    "Momentum_Composite",
+    "Value_Composite",
+    "Quality_Composite",
+    "Volume_Composite",
+    "Reversal_Composite",
+]
+
+ALL_FACTORS_WITH_COMPOSITES: list[str] = PRICE_VOLUME_FACTORS + COMPOSITE_FACTORS

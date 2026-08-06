@@ -184,6 +184,98 @@ class FeatureRegistry:
         """Get the version hash of a registered feature."""
         return self._version_map.get(name)
 
+    # ------------------------------------------------------------------
+    # Auto-registration from metadata (DP-002 C8)
+    # ------------------------------------------------------------------
+
+    def auto_register_all(
+        self,
+        feature_classes: list[type[BaseFeature]],
+    ) -> dict[str, BaseFeature]:
+        """Register multiple feature classes at once from their metadata.
+
+        Args:
+            feature_classes: List of BaseFeature subclasses.
+
+        Returns:
+            Dict mapping feature_name → registered instance.
+        """
+        registered: dict[str, BaseFeature] = {}
+        skipped: list[str] = []
+
+        for cls in feature_classes:
+            try:
+                instance = cls()
+                name = instance.feature_name
+                if name in self._features:
+                    skipped.append(name)
+                    continue
+                self.register(instance)
+                registered[name] = instance
+            except Exception as exc:
+                logger.warning("Failed to auto-register {}: {}", cls.__name__, exc)
+
+        if skipped:
+            logger.debug("Skipped {} already-registered features: {}", skipped, skipped)
+
+        return registered
+
+    # ------------------------------------------------------------------
+    # Factor Catalog (DP-002 E6)
+    # ------------------------------------------------------------------
+
+    def catalog(self) -> dict[str, object]:
+        """Generate a Factor Catalog from all registered features' metadata.
+
+        Returns:
+            Catalog dict with categories, flat list, and metadata summaries.
+        """
+        from datetime import UTC, datetime
+
+        categories: dict[str, dict[str, object]] = {}
+        flat_list: list[dict[str, object]] = []
+
+        for name in self._registration_order:
+            feature = self._features[name]
+            meta = feature.metadata_summary()
+            cat = str(meta.get("category", "Custom"))
+
+            if cat not in categories:
+                categories[cat] = {}
+            categories[cat][name] = meta
+            flat_list.append(meta)
+
+        return {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "n_factors": len(self._features),
+            "n_categories": len(categories),
+            "categories": categories,
+            "flat_list": flat_list,
+        }
+
+    def catalog_summary(self) -> str:
+        """Human-readable catalog summary."""
+        cat = self.catalog()
+        n = cat["n_factors"]
+        nc = cat["n_categories"]
+        lines = [
+            f"Factor Catalog — {n} factors in {nc} categories",
+            "-" * 60,
+        ]
+        from typing import Any as _Any
+        categories: dict[str, dict[str, _Any]] = cat["categories"]  # type: ignore[assignment]
+        for cat_name, factors in sorted(categories.items(), key=lambda x: str(x[0])):
+            lines.append(f"  [{cat_name}] ({len(factors)} factors)")
+            for fname, meta in sorted(factors.items()):
+                d = meta.get("direction", 1)
+                direction = "↑" if d > 0 else "↓"
+                lookback = meta.get("lookback", 0)
+                ver = meta.get("version", "")
+                lines.append(
+                    f"    {direction} {fname:35s} v{ver}  lookback={lookback}d"
+                )
+        return "\n".join(lines)
+
     def check_consistency(self, other: FeatureRegistry) -> dict[str, str]:
         """Compare registries for consistency (e.g., backtest vs live).
 

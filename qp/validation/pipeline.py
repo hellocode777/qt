@@ -195,12 +195,16 @@ class ValidationPipeline(BasePipeline):
 
     def _register_factor_checks(self, engine: RuleEngine, stage: str) -> None:
         from qp.validation.checks.factor_checks import (
+            CoverageCheck,
             ICIRCheck,
+            MaxCorrelationCheck,
             MinSamplePeriodCheck,
+            MissingRateCheck,
             NeutralizationCheck,
             RankICCheck,
             StratificationCheck,
             TStatCheck,
+            TurnoverLimitCheck,
         )
 
         overrides = self._config.overrides
@@ -223,6 +227,26 @@ class ValidationPipeline(BasePipeline):
         engine.register(
             MinSamplePeriodCheck(
                 min_years=overrides.get("min_sample_period", {}).get("min_years", 3.0)
+            )
+        )
+        engine.register(
+            CoverageCheck(
+                min_coverage_pct=overrides.get("coverage", {}).get("min_coverage_pct", 0.95)
+            )
+        )
+        engine.register(
+            MissingRateCheck(
+                max_missing_rate=overrides.get("missing_rate", {}).get("max_missing_rate", 0.05)
+            )
+        )
+        engine.register(
+            MaxCorrelationCheck(
+                max_corr=overrides.get("max_correlation", {}).get("max_corr", 0.85)
+            )
+        )
+        engine.register(
+            TurnoverLimitCheck(
+                max_turnover=overrides.get("turnover_limit", {}).get("max_turnover", 0.50)
             )
         )
 

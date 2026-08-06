@@ -33,9 +33,9 @@ async def factor_health_overview(request: Request) -> Any:
     overview = svc.overview()
 
     return templates.TemplateResponse(
-        "factor_health.html",
-        {
-            "request": request,
+        request=request,
+        name="factor_health.html",
+        context={
             "title": "因子健康监控",
             "overview": overview,
         },
@@ -49,9 +49,9 @@ async def factor_health_detail(request: Request, factor_name: str) -> Any:
     detail = svc.factor_detail(factor_name)
 
     return templates.TemplateResponse(
-        "factor_health_detail.html",
-        {
-            "request": request,
+        request=request,
+        name="factor_health_detail.html",
+        context={
             "title": f"因子健康 — {factor_name}",
             "detail": detail,
         },

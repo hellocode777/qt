@@ -11,8 +11,11 @@
 from qp.research.feature.compute import (
     ALL_FACTOR_DESCRIPTIONS,
     ALL_FACTOR_DIRECTIONS,
+    ALL_FACTORS_WITH_COMPOSITES,
+    COMPOSITE_FACTORS,
     PRICE_VOLUME_FACTORS,
     compute_all_factors,
+    compute_composite_factors,
     get_default_factor_weights,
 )
 from qp.research.feature.momentum import (
@@ -32,11 +35,11 @@ from qp.research.feature.money_flow import (
     compute_money_flow_factors,
 )
 from qp.research.feature.quality import (
+    QUALITY_DESCRIPTIONS,
+    QUALITY_DIRECTIONS,
     EarningsQuality,
     MarginComposite,
     ProfitStability,
-    QUALITY_DESCRIPTIONS,
-    QUALITY_DIRECTIONS,
     ROELevel,
 )
 from qp.research.feature.registry import FeatureRegistry
@@ -98,4 +101,8 @@ __all__ = [
     "ALL_FACTOR_DIRECTIONS",
     "ALL_FACTOR_DESCRIPTIONS",
     "PRICE_VOLUME_FACTORS",
+    # Composite factors
+    "compute_composite_factors",
+    "COMPOSITE_FACTORS",
+    "ALL_FACTORS_WITH_COMPOSITES",
 ]

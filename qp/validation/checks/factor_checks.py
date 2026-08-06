@@ -1,10 +1,11 @@
 """Factor validation checks — Rank IC, IC_IR, t-stat, stratification,
-neutralization survival, and minimum sample period.
+neutralization survival, minimum sample period, coverage, and missing rate.
 
 All checks follow the BaseRule contract. Thresholds are constructor-injected
 so they can be overridden from config or CLI without code changes.
 
 See rule.md §7.9.1, §10.1, §10.2 for the complete specification.
+DP-002 §4.5: Coverage (>95%) and Missing Rate (<5%) checks added per V7-V8.
 """
 
 from __future__ import annotations
@@ -542,5 +543,376 @@ class MinSamplePeriodCheck(BaseRule):
                 f"Training period: {train_start} → {train_end} = {years:.1f} years "
                 f"({'≥' if passed else '<'} threshold {self._min_years} years). "
                 f"({days} calendar days)"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# Coverage Check (DP-002 §4.5, V7)
+# ------------------------------------------------------------------
+
+
+class CoverageCheck(BaseRule):
+    """Validates that factor covers sufficient stock universe each day.
+
+    Per DP-002 §4.5: factor must have coverage > 95% of universe.
+    Coverage = (stocks with valid factor value) / (total stocks in universe).
+
+    Threshold: mean coverage ≥ min_coverage_pct (default 0.95).
+    """
+
+    def __init__(self, min_coverage_pct: float = 0.95) -> None:
+        self._min_coverage_pct = min_coverage_pct
+
+    @property
+    def rule_name(self) -> str:
+        return "coverage"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        feature_df = context.feature_df
+        price_df = context.price_df
+
+        if feature_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df in validation context.",
+            )
+
+        # Count total stocks per day from price universe (or feature_df itself)
+        if price_df is not None and not price_df.is_empty():
+            universe_per_day = (
+                price_df.group_by("trade_date")
+                .agg(pl.col("symbol").n_unique().alias("total_stocks"))
+            )
+        else:
+            # Fallback: use feature_df itself as the universe
+            universe_per_day = (
+                feature_df.group_by("trade_date")
+                .agg(pl.col("symbol").n_unique().alias("total_stocks"))
+            )
+
+        # Count stocks with valid factor values per day
+        valid_per_day = (
+            feature_df.drop_nulls(subset=["feature_value"])
+            .group_by("trade_date")
+            .agg(pl.col("symbol").n_unique().alias("covered_stocks"))
+        )
+
+        # Join to compute daily coverage ratio
+        joined = valid_per_day.join(universe_per_day, on="trade_date", how="inner")
+        if joined.is_empty():
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="No overlapping dates between feature and universe data.",
+            )
+
+        joined = joined.with_columns(
+            (pl.col("covered_stocks") / pl.col("total_stocks")).alias("coverage_ratio")
+        )
+
+        # Mean coverage across all days
+        mean_coverage = float(joined["coverage_ratio"].mean())
+        n_days = joined.height
+
+        # Check worst-day coverage too
+        min_coverage = float(joined["coverage_ratio"].min())
+
+        passed = mean_coverage >= self._min_coverage_pct
+        score = min(100.0, (mean_coverage / 1.0) * 100.0)
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._min_coverage_pct,
+            actual_value=round(mean_coverage, 4),
+            detail=(
+                f"Coverage = {mean_coverage:.1%} (min={min_coverage:.1%}) over {n_days} days "
+                f"({'≥' if passed else '<'} threshold {self._min_coverage_pct:.0%})"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# Missing Rate Check (DP-002 §4.5, V8)
+# ------------------------------------------------------------------
+
+
+class MissingRateCheck(BaseRule):
+    """Validates that factor has low missing value rate.
+
+    Per DP-002 §4.5: factor missing rate must be < 5%.
+    Missing rate = (NaN/None rows) / (total rows) in feature_df.
+
+    Threshold: missing rate ≤ max_missing_rate (default 0.05).
+    """
+
+    def __init__(self, max_missing_rate: float = 0.05) -> None:
+        self._max_missing_rate = max_missing_rate
+
+    @property
+    def rule_name(self) -> str:
+        return "missing_rate"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        feature_df = context.feature_df
+
+        if feature_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df in validation context.",
+            )
+
+        total_rows = feature_df.height
+        if total_rows == 0:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Feature DataFrame is empty.",
+            )
+
+        # Count null values in feature_value
+        null_count = feature_df["feature_value"].null_count()
+        missing_rate = null_count / total_rows
+
+        passed = missing_rate <= self._max_missing_rate
+        score = max(0.0, 100.0 - missing_rate * 200.0)  # 0% → 100, 5% → 90, 10% → 80
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._max_missing_rate,
+            actual_value=round(missing_rate, 4),
+            detail=(
+                f"Missing rate = {missing_rate:.2%} ({null_count:,}/{total_rows:,} rows) "
+                f"({'≤' if passed else '>'} threshold {self._max_missing_rate:.0%})"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# Max Correlation Check (DP-002 §4.5, V9)
+# ------------------------------------------------------------------
+
+
+class MaxCorrelationCheck(BaseRule):
+    """Validates that a new factor is not highly correlated with existing factors.
+
+    Per DP-002 §4.5: correlation with any existing factor must be < 0.85.
+    High correlation means the factor adds no new information — it's redundant.
+
+    Reads existing factor columns from feature_df, or accepts a pre-computed
+    max_correlation from context.metadata.
+
+    Threshold: max |correlation| < max_corr (default 0.85).
+    """
+
+    def __init__(self, max_corr: float = 0.85) -> None:
+        self._max_corr = max_corr
+
+    @property
+    def rule_name(self) -> str:
+        return "max_correlation"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        feature_df = context.feature_df
+
+        # Accept pre-computed from metadata
+        pre_max = context.metadata.get("max_correlation")
+        if pre_max is not None:
+            max_corr = float(pre_max)
+            passed = max_corr < self._max_corr
+            score = max(0.0, 100.0 - max_corr * 100.0)
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+                score=round(score, 2),
+                threshold=self._max_corr,
+                actual_value=round(max_corr, 4),
+                detail=(
+                    f"Max pairwise correlation = {max_corr:.3f} "
+                    f"({'<' if passed else '≥'} threshold {self._max_corr})"
+                ),
+            )
+
+        if feature_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df or max_correlation in context.",
+            )
+
+        # Identify factor columns (not trade_date, symbol, feature_value)
+        factor_cols = [
+            c
+            for c in feature_df.columns
+            if c not in ("trade_date", "symbol", "feature_value")
+        ]
+        if len(factor_cols) < 2:
+            # Single factor — no correlation to check
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.PASS,
+                score=100.0,
+                threshold=self._max_corr,
+                actual_value=0.0,
+                detail="Single factor — no pairwise correlation to check.",
+            )
+
+        # Compute pairwise Spearman correlations
+
+        corr_df = feature_df.select(factor_cols).drop_nulls()
+        if corr_df.height < 5:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.PASS,
+                score=100.0,
+                detail="Insufficient data for correlation check.",
+            )
+
+        # Compute correlation matrix
+        corr_matrix = corr_df.to_pandas().corr(method="spearman")
+        n = len(factor_cols)
+        max_corr = 0.0
+        worst_pair = ("", "")
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                corr_val = abs(corr_matrix.iloc[i, j])
+                if corr_val > max_corr:
+                    max_corr = corr_val
+                    worst_pair = (factor_cols[i], factor_cols[j])
+
+        passed = max_corr < self._max_corr
+        score = max(0.0, 100.0 - max_corr * 100.0)
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._max_corr,
+            actual_value=round(max_corr, 4),
+            detail=(
+                f"Max correlation = {max_corr:.3f} ({worst_pair[0]}↔{worst_pair[1]}) "
+                f"({'<' if passed else '≥'} threshold {self._max_corr})"
+            ),
+        )
+
+
+# ------------------------------------------------------------------
+# Turnover Limit Check (DP-002 §4.5, V10)
+# ------------------------------------------------------------------
+
+
+class TurnoverLimitCheck(BaseRule):
+    """Validates that factor turnover is within acceptable bounds.
+
+    Per DP-002 §4.5: day-over-day factor rank turnover should be reasonable.
+    Excessive turnover means the factor is unstable / noisy.
+
+    Reads turnover from context.metadata["factor_turnover"], or computes
+    from feature_df if multiple days of data are available.
+
+    Threshold: mean turnover ≤ max_turnover (default 0.50).
+    """
+
+    def __init__(self, max_turnover: float = 0.50) -> None:
+        self._max_turnover = max_turnover
+
+    @property
+    def rule_name(self) -> str:
+        return "turnover_limit"
+
+    def check(self, context: ValidationContext) -> RuleResult:
+        # Accept pre-computed from metadata
+        pre_turnover = context.metadata.get("factor_turnover")
+        if pre_turnover is not None:
+            turnover = float(pre_turnover)
+            passed = turnover <= self._max_turnover
+            score = max(0.0, 100.0 - turnover * 100.0)
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+                score=round(score, 2),
+                threshold=self._max_turnover,
+                actual_value=round(turnover, 4),
+                detail=(
+                    f"Factor turnover = {turnover:.3f} "
+                    f"({'≤' if passed else '>'} threshold {self._max_turnover})"
+                ),
+            )
+
+        feature_df = context.feature_df
+
+        if feature_df is None:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Missing feature_df or factor_turnover in context.",
+            )
+
+        # Compute day-over-day rank correlation turnover
+        import numpy as np
+
+        dates = feature_df["trade_date"].unique().sort().to_list()
+        if len(dates) < 2:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Need ≥ 2 trading days to compute turnover.",
+            )
+
+        turnovers: list[float] = []
+        for i in range(1, len(dates)):
+            prev = feature_df.filter(pl.col("trade_date") == dates[i - 1])
+            curr = feature_df.filter(pl.col("trade_date") == dates[i])
+
+            common_symbols = set(prev["symbol"].to_list()) & set(curr["symbol"].to_list())
+            if len(common_symbols) < 5:
+                continue
+
+            prev_scores = prev.filter(pl.col("symbol").is_in(common_symbols))["feature_value"]
+            curr_scores = curr.filter(pl.col("symbol").is_in(common_symbols))["feature_value"]
+
+            # Rank correlation
+            n = len(prev_scores)
+            rank_prev = prev_scores.rank()
+            rank_curr = curr_scores.rank()
+            d2 = float((rank_prev - rank_curr).pow(2).sum())
+            rho = 1.0 - (6.0 * d2) / (n * (n * n - 1))
+            turnovers.append(1.0 - rho)
+
+        if not turnovers:
+            return RuleResult(
+                rule_name=self.rule_name,
+                status=ValidationStatus.FAIL,
+                score=0.0,
+                detail="Could not compute turnover — insufficient common symbols.",
+            )
+
+        mean_turnover = float(np.mean(turnovers))
+        passed = mean_turnover <= self._max_turnover
+        score = max(0.0, 100.0 - mean_turnover * 100.0)
+
+        return RuleResult(
+            rule_name=self.rule_name,
+            status=ValidationStatus.PASS if passed else ValidationStatus.FAIL,
+            score=round(score, 2),
+            threshold=self._max_turnover,
+            actual_value=round(mean_turnover, 4),
+            detail=(
+                f"Mean turnover = {mean_turnover:.3f} over {len(turnovers)} days "
+                f"({'≤' if passed else '>'} threshold {self._max_turnover})"
             ),
         )

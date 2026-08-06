@@ -125,6 +125,23 @@ def compute_cross_sectional_scores(
     # Separate factor types
     all_factor_names = set(weights.keys())
 
+    # Composite factors (computed post-hoc from raw factors, not from OHLCV)
+    composite_factor_names = {
+        "LowVol_Composite", "Momentum_Composite", "Value_Composite",
+        "Quality_Composite", "Volume_Composite", "Reversal_Composite",
+    }
+
+    # When composites are in weights, expand to include their raw members
+    # MUST happen BEFORE valuation/fundamental extraction so those members
+    # are correctly classified
+    if composite_factor_names & all_factor_names:
+        from qp.strategy.factor_composite import COMPOSITE_DEFINITIONS
+
+        for comp_name, cfg in COMPOSITE_DEFINITIONS.items():
+            if comp_name in all_factor_names:
+                for member in cfg["members"]:
+                    all_factor_names.add(member)
+
     # Valuation factors (external data)
     valuation_factor_names = all_factor_names & {
         "PE_TTM",
@@ -151,8 +168,11 @@ def compute_cross_sectional_scores(
         "cashflow_per_share",
     }
 
-    # Price/volume factors (computed from OHLCV)
-    price_factor_names = all_factor_names - valuation_factor_names - fundamental_factor_names
+    # Price/volume factors (computed from OHLCV) — exclude composites
+    price_factor_names = (
+        all_factor_names - valuation_factor_names
+        - fundamental_factor_names - composite_factor_names
+    )
 
     # Collect raw factor values: {date_str: {symbol: {factor_name: value}}}
     all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
@@ -274,6 +294,26 @@ def compute_cross_sectional_scores(
                     if fval is not None and fval == fval:  # not NaN
                         all_raw[date_str][symbol][fname] = float(fval)
         # Re-sort dates after merge
+        all_dates = sorted(all_raw.keys())
+
+    # ── Auto-generate composite factors (DP-002 v3) ──
+    composite_names = {
+        "LowVol_Composite", "Momentum_Composite", "Value_Composite",
+        "Quality_Composite", "Volume_Composite", "Reversal_Composite",
+    }
+    if composite_names & set(weights.keys()):
+        from qp.strategy.factor_composite import FactorCompositeEngine
+
+        engine = FactorCompositeEngine()
+        composites = engine.compute_all(all_raw)
+        for comp_name, comp_df in composites.items():
+            if comp_name in weights:
+                for row in comp_df.to_dicts():
+                    d = row["trade_date"]
+                    sym = row["symbol"]
+                    score = row["score"]
+                    if d in all_raw and sym in all_raw[d]:
+                        all_raw[d][sym][comp_name] = float(score)
         all_dates = sorted(all_raw.keys())
 
     # ── Live mode: keep only last N days ──

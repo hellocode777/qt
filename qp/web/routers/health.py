@@ -17,6 +17,7 @@ from loguru import logger
 
 from qp.web.routers._templates import templates
 from qp.web.services.data_quality_service import DataQualityService
+from qp.web.services.factor_health_service import FactorHealthService
 from qp.web.services.health_service import HealthService
 
 router = APIRouter(tags=["health"])
@@ -37,12 +38,14 @@ async def health_overview(request: Request) -> Any:
     """System health overview page."""
     health_svc = _get_service(request, "health_service", HealthService)
     dq_svc = _get_service(request, "data_quality_service", DataQualityService)
+    factor_svc = _get_service(request, "factor_health_service", FactorHealthService)
 
     system_state = health_svc.system_state()
     latest_health = health_svc.latest_health()
     history = health_svc.health_history(limit=30)
     data_quality = dq_svc.today_summary()
     source_health = dq_svc.source_health()
+    factor_health = factor_svc.overview()
 
     logger.info("Health overview: state={}", system_state["state"])
 
@@ -56,6 +59,7 @@ async def health_overview(request: Request) -> Any:
             "has_history": len(history) > 0,
             "data_quality": data_quality,
             "source_health": source_health,
+            "factor_health": factor_health,
             "page_title": "System Health — QP Decision Center",
         },
     )

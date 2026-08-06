@@ -109,7 +109,7 @@ def get_regime_layer_weights(regime: str) -> dict[str, float]:
 
     total = sum(raw.values())
     if total <= 0:
-        return {k: 0.0 for k in raw}
+        return dict.fromkeys(raw, 0.0)
 
     return {k: v / total for k, v in raw.items()}
 

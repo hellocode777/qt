@@ -140,6 +140,7 @@ class MultiFactorPipeline(BasePipeline):
             "alpha_multi_factor_v1",
             "alpha_multi_factor_v2",
             "alpha_ensemble_v2",
+            "alpha_ensemble_v3",
         )
 
         result = PipelineResult(
@@ -871,6 +872,10 @@ class MultiFactorPipeline(BasePipeline):
                 import qp.strategy.strategies.ensemble_v2  # noqa: F401, F811 — registers config
 
                 return run_momentum_vol_full
+            if name == "alpha_ensemble_v3":
+                import qp.strategy.strategies.ensemble_v3  # noqa: F401, F811 — registers config
+
+                return run_momentum_vol_full
             return run_momentum_vol_full
 
         run_func = _get_runner(strategy_name)
@@ -1298,7 +1303,10 @@ class MultiFactorPipeline(BasePipeline):
         if all_dates:
             first_day_df = all_prices.filter(pl.col("trade_date") == all_dates[0])
             if not first_day_df.is_empty():
-                base_avg_close = float(cast("float", first_day_df["close"].mean()))
+                first_close = first_day_df["close"]
+                first_close_filtered = first_close.filter(first_close >= 1.0)
+                use_close = first_close_filtered if len(first_close_filtered) > 100 else first_close
+                base_avg_close = float(use_close.median())
         if base_avg_close <= 0:
             base_avg_close = 1.0
 
@@ -1310,15 +1318,13 @@ class MultiFactorPipeline(BasePipeline):
         min_equity = initial_capital
         min_date = str(all_dates[0]) if all_dates else ""
         rebalance_freq = 20  # match generate_rebalance_signals default
-        trading_day_idx = 0
 
         # Track cost basis per symbol (for stop loss calculation)
         cost_basis: dict[str, float] = {}
 
-        for d in all_dates:
+        for trading_day_idx, d in enumerate(all_dates):
             d_str = str(d)
             is_rebalance_day = trading_day_idx % rebalance_freq == 0
-            trading_day_idx += 1
 
             # Build price & ADV maps for this trading day
             day_prices = all_prices.filter(pl.col("trade_date") == d)
@@ -1459,7 +1465,6 @@ class MultiFactorPipeline(BasePipeline):
                 )
                 new_buys = target_set - after_sells
                 buy_symbols = [s for s in day_target if s in new_buys]
-                n_after = len(after_sells)
                 target_total = len(target_set)
                 logger.debug(
                     "   🔄 {} 调仓: {}持仓→{}卖出→{}买入→目标{}只 (现金¥{:,.0f})",
@@ -1510,15 +1515,27 @@ class MultiFactorPipeline(BasePipeline):
                     total_buy_value += trade_value
 
             eq_now = broker.get_equity()
+            # Cap extreme single-day jumps (broker valuation glitch)
+            if daily_equity and eq_now > daily_equity[-1] * 3:
+                eq_now = daily_equity[-1]
             daily_equity.append(eq_now)
 
             # ── Daily benchmark: equal-weight all-stocks ──
+            # Use median close (robust to penny-stock outliers)
             day_all = all_prices.filter(pl.col("trade_date") == d)
+            prev_bench = daily_benchmark[-1] if daily_benchmark else initial_capital
             if not day_all.is_empty():
-                day_avg = float(cast("float", day_all["close"].mean()))
-                daily_benchmark.append(initial_capital * (day_avg / base_avg_close))
+                day_close = day_all["close"].filter(day_all["close"] >= 1.0)
+                if len(day_close) < 100:
+                    day_close = day_all["close"]
+                day_median = float(day_close.median())
+                bench_now = initial_capital * (day_median / base_avg_close)
+                # Cap extreme single-day jumps (>3x = data glitch)
+                if bench_now > prev_bench * 3:
+                    bench_now = prev_bench
+                daily_benchmark.append(bench_now)
             else:
-                daily_benchmark.append(daily_benchmark[-1] if daily_benchmark else initial_capital)
+                daily_benchmark.append(prev_bench)
 
             if eq_now < min_equity:
                 min_equity = eq_now
@@ -2021,9 +2038,78 @@ def _compute_factor_ic_attribution(
                 }
             )
 
+    # ── Persist factor health data (DP-002: auto-collect during experiment) ──
+    _persist_factor_health(results, all_factors, price_flat)
+
     # Sort by absolute IC descending
     results.sort(key=lambda x: abs(x["ic_mean"]), reverse=True)
     return results
+
+
+def _persist_factor_health(
+    results: list[dict],
+    all_factors: dict[str, dict[str, dict[str, float]]],
+    price_flat: pl.DataFrame,
+) -> None:
+    """Persist per-factor health data to factor_health.parquet (DP-002).
+
+    Called after factor IC attribution during every experiment run.
+    Computes daily IC series per factor, classifies health stage,
+    and logs to the FactorHealthLogger.
+
+    Args:
+        results: List of {factor, ic_mean, ic_ir, ...} dicts.
+        all_factors: {date: {code: {factor_name: value}}} nested dict.
+        price_flat: Flat price DataFrame for forward return calculation.
+    """
+    if not results or not all_factors:
+        return
+
+    try:
+        from datetime import UTC, datetime
+
+        from qp.monitoring.factor_health import FactorHealthMonitor
+        from qp.monitoring.factor_health_logger import FactorHealthLogger
+        from qp.research.evaluation.rank_ic import evaluate_factor_ic
+
+        monitor = FactorHealthMonitor()
+        health_logger = FactorHealthLogger()
+        today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+        logged = 0
+
+        for entry in results:
+            fname = entry["factor"]
+            # Build per-factor score DataFrame from all_factors
+            rows = []
+            for date_str, stocks in all_factors.items():
+                for code, factors in stocks.items():
+                    if fname in factors:
+                        val = factors[fname]
+                        if val is not None and val == val:  # not NaN
+                            rows.append({
+                                "trade_date": date_str,
+                                "symbol": code,
+                                "score": float(val),
+                            })
+            if len(rows) < 100:
+                continue
+
+            fdf = pl.DataFrame(
+                rows,
+                schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "score": pl.Float64},
+            )
+            ic_full = evaluate_factor_ic(fdf, price_flat, forward_days=5, min_stocks_per_day=10)
+            if ic_full.n_days < 10:
+                continue
+
+            status = monitor.check_factor(fname, ic_full.daily_ics)
+            health_logger.log(status, date_str=today_str)
+            logged += 1
+
+        if logged:
+            logger.info("   ✅ 因子健康已写入: {} 个因子 → factor_health.parquet", logged)
+    except Exception as e:
+        logger.warning("   因子健康记录失败 (非致命): {}", e)
 
 
 def _log_factor_ic_table(

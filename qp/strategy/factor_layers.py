@@ -21,7 +21,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # ------------------------------------------------------------------
 # Factor Layer v2 Definition
 # ------------------------------------------------------------------
@@ -121,7 +120,7 @@ class FactorLayerConfig:
         if n == 0:
             return {}
         w = 1.0 / n
-        return {f: w for f in self.factors}
+        return dict.fromkeys(self.factors, w)
 
     def get_effective_weights(self) -> dict[str, float]:
         """Factor weights scaled by layer weight.
@@ -241,6 +240,48 @@ class FactorEnsemble:
 
         return {name: layer_cfg.weight for name, layer_cfg in self._layers.items()}
 
+    def get_active_weights_with_health(
+        self,
+        regime: str = "",
+        layer_overrides: dict[str, float] | None = None,
+        health_multipliers: dict[str, float] | None = None,
+    ) -> dict[str, float]:
+        """Get factor weights with health-based adjustments applied.
+
+        Each factor's effective weight is multiplied by its health multiplier
+        (1.0 = healthy, 0.5 = degraded, 0.0 = stale).
+
+        DP-002 §4.4, H10: Auto weight reduction on DEGRADED/STALE.
+
+        Args:
+            regime: Market regime label.
+            layer_overrides: Optional per-layer weight overrides.
+            health_multipliers: {factor_name: multiplier (0.0–1.0)}.
+                Factors not in the dict default to 1.0 (healthy).
+
+        Returns:
+            {factor_name: signed_effective_weight} with health adjustments.
+        """
+        base_weights = self.get_active_weights(regime=regime, layer_overrides=layer_overrides)
+
+        if not health_multipliers:
+            return base_weights
+
+        result: dict[str, float] = {}
+        for fname, w in base_weights.items():
+            multiplier = health_multipliers.get(fname, 1.0)
+            # STALE factors (multiplier=0.0) are dropped entirely
+            if multiplier <= 0:
+                continue
+            result[fname] = w * multiplier
+
+        # Re-normalize so |weights| sum to 1.0 (keeps score magnitude consistent)
+        total_abs = sum(abs(w) for w in result.values())
+        if total_abs > 0:
+            result = {f: w / total_abs for f, w in result.items()}
+
+        return result
+
     def get_weights_with_layers(
         self,
         regime: str = "",
@@ -257,6 +298,112 @@ class FactorEnsemble:
             {factor_name: signed_effective_weight}.
         """
         layer_weights = self.get_layer_weights(regime)
+        return self.get_active_weights(regime=regime, layer_overrides=layer_weights)
+
+    # ------------------------------------------------------------------
+    # Layer weight optimization from IC (DP-002 E7)
+    # ------------------------------------------------------------------
+
+    def optimize_layer_weights_from_ic(
+        self,
+        factor_ics: dict[str, float],
+        factor_icirs: dict[str, float] | None = None,
+        shrinkage: float = 0.30,
+    ) -> dict[str, float]:
+        """Optimize layer weights from per-factor IC/ICIR values.
+
+        Instead of using flat/equal layer weights, this computes optimal
+        layer weights proportional to the predictive power of factors
+        within each layer.
+
+        Uses IC_IR (signal consistency) as the quality metric for each
+        factor, then aggregates to layer level.
+
+        Args:
+            factor_ics: {factor_name: mean_IC}. Absolute value is used.
+            factor_icirs: {factor_name: IC_IR}. If None, computed from IC
+                assuming std=0.05 (conservative).
+            shrinkage: Blending weight toward prior (0 = pure IC-based,
+                1 = pure prior/base weights). Default 0.30.
+
+        Returns:
+            {layer_name: optimized_weight} where weights sum to 1.0.
+        """
+        if not factor_ics:
+            return self.get_layer_weights()
+
+        # Compute IC_IR for each factor (use IC magnitude as quality proxy)
+        factor_quality: dict[str, float] = {}
+        for fname, ic in factor_ics.items():
+            if factor_icirs and fname in factor_icirs:
+                factor_quality[fname] = abs(factor_icirs[fname])
+            else:
+                # Conservative: assume std(IC) ≈ 0.05
+                factor_quality[fname] = abs(ic)
+
+        # Aggregate quality per layer
+        layer_quality: dict[str, float] = {}
+        layer_counts: dict[str, int] = {}
+        for lname, layer in self._layers.items():
+            quality_sum = 0.0
+            count = 0
+            for fname in layer.factors:
+                if fname in factor_quality:
+                    quality_sum += factor_quality[fname]
+                    count += 1
+            layer_quality[lname] = quality_sum
+            layer_counts[lname] = count
+
+        # Normalize to get IC-based layer weights
+        total_quality = sum(layer_quality.values())
+        if total_quality <= 0:
+            return self.get_layer_weights()
+
+        ic_weights = {
+            lname: q / total_quality for lname, q in layer_quality.items()
+        }
+
+        # Shrinkage: blend with prior (base layer weights)
+        prior = self.get_layer_weights()
+        optimized: dict[str, float] = {}
+        for lname in self._layers:
+            prior_w = prior.get(lname, 0.0)
+            ic_w = ic_weights.get(lname, 0.0)
+            optimized[lname] = shrinkage * prior_w + (1 - shrinkage) * ic_w
+
+        # Re-normalize
+        total = sum(optimized.values())
+        if total > 0:
+            optimized = {k: v / total for k, v in optimized.items()}
+
+        return optimized
+
+    def get_optimized_weights(
+        self,
+        factor_ics: dict[str, float],
+        factor_icirs: dict[str, float] | None = None,
+        regime: str = "",
+        shrinkage: float = 0.30,
+    ) -> dict[str, float]:
+        """Get factor weights with IC-optimized layer weights.
+
+        Combines optimize_layer_weights_from_ic with get_active_weights
+        to produce the final flat factor weight dict.
+
+        Args:
+            factor_ics: {factor_name: mean_IC}.
+            factor_icirs: {factor_name: IC_IR}.
+            regime: Market regime label.
+            shrinkage: Prior shrinkage weight.
+
+        Returns:
+            {factor_name: signed_effective_weight}.
+        """
+        layer_weights = self.optimize_layer_weights_from_ic(
+            factor_ics=factor_ics,
+            factor_icirs=factor_icirs,
+            shrinkage=shrinkage,
+        )
         return self.get_active_weights(regime=regime, layer_overrides=layer_weights)
 
     # ------------------------------------------------------------------

@@ -23,6 +23,7 @@ from qp.monitoring.factor_health import (
     FactorHealthMonitor,
     FactorHealthStage,
     FactorHealthStatus,
+    FactorLifecycle,
 )
 from qp.monitoring.factor_health_logger import FactorHealthLogger
 from qp.platform.pipeline.result import PipelineResult
@@ -54,7 +55,7 @@ class FactorHealthReport:
     n_warning: int = 0
     n_degraded: int = 0
     n_stale: int = 0
-    overall_stage: FactorHealthStage = FactorHealthStage.HEALTHY
+    overall_stage: FactorHealthStage = FactorLifecycle.PRODUCTION
     summary: str = ""
     alerts: list[str] = field(default_factory=list)
 
@@ -63,7 +64,7 @@ class FactorHealthReport:
         """True if any factor is DEGRADED or STALE."""
         return self.overall_stage in (
             FactorHealthStage.DEGRADED,
-            FactorHealthStage.STALE,
+            FactorLifecycle.RETIRED,
         )
 
     @property
@@ -72,7 +73,7 @@ class FactorHealthReport:
         return [
             f.factor_name
             for f in self.factors
-            if f.stage in (FactorHealthStage.DEGRADED, FactorHealthStage.STALE)
+            if f.stage in (FactorHealthStage.DEGRADED, FactorLifecycle.RETIRED)
         ]
 
     def to_dict(self) -> dict[str, Any]:
@@ -282,22 +283,22 @@ class FactorHealthPipeline(BasePipeline):
     ) -> FactorHealthReport:
         """Aggregate per-factor statuses into a report."""
         counts: dict[FactorHealthStage, int] = {
-            FactorHealthStage.HEALTHY: 0,
-            FactorHealthStage.WARNING: 0,
+            FactorLifecycle.PRODUCTION: 0,
+            FactorLifecycle.VALIDATED: 0,
             FactorHealthStage.DEGRADED: 0,
-            FactorHealthStage.STALE: 0,
+            FactorLifecycle.RETIRED: 0,
         }
         for s in statuses:
             counts[s.stage] = counts.get(s.stage, 0) + 1
 
         # Overall stage = worst across all factors
         severity = {
-            FactorHealthStage.HEALTHY: 0,
-            FactorHealthStage.WARNING: 1,
+            FactorLifecycle.PRODUCTION: 0,
+            FactorLifecycle.VALIDATED: 1,
             FactorHealthStage.DEGRADED: 2,
-            FactorHealthStage.STALE: 3,
+            FactorLifecycle.RETIRED: 3,
         }
-        overall = FactorHealthStage.HEALTHY
+        overall = FactorLifecycle.PRODUCTION
         for s in statuses:
             if severity.get(s.stage, 0) > severity.get(overall, 0):
                 overall = s.stage
@@ -306,7 +307,7 @@ class FactorHealthPipeline(BasePipeline):
         alerts: list[str] = []
         degraded = [
             s for s in statuses
-            if s.stage in (FactorHealthStage.DEGRADED, FactorHealthStage.STALE)
+            if s.stage in (FactorHealthStage.DEGRADED, FactorLifecycle.RETIRED)
         ]
         if degraded:
             names = ", ".join(s.factor_name for s in degraded)
@@ -315,7 +316,7 @@ class FactorHealthPipeline(BasePipeline):
             )
 
         warning_only = [
-            s for s in statuses if s.stage == FactorHealthStage.WARNING
+            s for s in statuses if s.stage == FactorLifecycle.VALIDATED
         ]
         if warning_only:
             names = ", ".join(s.factor_name for s in warning_only)
@@ -325,10 +326,10 @@ class FactorHealthPipeline(BasePipeline):
 
         total = len(statuses)
         summary = (
-            f"Factor Health: {counts[FactorHealthStage.HEALTHY]}H / "
-            f"{counts[FactorHealthStage.WARNING]}W / "
+            f"Factor Health: {counts[FactorLifecycle.PRODUCTION]}H / "
+            f"{counts[FactorLifecycle.VALIDATED]}W / "
             f"{counts[FactorHealthStage.DEGRADED]}D / "
-            f"{counts[FactorHealthStage.STALE]}S "
+            f"{counts[FactorLifecycle.RETIRED]}S "
             f"(total {total})"
         )
 
@@ -336,10 +337,10 @@ class FactorHealthPipeline(BasePipeline):
             run_id="",
             timestamp=datetime.now(UTC).isoformat(),
             factors=statuses,
-            n_healthy=counts[FactorHealthStage.HEALTHY],
-            n_warning=counts[FactorHealthStage.WARNING],
+            n_healthy=counts[FactorLifecycle.PRODUCTION],
+            n_warning=counts[FactorLifecycle.VALIDATED],
             n_degraded=counts[FactorHealthStage.DEGRADED],
-            n_stale=counts[FactorHealthStage.STALE],
+            n_stale=counts[FactorLifecycle.RETIRED],
             overall_stage=overall,
             summary=summary,
             alerts=alerts,

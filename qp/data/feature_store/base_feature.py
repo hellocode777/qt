@@ -159,7 +159,81 @@ class BaseFeature:
             return False
         return len(self._buffer) >= self.window
 
-    # ── Metadata ──
+    # ── Metadata (DP-002 §6 Factor Standard) ──
+
+    @property
+    def version(self) -> str:
+        """Semantic version of the factor implementation."""
+        return "1.0.0"
+
+    @property
+    def category(self) -> str:
+        """Factor category: Momentum | Volatility | Volume | MoneyFlow |
+        Value | Quality | Growth | Risk | Sentiment | Custom."""
+        return "Custom"
+
+    @property
+    def lookback(self) -> int:
+        """Number of trading days this factor looks back (alias for window)."""
+        return self.window
+
+    @property
+    def direction(self) -> int:
+        """Expected direction: +1 (positive IC) or -1 (negative IC)."""
+        return +1
+
+    @property
+    def author(self) -> str:
+        """Person or team who authored this factor (alias for owner)."""
+        return self.owner
+
+    @property
+    def description(self) -> str:
+        """Human-readable description of what this factor measures."""
+        return ""
+
+    @property
+    def neutralize_methods(self) -> list[str]:
+        """Processing: neutralization methods to apply."""
+        return []
+
+    @property
+    def winsorize_method(self) -> str:
+        """Processing: outlier handling method (MAD | Percentile | None)."""
+        return "MAD"
+
+    @property
+    def normalize_method(self) -> str:
+        """Processing: normalization method (ZScore | Rank | MinMax | None)."""
+        return "ZScore"
+
+    def validate_input(self, df: pl.DataFrame) -> bool:
+        """Validate that input DataFrame has required columns.
+
+        Args:
+            df: Input DataFrame to validate.
+
+        Returns:
+            True if all required columns are present, False otherwise.
+        """
+        if not self.required_data:
+            return True
+        return all(col in df.columns for col in self.required_data)
+
+    def metadata_summary(self) -> dict[str, object]:
+        """Return all metadata as a dictionary (for registry/health/store)."""
+        return {
+            "name": self.feature_name,
+            "version": self.version,
+            "category": self.category,
+            "lookback": self.lookback,
+            "direction": self.direction,
+            "author": self.author,
+            "description": self.description,
+            "neutralize": self.neutralize_methods,
+            "winsorize": self.winsorize_method,
+            "normalize": self.normalize_method,
+        }
 
     def version_hash(self) -> str:
         """Return a hash of the feature definition for registry tracking."""

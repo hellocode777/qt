@@ -31,6 +31,42 @@ class ROELevel(BaseFeature):
     def required_data(self) -> list[str]:
         return ["fundamental"]
 
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def category(self) -> str:
+        return "Quality"
+
+    @property
+    def lookback(self) -> int:
+        return 1  # point-in-time ROE from latest report
+
+    @property
+    def direction(self) -> int:
+        return +1
+
+    @property
+    def author(self) -> str:
+        return "Wei"
+
+    @property
+    def description(self) -> str:
+        return "Return on Equity — raw profitability level, cross-sectionally normalized"
+
+    @property
+    def neutralize(self) -> list[str]:
+        return ["Industry"]
+
+    @property
+    def winsorize(self) -> str:
+        return "MAD"
+
+    @property
+    def normalize(self) -> str:
+        return "ZScore"
+
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         fund = data_map["fundamental"]
         required = ["trade_date", "symbol", "ROE"]
@@ -57,6 +93,42 @@ class ProfitStability(BaseFeature):
     @property
     def required_data(self) -> list[str]:
         return ["fundamental"]
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def category(self) -> str:
+        return "Quality"
+
+    @property
+    def lookback(self) -> int:
+        return 20  # rolling std window for stability
+
+    @property
+    def direction(self) -> int:
+        return +1
+
+    @property
+    def author(self) -> str:
+        return "Wei"
+
+    @property
+    def description(self) -> str:
+        return "Negative std(ROE) over 20 quarters — profitability consistency"
+
+    @property
+    def neutralize(self) -> list[str]:
+        return ["Industry"]
+
+    @property
+    def winsorize(self) -> str:
+        return "MAD"
+
+    @property
+    def normalize(self) -> str:
+        return "ZScore"
 
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         fund = data_map["fundamental"]
@@ -92,6 +164,42 @@ class EarningsQuality(BaseFeature):
     def required_data(self) -> list[str]:
         return ["fundamental"]
 
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def category(self) -> str:
+        return "Quality"
+
+    @property
+    def lookback(self) -> int:
+        return 1  # latest report data
+
+    @property
+    def direction(self) -> int:
+        return +1
+
+    @property
+    def author(self) -> str:
+        return "Wei"
+
+    @property
+    def description(self) -> str:
+        return "Cashflow per share / EPS — cash backing ratio for earnings quality"
+
+    @property
+    def neutralize(self) -> list[str]:
+        return ["Industry"]
+
+    @property
+    def winsorize(self) -> str:
+        return "MAD"
+
+    @property
+    def normalize(self) -> str:
+        return "ZScore"
+
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         fund = data_map["fundamental"]
         required_cols = {"trade_date", "symbol", "cashflow_per_share", "EPS"}
@@ -122,6 +230,42 @@ class MarginComposite(BaseFeature):
     @property
     def required_data(self) -> list[str]:
         return ["fundamental"]
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def category(self) -> str:
+        return "Quality"
+
+    @property
+    def lookback(self) -> int:
+        return 1  # latest report data
+
+    @property
+    def direction(self) -> int:
+        return +1
+
+    @property
+    def author(self) -> str:
+        return "Wei"
+
+    @property
+    def description(self) -> str:
+        return "(gross_margin + net_margin) / 2 — composite margin strength"
+
+    @property
+    def neutralize(self) -> list[str]:
+        return ["Industry"]
+
+    @property
+    def winsorize(self) -> str:
+        return "MAD"
+
+    @property
+    def normalize(self) -> str:
+        return "ZScore"
 
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         fund = data_map["fundamental"]
