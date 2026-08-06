@@ -42,6 +42,8 @@ data/positions/
 data/reports/
 data/experiments/*/
 data/dataset/registry.json
+data/dataset/*_metadata.json
+data/knowledge/
 data/monitoring/watchdog/
 *.log
 logs/
