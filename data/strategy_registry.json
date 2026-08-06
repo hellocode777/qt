@@ -13,11 +13,10 @@
         "description": "",
         "tags": [],
         "weights": {
-          "Amplitude_5D": -0.254368932038835,
-          "Volatility_20D": 0.23139158576051777,
-          "Momentum_3M": -0.21521035598705504,
-          "Volume_Concentration": -0.1883495145631068,
-          "Volume_Trend_10D": -0.11067961165048544
+          "Volatility_20D": 0.2551,
+          "Amplitude_5D": -0.2717,
+          "Momentum_3M": -0.2339,
+          "Volume_Concentration": -0.2394
         },
         "parameters": {
           "top_n": 10,
@@ -34,15 +33,14 @@
       "active": true,
       "approved": {
         "strategy_id": "momentum_vol_full",
-        "version": "v20260805",
+        "version": "v20260807",
         "approved_at": "2026-08-05T22:29:39.150898+00:00",
         "approved_by": "Wei",
         "weights": {
-          "Amplitude_5D": -0.254368932038835,
-          "Volatility_20D": 0.23139158576051777,
-          "Momentum_3M": -0.21521035598705504,
-          "Volume_Concentration": -0.1883495145631068,
-          "Volume_Trend_10D": -0.11067961165048544
+          "Volatility_20D": 0.2551,
+          "Amplitude_5D": -0.2717,
+          "Momentum_3M": -0.2339,
+          "Volume_Concentration": -0.2394
         },
         "parameters": {
           "top_n": 10,

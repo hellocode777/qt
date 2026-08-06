@@ -255,7 +255,10 @@ class MultiFactorPipeline(BasePipeline):
             # ── Legacy: bare factor pipeline ──
             fundamental_data = None
             valuation_data = None
-            index_df = None
+            try:
+                index_df = self._load_index_data()
+            except Exception:
+                index_df = None
             logger.info("[2/6] 计算原始因子值...")
             n_factors = len(PRICE_VOLUME_FACTORS)
             weights = {f: ALL_FACTOR_DIRECTIONS.get(f, 1) / n_factors for f in PRICE_VOLUME_FACTORS}
@@ -272,7 +275,7 @@ class MultiFactorPipeline(BasePipeline):
             # Compute raw factors for all stocks
             all_raw: dict[str, dict[str, dict[str, float]]] = {}
             for code, df in price_data.items():
-                factors = compute_all_factors(df.sort("trade_date"))
+                factors = compute_all_factors(df.sort("trade_date"), index_df=index_df)
                 if factors.is_empty():
                     continue
                 for row in factors.iter_rows(named=True):
@@ -2090,11 +2093,12 @@ def _persist_factor_health(
     all_factors: dict[str, dict[str, dict[str, float]]],
     price_flat: pl.DataFrame,
 ) -> None:
-    """Persist per-factor health data to factor_health.parquet (DP-002).
+    """Persist per-factor health data to factor_health.parquet (DP-002 v4).
 
     Called after factor IC attribution during every experiment run.
     Computes daily IC series per factor, classifies health stage,
-    and logs to the FactorHealthLogger.
+    saves daily IC series for correlation analysis, computes
+    multi-horizon decay curves, and logs to FactorHealthLogger.
 
     Args:
         results: List of {factor, ic_mean, ic_ir, ...} dicts.
@@ -2105,11 +2109,16 @@ def _persist_factor_health(
         return
 
     try:
+        import contextlib
         from datetime import UTC, datetime
 
         from qp.monitoring.factor_health import FactorHealthMonitor
         from qp.monitoring.factor_health_logger import FactorHealthLogger
-        from qp.research.evaluation.rank_ic import evaluate_factor_ic
+        from qp.research.evaluation.rank_ic import (
+            compute_daily_ic_series,
+            compute_ic_decay,
+            evaluate_factor_ic,
+        )
 
         monitor = FactorHealthMonitor()
         health_logger = FactorHealthLogger()
@@ -2118,6 +2127,13 @@ def _persist_factor_health(
 
         for entry in results:
             fname = entry["factor"]
+
+            # ── Guard: don't overwrite full-history data with experiment subset ──
+            existing = health_logger.load_latest(fname)
+            if existing and existing.get("n_days", 0) > entry.get("n_days", 0) * 1.5:
+                # Existing data covers substantially more days — skip experiment write
+                continue
+
             # Build per-factor score DataFrame from all_factors
             rows = []
             for date_str, stocks in all_factors.items():
@@ -2143,9 +2159,39 @@ def _persist_factor_health(
             if ic_full.n_days < 10:
                 continue
 
+            # ── Daily IC series persistence (for correlation analysis) ──
+            with contextlib.suppress(Exception):
+                daily_records = compute_daily_ic_series(fdf, price_flat, forward_days=5, min_stocks_per_day=10)
+                health_logger.save_daily_ic_series(fname, daily_records)
+
+            # ── Multi-horizon IC decay (1d/3d/5d/10d/20d) ──
+            multi_horizon: dict[int, float] = {}
+            with contextlib.suppress(Exception):
+                decay_results = compute_ic_decay(fdf, price_flat, min_stocks_per_day=10)
+                for h, rec in decay_results.items():
+                    multi_horizon[h] = rec.ic_mean
+
             status = monitor.check_factor(fname, ic_full.daily_ics)
-            health_logger.log(status, date_str=today_str)
+            health_logger.log(status, date_str=today_str, multi_horizon_ic=multi_horizon)
             logged += 1
+
+        # ── Factor Store integration: save raw factor data (DP-002 §4.3) ──
+        if logged:
+            with contextlib.suppress(Exception):
+                from qp.data.factor_store.store import FactorStore
+
+                # Convert all_factors {date: {symbol: {factor: value}}} to DataFrame
+                store_rows: list[dict[str, Any]] = []
+                for d, stocks in all_factors.items():
+                    for sym, factors in stocks.items():
+                        row: dict[str, Any] = {"trade_date": d, "symbol": sym}
+                        row.update(factors)
+                        store_rows.append(row)
+                if store_rows:
+                    store_df = pl.DataFrame(store_rows)
+                    store = FactorStore()
+                    store.save_raw(f"experiment_{today_str}", store_df)
+                    logger.info("   ✅ 因子数据已写入 FactorStore (raw tier)")
 
         if logged:
             logger.info("   ✅ 因子健康已写入: {} 个因子 → factor_health.parquet", logged)

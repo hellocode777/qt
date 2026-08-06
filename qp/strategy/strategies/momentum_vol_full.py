@@ -37,11 +37,10 @@ from qp.strategy.multifactor import run_multifactor_strategy
 # ------------------------------------------------------------------
 
 LOW_VOL_REVERSAL_WEIGHTS: dict[str, float] = {
-    "Amplitude_5D": -0.25,
-    "Volatility_20D": +0.22,
-    "Momentum_3M": -0.20,
-    "Volume_Concentration": -0.19,
-    "Volume_Trend_10D": -0.14,
+    "Volatility_20D": +0.26,
+    "Amplitude_5D": -0.27,
+    "Volume_Concentration": -0.24,
+    "Momentum_3M": -0.23,
 }
 
 # ── 消融实验: 拆因子定位 Q5 塌陷来源 ──
@@ -158,6 +157,14 @@ MOMENTUM_VOL_FULL_WEIGHTS: dict[str, float] = {
     "Volume_Trend_10D": -0.14,  # IC=-0.041, IR=0.46
     # 已移除（|IC|<0.02 或 IC_IR<0.3，噪音源）:
     #   PE_TTM, PB, Price_Volume_Corr, Implied_Net_Flow, Volume_Price_Trend
+}
+
+LOW_VOL_REVERSAL_WEIGHTS: dict[str, float] = {
+    "Amplitude_5D": -0.25,
+    "Volatility_20D": +0.22,
+    "Momentum_3M": -0.20,
+    "Volume_Concentration": -0.19,
+    "Volume_Trend_10D": -0.14,
 }
 
 # ------------------------------------------------------------------

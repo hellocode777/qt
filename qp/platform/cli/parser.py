@@ -624,6 +624,68 @@ def retrain() -> None:
 
 
 # ==================================================================
+# Factor (Factor Research & Health CLI)
+# ==================================================================
+
+
+@cli.group()
+def factor() -> None:
+    """Factor research & health (list, health, report, validate, catalog)."""
+
+
+@factor.command("list")
+def factor_list() -> None:
+    """List all tracked factors with lifecycle status."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_list
+
+    raise SystemExit(cmd_factor_list())
+
+
+@factor.command("health")
+@click.argument("factor_name", required=False, default="")
+def factor_health(factor_name: str) -> None:
+    """Show factor health: overview (no args) or detail for a specific factor."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_health
+
+    raise SystemExit(cmd_factor_health(factor_name))
+
+
+@factor.command("report")
+@click.argument("factor_name", required=False, default="")
+def factor_report(factor_name: str) -> None:
+    """Generate factor research report (markdown)."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_report
+
+    raise SystemExit(cmd_factor_report(factor_name))
+
+
+@factor.command("validate")
+@click.argument("factor_name", required=False, default="")
+@click.option("--persist", is_flag=True, default=False, help="Save results to factor_health.parquet")
+def factor_validate(factor_name: str, persist: bool) -> None:
+    """Run validation gate on a single factor against FULL price history."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_validate
+
+    raise SystemExit(cmd_factor_validate(factor_name, persist=persist))
+
+
+@factor.command("update-health")
+def factor_update_health() -> None:
+    """Recompute full-history health for ALL factors → factor_health.parquet."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_update_health
+
+    raise SystemExit(cmd_factor_update_health())
+
+
+@factor.command("catalog")
+def factor_catalog() -> None:
+    """Show factor catalog grouped by category."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_catalog
+
+    raise SystemExit(cmd_factor_catalog())
+
+
+# ==================================================================
 # Scheduler
 # ==================================================================
 

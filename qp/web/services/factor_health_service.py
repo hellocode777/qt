@@ -92,6 +92,19 @@ class FactorHealthService:
                     "direction_flipped": record.get("direction_flipped", False),
                     "consecutive_degraded_days": record.get("consecutive_degraded_days", 0),
                     "recommended_action": record.get("recommended_action", ""),
+                    # Multi-horizon IC decay (DP-002 §4.4)
+                    "ic_1d": record.get("ic_1d", 0.0),
+                    "ic_3d": record.get("ic_3d", 0.0),
+                    "ic_5d": record.get("ic_5d", 0.0),
+                    "ic_10d": record.get("ic_10d", 0.0),
+                    "ic_20d": record.get("ic_20d", 0.0),
+                    # PSI drift (DP-002 H7)
+                    "psi_30d": record.get("psi_30d", 0.0),
+                    "psi_90d": record.get("psi_90d", 0.0),
+                    "psi_alert": record.get("psi_30d", 0.0) > 0.25,
+                    # Crowding/Turnover
+                    "crowding_hhi": record.get("crowding_hhi", 0.0),
+                    "turnover_30d": record.get("turnover_30d", 0.0),
                 }
             )
 
@@ -511,6 +524,58 @@ class FactorHealthService:
                         "severity": "danger",
                         "message": f"📉 {name} IC 衰减加速 ({decay:+.5f}/天)。Alpha 可能在消失。",
                         "action": "紧急复核",
+                    }
+                )
+
+            # PSI drift alert (DP-002 H7)
+            psi_30d = f.get("psi_30d", 0.0)
+            if psi_30d > 0.25:
+                recs.append(
+                    {
+                        "factor": name,
+                        "type": "psi_alert",
+                        "severity": "danger",
+                        "message": (
+                            f"🚨 {name} PSI={psi_30d:.2f} > 0.25 — "
+                            f"因子分布发生显著漂移，可能已失效。"
+                        ),
+                        "action": "停用并复查因子定义",
+                    }
+                )
+            elif psi_30d > 0.10:
+                recs.append(
+                    {
+                        "factor": name,
+                        "type": "psi_warning",
+                        "severity": "warning",
+                        "message": (
+                            f"⚠️ {name} PSI={psi_30d:.2f} > 0.10 — "
+                            f"因子分布有中度偏移，建议关注。"
+                        ),
+                        "action": "密切监控",
+                    }
+                )
+
+            # Multi-horizon decay anomaly: IC reverses at long horizon
+            ic_1d = f.get("ic_1d", 0.0)
+            ic_20d = f.get("ic_20d", 0.0)
+            if (
+                stage in ("production", "validated")
+                and abs(ic_1d) > 0.01
+                and abs(ic_20d) > 0.01
+                and ic_1d * ic_20d < 0  # Sign reversal
+            ):
+                recs.append(
+                    {
+                        "factor": name,
+                        "type": "horizon_reversal",
+                        "severity": "warning",
+                        "message": (
+                            f"🔄 {name} IC 方向在长周期反转 "
+                            f"(1d={ic_1d:+.4f}, 20d={ic_20d:+.4f})。"
+                            f"因子在不同 horizon 的预测方向不一致。"
+                        ),
+                        "action": "复查因子逻辑",
                     }
                 )
 

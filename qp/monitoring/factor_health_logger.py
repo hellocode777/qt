@@ -6,11 +6,17 @@ Follows the pattern of SystemHealthLogger (health_logger.py):
   - Polars DataFrame for read/write
   - Supports historical querying for trend analysis and dashboard display.
 
+DP-002 §4.4 + §4.7: Daily IC series and multi-horizon IC decay are persisted
+alongside aggregated health stats for correlation analysis and decay-curve
+visualization.
+
 Usage:
     logger = FactorHealthLogger()
     logger.log(status, date_str="2026-08-05")
+    logger.save_daily_ic_series(factor_name, daily_ics, dates)
     history = logger.load_history("Momentum_3M", days=90)
     latest = logger.load_all_latest()
+    ic_df = logger.load_ic_series("Momentum_3M")
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from qp.monitoring.factor_health import FactorHealthStatus
 
 DEFAULT_FACTOR_HEALTH_DIR = "data/monitoring"
 FACTOR_HEALTH_FILE = "factor_health.parquet"
+FACTOR_IC_SERIES_FILE = "factor_ic_series.parquet"
 
 _FACTOR_HEALTH_SCHEMA: dict[str, type] = {
     "date": str,
@@ -41,6 +48,19 @@ _FACTOR_HEALTH_SCHEMA: dict[str, type] = {
     "n_days": int,
     "recommended_action": str,
     "summary": str,
+    # Multi-horizon IC decay (DP-002 §4.4)
+    "ic_1d": float,
+    "ic_3d": float,
+    "ic_5d": float,
+    "ic_10d": float,
+    "ic_20d": float,
+}
+
+_IC_SERIES_SCHEMA: dict[str, type] = {
+    "date": str,
+    "factor_name": str,
+    "ic": float,
+    "n_stocks": int,
 }
 
 
@@ -65,13 +85,20 @@ class FactorHealthLogger:
     # Write API
     # ------------------------------------------------------------------
 
-    def log(self, status: FactorHealthStatus, date_str: str = "") -> None:
+    def log(
+        self,
+        status: FactorHealthStatus,
+        date_str: str = "",
+        multi_horizon_ic: dict[int, float] | None = None,
+    ) -> None:
         """Record a single factor health snapshot.
 
         Args:
             status: FactorHealthStatus from FactorHealthMonitor.check_factor().
             date_str: Trading date (YYYY-MM-DD). Uses status data if empty.
+            multi_horizon_ic: {horizon_days: ic_mean} for decay-curve tracking.
         """
+        mh = multi_horizon_ic or {}
         record = {
             "date": date_str or "",
             "factor_name": status.factor_name,
@@ -88,6 +115,12 @@ class FactorHealthLogger:
             "n_days": status.n_days,
             "recommended_action": status.recommended_action,
             "summary": status.summary,
+            # Multi-horizon IC decay (DP-002 §4.4)
+            "ic_1d": mh.get(1, 0.0),
+            "ic_3d": mh.get(3, 0.0),
+            "ic_5d": mh.get(5, 0.0),
+            "ic_10d": mh.get(10, 0.0),
+            "ic_20d": mh.get(20, 0.0),
         }
         self._append(record)
 
@@ -96,14 +129,121 @@ class FactorHealthLogger:
         statuses: list[FactorHealthStatus],
         date_str: str = "",
     ) -> None:
-        """Record multiple factor health snapshots for the same date.
-
-        Args:
-            statuses: List of FactorHealthStatus objects.
-            date_str: Trading date.
-        """
+        """Record multiple factor health snapshots for the same date."""
         for s in statuses:
             self.log(s, date_str=date_str)
+
+    # ------------------------------------------------------------------
+    # Daily IC Series persistence (DP-002 §4.7 — correlation & decay)
+    # ------------------------------------------------------------------
+
+    @property
+    def _ic_series_path(self) -> Path:
+        return self._base / FACTOR_IC_SERIES_FILE
+
+    def save_daily_ic_series(
+        self,
+        factor_name: str,
+        daily_records: list[dict[str, Any]],
+    ) -> None:
+        """Save daily IC values for a factor (appends, dedup by date).
+
+        Args:
+            factor_name: Factor identifier.
+            daily_records: List of {date, ic, n_stocks} dicts from
+                compute_daily_ic_series().
+        """
+        if not daily_records:
+            return
+        self._base.mkdir(parents=True, exist_ok=True)
+
+        rows = [
+            {
+                "date": r["date"],
+                "factor_name": factor_name,
+                "ic": r["ic"],
+                "n_stocks": r.get("n_stocks", 0),
+            }
+            for r in daily_records
+        ]
+        new_df = pl.DataFrame(rows, schema=_IC_SERIES_SCHEMA)
+
+        existing_path = self._ic_series_path
+        if existing_path.exists():
+            existing = pl.read_parquet(existing_path)
+            # Dedup: remove existing rows for same (factor_name, date)
+            existing_dates = set(
+                existing.filter(pl.col("factor_name") == factor_name)["date"].to_list()
+            )
+            existing = existing.filter(
+                ~(
+                    (pl.col("factor_name") == factor_name)
+                    & pl.col("date").is_in(list(existing_dates))
+                )
+            )
+            combined = pl.concat([existing, new_df], how="vertical")
+            combined.write_parquet(existing_path)
+        else:
+            new_df.write_parquet(existing_path)
+
+    def load_ic_series(
+        self,
+        factor_name: str,
+        min_date: str = "",
+    ) -> pl.DataFrame:
+        """Load daily IC series for a factor.
+
+        Args:
+            factor_name: Factor identifier.
+            min_date: Optional minimum date filter (YYYY-MM-DD).
+
+        Returns:
+            Polars DataFrame [date, ic], sorted by date ascending.
+        """
+        path = self._ic_series_path
+        if not path.exists():
+            return pl.DataFrame(schema=_IC_SERIES_SCHEMA)
+
+        df = pl.read_parquet(path)
+        if df.is_empty():
+            return df
+
+        df = df.filter(pl.col("factor_name") == factor_name)
+        if min_date:
+            df = df.filter(pl.col("date") >= min_date)
+        return df.sort("date")
+
+    def load_all_ic_series(
+        self,
+        min_date: str = "",
+    ) -> dict[str, pl.DataFrame]:
+        """Load daily IC series for all factors.
+
+        Args:
+            min_date: Optional minimum date filter.
+
+        Returns:
+            {factor_name: DataFrame[date, ic]} mapping.
+        """
+        path = self._ic_series_path
+        if not path.exists():
+            return {}
+
+        df = pl.read_parquet(path)
+        if df.is_empty():
+            return {}
+
+        if min_date:
+            df = df.filter(pl.col("date") >= min_date)
+
+        result: dict[str, pl.DataFrame] = {}
+        for name in df["factor_name"].unique().to_list():
+            result[name] = df.filter(pl.col("factor_name") == name).sort("date")
+        return result
+
+    def has_ic_series(self) -> bool:
+        """Check if daily IC series data exists."""
+        return self._ic_series_path.exists()
 
     # ------------------------------------------------------------------
     # Read API
@@ -285,6 +425,9 @@ class FactorHealthLogger:
 
         Deduplicates by (factor_name, date): replaces any existing row
         with the same factor_name + date combination.
+
+        Automatically handles schema evolution: missing columns in
+        existing data are filled with null before concatenation.
         """
         self._base.mkdir(parents=True, exist_ok=True)
         new_row = pl.DataFrame([record], schema=_FACTOR_HEALTH_SCHEMA)
@@ -298,6 +441,14 @@ class FactorHealthLogger:
                     & (pl.col("date") == record["date"])
                 )
             )
+            # Schema evolution: add missing columns to existing with null
+            for col in new_row.columns:
+                if col not in existing.columns:
+                    existing = existing.with_columns(pl.lit(None).cast(pl.Float64).alias(col))
+            # Add any columns in existing not in new_row
+            for col in existing.columns:
+                if col not in new_row.columns:
+                    new_row = new_row.with_columns(pl.lit(None).cast(pl.Float64).alias(col))
             combined = pl.concat([existing, new_row], how="vertical")
             combined.write_parquet(self._filepath)
         else:
