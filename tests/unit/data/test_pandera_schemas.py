@@ -1,7 +1,6 @@
 # pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false, reportIncompatibleMethodOverride=false
 """Tests for qp.data.validation.pandera_schemas and pandera_validator."""
 
-
 from __future__ import annotations
 
 import pandera as pa

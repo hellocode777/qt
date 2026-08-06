@@ -1,7 +1,6 @@
 # pyright: reportOperatorIssue=false, reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportOptionalOperand=false, reportArgumentType=false, reportReturnType=false
 """Tests for NAVLedger — daily NAV tracking with Parquet persistence."""
 
-
 from __future__ import annotations
 
 from pathlib import Path
