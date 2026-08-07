@@ -13,7 +13,7 @@ Usage:
 
     cvar = CVaRBudget(confidence=0.95)
     result = cvar.compute_cvar(returns, symbols, weights)
-    limits = cvar.position_limits(returns, symbols, total_capital=1_000_000)
+    limits = cvar.position_limits(returns, symbols, total_capital=100_000)
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ class CVaRBudget:
         returns: pl.DataFrame,
         symbols: list[str],
         weights: dict[str, float] | None = None,
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
     ) -> dict[str, Any]:
         """Compute per-stock and portfolio CVaR.
 
@@ -174,7 +174,7 @@ class CVaRBudget:
         self,
         returns: pl.DataFrame,
         symbols: list[str],
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
     ) -> dict[str, float]:
         """Compute position size limits from CVaR budget.
 

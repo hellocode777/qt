@@ -87,7 +87,7 @@ class DemoAdapter(BaseDataSource):
                 open_price = price * (1 + rng.uniform(-0.01, 0.01))
                 high = max(open_price, price) * (1 + abs(rng.normal(0, 0.005)))
                 low = min(open_price, price) * (1 - abs(rng.normal(0, 0.005)))
-                volume = int(rng.integers(1_000_000, 50_000_000))
+                volume = int(rng.integers(100_000, 50_000_000))
 
                 rows.append(
                     {

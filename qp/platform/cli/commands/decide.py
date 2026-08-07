@@ -40,7 +40,7 @@ def cmd_decide() -> int:
     show_history = False
     show_id = ""
     strategy_id = "simple_rank_v1.0"
-    total_capital = 1_000_000.0
+    total_capital = 100_000.0
 
     args = sys.argv[2:]
     i = 0

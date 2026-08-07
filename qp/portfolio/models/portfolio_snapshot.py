@@ -9,7 +9,7 @@ exposures, and metadata for audit trails and reporting.
 Usage:
     snapshot = PortfolioSnapshot(
         date="2026-08-01",
-        total_capital=1_000_000,
+        total_capital=100_000,
         holdings={"600519.SH": 0.08, ...},
     )
     print(snapshot.summary())

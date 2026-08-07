@@ -23,7 +23,7 @@ class EqualWeightAllocator(BaseCapitalAllocator):
 
     Usage:
         alloc = EqualWeightAllocator(cash_buffer=0.05)
-        df = alloc.allocate(candidates, risk_report, total_capital=1_000_000)
+        df = alloc.allocate(candidates, risk_report, total_capital=100_000)
     """
 
     def __init__(self, cash_buffer: float = DEFAULT_CASH_BUFFER) -> None:

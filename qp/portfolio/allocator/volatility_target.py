@@ -42,7 +42,7 @@ class VolatilityTargetAllocator(BaseCapitalAllocator):
 
     Usage:
         alloc = VolatilityTargetAllocator(target_vol=0.12)
-        df = alloc.allocate(candidates, risk_report, total_capital=1_000_000)
+        df = alloc.allocate(candidates, risk_report, total_capital=100_000)
     """
 
     def __init__(

@@ -27,7 +27,7 @@ class PositionSizer:
     Usage:
         allocator = AllocationFactory.create("risk_parity")
         sizer = PositionSizer(allocator)
-        positions = sizer.size(candidates_df, risk_report, total_capital=1_000_000)
+        positions = sizer.size(candidates_df, risk_report, total_capital=100_000)
     """
 
     def __init__(self, allocator: BaseCapitalAllocator) -> None:
@@ -46,7 +46,7 @@ class PositionSizer:
         self,
         candidates: pd.DataFrame,
         risk_report: dict[str, Any] | None = None,
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
     ) -> pd.DataFrame:
         """Compute target weights for each candidate.
 
@@ -104,7 +104,7 @@ class PositionSizer:
         self,
         candidates: pd.DataFrame,
         risk_report: dict[str, Any] | None = None,
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
         group_by: str = "risk_cluster",
     ) -> pd.DataFrame:
         """Size positions per-group (e.g. per risk cluster).

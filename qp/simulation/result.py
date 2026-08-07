@@ -36,10 +36,10 @@ class SimulationResult:
     total_cost: float = 0.0
 
     # Portfolio
-    initial_capital: float = 1_000_000
-    final_equity: float = 1_000_000
-    max_equity: float = 1_000_000
-    min_equity: float = 1_000_000
+    initial_capital: float = 100_000
+    final_equity: float = 100_000
+    max_equity: float = 100_000
+    min_equity: float = 100_000
 
     # Benchmark comparison
     benchmark_return_pct: float = 0.0

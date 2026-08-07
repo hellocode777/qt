@@ -1256,7 +1256,7 @@ class MultiFactorPipeline(BasePipeline):
     def _compute_backtest(
         signals: pl.DataFrame,
         price_data: dict[str, pl.DataFrame],
-        initial_capital: float = 1_000_000,
+        initial_capital: float = 100_000,
         scores: pl.DataFrame | None = None,
         top_n: int = 10,
     ) -> dict[str, Any]:

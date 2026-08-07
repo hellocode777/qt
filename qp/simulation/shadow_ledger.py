@@ -94,7 +94,7 @@ class ShadowLedger:
         result = ledger.run_daily("2026-07-30")
     """
 
-    def __init__(self, initial_capital: float = 1_000_000.0) -> None:
+    def __init__(self, initial_capital: float = 100_000.0) -> None:
         SIM_DIR.mkdir(parents=True, exist_ok=True)
         self._capital = initial_capital
 

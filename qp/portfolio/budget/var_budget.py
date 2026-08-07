@@ -12,7 +12,7 @@ Usage:
     from qp.portfolio.budget import VaRBudget
 
     var = VaRBudget(method="historical", confidence=0.95)
-    result = var.allocate(returns_data, symbols, total_capital=1_000_000)
+    result = var.allocate(returns_data, symbols, total_capital=100_000)
     # → per-symbol VaR limits in CNY
 """
 
@@ -53,7 +53,7 @@ class VaRBudget:
         returns: pl.DataFrame,
         symbols: list[str],
         weights: dict[str, float] | None = None,
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
     ) -> dict[str, Any]:
         """Compute per-stock and portfolio VaR.
 
@@ -149,7 +149,7 @@ class VaRBudget:
         self,
         returns: pl.DataFrame,
         symbols: list[str],
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
     ) -> dict[str, float]:
         """Compute position size limits to satisfy VaR budget.
 

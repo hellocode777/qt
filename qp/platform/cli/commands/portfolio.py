@@ -72,7 +72,7 @@ def cmd_portfolio_report() -> int:
     signals_list = [s.generate_signals(today) for s in strategies]
     combined = aggregator.aggregate(signals_list)
 
-    total_capital = 1_000_000
+    total_capital = 100_000
     symbols = combined["symbol"].to_list()[:10] if not combined.is_empty() else []
 
     if not symbols:

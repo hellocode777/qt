@@ -33,7 +33,7 @@ def cmd_paper_start() -> int:
         return 1
 
     tracker = PaperTradingTracker()
-    run = tracker.start(strategy_id, capital=1_000_000)
+    run = tracker.start(strategy_id, capital=100_000)
     print(f"  运行编号 / Run ID: {run.run_id}")
     print(f"  状态文件 / State:   {run.state_file}")
     print()

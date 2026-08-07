@@ -67,7 +67,7 @@ class CapitalAllocator:
     Usage:
         config = CapitalAllocatorConfig(method="risk_parity", cash_buffer=0.05)
         allocator = CapitalAllocator(config)
-        result = allocator.run(candidates_df, risk_report, total_capital=1_000_000)
+        result = allocator.run(candidates_df, risk_report, total_capital=100_000)
         print(result.summary())
 
     With dynamic cash management:
@@ -94,7 +94,7 @@ class CapitalAllocator:
         self,
         candidates: pd.DataFrame,
         risk_report: dict[str, Any] | None = None,
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
         date: str = "",
         market_vol: float = 0.20,
         vol_percentile: float = 0.50,
@@ -235,7 +235,7 @@ class CapitalAllocator:
         cls,
         candidates: pd.DataFrame,
         method: str = "equal_weight",
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
         cash_buffer: float = 0.05,
     ) -> AllocationResult:
         """Quick one-liner: allocate with sensible defaults.

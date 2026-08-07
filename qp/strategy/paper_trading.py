@@ -12,7 +12,7 @@ Evaluation criteria (from plan_v1.md M3.3):
 
 Usage:
     tracker = PaperTradingTracker()
-    run = tracker.start("simple_rank_v1.0", capital=1_000_000)
+    run = tracker.start("simple_rank_v1.0", capital=100_000)
     for date, prices in trading_days:
         status = tracker.run_day(run, date, prices)
     result = tracker.evaluate(run)
@@ -74,7 +74,7 @@ class PaperTradingRun:
 
     run_id: str = ""
     strategy_id: str = ""
-    capital: float = 1_000_000
+    capital: float = 100_000
     start_date: str = ""
     daily_records: list[DailyRecord] = field(default_factory=list)
     result: PaperTradingResult | None = None
@@ -106,7 +106,7 @@ class PaperTradingTracker:
 
     Usage:
         tracker = PaperTradingTracker(data_dir="data/paper_trading")
-        run = tracker.start("simple_rank_v1.0", capital=1_000_000)
+        run = tracker.start("simple_rank_v1.0", capital=100_000)
 
         # Each trading day:
         prices = load_prices(date)
@@ -129,7 +129,7 @@ class PaperTradingTracker:
     def start(
         self,
         strategy_id: str,
-        capital: float = 1_000_000,
+        capital: float = 100_000,
         start_date: str | None = None,
     ) -> PaperTradingRun:
         """Begin a new 30-day paper trading run.

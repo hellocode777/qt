@@ -70,7 +70,7 @@ def get_price(code: str, date_str: str, price_data: dict) -> float | None:
 def compute_simple_backtest(
     signals: pl.DataFrame,
     price_data: dict[str, pl.DataFrame],
-    initial_capital: float = 1_000_000,
+    initial_capital: float = 100_000,
 ) -> dict:
     """Simple vector backtest from daily signals.
 
@@ -306,7 +306,7 @@ def main() -> None:
 
     # ── 6. Simple backtest ──
     print("💰 简单回测 (等权, 信号日调仓)...")
-    bt = compute_simple_backtest(signals, price_data, initial_capital=1_000_000)
+    bt = compute_simple_backtest(signals, price_data, initial_capital=100_000)
     print(f"   总收益:    {bt['total_return_pct']:+.2f}%")
     print(f"   年化夏普:  {bt['sharpe']:.2f}")
     print(f"   最大回撤:  {bt['max_dd_pct']:.2f}%")

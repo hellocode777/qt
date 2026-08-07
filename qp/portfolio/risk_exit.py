@@ -105,7 +105,7 @@ class RiskExitConfig:
     force_sell_delist: bool = True  # 退市强制卖出
     force_sell_blacklist: bool = True  # 黑名单强制卖出
     max_suspension_days: int = 30  # 长期停牌阈值
-    liquidity_min_avg_volume: int = 1_000_000  # 日均成交量最低阈值 (股)
+    liquidity_min_avg_volume: int = 100_000  # 日均成交量最低阈值 (股)
     liquidity_lookback_days: int = 20  # 流动性回看天数
     blacklist_path: str = "data/blacklist.json"  # 黑名单文件路径
 

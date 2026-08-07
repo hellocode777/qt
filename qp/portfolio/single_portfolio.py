@@ -21,7 +21,7 @@ class Order:
 class SinglePortfolio:
     """Equal-weight portfolio that generates orders from signals."""
 
-    def __init__(self, total_capital: float = 1_000_000) -> None:
+    def __init__(self, total_capital: float = 100_000) -> None:
         self._total_capital = total_capital
 
     def generate_orders(

@@ -73,7 +73,7 @@ class CashManager:
         current_market_vol: float = 0.20,
         vol_percentile: float = 0.50,
         risk_report: dict[str, Any] | None = None,
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
     ) -> CashDecision:
         """Determine the appropriate cash reserve ratio.
 

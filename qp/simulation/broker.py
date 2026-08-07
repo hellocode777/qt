@@ -68,7 +68,7 @@ class SimulatedBroker(BaseBroker):
     """Paper-trading broker with realistic execution and cost tracking.
 
     Usage:
-        broker = SimulatedBroker(initial_cash=1_000_000)
+        broker = SimulatedBroker(initial_cash=100_000)
         broker.set_prices(today_prices_df, adv_map)   # Called each day
         order_id = broker.submit_order({"symbol": "600519", "side": "BUY", "quantity": 1000})
         broker.execute_pending(execution_price_map)   # Execute at fill prices
@@ -78,7 +78,7 @@ class SimulatedBroker(BaseBroker):
 
     def __init__(
         self,
-        initial_cash: float = 1_000_000,
+        initial_cash: float = 100_000,
         slippage_model: str = "fixed",
         adv_limit: float = DEFAULT_ADV_LIMIT,
     ) -> None:

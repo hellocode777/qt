@@ -30,7 +30,7 @@ class DecisionEngine:
             signals=aggregated_df,
             prices=daily_prices_df,
             risk_report=risk_report,
-            total_capital=1_000_000,
+            total_capital=100_000,
         )
         print(engine.format_bilingual(report))
     """
@@ -57,7 +57,7 @@ class DecisionEngine:
         prices: pl.DataFrame,
         risk_report: RiskReport | None = None,
         current_positions: dict[str, float] | None = None,
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
         strategy_id: str = "default",
         market_regime: str = "",
     ) -> DecisionReport:

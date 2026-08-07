@@ -37,7 +37,7 @@ class KellyAllocator(BaseCapitalAllocator):
 
     Usage:
         alloc = KellyAllocator(fraction=0.25, max_single=0.08)
-        df = alloc.allocate(candidates, risk_report, total_capital=1_000_000)
+        df = alloc.allocate(candidates, risk_report, total_capital=100_000)
     """
 
     def __init__(

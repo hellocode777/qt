@@ -74,7 +74,7 @@ class MeanVarianceOptimizer:
         self,
         prices: pl.DataFrame,
         symbols: list[str],
-        total_capital: float = 1_000_000,
+        total_capital: float = 100_000,
     ) -> OptimizationResult:
         """Find max Sharpe weights for the given symbols.
 
