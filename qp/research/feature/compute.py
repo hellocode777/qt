@@ -105,16 +105,50 @@ def compute_all_factors(
     """
     df = df.sort("trade_date")
 
-    # Compute each category
-    momentum = compute_momentum_factors(df, index_df=index_df)
-    volatility = compute_volatility_factors(df)
-    volume = compute_volume_factors(df)
-    money_flow = compute_money_flow_factors(df)
+    # Determine which categories to compute based on subset.
+    # Without subset → compute all (backward-compatible).
+    # With subset → only compute categories that contain the requested factors,
+    #   avoiding the inner-join data loss from long-lookback factors like
+    #   Momentum_6M / Trend_MA120 when the caller only needs Volatility_20D.
+    subset_set: set[str] | None = set(subset) if subset else None
 
-    # Join all on trade_date
-    result = momentum.join(volatility, on="trade_date", how="inner")
-    result = result.join(volume, on="trade_date", how="inner")
-    result = result.join(money_flow, on="trade_date", how="inner")
+    _MOMENTUM_NAMES = set(MOMENTUM_DIRECTIONS.keys())
+    _VOLATILITY_NAMES = set(VOLATILITY_DIRECTIONS.keys())
+    _VOLUME_NAMES = set(VOLUME_DIRECTIONS.keys())
+    _MONEY_FLOW_NAMES = set(MONEY_FLOW_DIRECTIONS.keys())
+
+    need_momentum = subset_set is None or bool(subset_set & _MOMENTUM_NAMES)
+    need_volatility = subset_set is None or bool(subset_set & _VOLATILITY_NAMES)
+    need_volume = subset_set is None or bool(subset_set & _VOLUME_NAMES)
+    need_money_flow = subset_set is None or bool(subset_set & _MONEY_FLOW_NAMES)
+
+    # Compute only required categories, passing category-specific subset
+    # so intra-category drop_nulls doesn't cut off early dates unnecessarily.
+    momentum_subset = [f for f in subset if f in _MOMENTUM_NAMES] if subset else None
+    volatility_subset = [f for f in subset if f in _VOLATILITY_NAMES] if subset else None
+    volume_subset = [f for f in subset if f in _VOLUME_NAMES] if subset else None
+    money_flow_subset = [f for f in subset if f in _MONEY_FLOW_NAMES] if subset else None
+
+    momentum = (
+        compute_momentum_factors(df, index_df=index_df, subset=momentum_subset)
+        if need_momentum
+        else None
+    )
+    volatility = (
+        compute_volatility_factors(df, subset=volatility_subset) if need_volatility else None
+    )
+    volume = compute_volume_factors(df, subset=volume_subset) if need_volume else None
+    money_flow = (
+        compute_money_flow_factors(df, subset=money_flow_subset) if need_money_flow else None
+    )
+
+    # Join computed categories on trade_date
+    parts = [p for p in (momentum, volatility, volume, money_flow) if p is not None]
+    if not parts:
+        return pl.DataFrame(schema={"trade_date": pl.Date})
+    result = parts[0]
+    for p in parts[1:]:
+        result = result.join(p, on="trade_date", how="inner")
 
     if subset:
         return result.drop_nulls(subset=subset)

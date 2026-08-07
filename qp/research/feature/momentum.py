@@ -259,6 +259,7 @@ MOMENTUM_DESCRIPTIONS: dict[str, str] = {
 def compute_momentum_factors(
     df: pl.DataFrame,
     index_df: pl.DataFrame | None = None,
+    subset: list[str] | None = None,
 ) -> pl.DataFrame:
     """Compute all momentum factors for a single stock in one pass.
 
@@ -268,6 +269,9 @@ def compute_momentum_factors(
             computing Residual_Momentum_3M. If provided, the stock's 60-day
             return is adjusted by beta * market_return to isolate stock-
             specific alpha. If None, Residual_Momentum_3M is not computed.
+        subset: If provided, only keep and drop-null these factor columns.
+            Avoids the 120-day bottleneck from Momentum_6M / Trend_MA120
+            when the caller only needs short-lookback factors.
 
     Returns:
         DataFrame with [trade_date, factor columns...].
@@ -304,7 +308,8 @@ def compute_momentum_factors(
     for name in factor_names:
         df = df.with_columns(pl.col(name).shift(1).alias(name))
 
-    return df.select(["trade_date", *factor_names]).drop_nulls()
+    keep = subset if subset else factor_names
+    return df.select(["trade_date", *keep]).drop_nulls(subset=keep)
 
 
 def _compute_residual_momentum(

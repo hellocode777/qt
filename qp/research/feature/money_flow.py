@@ -148,12 +148,16 @@ MONEY_FLOW_DESCRIPTIONS: dict[str, str] = {
 }
 
 
-def compute_money_flow_factors(df: pl.DataFrame) -> pl.DataFrame:
+def compute_money_flow_factors(
+    df: pl.DataFrame,
+    subset: list[str] | None = None,
+) -> pl.DataFrame:
     """Compute all money flow factors for a single stock in one pass.
 
     Args:
         df: Single-stock DataFrame with [trade_date, open, high, low, close, volume]
             (sorted). Uses 'amount' column if available.
+        subset: If provided, only keep and drop-null these factor columns.
 
     Returns:
         DataFrame with [trade_date, factor columns...].
@@ -186,4 +190,5 @@ def compute_money_flow_factors(df: pl.DataFrame) -> pl.DataFrame:
     for name in factor_names:
         df = df.with_columns(pl.col(name).shift(1).alias(name))
 
-    return df.select(["trade_date", *factor_names]).drop_nulls()
+    keep = subset if subset else factor_names
+    return df.select(["trade_date", *keep]).drop_nulls(subset=keep)

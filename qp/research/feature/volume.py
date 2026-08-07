@@ -165,11 +165,18 @@ VOLUME_DESCRIPTIONS: dict[str, str] = {
 }
 
 
-def compute_volume_factors(df: pl.DataFrame) -> pl.DataFrame:
+def compute_volume_factors(
+    df: pl.DataFrame,
+    subset: list[str] | None = None,
+) -> pl.DataFrame:
     """Compute all volume factors for a single stock in one pass.
 
     Args:
         df: Single-stock DataFrame with [trade_date, close, volume] (sorted).
+        subset: If provided, only keep and drop-null these factor columns.
+            Avoids the 120-day bottleneck from long-lookback factors
+            (Volume_Expansion_20_120, Amount_Momentum_20_120) when the
+            caller only needs short-lookback volume factors.
 
     Returns:
         DataFrame with [trade_date, factor columns...].
@@ -223,4 +230,5 @@ def compute_volume_factors(df: pl.DataFrame) -> pl.DataFrame:
     for name in factor_names:
         df = df.with_columns(pl.col(name).shift(1).alias(name))
 
-    return df.select(["trade_date", *factor_names]).drop_nulls()
+    keep = subset if subset else factor_names
+    return df.select(["trade_date", *keep]).drop_nulls(subset=keep)

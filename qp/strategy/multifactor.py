@@ -53,6 +53,110 @@ from qp.shared.protocols.base_strategy import BaseStrategy
 # ------------------------------------------------------------------
 
 
+# ------------------------------------------------------------------
+# Experiment raw-factor cache — avoids recomputing compute_all_factors
+# across experiments with different weights/parameters.
+# ------------------------------------------------------------------
+
+_CACHE_PATH = "data/experiments/_factor_raw_cache.parquet"
+
+
+def _load_raw_factors_from_cache(
+    all_raw: dict[str, dict[str, dict[str, float]]],
+    price_factor_names: set[str],
+    logger: Any,
+) -> bool:
+    """Populate ``all_raw`` from the experiment cache if valid.
+
+    Returns True when the cache was loaded, False on cache miss.
+    The cache is keyed by (trade_date, symbol) and stores all 19 raw
+    factor columns — independent of which factors a specific strategy asks for.
+    """
+    from pathlib import Path as _P
+
+    if not _P(_CACHE_PATH).exists():
+        return False
+
+    try:
+        cache_df = pl.read_parquet(_CACHE_PATH)
+    except Exception:
+        return False
+
+    if cache_df.is_empty():
+        return False
+
+    date_col = cache_df["trade_date"].cast(pl.Utf8)
+    cache_dates = set(date_col.unique().to_list())
+    if len(cache_dates) < 200:
+        return False  # not enough history
+
+    available = [f for f in price_factor_names if f in cache_df.columns]
+    if not available:
+        return False
+
+    logger.info(
+        "📦 实验缓存命中: {} factors × {} dates → 跳过逐stock计算",
+        len(available),
+        len(cache_dates),
+    )
+    for row in cache_df.iter_rows(named=True):
+        dt = str(row["trade_date"])
+        sym = str(row["symbol"])
+        vals: dict[str, float] = {}
+        for fn in available:
+            v = row[fn]
+            if v is not None and v == v:
+                vals[fn] = float(v)
+        if vals:
+            all_raw[dt][sym] = vals
+
+    logger.info("📦 缓存加载完成: {} 个日期", len(all_raw))
+    return True
+
+
+def _save_raw_factors_to_cache(
+    all_raw: dict[str, dict[str, dict[str, float]]],
+    logger: Any,
+) -> None:
+    """Persist computed raw factors to the experiment cache.
+
+    The cache stores ALL factor columns as a wide Parquet table, keyed by
+    (trade_date, symbol).  This is a transparent performance optimization —
+    the computation result is identical whether it comes from cache or from
+    the live per-stock loop.
+    """
+    from pathlib import Path as _P
+
+    _P(_CACHE_PATH).parent.mkdir(parents=True, exist_ok=True)
+
+    rows: list[dict[str, Any]] = []
+    factor_names: set[str] = set()
+    for date_str, symbols in all_raw.items():
+        for sym, factors in symbols.items():
+            row: dict[str, Any] = {"trade_date": date_str, "symbol": sym}
+            row.update(factors)
+            factor_names.update(factors.keys())
+            rows.append(row)
+
+    if not rows:
+        return
+
+    df = pl.DataFrame(rows)
+    tmp = _P(str(_CACHE_PATH) + ".tmp.parquet")
+    try:
+        df.write_parquet(tmp)
+        tmp.rename(_CACHE_PATH)
+        logger.info(
+            "📦 实验缓存已保存: {} rows × {} factors → {}",
+            df.height,
+            len(factor_names),
+            _CACHE_PATH,
+        )
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+
+
 def compute_cross_sectional_scores(
     price_data: dict[str, pl.DataFrame],
     weights: dict[str, float] | None = None,
@@ -184,7 +288,15 @@ def compute_cross_sectional_scores(
     all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
 
     total_stocks = len(price_data)
+    cache_used = not live_mode and _load_raw_factors_from_cache(
+        all_raw, price_factor_names, logger
+    )
+    if cache_used:
+        total_stocks = 0  # skip the loop below
+
     for stock_idx, (code, df) in enumerate(price_data.items()):
+        if total_stocks == 0:
+            break
         if df is None or df.is_empty() or df.height < min_history:
             continue
 
@@ -263,6 +375,10 @@ def compute_cross_sectional_scores(
 
         if (stock_idx + 1) % 200 == 0:
             logger.info("🧮 因子计算: {}/{}", stock_idx + 1, total_stocks)
+
+    # ── Save to experiment cache for future runs ──
+    if not cache_used and not live_mode and price_factor_names:
+        _save_raw_factors_to_cache(all_raw, logger)
 
     # Sort dates
     all_dates = sorted(all_raw.keys())

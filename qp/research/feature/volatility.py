@@ -128,11 +128,17 @@ VOLATILITY_DESCRIPTIONS: dict[str, str] = {
 }
 
 
-def compute_volatility_factors(df: pl.DataFrame) -> pl.DataFrame:
+def compute_volatility_factors(
+    df: pl.DataFrame,
+    subset: list[str] | None = None,
+) -> pl.DataFrame:
     """Compute all volatility factors for a single stock in one pass.
 
     Args:
         df: Single-stock DataFrame with [trade_date, close] (sorted).
+        subset: If provided, only keep and drop-null these factor columns.
+            Avoids the 60-day bottleneck from Volatility_60D / MaxDD_60D
+            when the caller only needs Volatility_20D.
 
     Returns:
         DataFrame with [trade_date, Volatility_20D, Volatility_60D, MaxDD_60D].
@@ -158,7 +164,8 @@ def compute_volatility_factors(df: pl.DataFrame) -> pl.DataFrame:
     for name in factor_names:
         df = df.with_columns(pl.col(name).shift(1).alias(name))
 
-    return df.select(["trade_date", *factor_names]).drop_nulls()
+    keep = subset if subset else factor_names
+    return df.select(["trade_date", *keep]).drop_nulls(subset=keep)
 
 
 # ------------------------------------------------------------------
