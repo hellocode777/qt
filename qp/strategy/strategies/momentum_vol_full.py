@@ -49,6 +49,16 @@ LVR_VOL_ONLY_WEIGHTS: dict[str, float] = {
     "Volatility_20D": +1.00,  # 低波异象
 }
 
+LVR_VOL_MOM1M_WEIGHTS: dict[str, float] = {
+    "Volatility_20D": +0.50,  # 低波异象
+    "Momentum_1M": -0.50,  # 短期反转 (IC=-0.054, 与Vol_20D相关仅+0.078)
+}
+
+LVR_VOL_CONC_WEIGHTS: dict[str, float] = {
+    "Volatility_20D": +0.50,  # 低波异象
+    "Volume_Concentration": -0.50,  # 量集中度 (IC=-0.052, IC_IR=0.67, 极其稳定)
+}
+
 LVR_VOL_MOM_WEIGHTS: dict[str, float] = {
     "Volatility_20D": +0.55,
     "Momentum_3M": -0.45,  # 最强反转因子
@@ -101,6 +111,31 @@ def _make_lvr_config(name: str, display: str, factors: dict) -> StrategyConfig:
 
 LVR_VOL_ONLY = register_config(
     _make_lvr_config("lvr_vol_only", "低波(仅波动率)", LVR_VOL_ONLY_WEIGHTS)
+)
+LVR_VOL_STABLE = register_config(
+    StrategyConfig(
+        name="lvr_vol_stable",
+        display_name="低波(稳定版)",
+        factors=dict(LVR_VOL_ONLY_WEIGHTS),
+        max_positions=10,
+        rebalance_freq=40,  # 双月调仓 ↓换手
+        sell_buffer_multiplier=4,  # buffer到40名 ↓换手
+        score_smooth_days=5,  # 5日得分平滑 ↓换手
+        model_mode=False,
+        quality_filter=True,
+        industry_neutral=True,
+        orthogonalize=True,
+        anti_chase=True,
+        chase_threshold=0.20,
+        chase_lookback=5,
+        use_market_filter=True,
+    )
+)
+LVR_VOL_MOM1M = register_config(
+    _make_lvr_config("lvr_vol_mom1m", "低波+动量1M", LVR_VOL_MOM1M_WEIGHTS)
+)
+LVR_VOL_CONC = register_config(
+    _make_lvr_config("lvr_vol_conc", "低波+量集中度", LVR_VOL_CONC_WEIGHTS)
 )
 LVR_VOL_MOM = register_config(_make_lvr_config("lvr_vol_mom", "低波+动量", LVR_VOL_MOM_WEIGHTS))
 LVR_VOL_ALL_REV = register_config(
@@ -348,6 +383,7 @@ def run_momentum_vol_full(
         model_mode=config.model_mode,
         score_percentile_min=score_percentile_min,
         score_percentile_max=score_percentile_max,
+        score_smooth_days=getattr(config, "score_smooth_days", 1),
     )
 
     diagnostics = None

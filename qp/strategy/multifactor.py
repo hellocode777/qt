@@ -91,8 +91,8 @@ def _load_raw_factors_from_cache(
         return False  # not enough history
 
     available = [f for f in price_factor_names if f in cache_df.columns]
-    if not available:
-        return False
+    if len(available) < len(price_factor_names):
+        return False  # cache missing required factors → recompute
 
     logger.info(
         "📦 实验缓存命中: {} factors × {} dates → 跳过逐stock计算",
@@ -288,9 +288,7 @@ def compute_cross_sectional_scores(
     all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
 
     total_stocks = len(price_data)
-    cache_used = not live_mode and _load_raw_factors_from_cache(
-        all_raw, price_factor_names, logger
-    )
+    cache_used = not live_mode and _load_raw_factors_from_cache(all_raw, price_factor_names, logger)
     if cache_used:
         total_stocks = 0  # skip the loop below
 
@@ -777,6 +775,7 @@ def run_multifactor_strategy(
     score_percentile_min: float | None = None,
     score_percentile_max: float | None = None,
     extra_factors: dict[str, dict[str, dict[str, float]]] | None = None,
+    score_smooth_days: int = 1,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Run the complete multi-factor stock selection strategy.
 
@@ -804,6 +803,8 @@ def run_multifactor_strategy(
         regime_map: {date_str: regime} for adaptive sizing.
         regime_positions: {regime: top_n} for adaptive sizing.
         return_diagnostics: Return (signals, diagnostics) tuple.
+        score_smooth_days: Rolling-mean days for score smoothing (1=off).
+            >1 reduces turnover by damping single-day ranking noise.
 
     Returns:
         Polars DataFrame [date, symbol, signal, score, reason, name],
@@ -854,6 +855,13 @@ def run_multifactor_strategy(
         scores, diagnostics = css_result  # type: ignore[assignment]
     else:
         scores = css_result  # type: ignore[assignment]
+
+    # ── 1.5 Score smoothing (rolling mean per stock → lower turnover) ──
+    if score_smooth_days > 1 and not scores.is_empty():  # type: ignore[union-attr]
+        scores = scores.sort(["symbol", "trade_date"])  # type: ignore[union-attr]
+        scores = scores.with_columns(  # type: ignore[union-attr]
+            pl.col("score").rolling_mean(score_smooth_days, min_samples=1).over("symbol")
+        )
 
     # ── 2. Generate rebalance signals ──
     signals = generate_rebalance_signals(

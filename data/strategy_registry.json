@@ -1,27 +1,6 @@
 {
   "strategies": {
-    "value_v1.0": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "1.0.0",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "",
-        "description": "",
-        "tags": [],
-        "weights": {},
-        "parameters": {},
-        "backtest_ic": 0.0,
-        "backtest_sharpe": 0.0,
-        "backtest_max_dd": 0.0,
-        "backtest_excess_return": 0.0
-      },
-      "active": false
-    },
-    "quality_v1.0": {
+    "momentum_v1.0": {
       "lifecycle": "research",
       "meta": {
         "strategy_version": "1.0.0",
@@ -45,20 +24,21 @@
     "momentum_vol_full": {
       "lifecycle": "research",
       "meta": {
-        "strategy_version": "multifactor_20260805_145839",
+        "strategy_version": "v20260807",
         "model_version": "",
         "feature_version": "",
         "feature_set": [],
         "rebalance_frequency": "daily",
         "rebalance_day": 0,
-        "owner": "Wei",
+        "owner": "experiment",
         "description": "",
         "tags": [],
         "weights": {
-          "Volatility_20D": 0.2551,
-          "Amplitude_5D": -0.2717,
-          "Momentum_3M": -0.2339,
-          "Volume_Concentration": -0.2394
+          "Amplitude_5D": -0.25,
+          "Volatility_20D": 0.22,
+          "Momentum_3M": -0.2,
+          "Volume_Concentration": -0.19,
+          "Volume_Trend_10D": -0.14
         },
         "parameters": {
           "top_n": 10,
@@ -67,10 +47,10 @@
           "orthogonalize": true,
           "anti_chase": true
         },
-        "backtest_ic": 0.0702,
-        "backtest_sharpe": 1.45,
-        "backtest_max_dd": 9.42,
-        "backtest_excess_return": 22.92
+        "backtest_ic": 0.0692,
+        "backtest_sharpe": 0.71,
+        "backtest_max_dd": 17.29,
+        "backtest_excess_return": -28.28
       },
       "active": true,
       "approved": {
@@ -101,7 +81,87 @@
         "meta": {}
       }
     },
-    "momentum_v1.0": {
+    "lvr_vol_only": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "v20260807",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "experiment",
+        "description": "",
+        "tags": [],
+        "weights": {
+          "Volatility_20D": 1.0
+        },
+        "parameters": {
+          "top_n": 10,
+          "rebalance": 20,
+          "industry_neutral": true,
+          "orthogonalize": true,
+          "anti_chase": true
+        },
+        "backtest_ic": 0.0596,
+        "backtest_sharpe": 0.57,
+        "backtest_max_dd": 10.21,
+        "backtest_excess_return": -10.120000000000001
+      },
+      "active": false
+    },
+    "quality_v1.0": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "1.0.0",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "",
+        "description": "",
+        "tags": [],
+        "weights": {},
+        "parameters": {},
+        "backtest_ic": 0.0,
+        "backtest_sharpe": 0.0,
+        "backtest_max_dd": 0.0,
+        "backtest_excess_return": 0.0
+      },
+      "active": false
+    },
+    "lvr_vol_mom1m": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "v20260807",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "experiment",
+        "description": "",
+        "tags": [],
+        "weights": {
+          "Volatility_20D": 0.5,
+          "Momentum_1M": -0.5
+        },
+        "parameters": {
+          "top_n": 10,
+          "rebalance": 20,
+          "industry_neutral": true,
+          "orthogonalize": true,
+          "anti_chase": true
+        },
+        "backtest_ic": 0.0641,
+        "backtest_sharpe": 0.67,
+        "backtest_max_dd": 16.59,
+        "backtest_excess_return": -0.14999999999999858
+      },
+      "active": false
+    },
+    "value_v1.0": {
       "lifecycle": "research",
       "meta": {
         "strategy_version": "1.0.0",

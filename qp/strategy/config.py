@@ -98,6 +98,9 @@ class StrategyConfig:
     # ── 最低历史数据要求 ──
     min_history: int = 60
 
+    # ── 换手率控制 ──
+    score_smooth_days: int = 1  # 因子得分平滑天数 (1=不平滑, 5=5日均值)
+
     # ── 方法 ──
 
     def for_live(self) -> StrategyConfig:
