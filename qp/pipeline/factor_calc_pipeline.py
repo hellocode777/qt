@@ -176,7 +176,9 @@ def merge_with_existing(new_df: pl.DataFrame, output_path: Path) -> pl.DataFrame
     if set(existing.columns) != set(new_df.columns):
         all_cols = list(dict.fromkeys([*existing.columns, *new_df.columns]))
         if missing := set(all_cols) - set(existing.columns):
-            existing = existing.with_columns([pl.lit(None, dtype=pl.Float64).alias(c) for c in missing])
+            existing = existing.with_columns(
+                [pl.lit(None, dtype=pl.Float64).alias(c) for c in missing]
+            )
         if missing := set(all_cols) - set(new_df.columns):
             new_df = new_df.with_columns([pl.lit(None, dtype=pl.Float64).alias(c) for c in missing])
         existing = existing.select(all_cols)
