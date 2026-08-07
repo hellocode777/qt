@@ -1,0 +1,59 @@
+{
+  "strategy_id": "lvr_vol_only",
+  "stage": "backtest_passed",
+  "decision": "blocked",
+  "score": 60.0,
+  "confidence": 0.6,
+  "timestamp": "2026-08-06T23:59:31.952909+00:00",
+  "data_integrity": "PASS",
+  "factor_validity": "FAIL",
+  "portfolio_conversion": "FAIL",
+  "robustness": "NOT_RUN",
+  "cost_capacity": "NOT_RUN",
+  "rules": [
+    {
+      "rule_name": "rank_ic",
+      "status": "pass",
+      "score": 80,
+      "threshold": 0.02,
+      "actual_value": 0.0526,
+      "detail": "|IC|=0.0526"
+    },
+    {
+      "rule_name": "ic_ir",
+      "status": "fail",
+      "score": 30,
+      "threshold": 0.3,
+      "actual_value": 0.28,
+      "detail": "IC_IR=0.28"
+    },
+    {
+      "rule_name": "ic_t_stat",
+      "status": "pass",
+      "score": 80,
+      "threshold": 2.0,
+      "actual_value": 6.34,
+      "detail": "t=6.34"
+    },
+    {
+      "rule_name": "monotonicity",
+      "status": "fail",
+      "score": 30,
+      "threshold": 2.0,
+      "actual_value": -0.9,
+      "detail": "monotonicity t=-0.90"
+    },
+    {
+      "rule_name": "spread",
+      "status": "pass",
+      "score": 80,
+      "threshold": 2.0,
+      "actual_value": 2.16,
+      "detail": "Q5-Q1 spread t=2.16"
+    }
+  ],
+  "recommendation": "策略 lvr_vol_only 因子检验未通过。建议: 检查因子计算、数据源、或缩减因子数量。",
+  "artifacts": [
+    "data/knowledge/research_debt/20260806-235931-lvr-vol-only-gate-failure-factor-validity-failure.md"
+  ]
+}

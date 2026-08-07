@@ -1,0 +1,65 @@
+{
+  "experiment_id": "multifactor_20260807_011057",
+  "status": "completed",
+  "created_at": "2026-08-07T01:10:57.588091+00:00",
+  "completed_at": "2026-08-07T01:10:57.588098+00:00",
+  "config": {
+    "experiment_id": "multifactor_20260807_011057",
+    "created_at": "2026-08-07T01:10:57.588091+00:00",
+    "description": "Multi-factor experiment: 1 factors, Top-10, rebalance=20d",
+    "strategy_name": "lvr_vol_stable",
+    "model_mode": 0.0,
+    "dataset_version": "daily_price_latest@2024-01-01_2026-08-07",
+    "features": [
+      "Volatility_20D"
+    ],
+    "model_params": {
+      "Volatility_20D": 1.0
+    },
+    "cv_folds": 5,
+    "purge_days": 20,
+    "embargo_days": 5,
+    "train_start": "2024-01-01",
+    "train_end": "2026-08-07",
+    "test_start": "",
+    "test_end": "",
+    "tags": [
+      "multifactor",
+      "top10",
+      "rebalance20d"
+    ],
+    "git_commit": ""
+  },
+  "metrics": {
+    "experiment_id": "multifactor_20260807_011057",
+    "in_sample_ic": 0.0,
+    "out_of_sample_ic": 0.0,
+    "ic_mean": 0.0369,
+    "ic_ir": 0.19,
+    "ic_t_stat": 4.59,
+    "sharpe_ratio": 1.12,
+    "max_drawdown_pct": 9.78,
+    "excess_return_pct": 22.060000000000002,
+    "annual_return_pct": 18.68,
+    "annual_volatility_pct": 16.68,
+    "total_return_pct": 53.24,
+    "turnover_pct": 1225.61,
+    "n_days": 628,
+    "feature_importance": {},
+    "custom": {}
+  },
+  "lineage": {
+    "dataset": "daily_price_latest@2024-01-01",
+    "features": [
+      "Volatility_20D"
+    ],
+    "feature_versions": {},
+    "label": "",
+    "model_id": "",
+    "model_algo": "weighted_linear",
+    "strategy_id": "multifactor_top10"
+  },
+  "artifacts": [],
+  "errors": [],
+  "gate_result": null
+}
