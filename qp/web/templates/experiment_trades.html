@@ -92,7 +92,7 @@
       <tbody>
         {% for row in trades.timeline_symbols %}
         <tr>
-          <td style="font-weight: 600; font-size: 12px;"><code>{{ row.symbol }}</code></td>
+          <td style="font-weight: 600; font-size: 12px;">{{ row.symbol | stock_name }} <code>{{ row.symbol }}</code></td>
           <td style="text-align: center; color: var(--c-muted);">{{ row.count }}</td>
           {% for cell in row.cells %}
           <td style="text-align: center; padding: 2px 4px; font-size: 10px;
@@ -130,7 +130,7 @@
           <thead><tr><th>代码</th><th>价格</th><th>得分</th><th>排名</th></tr></thead>
           {% for b in latest.buys %}
           <tr>
-            <td><code>{{ b.symbol }}</code></td>
+            <td>{{ b.symbol | stock_name }} <code>{{ b.symbol }}</code></td>
             <td>¥{{ "%.2f"|format(b.price) }}</td>
             <td class="font-mono">{{ "%.4f"|format(b.score) }}</td>
             <td><span style="color: var(--green); font-weight: 700;">#{{ b.rank }}</span></td>
@@ -145,7 +145,7 @@
         <table class="data-table" style="font-size: 13px;">
           <thead><tr><th>代码</th><th>价格</th></tr></thead>
           {% for s in latest.sells %}
-          <tr><td><code>{{ s.symbol }}</code></td><td>¥{{ "%.2f"|format(s.price) }}</td></tr>
+          <tr><td>{{ s.symbol | stock_name }} <code>{{ s.symbol }}</code></td><td>¥{{ "%.2f"|format(s.price) }}</td></tr>
           {% endfor %}
         </table>
         {% else %}<div class="c-muted" style="font-size: 13px;">无卖出</div>{% endif %}
@@ -169,11 +169,11 @@
         <td style="color: var(--red); font-weight: 700;">{{ p.n_sells }}</td>
         <td>{{ p.n_hold }}</td>
         <td style="font-size: 12px; max-width: 300px;">
-          {% for b in p.buys[:8] %}<code style="font-size: 11px;">{{ b.symbol }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% for b in p.buys[:8] %}<span style="font-size: 11px;">{{ b.symbol | stock_name }}</span> <code style="font-size: 11px;">{{ b.symbol }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
           {% if p.buys|length > 8 %}<span class="c-muted"> +{{ p.buys|length - 8 }}</span>{% endif %}
         </td>
         <td style="font-size: 12px; max-width: 300px;">
-          {% for s in p.sells[:8] %}<code style="font-size: 11px;">{{ s.symbol }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% for s in p.sells[:8] %}<span style="font-size: 11px;">{{ s.symbol | stock_name }}</span> <code style="font-size: 11px;">{{ s.symbol }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
           {% if p.sells|length > 8 %}<span class="c-muted"> +{{ p.sells|length - 8 }}</span>{% endif %}
         </td>
       </tr>

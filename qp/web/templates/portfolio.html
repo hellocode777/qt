@@ -124,7 +124,7 @@
         {% for p in positions %}
         <tr>
           <td><code>{{ p.position_id }}</code></td>
-          <td><strong>{{ p.symbol }}</strong></td>
+          <td><strong>{{ p.symbol | stock_name }}</strong> <code class="c-muted">{{ p.symbol }}</code></td>
           <td>{{ p.entry_date }}</td>
           <td>¥{{ "%.2f"|format(p.entry_price) }}</td>
           <td>{{ p.shares }}</td>
@@ -164,7 +164,7 @@
       <tbody>
         {% for s in sell_signals %}
         <tr>
-          <td><strong>{{ s.symbol }}</strong></td>
+          <td><strong>{{ s.symbol | stock_name }}</strong> <code class="c-muted">{{ s.symbol }}</code></td>
           <td>{{ s.quantity_shares }}</td>
           <td>¥{{ "%.2f"|format(s.estimated_price) if s.estimated_price else "—" }}</td>
           <td style="font-size: 12px;">{{ s.reason or s.exit_reason or "—" }}</td>

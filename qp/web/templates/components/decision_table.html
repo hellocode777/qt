@@ -45,7 +45,7 @@
               {% for rec in decision.buys %}
               <tr class="hover:bg-gray-800/50 transition-colors">
                 <td class="text-gray-500 text-xs">{{ loop.index }}</td>
-                <td class="font-mono font-bold text-gray-200">{{ rec.symbol }}</td>
+                <td>{{ rec.symbol | stock_name }} <code class="font-mono text-gray-400 text-xs">{{ rec.symbol }}</code></td>
                 <td class="font-mono text-gray-300">{{ "%.1f"|format(rec.target_weight_pct) }}%</td>
                 <td class="font-mono text-gray-400 text-xs">{{ "%.2f"|format(rec.estimated_price) }}</td>
                 <td class="font-mono text-gray-400 text-xs">{{ rec.quantity_shares }}</td>
@@ -94,7 +94,7 @@
               {% for rec in decision.sells %}
               <tr class="hover:bg-gray-800/50 transition-colors">
                 <td class="text-gray-500 text-xs">{{ loop.index }}</td>
-                <td class="font-mono font-bold text-red-300">{{ rec.symbol }}</td>
+                <td>{{ rec.symbol | stock_name }} <code class="font-mono text-red-300/70 text-xs">{{ rec.symbol }}</code></td>
                 <td class="font-mono text-gray-300">{{ "%.1f"|format(rec.current_weight_pct) }}%</td>
                 <td class="font-mono text-gray-400 text-xs">{{ "%.2f"|format(rec.estimated_price) }}</td>
                 <td class="font-mono text-gray-400 text-xs">{{ rec.quantity_shares }}</td>

@@ -89,7 +89,7 @@
         {% for rec in detail.buys %}
         <tr>
           <td class="c-muted">{{ loop.index }}</td>
-          <td class="font-mono" style="font-weight: 700;">{{ rec.symbol }}</td>
+          <td style="font-weight: 700;">{{ rec.symbol | stock_name }} <code class="font-mono c-muted">{{ rec.symbol }}</code></td>
           <td><span class="badge badge-green" style="font-size: 11px;">BUY</span></td>
           <td class="font-mono">{{ "%.1f" | format(rec.target_weight_pct) }}%</td>
           <td class="font-mono c-secondary">{{ rec.quantity_shares }}</td>
