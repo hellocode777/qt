@@ -84,7 +84,7 @@
     </div>
   </div>
   <div class="card-body">
-    <div id="kline-chart" style="width: 100%; height: 520px;"></div>
+    <div id="kline-chart" style="width: 100%; height: 620px;"></div>
   </div>
 </div>
 
@@ -135,6 +135,43 @@
           }
           return result;
         }
+
+        // Calculate EMA
+        function calcEMA(data, period) {
+          const result = [];
+          const k = 2 / (period + 1);
+          for (let i = 0; i < data.length; i++) {
+            if (i === 0) {
+              result.push(data[i]);
+            } else if (i < period - 1) {
+              result.push(null);
+            } else {
+              const prev = result[i - 1];
+              result.push(prev !== null ? +(data[i] * k + prev * (1 - k)).toFixed(4) : data[i]);
+            }
+          }
+          return result;
+        }
+
+        // Calculate MACD
+        const closes = raw.map(d => d.close);
+        const ema12 = calcEMA(closes, 12);
+        const ema26 = calcEMA(closes, 26);
+        const dif = ema12.map((v, i) => v !== null && ema26[i] !== null ? +(v - ema26[i]).toFixed(4) : null);
+        const dea = calcEMA(dif.filter(v => v !== null), 9);
+        // Re-align DEA (pad with nulls)
+        const deaFull = [];
+        let deaI = 0;
+        for (let i = 0; i < dif.length; i++) {
+          if (dif[i] !== null) {
+            deaFull.push(dea[deaI] !== undefined ? dea[deaI] : null);
+            deaI++;
+          } else {
+            deaFull.push(null);
+          }
+        }
+        const macdBar = dif.map((v, i) => v !== null && deaFull[i] !== null ? +((v - deaFull[i]) * 2).toFixed(4) : null);
+
         const ma5 = calcMA(ohlc, 5);
         const ma10 = calcMA(ohlc, 10);
         const ma20 = calcMA(ohlc, 20);
@@ -147,14 +184,15 @@
             axisPointer: { type: 'cross' },
           },
           legend: {
-            data: ['K线', 'MA5', 'MA10', 'MA20', 'MA60', '成交量'],
+            data: ['K线', 'MA5', 'MA10', 'MA20', 'MA60', '成交量', 'DIF', 'DEA', 'MACD'],
             top: 6,
             left: 'center',
-            textStyle: { fontSize: 12 },
+            textStyle: { fontSize: 11 },
           },
           grid: [
-            { left: '8%', right: '2%', top: '12%', height: '58%' },
-            { left: '8%', right: '2%', top: '78%', height: '14%' },
+            { left: '8%', right: '2%', top: '12%', height: '48%' },
+            { left: '8%', right: '2%', top: '66%', height: '12%' },
+            { left: '8%', right: '2%', top: '84%', height: '12%' },
           ],
           xAxis: [
             {
@@ -168,14 +206,18 @@
               type: 'category',
               data: dates,
               gridIndex: 1,
+              axisLabel: { show: false },
+              axisLine: { lineStyle: { color: '#e0e0e0' } },
+            },
+            {
+              type: 'category',
+              data: dates,
+              gridIndex: 2,
               axisLabel: {
                 show: true,
                 fontSize: 10,
                 color: '#999',
-                formatter: function(v) {
-                  const d = v.substring(5); // MM-DD
-                  return d;
-                },
+                formatter: function(v) { return v.substring(5); },
                 interval: Math.floor(dates.length / 8),
               },
               axisLine: { lineStyle: { color: '#e0e0e0' } },
@@ -196,10 +238,17 @@
               axisLabel: { fontSize: 10, formatter: function(v) { return v > 1e8 ? (v/1e8).toFixed(1)+'亿' : (v/1e4).toFixed(0)+'万'; } },
               splitLine: { show: false },
             },
+            {
+              type: 'value',
+              gridIndex: 2,
+              scale: true,
+              axisLabel: { fontSize: 10 },
+              splitLine: { lineStyle: { color: '#f0f0f0' } },
+            },
           ],
           dataZoom: [
-            { type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 },
-            { type: 'slider', xAxisIndex: [0, 1], start: 50, end: 100, height: 20, bottom: 2 },
+            { type: 'inside', xAxisIndex: [0, 1, 2], start: 50, end: 100 },
+            { type: 'slider', xAxisIndex: [0, 1, 2], start: 50, end: 100, height: 20, bottom: 2 },
           ],
           series: [
             {
@@ -215,46 +264,10 @@
                 borderColor0: '#2e7d32',
               },
             },
-            {
-              name: 'MA5',
-              type: 'line',
-              data: ma5,
-              xAxisIndex: 0,
-              yAxisIndex: 0,
-              smooth: true,
-              lineStyle: { width: 1, color: '#e91e63' },
-              symbol: 'none',
-            },
-            {
-              name: 'MA10',
-              type: 'line',
-              data: ma10,
-              xAxisIndex: 0,
-              yAxisIndex: 0,
-              smooth: true,
-              lineStyle: { width: 1, color: '#ff9800' },
-              symbol: 'none',
-            },
-            {
-              name: 'MA20',
-              type: 'line',
-              data: ma20,
-              xAxisIndex: 0,
-              yAxisIndex: 0,
-              smooth: true,
-              lineStyle: { width: 1, color: '#9c27b0' },
-              symbol: 'none',
-            },
-            {
-              name: 'MA60',
-              type: 'line',
-              data: ma60,
-              xAxisIndex: 0,
-              yAxisIndex: 0,
-              smooth: true,
-              lineStyle: { width: 1, color: '#607d8b' },
-              symbol: 'none',
-            },
+            { name: 'MA5',  type: 'line', data: ma5,  xAxisIndex: 0, yAxisIndex: 0, smooth: true, lineStyle: { width: 1, color: '#e91e63' }, symbol: 'none' },
+            { name: 'MA10', type: 'line', data: ma10, xAxisIndex: 0, yAxisIndex: 0, smooth: true, lineStyle: { width: 1, color: '#ff9800' }, symbol: 'none' },
+            { name: 'MA20', type: 'line', data: ma20, xAxisIndex: 0, yAxisIndex: 0, smooth: true, lineStyle: { width: 1, color: '#9c27b0' }, symbol: 'none' },
+            { name: 'MA60', type: 'line', data: ma60, xAxisIndex: 0, yAxisIndex: 0, smooth: true, lineStyle: { width: 1, color: '#607d8b' }, symbol: 'none' },
             {
               name: '成交量',
               type: 'bar',
@@ -265,6 +278,36 @@
                 color: function(params) {
                   const i = params.dataIndex;
                   return ohlc[i][1] >= ohlc[i][0] ? '#c62828' : '#2e7d32';
+                },
+              },
+            },
+            {
+              name: 'DIF',
+              type: 'line',
+              data: dif,
+              xAxisIndex: 2,
+              yAxisIndex: 2,
+              symbol: 'none',
+              lineStyle: { width: 1, color: '#e91e63' },
+            },
+            {
+              name: 'DEA',
+              type: 'line',
+              data: deaFull,
+              xAxisIndex: 2,
+              yAxisIndex: 2,
+              symbol: 'none',
+              lineStyle: { width: 1, color: '#ff9800' },
+            },
+            {
+              name: 'MACD',
+              type: 'bar',
+              data: macdBar,
+              xAxisIndex: 2,
+              yAxisIndex: 2,
+              itemStyle: {
+                color: function(params) {
+                  return params.value >= 0 ? '#c62828' : '#2e7d32';
                 },
               },
             },
