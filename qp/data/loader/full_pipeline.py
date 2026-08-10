@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -39,11 +40,37 @@ DIR_SILVER = Path("data/silver")
 DIR_GOLD = Path("data/dataset")
 
 
-class FullDataPipeline(BasePipeline):
-    """4-tier data ingestion: Raw → Bronze → Silver → Gold.
+def _normalize_volume_unit(df: pl.DataFrame, logger: Any) -> pl.DataFrame:
+    """Normalize volume to 手 (lots, 100 shares) if the source returns 股 (shares).
 
-    Each tier is independently saved. Gold is registered in DatasetRegistry.
+    Heuristic: if the median volume across all rows exceeds 20M, the data is
+    likely in shares (A-share volume in lots rarely exceeds 20M even for the
+    most liquid stocks). Divide by 100 to convert back to 手.
     """
+    if df.is_empty():
+        return df
+
+    med_vol: float | None = df["volume"].median()  # type: ignore[assignment]
+    if med_vol is None:
+        return df
+
+    if med_vol > 20_000_000:
+        n_rows = df.height
+        before_mean = df["volume"].mean()
+        df = df.with_columns((pl.col("volume") / 100).alias("volume"))
+        after_mean = df["volume"].mean()
+        logger.info(
+            "🔧 Volume unit normalized: 股→手 (median={:,.0f} > 20M, "
+            "mean {:,.0f} → {:,.0f}, {} rows)",
+            med_vol,
+            before_mean,
+            after_mean,
+            n_rows,
+        )
+    return df
+
+
+class FullDataPipeline(BasePipeline):
 
     @property
     def name(self) -> str:
@@ -122,6 +149,11 @@ class FullDataPipeline(BasePipeline):
         logger.info("Tier 2/4: BRONZE — ETL 4-stage cleaning + Repair")
         DIR_BRONZE.mkdir(parents=True, exist_ok=True)
         bronze_path = DIR_BRONZE / f"daily_price_main_{version}.parquet"
+
+        # Normalize volume unit before ETL
+        # Data sources may change volume unit (手/lots vs 股/shares).
+        # A-share volume in 手 rarely exceeds 20M; higher → shares, divide by 100.
+        raw_df = _normalize_volume_unit(raw_df, logger)
 
         etl = ETLPipeline()
         etl_result = etl.run(raw_df, adj_factors=None)
