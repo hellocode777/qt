@@ -690,7 +690,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/shuai/workspace/qt
-ExecStart=/home/shuai/.local/bin/uv run qp web start
+ExecStart=/home/shuai/.local/bin/uv run qp web start --reload
 ExecStop=/bin/kill -TERM $MAINPID
 Restart=on-failure
 RestartSec=5

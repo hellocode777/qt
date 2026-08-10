@@ -603,11 +603,14 @@ def web() -> None:
 
 
 @web.command("start")
-def web_start() -> None:
+@click.option("--host", default="0.0.0.0", help="Bind address")
+@click.option("--port", default=8080, type=int, help="Port number")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+def web_start(host: str, port: int, reload: bool) -> None:
     """Start the QP web dashboard."""
     from qp.platform.cli.commands.web import cmd_web_start
 
-    raise SystemExit(cmd_web_start())
+    raise SystemExit(cmd_web_start(host=host, port=port, reload=reload))
 
 
 # ==================================================================
