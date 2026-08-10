@@ -1,7 +1,7 @@
 # QP (Quant Platform) 用户指南
 
 > 个人量化研究与投资决策操作系统
-> 更新日期：2026-08-01
+> 更新日期：2026-08-10
 
 ---
 
@@ -19,6 +19,7 @@
 10. [模拟交易](#10-模拟交易)
 11. [自动化调度](#11-自动化调度)
 12. [Web 决策中心](#12-web-决策中心)
+    - [12.3 个股K线分析](#123-个股k线分析)
 13. [全命令速查表](#13-全命令速查表)
 14. [典型工作流](#14-典型工作流)
 15. [配置说明](#15-配置说明)
@@ -578,6 +579,7 @@ sudo systemctl enable qp-scheduler
 sudo systemctl stop qp-scheduler
 
 # 重启（代码更新后）
+sudo systemctl daemon-reload
 sudo systemctl restart qp-scheduler
 
 # 查看状态
@@ -728,6 +730,40 @@ journalctl --user -u qp-web -f
 - 崩溃后 5 秒自动重启（`Restart=on-failure`）
 - 日志写入 systemd journal，`journalctl --user -u qp-web` 查看
 
+### 12.3 个股K线分析
+
+在 Web 界面中查看任意 A 股的历史 K 线图（蜡烛图），包含均线叠加和成交量。
+
+**访问路径**：导航栏点击「个股K线 Stocks」，或直接访问 `http://localhost:8080/stocks`。
+
+**搜索股票**：
+- 在搜索框输入股票代码（如 `600519`）或股票名称（如 `茅台`）
+- 支持 HTMX 实时搜索，输入即搜
+- 匹配 3000+ A 股股票
+
+**K线图表功能**：
+- 专业蜡烛图（红涨绿跌），ECharts 渲染
+- 均线叠加：MA5（粉）、MA10（橙）、MA20（紫）、MA60（灰）
+- 成交量柱状图（红涨绿跌），位于 K 线图下方
+- 时间范围切换按钮：3M / 6M / 1Y / 2Y / All
+- 鼠标滚轮缩放、拖拽平移
+- 底部滑块选择时间区间
+
+**页面信息**：
+- 最新价、涨跌幅
+- 开盘 / 最高 / 最低 / 成交量
+- 最新交易日、历史数据天数
+
+**API 接口**：
+
+| 路由 | 说明 |
+|------|------|
+| `GET /stocks` | 股票搜索页，支持 `?q=` 参数 |
+| `GET /stocks/{code}` | 个股 K 线详情页 |
+| `GET /api/stocks/{code}/kline?days=365` | JSON API，返回 OHLCV 数组 |
+
+示例：`curl http://localhost:8080/api/stocks/600519/kline?days=90`
+
 ---
 
 ## 13. 全命令速查表
@@ -742,6 +778,24 @@ journalctl --user -u qp-web -f
 | `qp web start [--port] [--host] [--reload]` | 启动 Web 决策中心 |
 | `qp pipeline list` | 列出已注册管道 |
 | `qp scheduler start` | 启动后台定时调度器 |
+
+### Web 页面
+
+| 路由 | 说明 |
+|------|------|
+| `/` | 驾驶舱首页 |
+| `/health` | 系统健康监控 |
+| `/health/factors` | 因子健康详情 |
+| `/health/strategies` | 策略健康列表 |
+| `/strategies` | 策略管理 |
+| `/portfolio` | 投资组合概览 |
+| `/decisions` | 决策记录 |
+| `/simulation` | 影子运行 |
+| `/experiments` | 实验追踪 |
+| `/models` | 模型注册 |
+| `/proposals` | 审批提案 |
+| `/stocks` | 个股K线分析 |
+| `/stocks/{code}` | 个股K线详情 |
 
 ### 数据
 
