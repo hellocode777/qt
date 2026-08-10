@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>个股分析 Stocks</h1>
+    <div class="meta">搜索个股，查看 K 线图表</div>
+  </div>
+</div>
+
+<!-- Search bar -->
+<div class="card">
+  <div class="card-body">
+    <form action="/stocks" method="get" style="display: flex; gap: 12px; align-items: center;">
+      <input
+        type="text"
+        name="q"
+        value="{{ query }}"
+        placeholder="输入股票代码或名称搜索，如 600519 或 茅台..."
+        style="flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 15px; outline: none;"
+        autofocus
+        hx-get="/stocks"
+        hx-trigger="keyup changed delay:300ms"
+        hx-target="#stock-results"
+        hx-select="#stock-results"
+        hx-push-url="true"
+      >
+      <button type="submit" class="btn" style="padding: 10px 24px; font-size: 15px;">
+        &#128269; 搜索
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Results -->
+<div id="stock-results">
+{% if query and not has_results %}
+<div class="card mt-4">
+  <div class="card-body">
+    <div class="empty-state">
+      <div class="icon">&#128300;</div>
+      <p style="margin: 8px 0; color: #999;">未找到匹配 "{{ query }}" 的股票</p>
+      <p style="font-size: 13px; color: #bbb;">尝试输入股票代码（如 000001）或股票名称</p>
+    </div>
+  </div>
+</div>
+{% elif has_results %}
+<div class="card mt-4">
+  <div class="card-header">
+    <span>&#128200; 搜索结果</span>
+    <span class="c-muted" style="font-size: 13px;">{{ results | length }} 个结果</span>
+  </div>
+  <div class="card-body p0">
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; padding: 12px;">
+      {% for stock in results %}
+      <a href="/stocks/{{ stock.code }}"
+         style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; text-decoration: none; color: inherit; transition: box-shadow 0.15s;"
+         onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'"
+         onmouseout="this.style.boxShadow='none'">
+        <div>
+          <div style="font-weight: 600; font-size: 14px;">{{ stock.name }}</div>
+          <div class="font-mono c-muted" style="font-size: 12px;">{{ stock.code }}</div>
+        </div>
+        <span style="color: var(--blue); font-size: 18px;">→</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mt-4">
+  <div class="card-body">
+    <div class="empty-state">
+      <div class="icon">&#128269;</div>
+      <p style="margin: 8px 0; color: #999;">输入股票代码或名称开始搜索</p>
+      <p style="font-size: 13px; color: #bbb;">支持 A 股全部 3000+ 只股票</p>
+    </div>
+  </div>
+</div>
+{% endif %}
+</div>
+
+{% endblock %}

@@ -7,6 +7,8 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- ECharts — candlestick charts, financial viz -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
   <!-- HTMX -->
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <!-- Alpine.js -->
@@ -33,6 +35,7 @@
       <a href="/models" class="{% if request.url.path.startswith('/models') %}active{% endif %}" hx-boost="true">模型 Models</a>
       <a href="/experiments" class="{% if request.url.path.startswith('/experiments') %}active{% endif %}" hx-boost="true">实验 Experiments</a>
       <a href="/proposals" class="{% if request.url.path.startswith('/proposals') %}active{% endif %}" hx-boost="true">提案 Proposals</a>
+      <a href="/stocks" class="{% if request.url.path.startswith('/stocks') %}active{% endif %}" hx-boost="true">个股K线 Stocks</a>
     </div>
     <div class="navbar-status">
       <span class="status-dot"></span>
@@ -52,5 +55,6 @@
     所有投资决策责任由您自行承担
   </div>
 
+  {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% if error %}
+<!-- Error state -->
+<div class="page-header">
+  <div>
+    <h1>个股分析 Stocks</h1>
+    <div class="meta">{{ error }}</div>
+  </div>
+</div>
+<div class="card mt-4">
+  <div class="card-body">
+    <div class="empty-state">
+      <div class="icon">&#128531;</div>
+      <p style="margin: 8px 0; color: #999;">{{ error }}</p>
+      <a href="/stocks" class="btn" style="margin-top: 12px;">← 返回搜索</a>
+    </div>
+  </div>
+</div>
+
+{% else %}
+
+<!-- Stock header -->
+<div class="page-header">
+  <div>
+    <h1>
+      {{ stock.name }}
+      <span class="font-mono c-muted" style="font-size: 16px; font-weight: 400;">{{ stock.code }}</span>
+    </h1>
+    <div class="meta">最新交易日: {{ stock.latest_date }}</div>
+  </div>
+  <a href="/stocks" class="btn" style="font-size: 13px;">← 返回搜索</a>
+</div>
+
+<!-- Price summary cards -->
+<div class="card-grid">
+  <div class="card">
+    <div class="card-body" style="text-align: center;">
+      <div class="stat-label">最新价</div>
+      <div class="stat-value" style="font-size: 32px; {% if stock.change_pct >= 0 %}color: #c62828;{% else %}color: #2e7d32;{% endif %}">
+        {{ "%.2f" | format(stock.latest_price) }}
+      </div>
+      <div style="font-size: 14px; {% if stock.change_pct >= 0 %}color: #c62828;{% else %}color: #2e7d32;{% endif %}">
+        {{ "%+.2f%%" | format(stock.change_pct) }}
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-label">开盘</div>
+          <div class="stat-value font-mono" style="font-size: 16px;">{{ "%.2f" | format(stock.latest_open) }}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">最高</div>
+          <div class="stat-value font-mono" style="font-size: 16px; color: #c62828;">{{ "%.2f" | format(stock.latest_high) }}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">最低</div>
+          <div class="stat-value font-mono" style="font-size: 16px; color: #2e7d32;">{{ "%.2f" | format(stock.latest_low) }}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">成交量</div>
+          <div class="stat-value font-mono" style="font-size: 14px;">{{ "%.0f" | format(stock.latest_volume) }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- K-line Chart -->
+<div class="card mt-4">
+  <div class="card-header">
+    <span>&#128202; K线图 Candlestick Chart</span>
+    <div style="display: flex; gap: 6px;">
+      <button class="btn btn-sm kline-range active" data-days="90">3M</button>
+      <button class="btn btn-sm kline-range" data-days="180">6M</button>
+      <button class="btn btn-sm kline-range" data-days="365" style="background: var(--blue); color: #fff;">1Y</button>
+      <button class="btn btn-sm kline-range" data-days="730">2Y</button>
+      <button class="btn btn-sm kline-range" data-days="3650">All</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div id="kline-chart" style="width: 100%; height: 520px;"></div>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  if (!{{ "true" if stock else "false" }}) return;
+
+  const code = "{{ code }}";
+  const chartDom = document.getElementById('kline-chart');
+  if (!chartDom) return;
+
+  const chart = echarts.init(chartDom);
+
+  // --- Fetch and render K-line data ---
+  function loadKline(days) {
+    // Highlight active button
+    document.querySelectorAll('.kline-range').forEach(btn => {
+      btn.style.background = '';
+      btn.style.color = '';
+    });
+    const activeBtn = document.querySelector(`.kline-range[data-days="${days}"]`);
+    if (activeBtn) {
+      activeBtn.style.background = 'var(--blue)';
+      activeBtn.style.color = '#fff';
+    }
+
+    fetch(`/api/stocks/${code}/kline?days=${days}`)
+      .then(r => r.json())
+      .then(resp => {
+        const raw = resp.data || [];
+        const dates = raw.map(d => d.date);
+        const ohlc = raw.map(d => [d.open, d.close, d.low, d.high]);
+        const volumes = raw.map(d => d.volume);
+
+        // Calculate MAs
+        function calcMA(data, period) {
+          const result = [];
+          for (let i = 0; i < data.length; i++) {
+            if (i < period - 1) { result.push(null); continue; }
+            let sum = 0;
+            for (let j = 0; j < period; j++) sum += data[i - j][1]; // close price
+            result.push(+(sum / period).toFixed(2));
+          }
+          return result;
+        }
+        const ma5 = calcMA(ohlc, 5);
+        const ma10 = calcMA(ohlc, 10);
+        const ma20 = calcMA(ohlc, 20);
+        const ma60 = calcMA(ohlc, 60);
+
+        const option = {
+          backgroundColor: '#fff',
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'cross' },
+          },
+          legend: {
+            data: ['K线', 'MA5', 'MA10', 'MA20', 'MA60', '成交量'],
+            top: 6,
+            left: 'center',
+            textStyle: { fontSize: 12 },
+          },
+          grid: [
+            { left: '8%', right: '2%', top: '12%', height: '58%' },
+            { left: '8%', right: '2%', top: '78%', height: '14%' },
+          ],
+          xAxis: [
+            {
+              type: 'category',
+              data: dates,
+              gridIndex: 0,
+              axisLabel: { show: false },
+              axisLine: { lineStyle: { color: '#e0e0e0' } },
+            },
+            {
+              type: 'category',
+              data: dates,
+              gridIndex: 1,
+              axisLabel: {
+                show: true,
+                fontSize: 10,
+                color: '#999',
+                formatter: function(v) {
+                  const d = v.substring(5); // MM-DD
+                  return d;
+                },
+                interval: Math.floor(dates.length / 8),
+              },
+              axisLine: { lineStyle: { color: '#e0e0e0' } },
+            },
+          ],
+          yAxis: [
+            {
+              type: 'value',
+              gridIndex: 0,
+              scale: true,
+              splitArea: { show: true },
+              axisLabel: { fontSize: 11 },
+              splitLine: { lineStyle: { color: '#f0f0f0' } },
+            },
+            {
+              type: 'value',
+              gridIndex: 1,
+              axisLabel: { fontSize: 10, formatter: function(v) { return v > 1e8 ? (v/1e8).toFixed(1)+'亿' : (v/1e4).toFixed(0)+'万'; } },
+              splitLine: { show: false },
+            },
+          ],
+          dataZoom: [
+            { type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 },
+            { type: 'slider', xAxisIndex: [0, 1], start: 50, end: 100, height: 20, bottom: 2 },
+          ],
+          series: [
+            {
+              name: 'K线',
+              type: 'candlestick',
+              data: ohlc,
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              itemStyle: {
+                color: '#c62828',
+                color0: '#2e7d32',
+                borderColor: '#c62828',
+                borderColor0: '#2e7d32',
+              },
+            },
+            {
+              name: 'MA5',
+              type: 'line',
+              data: ma5,
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              smooth: true,
+              lineStyle: { width: 1, color: '#e91e63' },
+              symbol: 'none',
+            },
+            {
+              name: 'MA10',
+              type: 'line',
+              data: ma10,
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              smooth: true,
+              lineStyle: { width: 1, color: '#ff9800' },
+              symbol: 'none',
+            },
+            {
+              name: 'MA20',
+              type: 'line',
+              data: ma20,
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              smooth: true,
+              lineStyle: { width: 1, color: '#9c27b0' },
+              symbol: 'none',
+            },
+            {
+              name: 'MA60',
+              type: 'line',
+              data: ma60,
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              smooth: true,
+              lineStyle: { width: 1, color: '#607d8b' },
+              symbol: 'none',
+            },
+            {
+              name: '成交量',
+              type: 'bar',
+              data: volumes,
+              xAxisIndex: 1,
+              yAxisIndex: 1,
+              itemStyle: {
+                color: function(params) {
+                  const i = params.dataIndex;
+                  return ohlc[i][1] >= ohlc[i][0] ? '#c62828' : '#2e7d32';
+                },
+              },
+            },
+          ],
+        };
+
+        chart.setOption(option, true);
+      })
+      .catch(err => {
+        console.error('Failed to load kline data:', err);
+      });
+  }
+
+  // Initial load
+  loadKline(365);
+
+  // Range buttons
+  document.querySelectorAll('.kline-range').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const days = parseInt(this.dataset.days);
+      loadKline(days);
+    });
+  });
+
+  // Resize
+  window.addEventListener('resize', () => chart.resize());
+})();
+</script>
+{% endblock %}

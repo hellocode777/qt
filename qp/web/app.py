@@ -63,6 +63,7 @@ def _register_routers(app: FastAPI) -> None:
     from qp.web.routers.portfolio import router as portfolio_router
     from qp.web.routers.proposals import router as proposals_router
     from qp.web.routers.simulation import router as simulation_router
+    from qp.web.routers.stocks import router as stocks_router
     from qp.web.routers.strategies import router as strategies_router
 
     app.include_router(dashboard_router)
@@ -73,6 +74,7 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(portfolio_router)
     app.include_router(proposals_router)
     app.include_router(simulation_router)
+    app.include_router(stocks_router)
     # Factor health router (L9 monitoring)
     from qp.web.routers.factors import router as factors_router
 
