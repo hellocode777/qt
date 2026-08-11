@@ -2,6 +2,8 @@
 
 > Personal Quant Research & Investment Decision Platform
 > 最后更新：2026-08-01
+>
+> **本文档为精简版宪法**（骨架与原则）。完整版见 [`rule.md`](rule.md) —— 含 28 条系统宪法全文、两大生命周期状态机、核心抽象接口定义、落地路线图与自查表。
 
 ---
 
@@ -11,7 +13,9 @@ QP (Quant Platform) 是一个**个人量化研究与投资决策操作系统**�
 
 它是**决策辅助系统**，不是自动交易系统。平台产出可解释、可审计的交易建议，最终执行由人完成。
 
-## 二、十二层架构
+## 二、十层架构
+
+> 原 12 层，ADR-029/030 合并 Risk + Capital Allocation 入 `portfolio/`（详见 `rule.md` 第 3 节）。
 
 ```
 Layer 1:  platform/     — 运行时内核（配置、日志、CLI、调度、存储、管道引擎）
@@ -127,12 +131,14 @@ DataFrame 管道（Polars）用于数据和研究层；Domain Model（Pydantic�
 
 ```
 docs/
-├── constitution/constitution-v4.2.md    ← 本文档（最高准则）
-├── user_guide.md                        ← 用户操作指南
-├── developer_guide.md                   ← 开发者指南
-├── api.md                               ← 公开 API 参考
-├── architecture/                        ← 分层设计提案（DP-001 ~ DP-010）
-└── tdr/                                 ← 技术决策记录（TDR-001 ~ TDR-010）
+├── constitution/
+│   ├── constitution-v4.2.md            ← 精简版宪法（本文档，最高准则摘要）
+│   └── rule.md                         ← 完整版宪法（28条宪法全文、状态机、接口定义）
+├── user_guide.md                       ← 用户操作指南
+├── developer_guide.md                  ← 开发者指南
+├── api.md                              ← 公开 API 参考
+├── architecture/                       ← 分层设计提案（DP-001 ~ DP-010）
+└── tdr/                                ← 技术决策记录（TDR-001 ~ TDR-010）
 ```
 
 ## 九、版本历史

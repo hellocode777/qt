@@ -38,5 +38,6 @@
 
 | 文件 | 被谁取代 |
 |------|----------|
-| `rule.md` | `docs/constitution/constitution-v4.2.md` |
 | `dp.md` | ADR-001 ~ ADR-031 + TDR-001 ~ TDR-010 |
+
+> 注：`rule.md` 已于 2026-08-11 移至 `docs/constitution/rule.md` —— 它不是被取代的旧文档，而是**完整版宪法**（含 28 条系统宪法、两大生命周期状态机、接口定义），与精简版 `docs/constitution/constitution-v4.2.md` 互为补充。
