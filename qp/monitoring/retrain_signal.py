@@ -23,15 +23,20 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
 DEFAULT_RETRAIN_DIR = "data/monitoring"
 RETRAIN_LOG_FILE = "retrain_signals.parquet"
+
+# Project convention (scheduler/config): timestamps use Asia/Shanghai.
+# UTC-only stamps made signal times look 8 hours off for the operator.
+CN_TZ = ZoneInfo("Asia/Shanghai")
 
 
 class RetrainAction(StrEnum):
@@ -218,13 +223,13 @@ def evaluate_retrain_need(
         RetrainSignal with recommended action.
     """
     ic_ratio = abs(rolling_ic) / training_ic if training_ic > 0 else 0.0
-    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    date_str = datetime.now(CN_TZ).strftime("%Y-%m-%d")
 
     # Tier 1: Critical — model is dead
     if model_decay_stage == "STALE":
         return RetrainSignal(
             date=date_str,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(CN_TZ).isoformat(),
             strategy_name=strategy_name,
             trigger=RetrainTrigger.MODEL_STALE,
             action=RetrainAction.RETIRE,
@@ -241,7 +246,7 @@ def evaluate_retrain_need(
     if psi_value >= 0.25:
         return RetrainSignal(
             date=date_str,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(CN_TZ).isoformat(),
             strategy_name=strategy_name,
             trigger=RetrainTrigger.PSI_DRIFT,
             action=RetrainAction.SCHEDULE_RETRAIN,
@@ -258,7 +263,7 @@ def evaluate_retrain_need(
     if ic_ratio < 0.30:
         return RetrainSignal(
             date=date_str,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(CN_TZ).isoformat(),
             strategy_name=strategy_name,
             trigger=RetrainTrigger.IC_DECAY,
             action=RetrainAction.REDUCE_WEIGHT,
@@ -274,7 +279,7 @@ def evaluate_retrain_need(
     if ic_ratio < 0.50:
         return RetrainSignal(
             date=date_str,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(CN_TZ).isoformat(),
             strategy_name=strategy_name,
             trigger=RetrainTrigger.IC_DECAY,
             action=RetrainAction.REDUCE_WEIGHT,
@@ -291,7 +296,7 @@ def evaluate_retrain_need(
     if psi_value >= 0.10:
         return RetrainSignal(
             date=date_str,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(CN_TZ).isoformat(),
             strategy_name=strategy_name,
             trigger=RetrainTrigger.PSI_DRIFT,
             action=RetrainAction.MONITOR,
@@ -308,7 +313,7 @@ def evaluate_retrain_need(
     if current_regime in ("LIQUIDITY_CRUNCH", "STYLE_REVERSAL"):
         return RetrainSignal(
             date=date_str,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(CN_TZ).isoformat(),
             strategy_name=strategy_name,
             trigger=RetrainTrigger.REGIME_SHIFT,
             action=RetrainAction.MONITOR,
