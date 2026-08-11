@@ -149,8 +149,8 @@ class KillSwitchPipeline(BasePipeline):
 
             # Step 3.6: Online signal health — realized rolling IC from
             # accumulated daily signal history (real value, not a 0.0 stub)
-            report.rolling_ic, report.rolling_ic_available = (
-                self._check_online_signal_health(context)
+            report.rolling_ic, report.rolling_ic_available = self._check_online_signal_health(
+                context
             )
             report.strategy_name = self._last_monitored_strategy or ""
 
