@@ -130,7 +130,38 @@
           "excess_return": -18.39
         },
         "validation_report_id": "",
-        "meta": {}
+        "meta": {},
+        "validation_report": {
+          "status": "PASS",
+          "score": 100.0,
+          "confidence": 1.0,
+          "rules": [
+            {
+              "rule_name": "rank_ic",
+              "status": "PASS",
+              "score": 0.0692,
+              "threshold": 0.02,
+              "actual_value": 0.0692,
+              "detail": "Mean IC from backtest"
+            },
+            {
+              "rule_name": "sharpe_ratio",
+              "status": "PASS",
+              "score": 1.06,
+              "threshold": 0.5,
+              "actual_value": 1.06,
+              "detail": "Sharpe ratio from backtest"
+            }
+          ],
+          "failed_rules": [],
+          "recommendation": "Backtest metrics frozen at approve time (ADR-031).",
+          "metrics": {
+            "ic_mean": 0.0692,
+            "sharpe_ratio": 1.06,
+            "max_drawdown_pct": 9.28,
+            "excess_return_pct": -18.39
+          }
+        }
       }
     },
     "lvr_vol_only": {

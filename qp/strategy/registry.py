@@ -17,7 +17,7 @@ import contextlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from qp.shared.protocols.base_strategy import BaseStrategy
 from qp.shared.types import RebalanceSchedule, StrategyLifecycle
@@ -503,6 +503,7 @@ class StrategyRegistry:
         strategy_id: str,
         approved_by: str = "",
         version: str | None = None,
+        validation_report: dict[str, Any] | None = None,
     ) -> object:
         """Freeze a strategy as an ApprovedStrategy snapshot.
 
@@ -544,6 +545,7 @@ class StrategyRegistry:
             version=version,
             approved_by=approved_by,
             meta=meta,
+            validation_report=validation_report,
         )
 
         self._approved[strategy_id] = approved.to_dict()
