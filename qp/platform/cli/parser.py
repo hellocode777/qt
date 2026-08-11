@@ -420,19 +420,40 @@ def paper() -> None:
 
 
 @paper.command("start")
-def paper_start() -> None:
+@click.argument("strategy_id", required=False, default="momentum_vol_full")
+@click.option("--capital", type=float, default=100_000, help="初始资金 (CNY)")
+def paper_start(strategy_id: str, capital: float) -> None:
     """Start paper trading for a strategy."""
     from qp.platform.cli.commands.paper import cmd_paper_start
 
-    raise SystemExit(cmd_paper_start())
+    raise SystemExit(cmd_paper_start(strategy_id, capital))
 
 
 @paper.command("status")
-def paper_status() -> None:
+@click.argument("strategy_id", required=False, default="momentum_vol_full")
+def paper_status(strategy_id: str) -> None:
     """Show paper trading status."""
     from qp.platform.cli.commands.paper import cmd_paper_status
 
-    raise SystemExit(cmd_paper_status())
+    raise SystemExit(cmd_paper_status(strategy_id))
+
+
+# ==================================================================
+# Lineage
+# ==================================================================
+
+
+@cli.group()
+def lineage() -> None:
+    """Lineage graph operations (Rule 7: Full Data Lineage)."""
+
+
+@lineage.command("snapshot")
+def lineage_snapshot() -> None:
+    """Build and persist the full lineage graph from registries."""
+    from qp.platform.cli.commands.lineage import cmd_lineage_snapshot
+
+    raise SystemExit(cmd_lineage_snapshot())
 
 
 # ==================================================================

@@ -48,6 +48,8 @@ class DailyRecord:
     n_trades: int = 0
     daily_return: float = 0.0
     total_cost: float = 0.0
+    positions: dict[str, int] = field(default_factory=dict)  # symbol → shares
+    avg_costs: dict[str, float] = field(default_factory=dict)  # symbol → avg cost basis
 
 
 @dataclass
@@ -187,11 +189,13 @@ class PaperTradingTracker:
 
             broker = SimulatedBroker(initial_cash=run.capital)
 
-        # Replay existing positions if we have history
+        # Restore cash + positions from the previous day so holdings persist
+        # across the 30-day window (Rule 11: real paper trading holds positions).
         if run.daily_records:
-            broker._cash = run.daily_records[-1].cash
-            # Note: full position replay would need the trade log;
-            # simplified: start fresh each day from cash + signals
+            prev = run.daily_records[-1]
+            broker._cash = prev.cash
+            if prev.positions:
+                broker.restore_positions(prev.positions, prev.avg_costs)
 
         # Build price/ADV maps
         price_map: dict[str, float] = {}
@@ -209,10 +213,17 @@ class PaperTradingTracker:
         # Generate signals if not provided
         if signals is None:
             registry = StrategyRegistry()
-            registry.register(SimpleRankStrategy(top_n=10))
-            strategy = registry.get(run.strategy_id)
-            today = date.fromisoformat(trade_date)
-            signals = strategy.generate_signals(today)
+            if run.strategy_id in registry.list_strategies():
+                strategy = registry.get(run.strategy_id)
+                today = date.fromisoformat(trade_date)
+                signals = strategy.generate_signals(today)
+            else:
+                from qp.strategy.simple_rank import SimpleRankStrategy
+
+                registry.register(SimpleRankStrategy(top_n=10))
+                strategy = registry.get(run.strategy_id)
+                today = date.fromisoformat(trade_date)
+                signals = strategy.generate_signals(today)
 
         n_signals = len(signals) if signals is not None and not signals.is_empty() else 0
         n_trades = 0
@@ -255,6 +266,10 @@ class PaperTradingTracker:
             n_trades=n_trades,
             daily_return=daily_ret,
             total_cost=total_cost,
+            positions={sym: pos.shares for sym, pos in broker._positions.items() if pos.shares > 0},
+            avg_costs={
+                sym: pos.avg_cost for sym, pos in broker._positions.items() if pos.shares > 0
+            },
         )
 
         run.daily_records.append(record)

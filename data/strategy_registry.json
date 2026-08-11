@@ -51,6 +51,80 @@
       },
       "active": false
     },
+    "lvr_vol_only": {
+      "lifecycle": "backtest_passed",
+      "meta": {
+        "strategy_version": "multifactor_20260807_020018",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "experiment",
+        "description": "",
+        "tags": [],
+        "weights": {
+          "Volatility_20D": 1.0
+        },
+        "parameters": {
+          "top_n": 10,
+          "rebalance": 20,
+          "industry_neutral": true,
+          "orthogonalize": true,
+          "anti_chase": true
+        },
+        "backtest_ic": 0.0543,
+        "backtest_sharpe": 1.52,
+        "backtest_max_dd": 9.7,
+        "backtest_excess_return": 26.730000000000004
+      },
+      "active": false,
+      "approved": {
+        "strategy_id": "lvr_vol_only",
+        "version": "v20260808",
+        "approved_at": "2026-08-08T12:30:30.915323+00:00",
+        "approved_by": "webui",
+        "weights": {
+          "Volatility_20D": 1.0
+        },
+        "parameters": {
+          "top_n": 10,
+          "rebalance": 20,
+          "industry_neutral": true,
+          "orthogonalize": true,
+          "anti_chase": true
+        },
+        "backtest_summary": {
+          "ic": 0.0543,
+          "sharpe": 1.52,
+          "max_dd": 9.7,
+          "excess_return": 26.730000000000004
+        },
+        "validation_report_id": "",
+        "meta": {}
+      }
+    },
+    "quality_v1.0": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "1.0.0",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "",
+        "description": "",
+        "tags": [],
+        "weights": {},
+        "parameters": {},
+        "backtest_ic": 0.0,
+        "backtest_sharpe": 0.0,
+        "backtest_max_dd": 0.0,
+        "backtest_excess_return": 0.0
+      },
+      "active": false
+    },
     "momentum_v1.0": {
       "lifecycle": "research",
       "meta": {
@@ -163,80 +237,6 @@
           }
         }
       }
-    },
-    "lvr_vol_only": {
-      "lifecycle": "backtest_passed",
-      "meta": {
-        "strategy_version": "multifactor_20260807_020018",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "experiment",
-        "description": "",
-        "tags": [],
-        "weights": {
-          "Volatility_20D": 1.0
-        },
-        "parameters": {
-          "top_n": 10,
-          "rebalance": 20,
-          "industry_neutral": true,
-          "orthogonalize": true,
-          "anti_chase": true
-        },
-        "backtest_ic": 0.0543,
-        "backtest_sharpe": 1.52,
-        "backtest_max_dd": 9.7,
-        "backtest_excess_return": 26.730000000000004
-      },
-      "active": false,
-      "approved": {
-        "strategy_id": "lvr_vol_only",
-        "version": "v20260808",
-        "approved_at": "2026-08-08T12:30:30.915323+00:00",
-        "approved_by": "webui",
-        "weights": {
-          "Volatility_20D": 1.0
-        },
-        "parameters": {
-          "top_n": 10,
-          "rebalance": 20,
-          "industry_neutral": true,
-          "orthogonalize": true,
-          "anti_chase": true
-        },
-        "backtest_summary": {
-          "ic": 0.0543,
-          "sharpe": 1.52,
-          "max_dd": 9.7,
-          "excess_return": 26.730000000000004
-        },
-        "validation_report_id": "",
-        "meta": {}
-      }
-    },
-    "quality_v1.0": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "1.0.0",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "",
-        "description": "",
-        "tags": [],
-        "weights": {},
-        "parameters": {},
-        "backtest_ic": 0.0,
-        "backtest_sharpe": 0.0,
-        "backtest_max_dd": 0.0,
-        "backtest_excess_return": 0.0
-      },
-      "active": false
     }
   }
 }

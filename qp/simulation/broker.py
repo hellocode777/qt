@@ -215,6 +215,32 @@ class SimulatedBroker(BaseBroker):
         """Available cash."""
         return self._cash
 
+    def restore_positions(
+        self, positions: dict[str, int], avg_costs: dict[str, float] | None = None
+    ) -> None:
+        """Restore a persisted position map (symbol → shares) into the broker.
+
+        Used by paper trading to continue holding positions across days
+        instead of starting fresh each day. Position cost basis is
+        restored from avg_costs when provided, otherwise market price.
+
+        Args:
+            positions: Mapping of symbol → share count.
+            avg_costs: Optional mapping of symbol → average cost basis.
+        """
+        for sym, shares in positions.items():
+            if shares <= 0:
+                continue
+            if sym not in self._positions:
+                self._positions[sym] = Position(symbol=sym)
+            pos = self._positions[sym]
+            pos.shares = shares
+            price = self._current_prices.get(sym, avg_costs.get(sym, 0.0) if avg_costs else 0.0)
+            if avg_costs and sym in avg_costs:
+                pos.avg_cost = avg_costs[sym]
+            if price > 0:
+                pos.market_value = shares * price
+
     # ------------------------------------------------------------------
     # Simulation API
     # ------------------------------------------------------------------
@@ -336,10 +362,14 @@ class SimulatedBroker(BaseBroker):
                 total_cost_basis = pos.shares * pos.avg_cost + fill_price * quantity
                 pos.shares = total_shares
                 pos.avg_cost = total_cost_basis / total_shares if total_shares > 0 else 0.0
+                # Mark-to-market immediately so get_equity() is correct
+                # right after execution (not only after the next set_prices)
+                pos.market_value = total_shares * fill_price
             else:
                 pos.shares -= quantity
                 if pos.shares == 0:
                     pos.avg_cost = 0.0
+                    pos.market_value = 0.0
 
             order["status"] = "FILLED"
 

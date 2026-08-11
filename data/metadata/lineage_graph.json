@@ -1,0 +1,276 @@
+{
+  "version": "1.0",
+  "exported_at": "2026-08-11T05:52:30.021035+00:00",
+  "graph": {
+    "directed": true,
+    "multigraph": false,
+    "graph": {},
+    "nodes": [
+      {
+        "node_type": "data",
+        "data_id": "daily_price",
+        "uri": "data/dataset/daily_price_latest.parquet",
+        "version": "latest",
+        "registered_at": "2026-08-11T05:52:29.997904+00:00",
+        "id": "data::daily_price::latest"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-07-31.parquet",
+        "version": "2026-07-31",
+        "registered_at": "2026-08-11T05:52:29.998017+00:00",
+        "id": "data::test_ds::2026-07-31"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-01.parquet",
+        "version": "2026-08-01",
+        "registered_at": "2026-08-11T05:52:29.998062+00:00",
+        "id": "data::test_ds::2026-08-01"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-02.parquet",
+        "version": "2026-08-02",
+        "registered_at": "2026-08-11T05:52:29.998092+00:00",
+        "id": "data::test_ds::2026-08-02"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-04.parquet",
+        "version": "2026-08-04",
+        "registered_at": "2026-08-11T05:52:29.998116+00:00",
+        "id": "data::test_ds::2026-08-04"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-05.parquet",
+        "version": "2026-08-05",
+        "registered_at": "2026-08-11T05:52:29.998138+00:00",
+        "id": "data::test_ds::2026-08-05"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-06.parquet",
+        "version": "2026-08-06",
+        "registered_at": "2026-08-11T05:52:29.998156+00:00",
+        "id": "data::test_ds::2026-08-06"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-07.parquet",
+        "version": "2026-08-07",
+        "registered_at": "2026-08-11T05:52:29.998172+00:00",
+        "id": "data::test_ds::2026-08-07"
+      },
+      {
+        "node_type": "data",
+        "data_id": "factor_values_daily",
+        "uri": "data/dataset/factor_values_daily.parquet",
+        "version": "latest",
+        "registered_at": "2026-08-11T05:52:29.998190+00:00",
+        "id": "data::factor_values_daily::latest"
+      },
+      {
+        "node_type": "data",
+        "data_id": "daily_price_main",
+        "uri": "data/dataset/daily_price_main_2026-08-07.parquet",
+        "version": "2026-08-07",
+        "registered_at": "2026-08-11T05:52:29.998207+00:00",
+        "id": "data::daily_price_main::2026-08-07"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-10.parquet",
+        "version": "2026-08-10",
+        "registered_at": "2026-08-11T05:52:29.998222+00:00",
+        "id": "data::test_ds::2026-08-10"
+      },
+      {
+        "node_type": "data",
+        "data_id": "test_ds",
+        "uri": "data/dataset/test_ds_2026-08-11.parquet",
+        "version": "2026-08-11",
+        "registered_at": "2026-08-11T05:52:29.998237+00:00",
+        "id": "data::test_ds::2026-08-11"
+      },
+      {
+        "node_type": "strategy",
+        "strategy_id": "lvr_vol_mom1m",
+        "lifecycle": "research",
+        "registered_at": "2026-08-11T05:52:30.020793+00:00",
+        "id": "strategy::lvr_vol_mom1m"
+      },
+      {
+        "node_type": "strategy",
+        "strategy_id": "lvr_vol_only",
+        "lifecycle": "backtest_passed",
+        "registered_at": "2026-08-11T05:52:30.020847+00:00",
+        "id": "strategy::lvr_vol_only"
+      },
+      {
+        "node_type": "strategy",
+        "strategy_id": "momentum_v1.0",
+        "lifecycle": "research",
+        "registered_at": "2026-08-11T05:52:30.020875+00:00",
+        "id": "strategy::momentum_v1.0"
+      },
+      {
+        "node_type": "strategy",
+        "strategy_id": "momentum_vol_full",
+        "lifecycle": "approved",
+        "registered_at": "2026-08-11T05:52:30.020898+00:00",
+        "id": "strategy::momentum_vol_full"
+      },
+      {
+        "node_type": "strategy",
+        "strategy_id": "quality_v1.0",
+        "lifecycle": "research",
+        "registered_at": "2026-08-11T05:52:30.020918+00:00",
+        "id": "strategy::quality_v1.0"
+      },
+      {
+        "node_type": "strategy",
+        "strategy_id": "value_v1.0",
+        "lifecycle": "research",
+        "registered_at": "2026-08-11T05:52:30.020936+00:00",
+        "id": "strategy::value_v1.0"
+      }
+    ],
+    "links": []
+  },
+  "data_registry": {
+    "data::daily_price::latest": {
+      "node_type": "data",
+      "data_id": "daily_price",
+      "uri": "data/dataset/daily_price_latest.parquet",
+      "version": "latest",
+      "registered_at": "2026-08-11T05:52:29.997904+00:00"
+    },
+    "data::test_ds::2026-07-31": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-07-31.parquet",
+      "version": "2026-07-31",
+      "registered_at": "2026-08-11T05:52:29.998017+00:00"
+    },
+    "data::test_ds::2026-08-01": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-01.parquet",
+      "version": "2026-08-01",
+      "registered_at": "2026-08-11T05:52:29.998062+00:00"
+    },
+    "data::test_ds::2026-08-02": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-02.parquet",
+      "version": "2026-08-02",
+      "registered_at": "2026-08-11T05:52:29.998092+00:00"
+    },
+    "data::test_ds::2026-08-04": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-04.parquet",
+      "version": "2026-08-04",
+      "registered_at": "2026-08-11T05:52:29.998116+00:00"
+    },
+    "data::test_ds::2026-08-05": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-05.parquet",
+      "version": "2026-08-05",
+      "registered_at": "2026-08-11T05:52:29.998138+00:00"
+    },
+    "data::test_ds::2026-08-06": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-06.parquet",
+      "version": "2026-08-06",
+      "registered_at": "2026-08-11T05:52:29.998156+00:00"
+    },
+    "data::test_ds::2026-08-07": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-07.parquet",
+      "version": "2026-08-07",
+      "registered_at": "2026-08-11T05:52:29.998172+00:00"
+    },
+    "data::factor_values_daily::latest": {
+      "node_type": "data",
+      "data_id": "factor_values_daily",
+      "uri": "data/dataset/factor_values_daily.parquet",
+      "version": "latest",
+      "registered_at": "2026-08-11T05:52:29.998190+00:00"
+    },
+    "data::daily_price_main::2026-08-07": {
+      "node_type": "data",
+      "data_id": "daily_price_main",
+      "uri": "data/dataset/daily_price_main_2026-08-07.parquet",
+      "version": "2026-08-07",
+      "registered_at": "2026-08-11T05:52:29.998207+00:00"
+    },
+    "data::test_ds::2026-08-10": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-10.parquet",
+      "version": "2026-08-10",
+      "registered_at": "2026-08-11T05:52:29.998222+00:00"
+    },
+    "data::test_ds::2026-08-11": {
+      "node_type": "data",
+      "data_id": "test_ds",
+      "uri": "data/dataset/test_ds_2026-08-11.parquet",
+      "version": "2026-08-11",
+      "registered_at": "2026-08-11T05:52:29.998237+00:00"
+    }
+  },
+  "feature_registry": {},
+  "model_registry": {},
+  "strategy_registry": {
+    "strategy::lvr_vol_mom1m": {
+      "node_type": "strategy",
+      "strategy_id": "lvr_vol_mom1m",
+      "lifecycle": "research",
+      "registered_at": "2026-08-11T05:52:30.020793+00:00"
+    },
+    "strategy::lvr_vol_only": {
+      "node_type": "strategy",
+      "strategy_id": "lvr_vol_only",
+      "lifecycle": "backtest_passed",
+      "registered_at": "2026-08-11T05:52:30.020847+00:00"
+    },
+    "strategy::momentum_v1.0": {
+      "node_type": "strategy",
+      "strategy_id": "momentum_v1.0",
+      "lifecycle": "research",
+      "registered_at": "2026-08-11T05:52:30.020875+00:00"
+    },
+    "strategy::momentum_vol_full": {
+      "node_type": "strategy",
+      "strategy_id": "momentum_vol_full",
+      "lifecycle": "approved",
+      "registered_at": "2026-08-11T05:52:30.020898+00:00"
+    },
+    "strategy::quality_v1.0": {
+      "node_type": "strategy",
+      "strategy_id": "quality_v1.0",
+      "lifecycle": "research",
+      "registered_at": "2026-08-11T05:52:30.020918+00:00"
+    },
+    "strategy::value_v1.0": {
+      "node_type": "strategy",
+      "strategy_id": "value_v1.0",
+      "lifecycle": "research",
+      "registered_at": "2026-08-11T05:52:30.020936+00:00"
+    }
+  }
+}

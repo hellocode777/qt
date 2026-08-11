@@ -2,38 +2,34 @@
 
 from __future__ import annotations
 
-import sys
 
-
-def cmd_paper_start() -> int:
+def cmd_paper_start(strategy_id: str = "momentum_vol_full", capital: float = 100_000) -> int:
     """Start a 30-day paper trading run."""
     from datetime import date
 
     from qp.strategy.paper_trading import PaperTradingTracker
     from qp.strategy.registry import StrategyRegistry
 
-    strategy_id = "simple_rank_v1.0"
-    if len(sys.argv) > 3 and not sys.argv[3].startswith("--"):
-        strategy_id = sys.argv[3]
-
     print("═══ QP 模拟交易 / Paper Trading ═══")
     print()
     print(f"  策略 / Strategy:  {strategy_id}")
     print(f"  起始日期 / Start: {date.today().isoformat()}")
+    print(f"  初始资金 / Capital: ¥{capital:,.0f}")
 
-    # Verify strategy exists
+    # Verify strategy exists in the registry (no auto-registration —
+    # paper trading validates an already-registered strategy, Rule 11)
     try:
         registry = StrategyRegistry()
-        from qp.strategy.simple_rank import SimpleRankStrategy
-
-        registry.register(SimpleRankStrategy(top_n=10))
-        registry.get(strategy_id)
-    except KeyError:
-        print(f"  ❌ 策略 '{strategy_id}' 未注册")
+        if strategy_id not in registry.list_strategies():
+            print(f"  ❌ 策略 '{strategy_id}' 未注册")
+            print(f"     已注册策略: {registry.list_strategies()}")
+            return 1
+    except Exception as e:
+        print(f"  ⚠ 注册表读取失败: {e}")
         return 1
 
     tracker = PaperTradingTracker()
-    run = tracker.start(strategy_id, capital=100_000)
+    run = tracker.start(strategy_id, capital=capital)
     print(f"  运行编号 / Run ID: {run.run_id}")
     print(f"  状态文件 / State:   {run.state_file}")
     print()
@@ -42,13 +38,9 @@ def cmd_paper_start() -> int:
     return 0
 
 
-def cmd_paper_status() -> int:
+def cmd_paper_status(strategy_id: str = "momentum_vol_full") -> int:
     """Show current paper trading status."""
     from qp.strategy.paper_trading import PaperTradingTracker
-
-    strategy_id = "simple_rank_v1.0"
-    if len(sys.argv) > 3 and not sys.argv[3].startswith("--"):
-        strategy_id = sys.argv[3]
 
     tracker = PaperTradingTracker()
     run = tracker.load(strategy_id)
