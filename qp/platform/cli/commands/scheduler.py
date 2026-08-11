@@ -215,7 +215,17 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 MonitorAction,
             )
 
-            ctx = _make_ctx("scheduled_monitor")
+            # Load price data so regime detection and online rolling-IC
+            # monitoring receive real market data (previously the context
+            # carried no price_data, so checks silently used defaults).
+            try:
+                from qp.pipeline.daily_pipeline import _load_price_data
+
+                price_data, _ = _load_price_data()
+            except Exception:
+                price_data = {}
+
+            ctx = _make_ctx("scheduled_monitor", price_data=price_data)
             pipeline = KillSwitchPipeline()
             result = pipeline.run(ctx)
 

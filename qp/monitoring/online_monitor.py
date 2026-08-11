@@ -300,6 +300,32 @@ class OnlineSignalMonitor:
             return 0.0
         return float(np.mean(ic_values))
 
+    def rolling_ic(
+        self,
+        strategy_id: str,
+        price_data: dict[str, pl.DataFrame],
+        window: int = 20,
+    ) -> float | None:
+        """Public realized rolling IC for monitoring.
+
+        Unlike ``_compute_realized_ic`` (which returns 0.0 when data is
+        missing), this returns **None** when there is insufficient signal
+        history — so callers can distinguish "no data yet" from "real
+        decay".  Callers must NOT treat None as a zero IC.
+
+        Args:
+            strategy_id: Strategy identifier.
+            price_data: Full price data {symbol: DataFrame}.
+            window: Rolling window size.
+
+        Returns:
+            Mean rank IC over the window, or None when history < 5 days.
+        """
+        history = self._load_signal_history(strategy_id)
+        if history is None or history.is_empty() or history.height < 5:
+            return None
+        return self._compute_realized_ic(strategy_id, price_data, window=window)
+
     # ── Persistence ────────────────────────────────────────────
 
     def _save_signal_snapshot(

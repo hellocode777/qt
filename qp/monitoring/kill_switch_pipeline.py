@@ -76,6 +76,9 @@ class MonitorReport:
     strategy_health: StrategyHealth | None = None
     factor_health: FactorHealthReport | None = None
     psi_value: float = 0.0
+    rolling_ic: float = 0.0
+    rolling_ic_available: bool = False
+    strategy_name: str = ""
     alerts: list[str] = field(default_factory=list)
     summary: str = ""
 
@@ -102,6 +105,7 @@ class KillSwitchPipeline(BasePipeline):
         self._alerts = alert_manager or AlertManager()
         self._model_decay = model_decay_detector
         self._regime_engine = regime_engine or MarketRegimeEngine()
+        self._last_monitored_strategy: str = ""
 
     @property
     def name(self) -> str:
@@ -142,6 +146,13 @@ class KillSwitchPipeline(BasePipeline):
 
             # Step 3.5: Factor health (per-factor IC + decay)
             report.factor_health = self._check_factor_health(context)
+
+            # Step 3.6: Online signal health — realized rolling IC from
+            # accumulated daily signal history (real value, not a 0.0 stub)
+            report.rolling_ic, report.rolling_ic_available = (
+                self._check_online_signal_health(context)
+            )
+            report.strategy_name = self._last_monitored_strategy or ""
 
             # Step 4: Strategy health
             report.strategy_health = self._check_strategy_health(context)
@@ -269,6 +280,54 @@ class KillSwitchPipeline(BasePipeline):
         except Exception:
             pass
         return None
+
+    def _check_online_signal_health(self, context: Any) -> tuple[float, bool]:
+        """Compute realized rolling IC from online signal history.
+
+        Reads the accumulated daily signal snapshots (written by the daily
+        pipeline) and computes the 20-day mean rank IC against price data.
+
+        Returns:
+            (rolling_ic_20d, available). ``available=False`` means the IC
+            was never computed — no price data in context, or fewer than 5
+            signal days in history.  A 0.0 IC with available=False is a
+            data gap, NOT model decay, and callers must not alarm on it.
+        """
+        self._last_monitored_strategy = ""
+        try:
+            prices = getattr(context, "price_data", None)
+            if not prices:
+                return 0.0, False
+
+            from qp.monitoring.online_monitor import OnlineSignalMonitor
+            from qp.strategy.registry import StrategyRegistry
+
+            registry = StrategyRegistry()
+            candidates = registry.list_strategies()
+            if not candidates:
+                return 0.0, False
+
+            monitor = OnlineSignalMonitor()
+            # First candidate with signal history wins; prefer one whose
+            # realized IC is actually non-zero (a 0.0 usually means the
+            # signal/price join produced no IC values for that strategy).
+            first_available: tuple[str, float] | None = None
+            for sid in candidates:
+                ic = monitor.rolling_ic(sid, prices, window=20)
+                if ic is None:
+                    continue
+                if first_available is None:
+                    first_available = (sid, float(ic))
+                if ic != 0.0:
+                    self._last_monitored_strategy = sid
+                    return float(ic), True
+            if first_available is not None:
+                self._last_monitored_strategy = first_available[0]
+                return first_available[1], True
+
+            return 0.0, False
+        except Exception:
+            return 0.0, False
 
     def _check_kill_switch(self, context: Any) -> dict[str, Any]:
         """Evaluate all Kill Switch triggers including P0 safety triggers."""
@@ -544,19 +603,27 @@ class KillSwitchPipeline(BasePipeline):
         try:
             from qp.monitoring.retrain_signal import (
                 RetrainSignalLogger,
+                RetrainTrigger,
                 evaluate_retrain_need,
             )
 
             regime_str = report.regime.regime.value if report.regime else "UNKNOWN"
 
             signal = evaluate_retrain_need(
-                strategy_name=getattr(report, "strategy_name", ""),
+                strategy_name=report.strategy_name or "unknown",
                 psi_value=report.psi_value,
-                rolling_ic=getattr(report, "rolling_ic", 0.0),
+                rolling_ic=report.rolling_ic,
                 training_ic=0.035,
                 current_regime=regime_str,
                 model_decay_stage=str(report.model_decay_stage),
             )
+
+            # rolling_ic_available=False means IC was never computed (no
+            # signal history yet / no price data in context).  A zero IC
+            # under that flag is a data gap, not real decay — suppress
+            # IC_DECAY false alarms so operators aren't spammed daily.
+            if not report.rolling_ic_available and signal.trigger == RetrainTrigger.IC_DECAY:
+                return
 
             if signal.is_actionable():
                 logger = RetrainSignalLogger()
