@@ -418,13 +418,21 @@ class DailyPipeline(BasePipeline):
 
             for strategy_name in validated_strategies:
                 try:
-                    # ADR-031: read frozen weights from Registry first,
-                    # fall back to StrategyConfig for parameters
+                    # ADR-031: read FROZEN weights/parameters from the
+                    # ApprovedStrategy snapshot (approve-time freeze), NOT
+                    # the mutable StrategyMeta — otherwise a later set_meta
+                    # would silently change what production runs.
                     registry_meta = registry.get_meta(strategy_name)
-                    weights = dict(registry_meta.weights) if registry_meta.weights else {}
+                    approved: Any = registry.get_approved(strategy_name)
+                    if approved is not None:
+                        weights = dict(approved.weights)
+                        params = dict(approved.parameters)
+                    else:
+                        weights = dict(registry_meta.weights) if registry_meta.weights else {}
+                        params = dict(registry_meta.parameters) if registry_meta.parameters else {}
 
                     if not weights:
-                        # Fallback: no weights in Registry yet → read from config
+                        # Fallback: no weights in snapshot/meta → read from config
                         cfg = get_strategy_config(strategy_name)
                         weights = dict(cfg.factors)
 
@@ -432,11 +440,10 @@ class DailyPipeline(BasePipeline):
                         "   {} — {} factors (today-only scoring{})",
                         strategy_name,
                         len(weights),
-                        " [from Registry]" if registry_meta.weights else " [from Config]",
+                        " [from frozen snapshot]" if approved is not None else " [from Registry]",
                     )
 
-                    # Parameters: try Registry first, then config
-                    params = dict(registry_meta.parameters) if registry_meta.parameters else {}
+                    # Parameters: prefer frozen snapshot, fall back to meta
                     industry_neutral = params.get("industry_neutral", True)
                     if not isinstance(industry_neutral, bool):
                         industry_neutral = True
