@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## AI Navigation Layer (docs/ai/ + AGENTS.md — 必读)
+
+**先读 `AGENTS.md`**（Agent 行为规范：如何调查问题、证据等级、最小 Context 原则），
+再按需读导航地图定位，只取最小 Context，不要通读全项目：
+
+- `AGENTS.md` — ⭐ Agent 行为规范（Locate → Trace → Verify → Explain；FACT/INFERENCE/HYPOTHESIS；调查 vs 修改边界）
+- `docs/ai/PROJECT_MAP.md` — 项目地图（架构/入口/产物位置），第一站
+- `docs/ai/MODULE_MAP.md` — 问题 → 相关文件清单
+- `docs/ai/COMMAND_MAP.md` — CLI 命令 → 代码入口 → 流程
+- `docs/ai/DATA_FLOW.md` — 数据从哪来 → 到哪去（Raw→Gold→下游）
+
+规则：结论必须基于仓库证据（代码/运行/测试/配置），标 FACT/INFERENCE/HYPOTHESIS；
+改代码后自己跑验证（ruff + pyright + pytest）；文件/命令变化时同步更新 docs/ai/。
+
 ## Project Overview
 
 QP (Quant Platform) is a quantitative investment research and investment-decision platform with a strict 10-layer architecture. The 10 layers are **fully implemented** (Phase 0-6 complete): ~400 source files, a working `qp` CLI with 20+ commands, and an end-to-end `qp run daily --demo` pipeline. Quality gates are green: `ruff check` = 0, `pyright` = 0, and 1049 passing tests. Python is pinned to **3.12** via `.python-version` (NumPy/LightGBM wheels are not yet ABI-compatible with 3.14).
