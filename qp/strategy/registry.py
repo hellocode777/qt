@@ -534,9 +534,10 @@ class StrategyRegistry:
             )
 
         if version is None:
-            from datetime import UTC, datetime
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
 
-            version = "v" + datetime.now(UTC).strftime("%Y%m%d")
+            version = "v" + datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
 
         approved = ApprovedStrategy.from_strategy_meta(
             strategy_id=strategy_id,

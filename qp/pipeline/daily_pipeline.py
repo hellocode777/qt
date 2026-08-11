@@ -385,7 +385,11 @@ class DailyPipeline(BasePipeline):
             # source of truth for frozen production weights.
             validated_strategies: list[str] = []
 
-            # 1. APPROVED strategies (explicitly frozen)
+            # Strict policy (A): ONLY APPROVED strategies run in production.
+            # Experiments auto-register RESEARCH strategies — they must be
+            # manually approved (qp strategy approve) before the daily
+            # pipeline will trade them.  No APPROVED → no strategy runs and
+            # the operator is alerted; no silent fallback to research.
             for sid in registry.list_strategies():
                 try:
                     if registry.get_lifecycle(sid) == StrategyLifecycle.APPROVED:
@@ -393,22 +397,15 @@ class DailyPipeline(BasePipeline):
                 except KeyError:
                     pass
 
-            # 2. RESEARCH strategies with weights + backtest (auto-registered
-            #    by experiments, awaiting manual approve)
             if not validated_strategies:
-                for sid in registry.list_strategies():
-                    try:
-                        meta = registry.get_meta(sid)
-                        if meta.weights and meta.backtest_ic:
-                            validated_strategies.append(sid)
-                    except KeyError:
-                        pass
-
-            # 3. Fallback: hardcoded (initial bootstrap before any experiment)
-            if not validated_strategies:
-                validated_strategies = [
-                    "momentum_vol_full",
-                ]
+                logger.warning(
+                    "无 APPROVED 策略，跳过策略执行。请人工批准: "
+                    "qp strategy approve <strategy_id> --by <name>"
+                )
+                result.metadata["warning"] = (
+                    "No APPROVED strategies — daily pipeline skipped. "
+                    "Run: qp strategy approve <strategy_id> --by <name>"
+                )
             today_str = today.isoformat()
 
             from qp.strategy.config import get_strategy_config

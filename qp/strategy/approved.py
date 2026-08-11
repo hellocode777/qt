@@ -19,8 +19,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
+
+# Project convention (scheduler/config): timestamps use Asia/Shanghai.
+CN_TZ = ZoneInfo("Asia/Shanghai")
 
 
 @dataclass(frozen=True)
@@ -82,11 +86,11 @@ class ApprovedStrategy:
             try:
                 approved_at = datetime.fromisoformat(str(approved_at_raw))
             except (ValueError, TypeError):
-                approved_at = datetime.now(UTC)
+                approved_at = datetime.now(CN_TZ)
         elif isinstance(approved_at_raw, datetime):
             approved_at = approved_at_raw
         else:
-            approved_at = datetime.now(UTC)
+            approved_at = datetime.now(CN_TZ)
 
         # Parse weights — coerce values to float
         weights_raw = data.get("weights", {})
@@ -157,7 +161,7 @@ class ApprovedStrategy:
         return cls(
             strategy_id=strategy_id,
             version=version,
-            approved_at=datetime.now(UTC),
+            approved_at=datetime.now(CN_TZ),
             approved_by=approved_by,
             weights=dict(getattr(meta, "weights", {})),
             parameters=dict(getattr(meta, "parameters", {})),
