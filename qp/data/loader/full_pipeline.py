@@ -71,7 +71,6 @@ def _normalize_volume_unit(df: pl.DataFrame, logger: Any) -> pl.DataFrame:
 
 
 class FullDataPipeline(BasePipeline):
-
     @property
     def name(self) -> str:
         return "full_data_ingest"
