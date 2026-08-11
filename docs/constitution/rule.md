@@ -14,7 +14,7 @@
 5. [两大生命周期状态机](#5-两大生命周期状态机)
 6. [二十八条系统宪法](#6-二十八条系统宪法)
 7. [Phase 0.1 核心抽象接口定义](#7-phase-01-核心抽象接口定义)
-8. [Walking Skeleton 落地路线图](#8-walking-skeleton-落地路线图)
+8. [Walking Skeleton 落地路线图（✅ 已完成，详见归档）](#8-walking-skeleton-落地路线图)
 9. [架构完整性自查表](#9-架构完整性自查表)
 10. [量化判定标准与运营参数](#10-量化判定标准与运营参数)
 11. [Walking Skeleton 之后：Phase 1 优先级](#11-walking-skeleton-之后phase-1-优先级)
@@ -601,51 +601,12 @@ class LightGBMRankModel(BaseModel):
 
 ## 8. Walking Skeleton 落地路线图
 
-**原则**：拒绝过度设计，停止增加架构概念。用 3 周时间打造一条能真正跑通的最小策略闭环。
-
-```
-                ┌────────────────────────────────────────┐
-                │         Walking Skeleton Pipeline       │
-                └───────────────────┬────────────────────┘
-                                    │
-  [ daily_price.parquet ] ─────────┼──► Data Layer (Simple Ingestion)
-                                    │
-  [ momentum_20d ] ────────────────┼──► Feature Layer (Basic Momentum)
-                                    │
-  [ SimpleRankStrategy ] ──────────┼──► Strategy Engine (Top-N Rank)
-                                    │
-  [ SinglePortfolio ] ─────────────┼──► Portfolio Layer (Equal Weight)
-                                    │
-  [ SimpleVectorBacktest ] ────────┼──► Backtest & Execution Simulation
-                                    │
-  [ QuantStats / Markdown Report ] ┼──► Performance Report & Logs
-                                    ▼
-                        【验证整体架构连通性】
-```
-
-### 阶段一：基础设施与核心对象（Week 1）
-
-- [ ] 初始化 Git 仓库、安装 Python 3.12+ / `uv` / `poetry`
-- [ ] 部署 `platform/config/`（pydantic）与 `platform/logging/`（loguru）
-- [ ] 落实 `platform/alert/`（基础 Terminal / Log / Telegram 告警通道）
-- [ ] 创建 9 个 Core Domain Objects 的强类型 `dataclass` / `pydantic` 定义
-
-### 阶段二：核心 Protocol Base Classes（Week 2）
-
-- [ ] 落盘 `BaseDataSource`、`BaseFeature`、`BaseModel`、`BaseStrategy`、`BasePortfolio`、`BaseBroker` 等基类
-- [ ] 实现轻量级 `ExperimentTracker`，支持保存参数与结果元数据（JSON / Parquet）
-
-### 阶段三：走通 Walking Skeleton 最小闭环（Week 3）
-
-- [ ] **Data**：接入单个行情数据源，生成 `daily_price.parquet`
-- [ ] **Feature**：计算一个简单的 20 日动量因子（`momentum_20d`）
-- [ ] **Strategy**：实现 `SimpleRankStrategy`，选取 Top 10 股票
-- [ ] **Portfolio**：资金均分，按固定调仓日生成 Order
-- [ ] **Backtest & Report**：运行端到端回测，输出一份 Markdown / HTML 绩效报告
-
-> **重要**：第 7 节列出的大部分接口（Registry、Lineage、Risk Model、Capital Allocator 的复杂算法版本等）在这 3 周计划中**不会**被用到。这是有意为之——先用最简实现（甚至是硬编码的简化版）走通全链路，再回头对照第 6、7 节的宪法条文，逐步替换为符合规范的正式实现。不要在骨架跑通之前就把所有抽象都做满。
+> **✅ 已完成**（2026-07 三阶段全部走通，项目进入完整实现阶段）。
+> 详细计划已归档至 `docs/archive/old_plans/walking_skeleton_roadmap.md`。
+> 本条对应 Rule 28（Build Walking Skeleton Before Expansion），见第 6.5 节。
 
 ---
+
 
 ## 9. 架构完整性自查表
 
@@ -772,7 +733,7 @@ class LightGBMRankModel(BaseModel):
 
 ## 13. 使用说明：如何在未来的开发中使用本文档
 
-1. **开工前**：先看第 8 节（Walking Skeleton），确认自己当前处于哪个阶段，不要跳阶段做高层抽象。
+1. **开工前**：确认当前所处阶段（Walking Skeleton 已完成，处于 Phase 1 分层补齐阶段，参考第 11 节），不要跳阶段做高层抽象。
 2. **写新模块前**：对照第 3 节确认这个模块属于哪一层，对照第 4 节确认它操作的是哪个领域对象。
 3. **设计接口前**：先查第 7 节是否已有对应 Base Protocol，优先复用/扩展，而不是重新发明。
 4. **做设计决策犹豫不决时**：回到第 6 节找对应的宪法条文；如果某个决定违反了某条宪法，需要在代码注释或 Experiment 记录里写明原因。
