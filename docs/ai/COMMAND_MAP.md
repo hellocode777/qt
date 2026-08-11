@@ -14,14 +14,14 @@
 | doctor | `commands/meta.py`（cmd_doctor） | 环境自检 |
 | experiment | `commands/experiment.py` | list, show, run, compare, validate, clean |
 | factor | `commands/factor_cmd.py` | catalog, compute, health, list, report, update-health, validate |
-| fundamental | main | 拉取基本面数据 |
-| ingest | `commands/ingest.py` | 从配置源导入数据 |
+| fundamental | `commands/ingest.py`（cmd_fundamental） | 拉取基本面数据 |
+| ingest | `commands/ingest.py` | 从配置源导入数据（cmd_ingest） |
 | knowledge | `commands/knowledge.py` | stats, search |
 | lineage | `commands/lineage.py` | snapshot（同步注册表→血缘 DAG→lineage_graph.json） |
 | model | `commands/model.py` | list, show |
 | monitor | `commands/monitor.py` | check, regime, alert-test |
 | paper | `commands/paper.py` | start, status |
-| pipeline | main/`commands/` | Pipeline 子命令 |
+| pipeline | `commands/ingest.py`（cmd_pipeline_list） | Pipeline 子命令 |
 | portfolio | `commands/portfolio.py` | report, risk |
 | position | `commands/position.py` | list, show, close, pnl, history |
 | proposal | `commands/proposal.py` | list, show, create, approve, reject, withdraw |
@@ -36,9 +36,18 @@
 ## 高频命令详解
 
 ### qp run daily
-- 入口：`qp/pipeline/daily_pipeline.py`（`run daily` 由 main 转发）
-- 流程：Step 6 选策略 → **只选 lifecycle==APPROVED**（ADR-031，无 APPROVED 则跳过+警告）→ compute_today_signals → Step 8 逐策略 generate_signals(today) → Step 8.5 StrategyHealthLogger → Step 9 Ensemble 融合 → Step 10.5 存信号快照到 `data/monitoring/online_signal_history.parquet` → DecisionPackage → `data/decisions/`
+- 入口：`qp/pipeline/daily_pipeline.py`（`run daily` 由 main 转发，cmd_run 在 ingest.py）
+- 完整步骤（2026-08-11 实测）：
+  1. Step 0 系统状态检查 → Step 1 抓数据（增量合并到 `data/dataset/daily_price_latest.parquet`）→ Step 1.5 因子计算（→ `factor_values_daily.parquet`）
+  2. Step 5 regime 检测 → 决定 `effective_top_n`
+  3. **Step 6 选策略（ADR-031 Policy A）**：只选 `lifecycle == APPROVED`（registry.get_lifecycle）；无 APPROVED → 跳过+警告，**不回退 research**；权重读 `registry.get_approved(id)` 冻结快照（不读 meta）；调 `compute_today_signals()` 只算今日分数（O(stocks)）
+  4. **Step 8 出信号**：逐策略 `strategy.generate_signals(today)` → 返回 `[symbol, raw_score, rank]`（已 top-N 过滤）→ Step 8.5 StrategyHealthLogger 记健康度
+  5. **Step 9 融合**：EnsembleEngine 等权融合多策略（FILL_ZERO 宇宙）
+  6. Step 10 风控/退出（止损 -7% / 止盈 / 回撤 20% / 行业超配 / 基本面恶化）→ Step 10.5 存信号快照到 `data/monitoring/online_signal_history.parquet` → Step 11 成本 → Step 12 资金分配（仅调仓日）
+  7. **Step 13** DecisionPackage → `data/decisions/` → **Step 13.1 ShadowLedger.run_daily(today)** 模拟盘（假钱按决策包数量建仓，无 SELL 即持有，当日市值 mark-to-market）
 - ⚠️ 生产读冻结快照 `registry.get_approved(id)`，不读可变 meta（410dd8a）
+- ⚠️ 信号是截面排名选股（今日因子加权分 top-N），不是涨跌择时；top_n 受 regime 调节
+- ⚠️ Shadow 的 mark-to-market 用 `daily_price_latest.parquet` 最新收盘价（补跑历史日期有前视偏差）
 
 ### qp factor update-health / health / report
 - 入口：`commands/factor_cmd.py` → `qp/monitoring/factor_health_logger.py`（FactorHealthLogger）+ `factor_health*.py`

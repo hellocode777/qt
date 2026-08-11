@@ -88,6 +88,25 @@ class ValidationGateError(ValidationError):
     """Strategy failed to pass the Validation Gate."""
 
 
+# ── Portfolio / Decision ───────────────────────────
+
+
+class PortfolioError(QPError):
+    """Base exception for Portfolio Layer errors."""
+
+
+class InsufficientCashError(PortfolioError):
+    """Account cash is insufficient to open a position (ADR-032)."""
+
+    def __init__(self, symbol: str = "", required: float = 0.0, available: float = 0.0) -> None:
+        self.symbol = symbol
+        self.required = required
+        self.available = available
+        super().__init__(
+            f"Insufficient cash: need ¥{required:,.0f} for {symbol}, have ¥{available:,.0f}"
+        )
+
+
 # ── Research ───────────────────────────────────────
 
 
@@ -118,11 +137,13 @@ __all__ = [
     "DatasetNotFoundError",
     "ExperimentError",
     "FrozenConfigError",
+    "InsufficientCashError",
     "LayerViolationError",
     "ModelError",
     "PipelineConfigError",
     "PipelineError",
     "PipelineTimeoutError",
+    "PortfolioError",
     "PurgedCVError",
     "QPError",
     "ResearchError",

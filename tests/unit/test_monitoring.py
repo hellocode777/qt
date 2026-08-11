@@ -2060,9 +2060,10 @@ class TestExitEnginePipelineIntegration:
             ledgermod.POSITIONS_DIR = tmp_path / "positions"
             ledgermod.POSITIONS_PARQUET = ledgermod.POSITIONS_DIR / "positions.parquet"
             ledgermod.POSITIONS_INDEX = ledgermod.POSITIONS_DIR / "index.json"
+            ledgermod.ACCOUNT_FILE = ledgermod.POSITIONS_DIR / "account.json"
 
             # Create active positions
-            ledger = ledgermod.PositionLedger()
+            ledger = ledgermod.PositionLedger(initial_capital=200_000.0)
             ledger.open("600519", 1450.0, 100, decision_id="dp-001")  # Not in loss
             ledger.open("000001", 14.0, 1000, decision_id="dp-001")  # -14% → stop loss
 
@@ -2086,6 +2087,7 @@ class TestExitEnginePipelineIntegration:
             ledgermod.POSITIONS_DIR = Path(orig_pos_dir)
             ledgermod.POSITIONS_PARQUET = Path(orig_pos_dir) / "positions.parquet"
             ledgermod.POSITIONS_INDEX = Path(orig_pos_dir) / "index.json"
+            ledgermod.ACCOUNT_FILE = Path(orig_pos_dir) / "account.json"
 
     def test_exit_check_st_risk(self, tmp_path) -> None:
         """ST stock should trigger CRITICAL exit."""
@@ -2097,6 +2099,7 @@ class TestExitEnginePipelineIntegration:
             ledgermod.POSITIONS_DIR = tmp_path / "positions"
             ledgermod.POSITIONS_PARQUET = ledgermod.POSITIONS_DIR / "positions.parquet"
             ledgermod.POSITIONS_INDEX = ledgermod.POSITIONS_DIR / "index.json"
+            ledgermod.ACCOUNT_FILE = ledgermod.POSITIONS_DIR / "account.json"
 
             ledger = ledgermod.PositionLedger()
             ledger.open("000888", 5.0, 1000, decision_id="dp-001")
@@ -2116,6 +2119,7 @@ class TestExitEnginePipelineIntegration:
             ledgermod.POSITIONS_DIR = Path(orig_pos_dir)
             ledgermod.POSITIONS_PARQUET = Path(orig_pos_dir) / "positions.parquet"
             ledgermod.POSITIONS_INDEX = Path(orig_pos_dir) / "index.json"
+            ledgermod.ACCOUNT_FILE = Path(orig_pos_dir) / "account.json"
 
     def test_exit_check_empty_positions(self) -> None:
         """No active positions → no exit signals."""
@@ -2139,6 +2143,7 @@ class TestExitEnginePipelineIntegration:
             ledgermod.POSITIONS_DIR = tmp_path / "positions"
             ledgermod.POSITIONS_PARQUET = ledgermod.POSITIONS_DIR / "positions.parquet"
             ledgermod.POSITIONS_INDEX = ledgermod.POSITIONS_DIR / "index.json"
+            ledgermod.ACCOUNT_FILE = ledgermod.POSITIONS_DIR / "account.json"
 
             mgr = RiskExitManager()
             exits = mgr.evaluate_daily(
@@ -2158,6 +2163,7 @@ class TestExitEnginePipelineIntegration:
             ledgermod.POSITIONS_DIR = Path(orig_pos_dir)
             ledgermod.POSITIONS_PARQUET = Path(orig_pos_dir) / "positions.parquet"
             ledgermod.POSITIONS_INDEX = Path(orig_pos_dir) / "index.json"
+            ledgermod.ACCOUNT_FILE = Path(orig_pos_dir) / "account.json"
 
 
 class TestAlphaDecayDetector:

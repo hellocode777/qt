@@ -122,6 +122,7 @@ class ShadowLedger:
         dp = DecisionPackage.load_latest()
         if dp is None:
             # Record a "no decision" snapshot so the Web UI has history to show
+            prev_equity = self._previous_equity(date_str)
             snapshot = {
                 "date": date_str,
                 "n_positions": 0,
@@ -129,6 +130,7 @@ class ShadowLedger:
                 "cash": self._capital,
                 "realized_pnl": 0,
                 "unrealized_pnl": 0,
+                "daily_pnl": (self._capital - prev_equity) if prev_equity is not None else 0.0,
                 "total_equity": self._capital,
                 "decision_id": "N/A",
                 "n_buys": 0,
@@ -166,13 +168,12 @@ class ShadowLedger:
 
         # 3. Mark-to-market: compute unrealized PnL from CURRENT active positions
         active_after = self._load_active()
-        daily_pnl = 0.0
+        unrealized_pnl = 0.0
         cost_basis = 0.0
         for pos in active_after:
             px = prices.get(pos.symbol, pos.entry_price)
             if px > 0:
-                unrealized = (px - pos.entry_price) * pos.shares
-                daily_pnl += unrealized
+                unrealized_pnl += (px - pos.entry_price) * pos.shares
             cost_basis += pos.entry_price * pos.shares
 
         total_value = sum(
@@ -183,6 +184,12 @@ class ShadowLedger:
 
         # Cash = initial capital + realized gains - cost basis of active positions
         cash = self._capital + realized_pnl - cost_basis
+        total_equity = cash + total_value
+
+        # True daily P&L = today's equity - previous day's equity (not the
+        # cumulative unrealized PnL vs entry cost).
+        prev_equity = self._previous_equity(date_str)
+        daily_pnl = total_equity - prev_equity if prev_equity is not None else 0.0
 
         snapshot = {
             "date": date_str,
@@ -190,8 +197,9 @@ class ShadowLedger:
             "market_value": total_value,
             "cash": cash,
             "realized_pnl": realized_pnl,
-            "unrealized_pnl": daily_pnl,
-            "total_equity": cash + total_value,
+            "unrealized_pnl": unrealized_pnl,
+            "daily_pnl": daily_pnl,
+            "total_equity": total_equity,
             "decision_id": dp.package_id,
             "n_buys": dp.report.n_buys,
             "n_sells": dp.report.n_sells,
@@ -207,6 +215,23 @@ class ShadowLedger:
         )
 
         return snapshot
+
+    def _previous_equity(self, date_str: str) -> float | None:
+        """Equity of the most recent snapshot strictly before ``date_str``.
+
+        Returns None when there is no prior snapshot (first run), so callers
+        can report daily P&L = 0 instead of a misleading negative number.
+        """
+        if not SHADOW_DAILY.exists():
+            return None
+        df = pl.read_parquet(str(SHADOW_DAILY))
+        if df.is_empty():
+            return None
+        prior = df.filter(pl.col("date") < date_str)
+        if prior.is_empty():
+            return None
+        prior = prior.sort("date", descending=True)
+        return float(prior["total_equity"][0])
 
     # ------------------------------------------------------------------
     # Query

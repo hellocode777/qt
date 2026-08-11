@@ -39,6 +39,7 @@ async def portfolio(request: Request) -> Any:
     total_value = ledger.total_active_value()
     total_pnl = ledger.total_realized_pnl()
     all_positions = ledger.get_history(limit=50)
+    account = ledger.get_account_summary()  # ADR-032
 
     # Enrich positions with current status
     positions = [p.to_dict() for p in active]
@@ -73,6 +74,15 @@ async def portfolio(request: Request) -> Any:
         "total_realized_pnl": total_pnl,
         "total_realized_pnl_fmt": f"¥{total_pnl:+,.0f}",
         "pnl_badge": "badge-green" if total_pnl >= 0 else "badge-red",
+        # ADR-032 account truth
+        "account_cash": account["cash"],
+        "account_cash_fmt": f"¥{account['cash']:,.0f}",
+        "account_initial": account["initial_capital"],
+        "account_initial_fmt": f"¥{account['initial_capital']:,.0f}",
+        "account_total_equity": account["total_equity"],
+        "account_total_equity_fmt": f"¥{account['total_equity']:,.0f}",
+        "account_invested": account["invested"],
+        "account_invested_fmt": f"¥{account['invested']:,.0f}",
     }
 
     # Load portfolio-level performance metrics from NAV history

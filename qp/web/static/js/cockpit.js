@@ -359,10 +359,12 @@ var QPCharts = (function () {
       // Find nearest data point by X
       var idx = Math.round((mx - d.pad.left) / (W - d.pad.left - d.pad.right) * (d.n - 1));
       idx = Math.max(0, Math.min(d.n - 1, idx));
+      // Full numbers in tooltip; Y-axis grid keeps the compact 万 label.
+      var cur = d.opts.currency || '¥';
       var html = '<b>' + d.dates[idx].substring(0, 10) + '</b><br>' +
-        '组合: ' + _fmtVal(d.portfolio[idx], d.opts);
+        '组合: ' + cur + Number(d.portfolio[idx]).toLocaleString();
       if (d.benchmark) {
-        html += '<br>基准: ' + _fmtVal(d.benchmark[idx], d.opts);
+        html += '<br>基准: ' + cur + Number(d.benchmark[idx]).toLocaleString();
       }
       _showTooltip(ev, html);
     });
@@ -518,15 +520,16 @@ function initEquityChart() {
     try { rawData = JSON.parse(el.textContent || '[]'); } catch (e) { return; }
     if (!rawData || rawData.length === 0) return;
 
-    // Map from simulation data format to QPCharts format
+    // Map from simulation data format to QPCharts format.
+    // NOTE: shadow 盘没有真实基准（等权基准只存在于实验 daily_nav），
+    // 之前把 market_value 当 benchmark 传入是假基准 → 已移除，只画总权益。
     var dates = rawData.map(function (d) { return d.date; });
     var portfolio = rawData.map(function (d) { return d.total_equity; });
-    var benchmark = rawData.map(function (d) { return d.market_value; });
 
     QPCharts.EquityCurve('equityChart', {
       dates: dates,
       portfolio: portfolio,
-      benchmark: benchmark,
+      // benchmark: 不传 — shadow 无真实基准（2026-08-11 修复假基准）
     });
   } catch (e) {
     console.error('initEquityChart:', e);

@@ -1255,8 +1255,9 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
-            ledger = mod.PositionLedger()
+            ledger = mod.PositionLedger(initial_capital=200_000.0)
             pos = ledger.open(
                 "600519",
                 1450.0,
@@ -1278,6 +1279,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_open_close_cycle(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1287,6 +1289,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             ledger = mod.PositionLedger()
             pos = ledger.open("000001", 12.5, 1000, decision_id="dp-test")
@@ -1307,6 +1310,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_get_active_only(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1316,6 +1320,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             ledger = mod.PositionLedger()
             p1 = ledger.open("A", 10.0, 100, decision_id="dp-x")
@@ -1329,6 +1334,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_get_by_decision(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1338,6 +1344,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             ledger = mod.PositionLedger()
             ledger.open("A", 10.0, 100, decision_id="dp-001")
@@ -1350,6 +1357,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_total_active_value(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1359,6 +1367,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             ledger = mod.PositionLedger()
             ledger.open("A", 10.0, 100, decision_id="dp-x")  # 1000
@@ -1369,6 +1378,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_total_realized_pnl(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1378,6 +1388,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             ledger = mod.PositionLedger()
             p1 = ledger.open("A", 10.0, 100, decision_id="dp-x")
@@ -1391,6 +1402,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_close_nonexistent_returns_none(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1400,6 +1412,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             ledger = mod.PositionLedger()
             result = ledger.close("P-99999", 100.0)
@@ -1408,6 +1421,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_open_from_decision(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1419,6 +1433,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             # Create an approved DecisionPackage with recommendations
             dp = DecisionPackage(package_id="dp-bulk-test", date="2026-07-30")
@@ -1450,7 +1465,7 @@ class TestPositionLedger:
                 ),
             ]
 
-            ledger = mod.PositionLedger()
+            ledger = mod.PositionLedger(initial_capital=200_000.0)
             positions = ledger.open_from_decision(dp)
 
             assert len(positions) == 2  # SELL skipped
@@ -1465,6 +1480,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
 
     def test_sequential_ids(self, tmp_path) -> None:
         import qp.decision.position_ledger as mod
@@ -1474,6 +1490,7 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = tmp_path
             mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
             mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
 
             ledger = mod.PositionLedger()
             p1 = ledger.open("A", 10.0, 100, decision_id="dp-x")
@@ -1485,3 +1502,157 @@ class TestPositionLedger:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
             mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
+
+
+class TestAccountCashLedger:
+    """ADR-032: account cash ledger — buy debits, sell credits, closed loop."""
+
+    def test_open_debits_cash(self, tmp_path) -> None:
+        import qp.decision.position_ledger as mod
+
+        original_dir = str(mod.POSITIONS_DIR)
+        try:
+            mod.POSITIONS_DIR = tmp_path
+            mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
+            mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
+
+            ledger = mod.PositionLedger(initial_capital=200_000.0)
+            assert ledger.get_cash() == pytest.approx(200_000.0)
+
+            ledger.open("600519", 1450.0, 100, decision_id="dp-001")  # ¥145,000
+            assert ledger.get_cash() == pytest.approx(55_000.0)
+
+            summary = ledger.get_account_summary()
+            assert summary["invested"] == pytest.approx(145_000.0)
+            assert summary["total_equity"] == pytest.approx(200_000.0)
+        finally:
+            mod.POSITIONS_DIR = Path(original_dir)
+            mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
+            mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
+
+    def test_close_credits_cash(self, tmp_path) -> None:
+        import qp.decision.position_ledger as mod
+
+        original_dir = str(mod.POSITIONS_DIR)
+        try:
+            mod.POSITIONS_DIR = tmp_path
+            mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
+            mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
+
+            ledger = mod.PositionLedger(initial_capital=100_000.0)
+            pos = ledger.open("000001", 10.0, 1000, decision_id="dp-001")  # ¥10,000
+            assert ledger.get_cash() == pytest.approx(90_000.0)
+
+            # Sell at a profit → cash flows back
+            ledger.close(pos.position_id, 12.0, exit_reason="target_reached")
+            assert ledger.get_cash() == pytest.approx(102_000.0)  # 90,000 + 12,000
+            summary = ledger.get_account_summary()
+            assert summary["realized_pnl"] == pytest.approx(2_000.0)
+        finally:
+            mod.POSITIONS_DIR = Path(original_dir)
+            mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
+            mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
+
+    def test_open_rejects_insufficient_cash(self, tmp_path) -> None:
+        import qp.decision.position_ledger as mod
+        from qp.shared.exceptions import InsufficientCashError
+
+        original_dir = str(mod.POSITIONS_DIR)
+        try:
+            mod.POSITIONS_DIR = tmp_path
+            mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
+            mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
+
+            ledger = mod.PositionLedger(initial_capital=100_000.0)
+            with pytest.raises(InsufficientCashError):
+                ledger.open("600519", 2000.0, 100, decision_id="dp-001")  # ¥200,000
+
+            # No partial position should have been created
+            assert len(ledger.get_active()) == 0
+            assert ledger.get_cash() == pytest.approx(100_000.0)
+        finally:
+            mod.POSITIONS_DIR = Path(original_dir)
+            mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
+            mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
+
+    def test_open_from_decision_validates_total(self, tmp_path) -> None:
+        import qp.decision.position_ledger as mod
+        from qp.decision.decision_package import DecisionPackage
+        from qp.decision.models import TradeRecommendation
+        from qp.shared.exceptions import InsufficientCashError
+
+        original_dir = str(mod.POSITIONS_DIR)
+        try:
+            mod.POSITIONS_DIR = tmp_path
+            mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
+            mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
+
+            dp = DecisionPackage(package_id="dp-big", date="2026-07-30")
+            dp.approve(reviewer="测试")
+            dp.report.recommendations = [
+                TradeRecommendation(
+                    symbol="600519",
+                    action="BUY",
+                    estimated_price=1450.0,
+                    quantity_shares=100,
+                    target_weight_pct=60.0,
+                    strategy="s1",
+                    reason="r",
+                ),
+                TradeRecommendation(
+                    symbol="000001",
+                    action="BUY",
+                    estimated_price=12.5,
+                    quantity_shares=1000,
+                    target_weight_pct=40.0,
+                    strategy="s1",
+                    reason="r",
+                ),
+            ]
+
+            ledger = mod.PositionLedger(initial_capital=100_000.0)  # needs 157.5k
+            with pytest.raises(InsufficientCashError):
+                ledger.open_from_decision(dp)
+
+            # Atomic: nothing created
+            assert len(ledger.get_active()) == 0
+            assert ledger.get_cash() == pytest.approx(100_000.0)
+        finally:
+            mod.POSITIONS_DIR = Path(original_dir)
+            mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
+            mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
+
+    def test_account_migrates_existing_positions(self, tmp_path) -> None:
+        """Existing positions (pre ADR-032) → cash derived from cost basis."""
+        import qp.decision.position_ledger as mod
+
+        original_dir = str(mod.POSITIONS_DIR)
+        try:
+            mod.POSITIONS_DIR = tmp_path
+            mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
+            mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
+
+            # Simulate pre-ADR-032 state: positions exist, no account.json
+            legacy = mod.PositionLedger(initial_capital=100_000.0)
+            legacy.open("000001", 10.0, 1000, decision_id="dp-old")  # ¥10,000
+            # Remove the account file to simulate legacy data
+            mod.ACCOUNT_FILE.unlink()
+
+            ledger = mod.PositionLedger()  # fresh init without account.json
+            assert ledger.get_cash() == pytest.approx(90_000.0)
+            assert ledger.get_initial_capital() == pytest.approx(100_000.0)
+        finally:
+            mod.POSITIONS_DIR = Path(original_dir)
+            mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
+            mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"

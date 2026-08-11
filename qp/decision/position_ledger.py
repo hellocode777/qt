@@ -26,11 +26,14 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.shared.exceptions import InsufficientCashError
 from qp.shared.types import PositionState
 
 POSITIONS_DIR = Path("data/positions")
 POSITIONS_PARQUET = POSITIONS_DIR / "positions.parquet"
 POSITIONS_INDEX = POSITIONS_DIR / "index.json"
+ACCOUNT_FILE = POSITIONS_DIR / "account.json"
+DEFAULT_INITIAL_CAPITAL = 100_000.0
 
 
 # ==================================================================
@@ -162,9 +165,80 @@ class PositionLedger:
         ledger.close(pos.position_id, 1500.0, "target_reached")
     """
 
-    def __init__(self) -> None:
+    def __init__(self, initial_capital: float | None = None) -> None:
         POSITIONS_DIR.mkdir(parents=True, exist_ok=True)
         self._next_id = self._load_next_id()
+        self._account: dict[str, float] = {}
+        self._init_account(initial_capital)
+
+    # ------------------------------------------------------------------
+    # Account cash ledger (ADR-032)
+    # ------------------------------------------------------------------
+
+    def _init_account(self, initial_capital: float | None = None) -> None:
+        """Initialize the cash ledger.
+
+        If account.json exists, load it. Otherwise seed with:
+        cash = initial_capital − Σ(active position cost basis)
+        so existing positions (created before ADR-032) stay consistent.
+        """
+        if ACCOUNT_FILE.exists():
+            try:
+                data = json.loads(ACCOUNT_FILE.read_text(encoding="utf-8"))
+                self._account = {
+                    "initial_capital": float(data.get("initial_capital", DEFAULT_INITIAL_CAPITAL)),
+                    "cash": float(data.get("cash", 0.0)),
+                }
+                return
+            except (json.JSONDecodeError, OSError, AttributeError):
+                pass
+
+        capital = float(initial_capital) if initial_capital is not None else DEFAULT_INITIAL_CAPITAL
+        cost_basis = sum(p.entry_price * p.shares for p in self.get_active())
+        self._account = {
+            "initial_capital": capital,
+            "cash": max(capital - cost_basis, 0.0),
+        }
+        self._save_account()
+
+    def _save_account(self) -> None:
+        ACCOUNT_FILE.write_text(
+            json.dumps(
+                {
+                    "initial_capital": round(self._account.get("initial_capital", 0.0), 2),
+                    "cash": round(self._account.get("cash", 0.0), 2),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    def get_cash(self) -> float:
+        """Available cash in the account (ADR-032)."""
+        return float(self._account.get("cash", 0.0))
+
+    def get_initial_capital(self) -> float:
+        return float(self._account.get("initial_capital", DEFAULT_INITIAL_CAPITAL))
+
+    def get_account_summary(self) -> dict[str, float]:
+        """Account view: cash + positions value = total equity (ADR-032).
+
+        This is the *account* truth (as opposed to a DecisionPackage's
+        recommendation-level remaining_cash, which restarts from capital
+        each run).
+        """
+        positions_value = self.total_active_value()
+        cash = self.get_cash()
+        return {
+            "initial_capital": self.get_initial_capital(),
+            "cash": round(cash, 2),
+            "positions_value": round(positions_value, 2),
+            "total_equity": round(cash + positions_value, 2),
+            "realized_pnl": round(self.total_realized_pnl(), 2),
+            "invested": round(self.get_initial_capital() - cash, 2),
+        }
 
     # ------------------------------------------------------------------
     # CRUD
@@ -179,6 +253,7 @@ class PositionLedger:
         decision_id: str = "",
         entry_date: str = "",
         notes: str = "",
+        check_cash: bool = True,
     ) -> Position:
         """Open a new position.
 
@@ -190,12 +265,26 @@ class PositionLedger:
             decision_id: Approving DecisionPackage.
             entry_date: Date (defaults to today).
             notes: Optional notes.
+            check_cash: If True (default), debit cash from the account ledger
+                (ADR-032) and raise if insufficient. Pass False for callers
+                that manage cash themselves or are not account-backed.
 
         Returns:
             The newly created Position.
+
+        Raises:
+            InsufficientCashError: When check_cash=True and cash < cost.
         """
         if not entry_date:
             entry_date = datetime.now(UTC).date().isoformat()
+
+        cost = entry_price * shares
+        if check_cash and cost > self.get_cash():
+            raise InsufficientCashError(
+                symbol=symbol,
+                required=cost,
+                available=self.get_cash(),
+            )
 
         pos_id = self._generate_id()
         position = Position(
@@ -211,6 +300,9 @@ class PositionLedger:
         )
 
         self._save(position)
+        if check_cash:
+            self._account["cash"] -= cost
+            self._save_account()
         logger.info("Position opened: {} {} {}shares @¥{}", pos_id, symbol, shares, entry_price)
         return position
 
@@ -257,6 +349,9 @@ class PositionLedger:
             pos.notes = pos.notes + "; " + notes if pos.notes else notes
 
         self._save(pos)
+        # ADR-032: cash flows back on exit
+        self._account["cash"] += exit_price * pos.shares
+        self._save_account()
         logger.info(
             "Position closed: {} PnL=¥{:.2f} ({:.2%}) reason={}",
             position_id,
@@ -419,12 +514,25 @@ class PositionLedger:
         existing = self.get_by_decision(decision_package.package_id)
         existing_symbols = {p.symbol for p in existing if p.is_active}
 
+        buy_recs = [
+            rec
+            for rec in decision_package.report.recommendations
+            if rec.action == "BUY"
+            and rec.quantity_shares > 0
+            and rec.symbol not in existing_symbols
+        ]
+
+        # ADR-032: validate total cash up-front to avoid partial success
+        total_cost = sum(rec.quantity_shares * rec.estimated_price for rec in buy_recs)
+        if total_cost > self.get_cash():
+            raise InsufficientCashError(
+                symbol="<decision>",
+                required=total_cost,
+                available=self.get_cash(),
+            )
+
         positions: list[Position] = []
-        for rec in decision_package.report.recommendations:
-            if rec.action != "BUY" or rec.quantity_shares <= 0:
-                continue
-            if rec.symbol in existing_symbols:
-                continue  # Already opened — dedup
+        for rec in buy_recs:
             pos = self.open(
                 symbol=rec.symbol,
                 entry_price=rec.estimated_price,
@@ -432,6 +540,7 @@ class PositionLedger:
                 strategy_id=rec.strategy,
                 decision_id=decision_package.package_id,
                 notes=f"Weight: {rec.target_weight_pct:.1f}% | {rec.reason}",
+                check_cash=True,
             )
             positions.append(pos)
         logger.info(

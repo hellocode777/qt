@@ -407,7 +407,12 @@
   <div class="card-header">
     <span>&#128203; 今日决策 Today's Decisions</span>
     <span class="c-muted" style="font-size: 13px;">
+      {% if account %}
+      已用 ¥{{ "%.0f"|format(account.invested) }} / 剩余 ¥{{ "%.0f"|format(account.cash) }}
+      <span style="font-size:11px;">（账户口径 · 初始 ¥{{ "%.0f"|format(account.initial_capital) }}）</span>
+      {% else %}
       已用 ¥{{ decision.report.total_invested_fmt }} / 剩余 ¥{{ decision.report.remaining_cash_fmt }}
+      {% endif %}
     </span>
   </div>
   <div class="card-body p0">

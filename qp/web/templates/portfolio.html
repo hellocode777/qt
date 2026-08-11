@@ -11,6 +11,26 @@
   </div>
 </div>
 
+<!-- ADR-032 Account overview — account truth, not today's recommendation -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
+  <div class="card" style="text-align: center; padding: 16px; border-left: 4px solid var(--green);">
+    <div style="font-size: 12px; color: var(--c-muted);">账户总资产</div>
+    <div style="font-size: 22px; font-weight: 700;">{{ stats.account_total_equity_fmt }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">可用现金</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ stats.account_cash_fmt }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">已投入</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ stats.account_invested_fmt }}</div>
+  </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">初始资金</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ stats.account_initial_fmt }}</div>
+  </div>
+</div>
+
 <!-- Stats row -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
   <div class="card" style="text-align: center; padding: 16px;">

@@ -54,6 +54,16 @@ async def dashboard(request: Request) -> Any:
     source_health = dq_svc.source_health()
     has_data = decision is not None
 
+    # ADR-032: account truth (cash ledger) — replaces recommendation-level
+    # remaining_cash in the "Today's Decisions" panel.
+    account = {}
+    try:
+        from qp.decision.position_ledger import PositionLedger
+
+        account = PositionLedger().get_account_summary()
+    except Exception:
+        account = {}
+
     if has_data:
         logger.info(
             "Dashboard loaded: {} | regime={} | buys={} | sells={}",
@@ -103,6 +113,7 @@ async def dashboard(request: Request) -> Any:
             "data_quality": data_quality,
             "source_health": source_health,
             "has_data": has_data,
+            "account": account,
             "nav_dates": nav_dates,
             "nav_values": nav_values,
             "nav_json": nav_values,  # For Chart.js

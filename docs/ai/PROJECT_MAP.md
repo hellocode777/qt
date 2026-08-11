@@ -56,6 +56,37 @@
 | Web UI | `qp/web/` | `qp web start` |
 | 实验 | `qp/research/experiment/` | `qp experiment run multifactor` |
 
+## 三个执行系统（策略验证 → 每日决策验证 → 真实账户）
+
+容易混淆的三个"执行层"，全部消费**同一个 DecisionPackage（data/decisions/）**，但目的、资金、审核完全不同：
+
+```
+策略生命周期（验证"策略能不能上线"）
+  Paper Trading（qp paper start，Rule 11，30 天验证）
+      │  策略信号，纸面持仓，数据/paper_trading/
+      ▼
+每日决策验证（验证"跟着系统建议做会怎样"）
+  Shadow Production（影子运行，daily_pipeline Step 13.1 自动跑）
+      │  决策包全自动执行，独立假钱 10 万，数据/simulation/
+      ▼
+真实账户（人工把关的账户账本）
+  Portfolio（投资组合，WebUI approve 后建仓）
+      │  人工审核状态机，真实现金账本，data/positions/
+      ▼
+  人工执行交易（系统出建议，人下单）
+```
+
+| | Paper Trading | Shadow 影子运行 | Portfolio 投资组合 |
+|---|---|---|---|
+| 目的 | 策略上线前验证 | 每日决策无脑执行对照 | 真实账户记账 |
+| 触发 | `qp paper start` | daily_pipeline 自动 | WebUI 人工 approve |
+| 资金 | 纸面（独立） | 假钱 10 万（独立） | 真实账户现金（ADR-032） |
+| 审核 | 无 | 无 | 有状态机 + 驳回 |
+| 存储 | `data/paper_trading/` | `data/simulation/` | `data/positions/`（含 account.json） |
+| 代码 | `qp/strategy/paper_trading.py` | `qp/simulation/shadow_ledger.py` | `qp/decision/position_ledger.py` |
+
+⚠️ 现金账本（ADR-032）只属于 Portfolio；Shadow/Paper 各有独立假钱，互不干扰。
+
 ## 数据流（总览，详见 DATA_FLOW.md）
 
 ```
@@ -76,8 +107,9 @@ AkShare (数据源)
 | 路径 | 内容 |
 |---|---|
 | `data/strategy_registry.json` | 策略注册表（会被 WebUI/实验自动改写！）；APPROVED 冻结快照在 `strategies.<id>.approved` 字段内（ADR-031） |
-| `data/decisions/` | DecisionPackage（每日决策） |
-| `data/monitoring/` | watchdog ping、online_signal_history、retrain_signals 等 |
+| `data/decisions/` | DecisionPackage（每日决策，三个执行系统的共同输入） |
+| `data/positions/` | Portfolio 真实账户：positions.parquet + account.json（现金账本，ADR-032） |
+| `data/simulation/` | Shadow 影子盘：shadow_positions.parquet + shadow_daily.parquet |
 | `data/paper_trading/` | Paper Trading 状态（`{strategy_id}_paper.json`） |
 | `data/experiments/` | 实验产物 |
 | `data/metadata/lineage_graph.json` | 血缘图（`qp lineage snapshot` 生成） |
