@@ -14,6 +14,7 @@ from typing import Any
 import lightgbm as lgb
 import pandas as pd
 
+from qp.shared.constants import DEFAULT_SEED
 from qp.shared.protocols.base_model import BaseModel
 
 # Default hyperparameters from rule.md §7.9.4
@@ -32,7 +33,7 @@ DEFAULT_LGB_PARAMS: dict[str, Any] = {
     "lambda_l2": 0.5,
     "early_stopping_rounds": 50,
     "verbose": -1,
-    "seed": 42,
+    "seed": DEFAULT_SEED,
 }
 
 

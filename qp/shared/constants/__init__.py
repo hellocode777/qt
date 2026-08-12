@@ -2,6 +2,11 @@
 
 from datetime import UTC
 
+# ── Determinism (Rule 24: Same Input, Same Output) ────────
+# Global default seed — all random sources (numpy / random / LightGBM)
+# should reference this instead of hardcoding their own literals.
+DEFAULT_SEED = 42
+
 # ── Time ───────────────────────────────────────────
 DEFAULT_TIMEZONE = UTC
 TRADING_DAYS_PER_YEAR = 252

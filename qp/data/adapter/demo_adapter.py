@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
+from qp.shared.constants import DEFAULT_SEED
 from qp.shared.protocols.base_data_source import BaseDataSource
 
 
@@ -58,7 +59,7 @@ class DemoAdapter(BaseDataSource):
             日期, 股票代码, 开盘, 收盘, 最高, 最低, 成交量, symbol
         """
         symbols = kwargs.get("symbols") or self.DEFAULT_SYMBOLS
-        np.random.seed(42)  # Deterministic output
+        np.random.seed(DEFAULT_SEED)  # Deterministic output (Rule 24)
 
         # Generate date range (weekdays only)
         dates: list[date] = []

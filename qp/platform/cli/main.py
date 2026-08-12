@@ -11,6 +11,11 @@ from __future__ import annotations
 
 def main() -> int:
     """Entry point — delegates to the Click CLI group in parser.py."""
+    # Rule 24 (Same Input, Same Output): deterministic seeds at process start.
+    from qp.shared.constants.seed import seed_everything
+
+    seed_everything()
+
     from qp.platform.cli.parser import cli
 
     # standalone_mode=False: Click returns the exit code instead of
