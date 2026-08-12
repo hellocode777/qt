@@ -45,6 +45,7 @@ data/dataset/registry.json
 data/dataset/*_metadata.json
 data/knowledge/
 data/monitoring/watchdog/
+data/factor_store/
 *.log
 logs/
 
