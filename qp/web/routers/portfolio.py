@@ -36,7 +36,6 @@ async def portfolio(request: Request) -> Any:
 
     ledger = PositionLedger()
     active = ledger.get_active()
-    total_value = ledger.total_active_value()
     total_pnl = ledger.total_realized_pnl()
     all_positions = ledger.get_history(limit=50)
     account = ledger.get_account_summary()  # ADR-032
@@ -96,13 +95,20 @@ async def portfolio(request: Request) -> Any:
     closed = [p for p in all_positions if not p.is_active]
     winning = [p for p in closed if p.pnl > 0]
 
+    # ADR-032 + mark-to-market: 账户卡与净值曲线同口径
+    # PositionLedger.positions_value 是成本市值 (entry_price×shares)，
+    # 净值曲线(影子盘) 用最新收盘市值 — 两者必须一致，否则同一页面两个"总权益"
+    mkt_positions_value = round(sum(p["market_value_marked"] for p in positions), 2)
+    account["positions_value"] = mkt_positions_value
+    account["total_equity"] = round(account["cash"] + mkt_positions_value, 2)
+
     # Closed positions for the realized-PnL table
     closed_positions = [p.to_dict() for p in closed]
 
     portfolio_stats = {
         "active_count": len(active),
-        "total_value": total_value,
-        "total_value_fmt": f"¥{total_value:,.0f}",
+        "total_value": mkt_positions_value,
+        "total_value_fmt": f"¥{mkt_positions_value:,.0f}",
         "closed_count": len(closed),
         "winning_count": len(winning),
         "win_rate": f"{len(winning) / len(closed) * 100:.0f}%" if closed else "N/A",
