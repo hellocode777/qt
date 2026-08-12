@@ -188,6 +188,8 @@ uv run qp run daily                            # 正式数据
 uv run qp run daily --demo                     # 合成数据
 ```
 
+> ⚠️ **demo 模式仅供逻辑验证**：合成数据算出的 DecisionPackage / 信号**禁止作为交易依据**。自 2026-08-12（8/5 事故）起，demo 数据经 guard 短路，绝不写入生产数据集 `daily_price_latest.parquet`，可安全用于离线测试管道、邮件通知等逻辑。
+
 #### 每日管道行为说明
 
 Daily pipeline 每天运行，但**不是每天都调仓**：
