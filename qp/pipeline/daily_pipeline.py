@@ -1177,7 +1177,8 @@ class DailyPipeline(BasePipeline):
                 from qp.simulation.shadow_ledger import ShadowLedger
 
                 shadow = ShadowLedger(initial_capital=total_capital)
-                shadow_result = shadow.run_daily(today.isoformat())
+                # 注入刚生成的决策包（避免 simulation 层反向依赖 decision 层）
+                shadow_result = shadow.run_daily(today.isoformat(), decision_package=package)
                 shadow_equity = shadow_result.get("total_equity", total_capital)
                 shadow_n_positions = shadow_result.get("n_positions", 0)
                 shadow_cash = shadow_result.get("cash", shadow_equity)

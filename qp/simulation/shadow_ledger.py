@@ -102,7 +102,7 @@ class ShadowLedger:
     # Daily Run
     # ------------------------------------------------------------------
 
-    def run_daily(self, date_str: str = "") -> dict[str, Any]:
+    def run_daily(self, date_str: str = "", decision_package: Any | None = None) -> dict[str, Any]:
         """Execute one day of shadow trading.
 
         1. Mark existing positions to market (today's close price)
@@ -110,21 +110,27 @@ class ShadowLedger:
         3. Execute BUY recommendations → open new shadow positions
         4. Record daily P&L snapshot
 
+        Args:
+            date_str: Trade date (ISO format). Defaults to today UTC.
+            decision_package: Pre-loaded DecisionPackage from the caller.
+                Injected to avoid a simulation→decision layer dependency
+                (CLAUDE.md "no upward dependency" rule).
+
         Returns:
             Dict with daily_summary, positions, pnl.
         """
         if not date_str:
             date_str = datetime.now(UTC).date().isoformat()
 
-        # Load today's DecisionPackage
-        from qp.decision.decision_package import DecisionPackage
-
-        dp = DecisionPackage.load_latest()
+        # DecisionPackage 由上层注入（daily_pipeline / CLI 组合根），
+        # simulation 层不直接依赖 decision 层（CLAUDE.md 禁止向上依赖）。
+        dp = decision_package
         if dp is None:
             # Record a "no decision" snapshot so the Web UI has history to show
             prev_equity = self._previous_equity(date_str)
             snapshot = {
                 "date": date_str,
+                "status": "no_decision",
                 "n_positions": 0,
                 "market_value": 0,
                 "cash": self._capital,

@@ -5,10 +5,12 @@ from __future__ import annotations
 
 def cmd_shadow_run(date_str: str = "") -> int:
     """Run today's shadow simulation."""
+    from qp.decision.decision_package import DecisionPackage
     from qp.simulation.shadow_ledger import ShadowLedger
 
     ledger = ShadowLedger()
-    result = ledger.run_daily(date_str)
+    # CLI 是组合根，允许依赖 decision 层；注入决策包避免 simulation→decision 反向依赖
+    result = ledger.run_daily(date_str, decision_package=DecisionPackage.load_latest())
 
     if result.get("status") == "no_decision":
         print("❌ 今天还没有决策包。请先运行 qp run daily")
