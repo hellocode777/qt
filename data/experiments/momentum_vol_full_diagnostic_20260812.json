@@ -100,6 +100,36 @@
     ],
     "next_step": "Market Regime conditioning: 接 Market State (Bull/Bear/Sideways), 看 Q1×Q1 幅度变化是否与 regime 标签对齐"
   },
-  "production_decision": "momentum_vol_full v20260811 保持不动 — 不加 Rank Cap / 不加 Trap Factor / 不手工过滤 / 不加 regime-dependent cap",
+  "r1_structural_break": {
+    "finding": "反转 Alpha 的 return 实现在 2022 后台阶式衰减, 但 IC 从未衰减 (0.046-0.096 稳定)",
+    "q1xq1_yearly": {"2015": 31.12, "2016": 32.42, "2017": 15.23, "2018": 8.29, "2019": 29.31, "2020": 20.86, "2021": 14.29, "2022": 2.23, "2023": -0.83, "2024": 3.64, "2025": 3.58, "2026YTD": -3.86},
+    "mechanism": "不是反转逻辑失效 (IC 稳定), 而是 return 实现衰减 — 2022 后同样的排序赚不到那么多"
+  },
+  "r2_universe_size": {
+    "finding": "衰减集中在小盘超跌高波的暴利尾部 (77.41%→5.41%, Δ72pp), 大中盘从来不强; 胜率两期不变 (60.9%) → 衰减的是赔率不是胜率",
+    "size_periods": {"Large": {"2015-2021": 0.68, "2022-2026": 0.36}, "Mid": {"2015-2021": 4.26, "2022-2026": 2.49}, "Small": {"2015-2021": 77.41, "2022-2026": 5.41}},
+    "board_periods": {"SH": {"2015-2021": 23.16, "2022-2026": 1.75}, "SZ": {"2015-2021": 16.31, "2022-2026": 1.83}},
+    "mechanism": "小盘超跌高波的彩票尾部消失 (注册制/监管/涨跌停约束变严), 胜率没变只是面额变小"
+  },
+  "r3_volatility_decomposition": {
+    "finding": "超跌×高上行波 (17.25%) > 超跌×高下行波 (8.98%) — 真正 Alpha 更像'超跌+宽幅震荡'而非'恐慌下行'; 2022 后所有类型高波超跌都衰减",
+    "key_cells": {"MomQ1xUpQ5": {"2015-2021": 26.80, "2022-2026": 1.27}, "MomQ1xDownQ5": {"2015-2021": 14.18, "2022-2026": 1.70}},
+    "mechanism": "衰减是全面的, 不是波动定义变化; 低波侧反而微升 (2022 后反转从高波彩票挪到低波稳健)"
+  },
+  "r4_crash_structure": {
+    "finding": "核心机制 — 反转 Alpha 本质是'跌停反转': CRASH_LIMIT 类型 17.77%→5.81% (超跌高波内 33.6%→4.24%), 且跌停样本腰斩 (75119→33607)",
+    "crash_types": {"CRASH_LIMIT": {"2015-2021": 17.77, "2022-2026": 5.81, "hit_15_21": 56.7, "hit_22_26": 63.4}, "CRASH_STEEP": {"2015-2021": 1.32, "2022-2026": 0.76}, "SLOW_DECLINE": {"2015-2021": 0.49, "2022-2026": 0.45}},
+    "mechanism": "2022 后跌停次数减少 + 跌停打开后修复空间压缩; hit rate 反而升 (56.7→63.4%) = 胜率更高赔率更薄 — 市场效率提升, 极端错误定价被更快修复"
+  },
+  "r5_interaction_model": {
+    "finding": "Momentum×Volatility 交互项 (z(Mom)×z(Vol)) 是真实的、2022 后反而更强的增量 factor: 增量 IC 全样本 +0.033, 2022-2026 +0.042 (强于 2015-2021 的 +0.027)",
+    "ic_compare": {"composite": 0.0850, "interaction": 0.0426, "partial_interaction": 0.0331},
+    "interaction_quintile": {"Q1": 0.45, "Q2": 0.82, "Q3": 1.03, "Q4": 1.11, "Q5": 2.60},
+    "optimal_weight": "w≈0.05 (top10: 1.039%→1.098%); w>0.2 过拟合受损",
+    "mechanism": "交互项捕捉'价格极端×波动极端'整体极端, 不只反转; 作为增强项加入有意义, 作为主 Alpha 不行"
+  },
+  "final_causal_chain": "2022 后 A 股微观结构变化 → 跌停次数减少+修复空间压缩 → 小盘超跌高波暴利尾部消失 (R2) → 反转 IC 不变但 return 实现衰减 (R1) → 超跌×高波从彩票变小奖 (R3/R4) → 市场效率提升, 不是 Alpha 失效",
+  "final_conclusion": "当前策略稳健核心 = Volume_Concentration 单调 Alpha (仍然有效); 反转部分从暴利变温和; 可选增强 = 交互项小权重 (w≈0.05); 不建议为了 2022 前的高收益改权重 — 那是回不去的市场环境",
+  "production_decision": "momentum_vol_full v20260811 保持不动 — 不加 Rank Cap / 不加 Trap Factor / 不手工过滤 / 不加 regime-dependent cap; 交互项作为 future research candidate 记录",
   "status": "completed"
 }
