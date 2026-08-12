@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 from loguru import logger
@@ -139,16 +140,38 @@ class DataPipeline(BasePipeline):
             clean = engine.clean(raw_pl)
             result.metrics["cleaned_rows"] = clean.height
 
+            output_dir = Path("data/dataset")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / "daily_price_latest.parquet"
+
+            # ── Step 2.5: Volume unit normalization (股→手) ──
+            # 数据源（新浪/腾讯）在 2026-08-05 起把 volume 单位从「手」改成「股」（1手=100股），
+            # 造成 ~100 倍量级断裂（8/5 事故，commit 92c5c6d 记录 AkShare 变更）。
+            # full_pipeline 的 median>20M 阈值对增量批次（5 天）不生效（全市场中位数 ~1300 万 < 2000 万），
+            # 这里用相对基准：新批次 median 与现有数据最近 60 交易日 median 比较，>50 倍 → 股 → ÷100。
+            if "volume" in clean.columns and not use_demo:
+                clean = _normalize_volume_relative(clean, output_path, logger)
+
             # Step 3: Validate contract
             errors = DailyPriceContract.validate(clean)
             if errors:
                 result.errors.extend(errors)
 
+            # ── Step 3.5: Demo guard ──
+            # Demo 数据（合成 OHLCV）仅用于离线测试管道逻辑，绝不写入生产 Gold 数据集。
+            # 8/5 事故根因：`qp run daily --demo` 的合成数据被 merge 进 daily_price_latest.parquet，
+            # 污染 48+46 只股票的 K 线（价格与真实值差 5-30 倍）。
+            # demo 短路：校验后直接返回，不执行 Gate/Merge/Write/Registry。
+            if use_demo:
+                result.metadata["demo"] = True
+                result.metadata["warning"] = (
+                    "Demo mode — synthetic data NOT written to production dataset"
+                )
+                logger.warning("Demo 模式: 合成数据不写入生产数据集 (daily_price_latest.parquet)")
+                return result
+
             # ── Step 4: Validation Gate ──
             # Prevent bad data from corrupting the main dataset.
-            output_dir = Path("data/dataset")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = output_dir / "daily_price_latest.parquet"
 
             # Load previous registry for drift detection
             prev_meta = None
@@ -417,3 +440,74 @@ def _trading_days_between(d1: str, d2: str) -> int:
         if d.weekday() < 5:
             days += 1 if dt2 > dt1 else -1
     return days
+
+
+def _normalize_volume_relative(
+    df: pl.DataFrame,
+    existing_path: Path | None,
+    logger: Any,
+) -> pl.DataFrame:
+    """Normalize volume to 手 (lots, 100 shares) using the existing dataset as reference.
+
+    Data source (Sina/Tencent) changed volume unit from 手 to 股 after 2026-08-05,
+    causing ~100x volume spike. Unlike ``full_pipeline._normalize_volume_unit``
+    (absolute median > 20M), this compares the incoming batch's median volume
+    against the existing dataset's recent-60-day median:
+
+      ratio = new_median / existing_median
+
+    A ratio > 50x indicates the incoming batch is in 股 while history is in 手
+    → divide by 100.  Idempotent: an already-normalized batch (手) has ratio ~1
+    and is left untouched.
+
+    Args:
+        df: Incoming (cleaned) batch with a ``volume`` column.
+        existing_path: Path to the existing ``daily_price_latest.parquet``.
+        logger: Loguru logger.
+
+    Returns:
+        The input DataFrame with ``volume`` divided by 100 when a unit mismatch
+        is detected, otherwise unchanged.
+    """
+    if df.is_empty() or "volume" not in df.columns:
+        return df
+
+    new_med: float | None = df["volume"].median()  # type: ignore[assignment]
+    if new_med is None or new_med <= 0:
+        return df
+
+    # Reference: median volume of the existing dataset's most recent 60 trading days.
+    ref_med: float | None = None
+    if existing_path is not None and existing_path.exists():
+        try:
+            existing = pl.read_parquet(str(existing_path))
+            if "trade_date" in existing.columns and "volume" in existing.columns:
+                max_date = existing["trade_date"].max()
+                recent = existing.filter(pl.col("trade_date") > max_date - pl.duration(days=120))
+                ref_med = recent["volume"].median()  # type: ignore[assignment]
+        except Exception:
+            ref_med = None
+
+    if ref_med is None or ref_med <= 0:
+        # No usable reference → fall back to the absolute heuristic used by
+        # full_pipeline (median > 20M is almost certainly 股 for A-shares).
+        if new_med <= 20_000_000:
+            return df
+    elif new_med / ref_med <= 50:
+        # Same unit as history (手) or plausible real volume change — leave alone.
+        return df
+
+    n_rows = df.height
+    before_mean = df["volume"].mean()
+    df = df.with_columns((pl.col("volume") / 100).alias("volume"))
+    after_mean = df["volume"].mean()
+    logger.info(
+        "🔧 Volume unit normalized: 股→手 (new_median={:,.0f}, ref_median={:,.0f}, "
+        "mean {:,.0f} → {:,.0f}, {} rows)",
+        new_med,
+        ref_med or 0.0,
+        before_mean,
+        after_mean,
+        n_rows,
+    )
+    return df

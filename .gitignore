@@ -66,3 +66,4 @@ htmlcov/
 .env.local
 *.pem
 *.key
+data/dataset/*.bak_*
