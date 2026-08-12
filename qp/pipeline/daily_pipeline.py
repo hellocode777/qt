@@ -470,7 +470,12 @@ class DailyPipeline(BasePipeline):
                             registry.set_meta(strategy_name, registry_meta)
                     registry.register(
                         multifactor,
-                        lifecycle=StrategyLifecycle.RESEARCH,
+                        # ADR-031 修复 (2026-08-12): 保留现有 lifecycle，不硬编码 RESEARCH。
+                        # 之前每次 daily run 都会把磁盘上已 APPROVED 的策略覆盖回
+                        # RESEARCH（register() 无条件写 _lifecycles[sid]，新进程
+                        # _strategies 为空不会抛错），导致 approve 后一跑 daily 就
+                        # 掉线、下次 pipeline 判定"无 APPROVED 策略"跳过执行。
+                        lifecycle=registry.get_lifecycle(strategy_name),
                         meta=registry_meta,
                     )
                     registered_ids.append(multifactor.strategy_id)

@@ -267,7 +267,7 @@ class ApprovedStrategy:
         """Human-readable summary of the frozen strategy."""
         factor_list = ", ".join(f"{k}: {v:+.3f}" for k, v in self.weights.items())
         lines = [
-            f"ApprovedStrategy: {self.strategy_id} (v{self.version})",
+            f"ApprovedStrategy: {self.strategy_id} (v{self.version.removeprefix('v')})",
             f"  Approved by: {self.approved_by} @ {self.approved_at.isoformat()}",
             f"  Factors ({self.factor_count}): {factor_list}",
             f"  Parameters: top_n={self.top_n}, rebalance={self.rebalance_freq}, "
