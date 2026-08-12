@@ -1,0 +1,54 @@
+{
+  "experiment_id": "momentum_vol_full_diagnostic_20260812",
+  "strategy_id": "momentum_vol_full",
+  "type": "diagnostic",
+  "created_at": "2026-08-12T11:00:00+08:00",
+  "purpose": "诊断 5 因子组合 score→future return 的非线性结构 (Q5 collapse / Q4 vs Q5)",
+  "data": {
+    "factor_source": "data/experiments/_factor_raw_cache.parquet",
+    "price_source": "data/dataset/daily_price_latest.parquet",
+    "date_range": "2024-12-05 → 2026-07-14",
+    "rows": 394329,
+    "stocks": 1031
+  },
+  "weights": {
+    "Amplitude_5D": -0.25,
+    "Volatility_20D": 0.22,
+    "Momentum_3M": -0.20,
+    "Volume_Concentration": -0.19,
+    "Volume_Trend_10D": -0.14
+  },
+  "method": "每日横截面按因子值分 5 组 (Q1=最低20%), 计算各组未来 5/10/20 日收益均值",
+  "findings": {
+    "single_factor_20d": {
+      "Volume_Concentration": {"Q1": 2.159, "Q2": 1.942, "Q3": 1.705, "Q4": 1.409, "Q5": 1.067, "monotonic": true, "note": "唯一干净单调递减因子，成交越集中未来越差"},
+      "Amplitude_5D": {"Q1": 1.065, "Q2": 1.625, "Q3": 1.998, "Q4": 2.151, "Q5": 1.439, "monotonic": false, "note": "升到 Q4 后 Q5 崩塌 (Q5 collapse)"},
+      "Momentum_3M": {"Q1": 1.71, "Q2": 1.823, "Q3": 1.861, "Q4": 1.58, "Q5": 1.306, "monotonic": false, "note": "Q3 见顶，反转效应存在"},
+      "Volume_Trend_10D": {"Q1": 1.649, "Q2": 1.783, "Q3": 1.834, "Q4": 1.787, "Q5": 1.227, "monotonic": false, "note": "Q3 见顶，Q5 崩塌"},
+      "Volatility_20D": {"Q1": 1.318, "Q2": 2.179, "Q3": 2.155, "Q4": 1.606, "Q5": 1.022, "monotonic": false, "note": "中间最优 (Q2/Q3)，两端都差；低波组 Q5 反而是最差组之一"}
+    },
+    "composite_20d": {
+      "Q1": 1.045, "Q2": 1.963, "Q3": 1.901, "Q4": 1.87, "Q5": 1.5,
+      "note": "Q5 (模型最看好组) 收益明显低于 Q2-Q4 —— IC 为正但 Q5 弱的根源"
+    },
+    "q4_vs_q5_profile": {
+      "Q4": {"Amplitude_5D": 0.0261, "Volatility_20D": -0.2877, "Momentum_3M": -0.0121, "Volume_Concentration": 0.3777, "Volume_Trend_10D": 0.9097, "fwd_20": 1.87},
+      "Q5": {"Amplitude_5D": 0.0209, "Volatility_20D": -0.2262, "Momentum_3M": -0.0637, "Volume_Concentration": 0.3157, "Volume_Trend_10D": 0.8758, "fwd_20": 1.5}
+    }
+  },
+  "conclusions": [
+    "策略实际是 Anti-Chasing / Low-Vol / Mean-Reversion 组合，不是动量策略 (4 负权 + Volatility_20D 因子值内嵌负号=低波动加分)",
+    "Volume_Concentration 是唯一干净单调因子 (成交越集中未来越差)",
+    "Amplitude_5D / Volume_Trend_10D 存在 Q5 collapse (最高因子值组收益掉到 Q4 之下)",
+    "Volatility_20D 不是低波异象而是中间最优 (Q2/Q3 最好，两端都差)",
+    "Composite score→return 非线性：Q2 峰值，Q5 下降。Q5 画像 = 波动最小+跌最多+量最缩的冷门股，未来收益差更可能是低流动性/弱势股陷阱而非拥挤反噬"
+  ],
+  "recommendations": [
+    "不要盲目微调权重 (容易优化历史噪声)",
+    "考虑给 composite score 加中间地带约束：惩罚双极端 (超活跃 & 超冷门)",
+    "Volatility_20D 改用非对称处理 (保留中低波动加分，去掉超低波动惩罚) 或单独验证",
+    "后续可对比单因子 IC 与分层一致性，确认 Volume_Concentration 权重是否应提升"
+  ],
+  "script": "qp/research/evaluation/quintile_diag.py",
+  "status": "completed"
+}
