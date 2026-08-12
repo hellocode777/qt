@@ -243,7 +243,7 @@ def compute_cross_sectional_scores(
     # MUST happen BEFORE valuation/fundamental extraction so those members
     # are correctly classified
     if composite_factor_names & all_factor_names:
-        from qp.strategy.factor_composite import COMPOSITE_DEFINITIONS
+        from qp.research.feature.factor_composite import COMPOSITE_DEFINITIONS
 
         for comp_name, cfg in COMPOSITE_DEFINITIONS.items():
             if comp_name in all_factor_names:
@@ -426,7 +426,7 @@ def compute_cross_sectional_scores(
         "Reversal_Composite",
     }
     if composite_names & set(weights.keys()):
-        from qp.strategy.factor_composite import FactorCompositeEngine
+        from qp.research.feature.factor_composite import FactorCompositeEngine
 
         engine = FactorCompositeEngine()
         composites = engine.compute_all(all_raw)

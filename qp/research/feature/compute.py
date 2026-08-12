@@ -174,7 +174,7 @@ def compute_composite_factors(
     Returns:
         Same DataFrame with composite columns added.
     """
-    from qp.strategy.factor_composite import COMPOSITE_DEFINITIONS
+    from qp.research.feature.factor_composite import COMPOSITE_DEFINITIONS
 
     df = factor_df.clone()
 
