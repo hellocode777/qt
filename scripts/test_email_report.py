@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Test: send today's DecisionPackage as email."""
+"""Test: send today's DecisionPackage as email.
+
+手工验证脚本（不属于库代码，不参与 lint/pyright 门禁）：
+运行方式：`.venv/bin/python scripts/test_email_report.py`
+验证邮件链路：加载最新 DecisionPackage → 预览 → 发到 SMTP 配置的邮箱。
+"""
 
 import json
 from pathlib import Path

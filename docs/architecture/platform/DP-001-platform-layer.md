@@ -20,7 +20,7 @@ Platform 是所有层的运行时内核。每一层都运行在 Platform 之上�
 | `platform/runtime/` | 5 | 状态机 | 生命周期（CREATED→INITIALIZING→READY→RUNNING→STOPPING→TERMINATED）+ 组合根 |
 | `platform/metadata/` | 3 | 版本/环境 | 运行时元信息 |
 | `platform/proposals/` | 2 | `StrategyProposal`, `ProposalStore` | 策略生命周期审批 |
-| `platform/alert/` | 0 (bridge) | re-export | 桥接到 `monitoring.alerts` |
+| `platform/alert/` | 3 | `Alert`, `AlertSeverity`, `AlertChannel` | 告警协议定义（L1），monitoring 层实现通道（ADR-033） |
 
 ## 关键设计决策
 
@@ -34,3 +34,11 @@ Platform 是所有层的运行时内核。每一层都运行在 Platform 之上�
 
 - **无上层依赖** — Platform 是最底层
 - **被所有层依赖**: L2-L10 均运行在 Platform 之上
+
+## 组合根豁免（ADR-033）
+
+以下目录允许跨层 import，不视为架构违规：
+
+1. **`qp/pipeline/`** — 业务编排组合根（ADR-003）：`daily_pipeline.py`（每日信号链）、`multifactor_pipeline.py`（实验回测）等跨全部 10 层编排。与 `platform/pipeline/`（管道引擎）分工：platform 提供机制，qp/pipeline 提供业务编排。
+2. **`qp/web/`** — WebUI 人类接口层：只读各层产物渲染（决策/监控/持仓/回测），不计算投资逻辑。
+3. **`platform/cli/commands/*.py`** — CLI 组合根（ADR-002 唯一入口）：命令处理函数内 lazy import 豁免；但命令文件只做参数解析 + 调下层 + 输出，不定义业务逻辑。

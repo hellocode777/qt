@@ -7,6 +7,7 @@ def cmd_monitor_check() -> int:
     """Run full KillSwitchPipeline — regime + drift + decay + kill switch + health."""
     from datetime import datetime
 
+    from qp.knowledge.archive import KnowledgeArchive
     from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline, MonitorAction
     from qp.platform.pipeline.context import PipelineContext
 
@@ -14,7 +15,7 @@ def cmd_monitor_check() -> int:
     print(f"  时间 / Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     ctx = PipelineContext(pipeline_name="cli_monitor_check")
-    pipeline = KillSwitchPipeline()
+    pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
     result = pipeline.run(ctx)
 
     if result.status.value != "success":

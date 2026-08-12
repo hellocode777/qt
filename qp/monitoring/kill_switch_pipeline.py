@@ -100,12 +100,16 @@ class KillSwitchPipeline(BasePipeline):
         alert_manager: AlertManager | None = None,
         model_decay_detector: ModelDecayDetector | None = None,
         regime_engine: MarketRegimeEngine | None = None,
+        knowledge_archive: Any | None = None,
     ) -> None:
         super().__init__()
         self._alerts = alert_manager or AlertManager()
         self._model_decay = model_decay_detector
         self._regime_engine = regime_engine or MarketRegimeEngine()
         self._last_monitored_strategy: str = ""
+        # 注入知识库归档器（上层组合根传入），避免 monitoring→knowledge 向上依赖。
+        # None 时回退 lazy import（保持调度器/CLI 兼容）。
+        self._knowledge_archive = knowledge_archive
 
     @property
     def name(self) -> str:
@@ -517,9 +521,11 @@ class KillSwitchPipeline(BasePipeline):
             return  # Don't archive routine or watch-only events
 
         try:
-            from qp.knowledge.archive import KnowledgeArchive
-
-            archive = KnowledgeArchive()
+            # 归档器由上层组合根注入（CLI/scheduler），监控层不直接依赖知识层。
+            # 未注入时跳过归档（best-effort，不阻塞管道）。
+            archive = self._knowledge_archive
+            if archive is None:
+                return
 
             # Build event summary from report
             regime_str = report.regime.regime.value if report.regime else "UNKNOWN"

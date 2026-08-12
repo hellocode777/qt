@@ -210,6 +210,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
     # ── Job 1: morning health check (09:07 on weekdays) ──
     def job_monitor_check() -> None:
         with job_log_sink("monitor_check"):
+            from qp.knowledge.archive import KnowledgeArchive
             from qp.monitoring.kill_switch_pipeline import (
                 KillSwitchPipeline,
                 MonitorAction,
@@ -226,7 +227,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 price_data = {}
 
             ctx = _make_ctx("scheduled_monitor", price_data=price_data)
-            pipeline = KillSwitchPipeline()
+            pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
             result = pipeline.run(ctx)
 
             if result.status.value != "success":
@@ -360,13 +361,14 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
     def job_pre_close_check() -> None:
         """收盘前快速检查，决定是否执行盘后策略."""
         with job_log_sink("pre_close_check"):
+            from qp.knowledge.archive import KnowledgeArchive
             from qp.monitoring.kill_switch_pipeline import (
                 KillSwitchPipeline,
                 MonitorAction,
             )
 
             ctx = _make_ctx("pre_close_check")
-            pipeline = KillSwitchPipeline()
+            pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
             result = pipeline.run(ctx)
 
             if result.status.value != "success":
