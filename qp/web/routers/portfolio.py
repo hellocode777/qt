@@ -44,6 +44,38 @@ async def portfolio(request: Request) -> Any:
     # Enrich positions with current status
     positions = [p.to_dict() for p in active]
 
+    # Mark-to-market: latest close per symbol from daily_price_latest.parquet
+    latest_prices: dict[str, float] = {}
+    try:
+        import polars as pl
+
+        px = pl.read_parquet("data/dataset/daily_price_latest.parquet")
+        if not px.is_empty():
+            latest_date = px["trade_date"].max()
+            px_latest = (
+                px.filter(pl.col("trade_date") == latest_date)
+                .select(["symbol", "close"])
+                .unique(subset=["symbol"], keep="first")
+            )
+            latest_prices = {
+                str(r["symbol"]): float(r["close"]) for r in px_latest.iter_rows(named=True)
+            }
+    except Exception as exc:
+        logger.warning("Mark-to-market prices unavailable: {}", exc)
+
+    for p in positions:
+        close = latest_prices.get(p.get("symbol", ""))
+        p["latest_price"] = close
+        entry = p.get("entry_price", 0.0)
+        if close is not None:
+            # Market value = latest close × shares (true market value)
+            p["market_value_marked"] = round(close * p.get("shares", 0), 2)
+            p["unrealized_pnl_pct"] = round((close - entry) / entry * 100, 2) if entry > 0 else None
+        else:
+            # No quote (suspended/delisted) → fall back to cost value
+            p["market_value_marked"] = p.get("market_value", 0.0)
+            p["unrealized_pnl_pct"] = None
+
     # Get latest decision for sell signals
     decision_svc = _get_service(request, "decision_service", DecisionService)
     latest_decision = decision_svc.latest()
@@ -63,6 +95,9 @@ async def portfolio(request: Request) -> Any:
     # P&L stats
     closed = [p for p in all_positions if not p.is_active]
     winning = [p for p in closed if p.pnl > 0]
+
+    # Closed positions for the realized-PnL table
+    closed_positions = [p.to_dict() for p in closed]
 
     portfolio_stats = {
         "active_count": len(active),
@@ -129,6 +164,8 @@ async def portfolio(request: Request) -> Any:
         context={
             "positions": positions,
             "has_positions": len(positions) > 0,
+            "closed_positions": closed_positions,
+            "has_closed_positions": len(closed_positions) > 0,
             "sell_signals": sell_signals,
             "has_sell_signals": len(sell_signals) > 0,
             "stats": portfolio_stats,

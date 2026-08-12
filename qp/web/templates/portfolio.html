@@ -134,8 +134,10 @@
           <th>标的</th>
           <th>入场日</th>
           <th>入场价</th>
+          <th>最新价</th>
           <th>股数</th>
-          <th>市值</th>
+          <th>市值(最新)</th>
+          <th>盈亏 %</th>
           <th>策略</th>
           <th>决策包</th>
         </tr>
@@ -147,8 +149,16 @@
           <td><strong>{{ p.symbol | stock_name }}</strong> <code class="c-muted">{{ p.symbol }}</code></td>
           <td>{{ p.entry_date }}</td>
           <td>¥{{ "%.2f"|format(p.entry_price) }}</td>
+          <td>{% if p.latest_price %}¥{{ "%.2f"|format(p.latest_price) }}{% else %}<span class="c-muted">—</span>{% endif %}</td>
           <td>{{ p.shares }}</td>
-          <td>¥{{ "%.0f"|format(p.market_value) }}</td>
+          <td>¥{{ "%.0f"|format(p.market_value_marked) }}</td>
+          <td>
+            {% if p.unrealized_pnl_pct is not none %}
+            <span class="badge {{ 'badge-green' if p.unrealized_pnl_pct >= 0 else 'badge-red' }}" style="font-size: 11px;">{{ "%+.2f"|format(p.unrealized_pnl_pct) }}%</span>
+            {% else %}
+            <span class="c-muted">—</span>
+            {% endif %}
+          </td>
           <td><span style="font-size: 12px;">{{ p.strategy_id }}</span></td>
           <td>
             <a href="/decisions/{{ p.decision_id }}" style="color: var(--blue); font-size: 12px;">
@@ -162,6 +172,48 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Closed Positions (realized P&L) -->
+{% if has_closed_positions %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header">
+    <span>&#128200; 已平仓持仓 Closed Positions</span>
+    <span class="c-muted" style="font-size: 12px;">{{ closed_positions | length }} 笔 · 已实现 {{ stats.total_realized_pnl_fmt }}</span>
+  </div>
+  <div class="card-body">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>标的</th>
+          <th>入场日</th>
+          <th>入场价</th>
+          <th>卖出价</th>
+          <th>股数</th>
+          <th>盈亏金额</th>
+          <th>盈亏 %</th>
+          <th>卖出原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in closed_positions %}
+        <tr>
+          <td><code>{{ p.position_id }}</code></td>
+          <td><strong>{{ p.symbol | stock_name }}</strong> <code class="c-muted">{{ p.symbol }}</code></td>
+          <td>{{ p.entry_date }}</td>
+          <td>¥{{ "%.2f"|format(p.entry_price) }}</td>
+          <td>{% if p.exit_price %}¥{{ "%.2f"|format(p.exit_price) }}{% else %}<span class="c-muted">—</span>{% endif %}</td>
+          <td>{{ p.shares }}</td>
+          <td><span class="{{ 'badge-green' if p.pnl >= 0 else 'badge-red' }}" style="font-size: 12px;">¥{{ "%+.0f"|format(p.pnl) }}</span></td>
+          <td><span class="badge {{ 'badge-green' if p.pnl_pct >= 0 else 'badge-red' }}" style="font-size: 11px;">{{ "%+.2f"|format(p.pnl_pct * 100) }}%</span></td>
+          <td style="font-size: 12px;">{{ p.exit_reason or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <!-- Sell Signals from latest DecisionPackage -->
 {% if has_sell_signals %}
