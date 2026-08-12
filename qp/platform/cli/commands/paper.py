@@ -7,7 +7,7 @@ def cmd_paper_start(strategy_id: str = "momentum_vol_full", capital: float = 100
     """Start a 30-day paper trading run."""
     from datetime import date
 
-    from qp.strategy.paper_trading import PaperTradingTracker
+    from qp.simulation.paper_trading import PaperTradingTracker
     from qp.strategy.registry import StrategyRegistry
 
     print("═══ QP 模拟交易 / Paper Trading ═══")
@@ -40,7 +40,7 @@ def cmd_paper_start(strategy_id: str = "momentum_vol_full", capital: float = 100
 
 def cmd_paper_status(strategy_id: str = "momentum_vol_full") -> int:
     """Show current paper trading status."""
-    from qp.strategy.paper_trading import PaperTradingTracker
+    from qp.simulation.paper_trading import PaperTradingTracker
 
     tracker = PaperTradingTracker()
     run = tracker.load(strategy_id)

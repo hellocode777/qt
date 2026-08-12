@@ -31,11 +31,6 @@ from qp.strategy.multifactor import (
     generate_rebalance_signals,
     run_multifactor_strategy,
 )
-from qp.strategy.paper_trading import (
-    PaperTradingResult,
-    PaperTradingRun,
-    PaperTradingTracker,
-)
 from qp.strategy.quality_filter import apply_quality_filter, get_filter_report
 from qp.strategy.registry import StrategyMeta, StrategyRegistry
 from qp.strategy.runner import RunnerResult, StrategyRunner
