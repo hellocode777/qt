@@ -549,3 +549,56 @@ class PositionLedger:
             decision_package.package_id,
         )
         return positions
+
+    def close_from_decision(
+        self,
+        decision_package: Any,  # DecisionPackage
+        exit_date: str = "",
+    ) -> list[Position]:
+        """Close positions from an approved DecisionPackage's SELL recommendations.
+
+        Symmetric to open_from_decision: iterate SELL recommendations, match
+        active positions by symbol, and close them at the recommended exit
+        price with cash flowing back into the account (ADR-032).
+
+        Idempotent: symbols without an active position are skipped, so
+        re-approval or partial execution does not double-close.
+
+        Args:
+            decision_package: An approved DecisionPackage with SELL recommendations.
+            exit_date: Exit date (defaults to today).
+
+        Returns:
+            List of closed Positions (may be empty if none matched).
+        """
+        sell_recs = [
+            rec
+            for rec in decision_package.report.recommendations
+            if rec.action == "SELL" and rec.quantity_shares > 0
+        ]
+
+        active_by_symbol = {p.symbol: p for p in self.get_active()}
+        closed: list[Position] = []
+        for rec in sell_recs:
+            pos = active_by_symbol.get(rec.symbol)
+            if pos is None:
+                logger.warning(
+                    "SELL {} has no active position — skipped (already closed?)",
+                    rec.symbol,
+                )
+                continue
+            result = self.close(
+                position_id=pos.position_id,
+                exit_price=rec.estimated_price,
+                exit_reason=rec.reason,
+                exit_date=exit_date,
+                notes=f"Decision: {decision_package.package_id}",
+            )
+            if result is not None:
+                closed.append(result)
+        logger.info(
+            "Bulk closed {} positions from {}",
+            len(closed),
+            decision_package.package_id,
+        )
+        return closed

@@ -39,6 +39,7 @@ config.toml
 # Runtime data (auto-generated)
 data/decisions/
 data/positions/
+data/positions.bak-*/
 data/reports/
 data/experiments/*/
 data/dataset/registry.json

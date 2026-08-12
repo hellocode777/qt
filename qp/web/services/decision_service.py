@@ -95,8 +95,9 @@ class DecisionService:
         Validates the transition via the state machine.
         Saves updated JSON and refreshes the index.
 
-        If create_positions is True (default), auto-creates Position records
-        for each BUY recommendation via PositionLedger.open_from_decision().
+        If create_positions is True (default), auto-applies the package to
+        PositionLedger: closes positions for each SELL recommendation and
+        creates Position records for each BUY recommendation.
         """
         result = self._transition(
             package_id,
@@ -111,15 +112,18 @@ class DecisionService:
                 from qp.decision.position_ledger import PositionLedger
 
                 ledger = PositionLedger()
+                # SELL first: cash flows back before BUY cash is debited
+                closed = ledger.close_from_decision(pkg)
                 positions = ledger.open_from_decision(pkg)
                 logger.info(
-                    "Auto-created {} positions from {}",
+                    "Auto-applied {} closes / {} positions from {}",
+                    len(closed),
                     len(positions),
                     package_id,
                 )
             except Exception as e:
                 logger.warning(
-                    "Failed to auto-create positions for {}: {}",
+                    "Failed to auto-apply positions for {}: {}",
                     package_id,
                     e,
                 )

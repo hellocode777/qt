@@ -19,6 +19,7 @@ from qp.decision.state_machine import (
     reject,
     transition,
 )
+from qp.shared.types import PositionState
 
 
 class TestTradeRecommendation:
@@ -1651,6 +1652,128 @@ class TestAccountCashLedger:
             ledger = mod.PositionLedger()  # fresh init without account.json
             assert ledger.get_cash() == pytest.approx(90_000.0)
             assert ledger.get_initial_capital() == pytest.approx(100_000.0)
+        finally:
+            mod.POSITIONS_DIR = Path(original_dir)
+            mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
+            mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
+
+
+class TestCloseFromDecision:
+    """SELL recommendations → close active positions + cash back (symmetric to open)."""
+
+    def test_close_from_decision(self, tmp_path) -> None:
+        import qp.decision.position_ledger as mod
+        from qp.decision.decision_package import DecisionPackage
+        from qp.decision.models import TradeRecommendation
+
+        original_dir = str(mod.POSITIONS_DIR)
+        try:
+            mod.POSITIONS_DIR = tmp_path
+            mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
+            mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
+
+            ledger = mod.PositionLedger(initial_capital=100_000.0)
+            ledger.open("600519", 10.0, 1000, decision_id="dp-old")  # ¥10,000
+            ledger.open("000001", 20.0, 500, decision_id="dp-old")  # ¥10,000
+            ledger.open("000002", 30.0, 300, decision_id="dp-old")  # ¥9,000
+            assert ledger.get_cash() == pytest.approx(71_000.0)
+
+            dp = DecisionPackage(package_id="dp-sell-test", date="2026-08-12")
+            dp.approve(reviewer="测试")
+            dp.report.recommendations = [
+                TradeRecommendation(
+                    symbol="600519",
+                    action="SELL",
+                    estimated_price=12.0,
+                    quantity_shares=1000,
+                    reason="RISK_LIQUIDITY",
+                    strategy="rank_exit",
+                ),
+                TradeRecommendation(
+                    symbol="000001",
+                    action="SELL",
+                    estimated_price=18.0,
+                    quantity_shares=500,
+                    reason="RISK_LIQUIDITY",
+                    strategy="rank_exit",
+                ),
+                TradeRecommendation(
+                    symbol="000002",
+                    action="BUY",
+                    estimated_price=30.0,
+                    quantity_shares=0,
+                ),
+            ]
+
+            closed = ledger.close_from_decision(dp)
+            assert len(closed) == 2  # BUY skipped, only SELL closes
+            assert {p.symbol for p in closed} == {"600519", "000001"}
+            assert all(p.status == PositionState.CLOSED for p in closed)
+            assert all(p.decision_id == "dp-old" for p in closed)
+
+            # Cash: 71,000 + 12,000 + 9,000 = 92,000
+            assert ledger.get_cash() == pytest.approx(92_000.0)
+            # Realized PnL: (12-10)*1000 + (18-20)*500 = 2000 - 1000 = 1000
+            summary = ledger.get_account_summary()
+            assert summary["realized_pnl"] == pytest.approx(1_000.0)
+
+            # Remaining active: only 000002
+            active = ledger.get_active()
+            assert len(active) == 1
+            assert active[0].symbol == "000002"
+        finally:
+            mod.POSITIONS_DIR = Path(original_dir)
+            mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"
+            mod.POSITIONS_INDEX = Path(original_dir) / "index.json"
+            mod.ACCOUNT_FILE = Path(original_dir) / "account.json"
+
+    def test_close_from_decision_idempotent(self, tmp_path) -> None:
+        """Re-applying the same package must not double-close or double-credit cash."""
+        import qp.decision.position_ledger as mod
+        from qp.decision.decision_package import DecisionPackage
+        from qp.decision.models import TradeRecommendation
+
+        original_dir = str(mod.POSITIONS_DIR)
+        try:
+            mod.POSITIONS_DIR = tmp_path
+            mod.POSITIONS_PARQUET = tmp_path / "positions.parquet"
+            mod.POSITIONS_INDEX = tmp_path / "index.json"
+            mod.ACCOUNT_FILE = tmp_path / "account.json"
+
+            ledger = mod.PositionLedger(initial_capital=100_000.0)
+            ledger.open("600519", 10.0, 1000, decision_id="dp-old")  # ¥10,000
+            assert ledger.get_cash() == pytest.approx(90_000.0)
+
+            dp = DecisionPackage(package_id="dp-sell-test", date="2026-08-12")
+            dp.approve(reviewer="测试")
+            dp.report.recommendations = [
+                TradeRecommendation(
+                    symbol="600519",
+                    action="SELL",
+                    estimated_price=12.0,
+                    quantity_shares=1000,
+                    reason="RISK_LIQUIDITY",
+                    strategy="rank_exit",
+                ),
+                TradeRecommendation(
+                    symbol="999999",
+                    action="SELL",
+                    estimated_price=1.0,
+                    quantity_shares=1000,
+                    reason="RISK_LIQUIDITY",
+                    strategy="rank_exit",
+                ),
+            ]
+
+            first = ledger.close_from_decision(dp)
+            assert len(first) == 1  # 999999 has no active position → skipped
+            assert ledger.get_cash() == pytest.approx(102_000.0)
+
+            second = ledger.close_from_decision(dp)
+            assert len(second) == 0  # already closed → idempotent
+            assert ledger.get_cash() == pytest.approx(102_000.0)
         finally:
             mod.POSITIONS_DIR = Path(original_dir)
             mod.POSITIONS_PARQUET = Path(original_dir) / "positions.parquet"

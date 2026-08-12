@@ -451,17 +451,20 @@ def _execute_review_action(
     pkg.to_markdown()
     pkg.update_index()
 
-    # P2.3: Auto-create positions on approve
+    # P2.3: Auto-apply positions on approve (SELL closes + BUY opens)
     if action == "approve":
         try:
             from qp.decision.position_ledger import PositionLedger
 
             ledger = PositionLedger()
+            closed = ledger.close_from_decision(pkg)
             positions = ledger.open_from_decision(pkg)
+            if closed:
+                print(f"  📉 自动平仓 {len(closed)} 条持仓")
             if positions:
                 print(f"  📊 自动创建 {len(positions)} 条持仓记录")
         except Exception as exc:
-            print(f"  ⚠️ 持仓创建失败: {exc}")
+            print(f"  ⚠️ 持仓同步失败: {exc}")
 
     labels = {
         "approve": "✅ 已批准",
