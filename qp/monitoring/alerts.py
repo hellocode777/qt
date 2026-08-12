@@ -1,7 +1,10 @@
 """Alert Channels — multi-channel alerting for monitoring events.
 
-Provides three alert channels (Terminal, Log, Telegram) and an AlertManager
-that routes alerts by severity.
+Provides concrete alert channels (Terminal, Log, Telegram, Email, DingTalk,
+WeCom, File) and an AlertManager that routes alerts by severity. The alert
+protocol (AlertSeverity / Alert / AlertChannel) is defined in
+``qp.platform.alert`` (Layer 1); this module implements it — monitoring →
+platform is a legal downward dependency.
 
 Rule: secrets (Telegram API keys) come from environment variables only.
 See rule.md §10.1.
@@ -15,86 +18,16 @@ Usage:
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from enum import StrEnum
-
 from loguru import logger
 
-
-class AlertSeverity(StrEnum):
-    """Alert severity levels."""
-
-    INFO = "info"  # Routine notification
-    WARNING = "warning"  # Needs attention
-    CRITICAL = "critical"  # Immediate action required
-
-
-@dataclass
-class Alert:
-    """A monitoring alert event.
-
-    Attributes:
-        severity: Alert severity level.
-        title: Short alert title.
-        message: Detailed message body.
-        source: Which subsystem generated the alert.
-        timestamp: ISO-format timestamp.
-        metadata: Arbitrary extra context.
-    """
-
-    severity: AlertSeverity
-    title: str
-    message: str
-    source: str = "monitoring"
-    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
-    metadata: dict[str, str] = field(default_factory=dict)
-
-    def format_short(self) -> str:
-        """Short one-line format."""
-        return f"[{self.severity.value.upper()}] {self.title}: {self.message}"
-
-    def format_detailed(self) -> str:
-        """Multi-line detailed format with metadata."""
-        lines = [
-            f"=== {self.severity.value.upper()} ALERT ===",
-            f"Time: {self.timestamp}",
-            f"Source: {self.source}",
-            f"Title: {self.title}",
-            f"Message: {self.message}",
-        ]
-        if self.metadata:
-            lines.append("Metadata:")
-            for k, v in self.metadata.items():
-                lines.append(f"  {k}: {v}")
-        return "\n".join(lines)
-
+from qp.platform.alert import Alert, AlertChannel, AlertSeverity
 
 # ------------------------------------------------------------------
 # Alert channels
 # ------------------------------------------------------------------
 
 
-class _BaseAlertChannel(ABC):
-    """Abstract alert channel — all channels implement send()."""
-
-    @abstractmethod
-    def send(self, alert: Alert) -> bool:
-        """Send an alert through this channel.
-
-        Returns:
-            True if successfully delivered, False otherwise.
-        """
-        ...
-
-    @abstractmethod
-    def test(self) -> bool:
-        """Send a test alert to verify channel is working."""
-        ...
-
-
-class TerminalAlert(_BaseAlertChannel):
+class TerminalAlert(AlertChannel):
     """Sends alerts to terminal with ANSI color coding.
 
     Usage:
@@ -142,7 +75,7 @@ class TerminalAlert(_BaseAlertChannel):
         return self.send(alert)
 
 
-class LogAlert(_BaseAlertChannel):
+class LogAlert(AlertChannel):
     """Sends alerts via structured logging (Loguru).
 
     Usage:
@@ -212,7 +145,7 @@ class LogAlert(_BaseAlertChannel):
         return log_map.get(severity, logger.info)
 
 
-class TelegramAlert(_BaseAlertChannel):
+class TelegramAlert(AlertChannel):
     """Sends alerts via Telegram Bot API.
 
     Requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.
@@ -314,7 +247,7 @@ class TelegramAlert(_BaseAlertChannel):
 # ------------------------------------------------------------------
 
 
-class DingTalkAlert(_BaseAlertChannel):
+class DingTalkAlert(AlertChannel):
     """Sends alerts via DingTalk robot webhook.
 
     Requires DINGTALK_WEBHOOK_URL environment variable.
@@ -396,7 +329,7 @@ class DingTalkAlert(_BaseAlertChannel):
 # ------------------------------------------------------------------
 
 
-class WeComAlert(_BaseAlertChannel):
+class WeComAlert(AlertChannel):
     """Sends alerts via WeCom (企业微信) robot webhook.
 
     Requires WECOM_WEBHOOK_URL environment variable.
@@ -473,7 +406,7 @@ class WeComAlert(_BaseAlertChannel):
 # ------------------------------------------------------------------
 
 
-class EmailAlert(_BaseAlertChannel):
+class EmailAlert(AlertChannel):
     """Sends alerts via SMTP email.
 
     Requires environment variables:
@@ -559,7 +492,7 @@ class EmailAlert(_BaseAlertChannel):
 # ------------------------------------------------------------------
 
 
-class FileAlert(_BaseAlertChannel):
+class FileAlert(AlertChannel):
     """Writes alerts to a Markdown file for persistent record-keeping.
 
     Usage:
@@ -632,11 +565,11 @@ class AlertManager:
     """
 
     def __init__(self) -> None:
-        self._channels: list[tuple[_BaseAlertChannel, AlertSeverity | None]] = []
+        self._channels: list[tuple[AlertChannel, AlertSeverity | None]] = []
 
     def add_channel(
         self,
-        channel: _BaseAlertChannel,
+        channel: AlertChannel,
         min_severity: AlertSeverity | None = None,
     ) -> None:
         """Register an alert channel.
