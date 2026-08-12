@@ -51,9 +51,7 @@ def _load_joined(
     price = pdf.select(["trade_date", "symbol", "close"]).sort(["symbol", "trade_date"])
     for H in horizons:
         price = price.with_columns(
-            (pl.col("close").shift(-H).over("symbol") / pl.col("close") - 1.0).alias(
-                f"fwd_{H}"
-            )
+            (pl.col("close").shift(-H).over("symbol") / pl.col("close") - 1.0).alias(f"fwd_{H}")
         )
     df = fdf.join(price, on=["trade_date", "symbol"], how="inner")
     df = df.drop_nulls(subset=[f"fwd_{H}" for H in horizons])
@@ -62,14 +60,14 @@ def _load_joined(
 
 def _quintile(df: pl.DataFrame, col: str) -> pl.DataFrame:
     """Daily cross-sectional quintile labels (Q1 = lowest factor value)."""
-    return df.with_columns(
-        pl.col(col).rank("ordinal").over("trade_date").alias("_r")
-    ).with_columns(
-        (pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct")
-    ).with_columns(
-        pl.col("_pct")
-        .cut([0.2, 0.4, 0.6, 0.8], labels=["Q1", "Q2", "Q3", "Q4", "Q5"])
-        .alias("_q")
+    return (
+        df.with_columns(pl.col(col).rank("ordinal").over("trade_date").alias("_r"))
+        .with_columns((pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct"))
+        .with_columns(
+            pl.col("_pct")
+            .cut([0.2, 0.4, 0.6, 0.8], labels=["Q1", "Q2", "Q3", "Q4", "Q5"])
+            .alias("_q")
+        )
     )
 
 
@@ -132,9 +130,7 @@ def run_quintile_diagnostic(
     df = _load_joined(horizons=horizons)
     df = composite_score(df, weights)
 
-    per_factor: dict[str, pl.DataFrame] = {
-        f: quintile_report(df, f, horizons) for f in factors
-    }
+    per_factor: dict[str, pl.DataFrame] = {f: quintile_report(df, f, horizons) for f in factors}
     composite = quintile_report(df, "composite", horizons)
     profile = profile_quintiles(df, "composite", factors, horizons)
 

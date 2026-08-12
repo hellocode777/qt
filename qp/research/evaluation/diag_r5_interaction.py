@@ -1,5 +1,6 @@
 """R5 — Interaction Model: Momentum × Volatility 交互项是否有增量 Alpha.
 
+
 设计:
 1. 每日截面标准化 Mom / Vol → 交互项 = z(Mom) × z(Vol)
 2. 对比增量预测能力:
@@ -9,6 +10,14 @@
 3. 分时期 2015-2021 / 2022-2026
 4. enhanced score = composite + w×interaction, 扫 w 看 top10 收益与分层
 """
+
+# ─────────────────────────────────────────────────────────────
+# 研究诊断脚本（Research Diagnostic）— print 豁免说明
+# 本文件是一次性研究分析工具（顶层执行，输出分析表格），
+# 非生产库模块。print 为研究输出（表格/进度），按 CLAUDE.md
+# "No print()" 规则予以豁免：研究脚本保持可读性优先。
+# 生产库代码禁止参考此豁免。
+# ─────────────────────────────────────────────────────────────
 import polars as pl
 
 WEIGHTS = {
@@ -64,18 +73,26 @@ daily = (
 # 残差 IC: interaction 对 composite 回归后的残差与 fwd_20 的相关
 # 简化: 每日偏相关 = (r_if - r_ic*r_cf)/sqrt((1-r_ic^2)(1-r_cf^2))
 daily = daily.with_columns(
-    ((pl.col("ic_inter") - pl.col("ic_inter_comp") * pl.col("ic_comp")) /
-     ((1 - pl.col("ic_inter_comp")**2) * (1 - pl.col("ic_comp")**2)).sqrt()).alias("ic_partial")
+    (
+        (pl.col("ic_inter") - pl.col("ic_inter_comp") * pl.col("ic_comp"))
+        / ((1 - pl.col("ic_inter_comp") ** 2) * (1 - pl.col("ic_comp") ** 2)).sqrt()
+    ).alias("ic_partial")
 )
+
 
 def ic_summary(d):
     n = d.height
-    for col, name in [("ic_comp", "composite"), ("ic_inter", "interaction"), ("ic_partial", "interaction|comp")]:
+    for col, name in [
+        ("ic_comp", "composite"),
+        ("ic_inter", "interaction"),
+        ("ic_partial", "interaction|comp"),
+    ]:
         m = float(d.select(pl.col(col).mean()).item())
         s = float(d.select(pl.col(col).std()).item()) if n > 1 else 0.0
-        ir = m / s * (n ** 0.5) if s > 0 else float("nan")
+        ir = m / s * (n**0.5) if s > 0 else float("nan")
         hit = float(d.select((pl.col(col) > 0).mean()).item()) * 100
         print(f"  {name:20s} IC={m:+.4f}  IR={ir:6.1f}  hit={hit:5.1f}%  (n={n})")
+
 
 print("\n" + "=" * 70)
 print("R5A. IC 对比 (全样本)")
@@ -85,7 +102,8 @@ ic_summary(daily)
 print("\nR5B. 分时期:")
 for period in ["2015-2021", "2022-2026"]:
     d = daily.filter(
-        pl.when(pl.col("year") <= 2021).then(pl.lit("2015-2021")).otherwise(pl.lit("2022-2026")) == period
+        pl.when(pl.col("year") <= 2021).then(pl.lit("2015-2021")).otherwise(pl.lit("2022-2026"))
+        == period
     )
     print(f"\n[{period}]")
     ic_summary(d)
@@ -106,14 +124,12 @@ for w in [0.0, 0.02, 0.05, 0.1, 0.2, 0.5]:
 print("\n" + "=" * 70)
 print("R5D. interaction 自身 Q 分层 (Q1=交互值最低=超跌低波)")
 print("=" * 70)
-d = df.with_columns(
-    pl.col("interaction").rank("ordinal").over("trade_date").alias("_r_int")
-).with_columns(
-    (pl.col("_r_int") / pl.col("_r_int").count().over("trade_date")).alias("_p_int")
-).with_columns(
-    pl.col("_p_int").cut([0.2, 0.4, 0.6, 0.8], labels=Q_LABELS).alias("Q_int")
+d = (
+    df.with_columns(pl.col("interaction").rank("ordinal").over("trade_date").alias("_r_int"))
+    .with_columns((pl.col("_r_int") / pl.col("_r_int").count().over("trade_date")).alias("_p_int"))
+    .with_columns(pl.col("_p_int").cut([0.2, 0.4, 0.6, 0.8], labels=Q_LABELS).alias("Q_int"))
 )
 agg = d.group_by("Q_int").agg(pl.col("fwd_20").mean().alias("m")).sort("Q_int")
 print("Q1=低交互(超跌低波) → Q5=高交互(超跌高波或涨多高波):")
 for r in agg.iter_rows(named=True):
-    print(f"  {r['Q_int']:4s} {float(r['m'])*100:7.2f}%")
+    print(f"  {r['Q_int']:4s} {float(r['m']) * 100:7.2f}%")

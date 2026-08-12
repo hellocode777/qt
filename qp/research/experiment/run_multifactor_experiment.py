@@ -19,6 +19,7 @@ from datetime import date
 
 import numpy as np
 import polars as pl
+from loguru import logger
 
 from qp.data.adapter.tencent_adapter import TencentAdapter
 from qp.strategy.multifactor import (
@@ -36,7 +37,7 @@ def fetch_data(symbols: list[str], start: str, end: str) -> dict[str, pl.DataFra
     raw = adapter.fetch_raw(start_date, end_date, symbols=symbols)
 
     if raw.empty:
-        print("❌ 数据获取失败")
+        logger.error("❌ 数据获取失败")
         sys.exit(1)
 
     # Convert to Polars and organize by symbol
@@ -169,10 +170,9 @@ def compute_simple_backtest(
 
 
 def main() -> None:
-    print("=" * 70)
-    print("🧪 多因子策略实验 — A股真实数据")
-    print("=" * 70)
-    print()
+    logger.info("=" * 70)
+    logger.info("🧪 多因子策略实验 — A股真实数据")
+    logger.info("=" * 70)
 
     # ── 1. Fetch data ──
     SYMBOLS = [
@@ -196,25 +196,23 @@ def main() -> None:
         "601888",
     ]
 
-    print(f"📡 获取数据: {len(SYMBOLS)} 只A股 (2024-01-01 → 2026-07-20)...")
+    logger.info(f"📡 获取数据: {len(SYMBOLS)} 只A股 (2024-01-01 → 2026-07-20)...")
     start_date = "2024-01-01"
     end_date = "2026-07-20"
 
     price_data = fetch_data(SYMBOLS, start_date, end_date)
     total_rows = sum(df.height for df in price_data.values())
-    print(f"   ✅ {len(price_data)} 只股票, {total_rows:,} 行日线数据")
-    print()
+    logger.info(f"   ✅ {len(price_data)} 只股票, {total_rows:,} 行日线数据")
 
     # ── 2. Factor weights (equal weight all 15 price/volume factors) ──
     from qp.research.feature.compute import PRICE_VOLUME_FACTORS
 
     n_factors = len(PRICE_VOLUME_FACTORS)
     weights = dict.fromkeys(PRICE_VOLUME_FACTORS, 1.0 / n_factors)
-    print(f"🔢 因子: {n_factors} 个价格/成交量因子, 等权")
-    print()
+    logger.info(f"🔢 因子: {n_factors} 个价格/成交量因子, 等权")
 
     # ── 3. Compute cross-sectional scores ──
-    print("📊 计算截面多因子得分...")
+    logger.info("📊 计算截面多因子得分...")
     scores = compute_cross_sectional_scores(
         price_data,
         weights=weights,
@@ -222,14 +220,15 @@ def main() -> None:
         industry_neutral=False,
         orthogonalize=False,
     )
-    print(f"   ✅ 得分矩阵: {scores.height:,} 行 × {len(SYMBOLS)} 只股票")  # type: ignore[union-attr]
-    print(
-        f"   日期范围: {sorted(scores['trade_date'].unique().to_list())[0]} → {sorted(scores['trade_date'].unique().to_list())[-1]}"  # type: ignore[index]
+    logger.info(f"   ✅ 得分矩阵: {scores.height:,} 行 × {len(SYMBOLS)} 只股票")  # type: ignore[union-attr]
+    logger.info(
+        "日期范围: {} → {}",
+        sorted(scores["trade_date"].unique().to_list())[0],  # type: ignore[index]
+        sorted(scores["trade_date"].unique().to_list())[-1],  # type: ignore[index]
     )
-    print()
 
     # ── 4. IC Analysis ──
-    print("📈 Rank IC 分析...")
+    logger.info("📈 Rank IC 分析...")
     from qp.research.experiment.runner import ExperimentRunner
 
     # Compute daily top-10 forward returns vs scores
@@ -270,17 +269,16 @@ def main() -> None:
         ic_mean = float(np.mean(ics))
         ic_ir = float(np.abs(np.mean(ics)) / np.std(ics)) if np.std(ics) > 0 else 0.0
         ic_positive = float(np.sum(ics > 0) / len(ics) * 100)
-        print(f"   IC Mean: {ic_mean:.4f}")
-        print(f"   IC IR:   {ic_ir:.2f}")
-        print(f"   IC > 0:  {ic_positive:.1f}% 天数")
-        print(f"   样本量:   {len(daily_ics)} 天")
+        logger.info(f"   IC Mean: {ic_mean:.4f}")
+        logger.info(f"   IC IR:   {ic_ir:.2f}")
+        logger.info(f"   IC > 0:  {ic_positive:.1f}% 天数")
+        logger.info(f"   样本量:   {len(daily_ics)} 天")
     else:
         ic_mean = 0.0
-        print("   ⚠️ IC 计算数据不足")
-    print()
+        logger.info("   ⚠️ IC 计算数据不足")
 
     # ── 5. Generate signals ──
-    print("🎯 生成调仓信号...")
+    logger.info("🎯 生成调仓信号...")
     signals = generate_rebalance_signals(
         scores,  # type: ignore[arg-type]
         top_n=10,
@@ -290,40 +288,39 @@ def main() -> None:
     if not signals.is_empty():
         buys = signals.filter(pl.col("signal") == "buy")
         sells = signals.filter(pl.col("signal") == "sell")
-        print(f"   📈 买入信号: {buys.height} 条")
-        print(f"   📉 卖出信号: {sells.height} 条")
-        print(f"   调仓日: {signals['date'].n_unique()} 天")
-        print()
-        print("   最近一次调仓信号:")
+        logger.info(f"   📈 买入信号: {buys.height} 条")
+        logger.info(f"   📉 卖出信号: {sells.height} 条")
+        logger.info(f"   调仓日: {signals['date'].n_unique()} 天")
+
+        logger.info("   最近一次调仓信号:")
         latest_date = signals["date"].max()
         latest = signals.filter(pl.col("date") == latest_date).sort("signal", descending=True)
         for row in latest.iter_rows(named=True):
             emoji = "🟢" if row["signal"] == "buy" else "🔴"
-            print(f"     {emoji} {row['signal']:4s}  {row['symbol']:8s}  score={row['score']:.4f}")
+            logger.info(
+                f"     {emoji} {row['signal']:4s}  {row['symbol']:8s}  score={row['score']:.4f}"
+            )
     else:
-        print("   ⚠️ 无信号生成")
-    print()
+        logger.info("   ⚠️ 无信号生成")
 
     # ── 6. Simple backtest ──
-    print("💰 简单回测 (等权, 信号日调仓)...")
+    logger.info("💰 简单回测 (等权, 信号日调仓)...")
     bt = compute_simple_backtest(signals, price_data, initial_capital=100_000)
-    print(f"   总收益:    {bt['total_return_pct']:+.2f}%")
-    print(f"   年化夏普:  {bt['sharpe']:.2f}")
-    print(f"   最大回撤:  {bt['max_dd_pct']:.2f}%")
-    print(f"   期末资产:  ¥{bt['final_equity']:,.0f}")
-    print(f"   交易天数:  {bt['n_trading_days']} 天")
-    print()
+    logger.info(f"   总收益:    {bt['total_return_pct']:+.2f}%")
+    logger.info(f"   年化夏普:  {bt['sharpe']:.2f}")
+    logger.info(f"   最大回撤:  {bt['max_dd_pct']:.2f}%")
+    logger.info(f"   期末资产:  ¥{bt['final_equity']:,.0f}")
+    logger.info(f"   交易天数:  {bt['n_trading_days']} 天")
 
     # ── 7. Benchmark comparison ──
-    print("📏 基准对比 (等权持有)...")
+    logger.info("📏 基准对比 (等权持有)...")
     bench_ret = _benchmark_return(price_data, SYMBOLS, start_date, end_date)
-    print(f"   等权买入持有: {bench_ret:+.2f}%")
-    print()
+    logger.info(f"   等权买入持有: {bench_ret:+.2f}%")
 
-    print("=" * 70)
-    print("✅ 实验完成")
-    print("   ruff=0 | pyright=0 | pytest=109/109")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("✅ 实验完成")
+    logger.info("   ruff=0 | pyright=0 | pytest=109/109")
+    logger.info("=" * 70)
 
 
 def _benchmark_return(

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import polars as pl
+from loguru import logger
 
 from qp.data.cleaning.etl_pipeline import ETLPipeline
 
@@ -31,10 +32,10 @@ def main() -> None:
     name_map = {r[0]: r[1] for r in name_rows}
     board_map = {r[0]: r[2] or "main" for r in name_rows}
     codes = list(name_map.keys())
-    print(f"股票: {len(codes):,} 只")
+    logger.info(f"股票: {len(codes):,} 只")
 
     # ── 2. Read daily_bar in batches ──
-    print("读取 daily_bar...")
+    logger.info("读取 daily_bar...")
     cursor = conn.cursor()
     cursor.execute(
         "SELECT code, date, open, high, low, close, volume, amount "
@@ -65,16 +66,16 @@ def main() -> None:
         ]
         chunks.append(pl.DataFrame(data))
         total += len(batch)
-        print(f"\r  {total:,} 行", end="", flush=True)
+        if total % 500_000 == 0:
+            logger.info("  累计读取 {} 行...", total)
         batch = cursor.fetchmany(batch_size)
-    print()
 
     raw_df = pl.concat(chunks).sort(["symbol", "trade_date"])
     del chunks
-    print(f"  原始: {raw_df.height:,} 行 × {raw_df.width} 列")
+    logger.info(f"  原始: {raw_df.height:,} 行 × {raw_df.width} 列")
 
     # ── 3. Read adj_factors ──
-    print("读取 adj_factors...")
+    logger.info("读取 adj_factors...")
     adj_rows = conn.execute(
         "SELECT code, ex_date, cum_factor FROM adj_factors ORDER BY code, ex_date"
     ).fetchall()
@@ -83,24 +84,24 @@ def main() -> None:
         schema=["code", "ex_date", "cum_factor"],
         orient="row",
     )
-    print(f"  {adj_df.height:,} 行")
+    logger.info(f"  {adj_df.height:,} 行")
     conn.close()
 
     # ── 4. Run 4-stage ETL ──
-    print("\n🔧 4阶段ETL清洗 (rule.md §2 Rule 5)...")
+    logger.info("\n🔧 4阶段ETL清洗 (rule.md §2 Rule 5)...")
     pipeline = ETLPipeline()
     etl_result = pipeline.run(raw_df, adj_df)
 
     for s in etl_result.stages:
         flag_str = ", ".join(s.flags_added)
-        print(f"  {s.stage_name}: {s.rows_affected:,}行受影响 | +[{flag_str}]")
+        logger.info(f"  {s.stage_name}: {s.rows_affected:,}行受影响 | +[{flag_str}]")
 
     df = etl_result.df
-    print(f"\n  清洗后: {df.height:,} 行, flags: {etl_result.flags}")
+    logger.info(f"\n  清洗后: {df.height:,} 行, flags: {etl_result.flags}")
 
     # ── 5. Save ──
     path = OUT_DIR / f"daily_price_{VERSION}.parquet"
-    print(f"\n写入 {path}...")
+    logger.info(f"\n写入 {path}...")
     df.write_parquet(str(path))
     size_mb = path.stat().st_size / (1024 * 1024)
 
@@ -129,12 +130,12 @@ def main() -> None:
     limit_down = df.filter(pl.col("is_limit_down")).height
     tradeable = df.filter(pl.col("is_tradeable")).height
 
-    print(f"\n✅ {path} ({size_mb:.1f} MB)")
-    print(f"   股票: {df['symbol'].n_unique():,}  行: {df.height:,}")
-    print(f"   日期: {df['trade_date'].min()} → {df['trade_date'].max()}")
-    print(f"   停牌: {suspended:,}  涨停: {limit_up:,}  跌停: {limit_down:,}")
-    print(f"   可交易: {tradeable:,} ({tradeable / df.height * 100:.1f}%)")
-    print(f"   耗时: {time.time() - t0:.0f}s")
+    logger.info(f"\n✅ {path} ({size_mb:.1f} MB)")
+    logger.info(f"   股票: {df['symbol'].n_unique():,}  行: {df.height:,}")
+    logger.info(f"   日期: {df['trade_date'].min()} → {df['trade_date'].max()}")
+    logger.info(f"   停牌: {suspended:,}  涨停: {limit_up:,}  跌停: {limit_down:,}")
+    logger.info(f"   可交易: {tradeable:,} ({tradeable / df.height * 100:.1f}%)")
+    logger.info(f"   耗时: {time.time() - t0:.0f}s")
 
 
 if __name__ == "__main__":

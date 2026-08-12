@@ -68,6 +68,7 @@ class TencentAdapter(BaseDataSource):
             except Exception:
                 pass
             # Progress: print every 50 stocks or at the end
+            # 豁免 print() 硬规则：终端进度条（stderr + \r 刷新），logger 无法做覆盖式进度 UI
             if (i + 1) % 50 == 0 or i == n_total - 1:
                 pct = (i + 1) / n_total * 100
                 n_rows = len(all_rows)

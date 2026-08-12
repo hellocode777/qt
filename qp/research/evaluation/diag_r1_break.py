@@ -1,10 +1,19 @@
 """R1 — Structural Break Analysis: 超跌×高波 Alpha 何时衰减.
 
+
 按细窗口 (2015-2017 / 2018-2019 / 2020-2021 / 2022 / 2023 / 2024 / 2025 / 2026 YTD)
 对 Q1×Q1 (超跌高波) 计算: 20D return / Hit Rate / 样本量,
 另算全市场反转因子 (负 Momentum) 的 Rank IC / IC_IR / IC hit rate.
 目标: 定位断点是否集中在 2022 左右.
 """
+
+# ─────────────────────────────────────────────────────────────
+# 研究诊断脚本（Research Diagnostic）— print 豁免说明
+# 本文件是一次性研究分析工具（顶层执行，输出分析表格），
+# 非生产库模块。print 为研究输出（表格/进度），按 CLAUDE.md
+# "No print()" 规则予以豁免：研究脚本保持可读性优先。
+# 生产库代码禁止参考此豁免。
+# ─────────────────────────────────────────────────────────────
 import polars as pl
 
 WEIGHTS = {
@@ -31,18 +40,22 @@ for fname, w in WEIGHTS.items():
 df = df.with_columns(score.alias("composite"))
 df = df.with_columns(
     pl.col("composite").rank("ordinal").over("trade_date").alias("_r")
-).with_columns(
-    (pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct")
-)
+).with_columns((pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct"))
+
 
 def add_q(d, col, label):
-    return d.with_columns(
-        pl.col(col).rank("ordinal").over("trade_date").alias(f"_r_{label}")
-    ).with_columns(
-        (pl.col(f"_r_{label}") / pl.col(f"_r_{label}").count().over("trade_date")).alias(f"_p_{label}")
-    ).with_columns(
-        pl.col(f"_p_{label}").cut([0.2, 0.4, 0.6, 0.8], labels=Q_LABELS).alias(f"Q_{label}")
+    return (
+        d.with_columns(pl.col(col).rank("ordinal").over("trade_date").alias(f"_r_{label}"))
+        .with_columns(
+            (pl.col(f"_r_{label}") / pl.col(f"_r_{label}").count().over("trade_date")).alias(
+                f"_p_{label}"
+            )
+        )
+        .with_columns(
+            pl.col(f"_p_{label}").cut([0.2, 0.4, 0.6, 0.8], labels=Q_LABELS).alias(f"Q_{label}")
+        )
     )
+
 
 df = add_q(df, "Momentum_3M", "Mom")
 df = add_q(df, "Volatility_20D", "Vol")
@@ -65,33 +78,51 @@ daily_ic = daily_ic.drop_nulls(subset=["ic"])
 
 # 窗口定义
 windows = [
-    ("2015-2017", pl.date(2015,1,1), pl.date(2017,12,31)),
-    ("2018-2019", pl.date(2018,1,1), pl.date(2019,12,31)),
-    ("2020-2021", pl.date(2020,1,1), pl.date(2021,12,31)),
-    ("2022", pl.date(2022,1,1), pl.date(2022,12,31)),
-    ("2023", pl.date(2023,1,1), pl.date(2023,12,31)),
-    ("2024", pl.date(2024,1,1), pl.date(2024,12,31)),
-    ("2025", pl.date(2025,1,1), pl.date(2025,12,31)),
-    ("2026YTD", pl.date(2026,1,1), pl.date(2026,12,31)),
+    ("2015-2017", pl.date(2015, 1, 1), pl.date(2017, 12, 31)),
+    ("2018-2019", pl.date(2018, 1, 1), pl.date(2019, 12, 31)),
+    ("2020-2021", pl.date(2020, 1, 1), pl.date(2021, 12, 31)),
+    ("2022", pl.date(2022, 1, 1), pl.date(2022, 12, 31)),
+    ("2023", pl.date(2023, 1, 1), pl.date(2023, 12, 31)),
+    ("2024", pl.date(2024, 1, 1), pl.date(2024, 12, 31)),
+    ("2025", pl.date(2025, 1, 1), pl.date(2025, 12, 31)),
+    ("2026YTD", pl.date(2026, 1, 1), pl.date(2026, 12, 31)),
 ]
 
 print("=" * 100)
 print("R1 窗口分解: Q1×Q1 (超跌高波) + 全市场反转 IC")
 print("=" * 100)
-print(f"{'窗口':<10s} {'Q1xQ1收益':>9s} {'Q1xQ1 hit':>9s} {'Q1xQ1 n':>9s} {'rev IC':>8s} {'IC_IR':>7s} {'IC hit':>7s} {'IC天数':>6s}")
+print(
+    f"{'窗口':<10s} {'Q1xQ1收益':>9s} {'Q1xQ1 hit':>9s} {'Q1xQ1 n':>9s} {'rev IC':>8s} {'IC_IR':>7s} {'IC hit':>7s} {'IC天数':>6s}"
+)
 for wname, d1, d2 in windows:
     sub = df.filter((pl.col("trade_date") >= d1) & (pl.col("trade_date") <= d2))
     if sub.height == 0:
         continue
     cell = sub.filter((pl.col("Q_Mom") == "Q1") & (pl.col("Q_Vol") == "Q1"))
-    q1q1_ret = float(cell.select(pl.col("fwd_20").mean()).item()) * 100 if cell.height else float("nan")
-    q1q1_hit = float(cell.select((pl.col("fwd_20") > 0).mean()).item()) * 100 if cell.height else float("nan")
+    q1q1_ret = (
+        float(cell.select(pl.col("fwd_20").mean()).item()) * 100 if cell.height else float("nan")
+    )
+    q1q1_hit = (
+        float(cell.select((pl.col("fwd_20") > 0).mean()).item()) * 100
+        if cell.height
+        else float("nan")
+    )
     ic_sub = daily_ic.filter((pl.col("trade_date") >= d1) & (pl.col("trade_date") <= d2))
     ic_mean = float(ic_sub.select(pl.col("ic").mean()).item()) if ic_sub.height else float("nan")
     ic_std = float(ic_sub.select(pl.col("ic").std()).item()) if ic_sub.height > 1 else 0.0
-    ic_ir = ic_mean / ic_std * (ic_sub.height ** 0.5) if ic_sub.height > 1 and ic_std > 0 else float("nan")
-    ic_hit = float(ic_sub.select((pl.col("ic") > 0).mean()).item()) * 100 if ic_sub.height else float("nan")
-    print(f"{wname:<10s} {q1q1_ret:>9.2f} {q1q1_hit:>8.1f}% {cell.height:>9d} {ic_mean:>8.3f} {ic_ir:>7.1f} {ic_hit:>6.1f}% {ic_sub.height:>6d}")
+    ic_ir = (
+        ic_mean / ic_std * (ic_sub.height**0.5)
+        if ic_sub.height > 1 and ic_std > 0
+        else float("nan")
+    )
+    ic_hit = (
+        float(ic_sub.select((pl.col("ic") > 0).mean()).item()) * 100
+        if ic_sub.height
+        else float("nan")
+    )
+    print(
+        f"{wname:<10s} {q1q1_ret:>9.2f} {q1q1_hit:>8.1f}% {cell.height:>9d} {ic_mean:>8.3f} {ic_ir:>7.1f} {ic_hit:>6.1f}% {ic_sub.height:>6d}"
+    )
 
 # 逐年明细 (更细的断点定位)
 print("\n逐年 Q1×Q1 (20日收益%, 全样本年化对照):")

@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from loguru import logger
+
 
 class AlertSeverity(StrEnum):
     """Alert severity levels."""
@@ -116,12 +118,17 @@ class TerminalAlert(_BaseAlertChannel):
         """Print alert to terminal with color."""
         if self._use_colors:
             color = self._COLORS.get(alert.severity, "")
-            print(
-                f"{color}{self._BOLD}[{alert.severity.value.upper()}]{self._RESET} "
-                f"{alert.title}: {alert.message}"
+            logger.info(
+                "{}{}[{}]{} {}: {}",
+                color,
+                self._BOLD,
+                alert.severity.value.upper(),
+                self._RESET,
+                alert.title,
+                alert.message,
             )
         else:
-            print(alert.format_short())
+            logger.info("{}", alert.format_short())
         return True
 
     def test(self) -> bool:
@@ -169,8 +176,11 @@ class LogAlert(_BaseAlertChannel):
             )
             return True
         except Exception:
-            # Fallback: print if logging fails
-            print(f"[LOG FALLBACK] {alert.format_short()}")
+            # Fallback: stderr 输出（logger 已失败，不能再依赖 logger，否则递归）
+            # 豁免 print() 硬规则：这是 LogAlert 的最终兜底通道
+            import sys
+
+            print(f"[LOG FALLBACK] {alert.format_short()}", file=sys.stderr)
             return False
 
     def test(self) -> bool:
@@ -275,7 +285,9 @@ class TelegramAlert(_BaseAlertChannel):
     def test(self) -> bool:
         """Send a test message to verify Telegram configuration."""
         if not self._token or not self._chat_id:
-            print("Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)")
+            logger.warning(
+                "Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)"
+            )
             return False
 
         alert = Alert(
@@ -286,9 +298,9 @@ class TelegramAlert(_BaseAlertChannel):
         )
         success = self.send(alert)
         if success:
-            print("Telegram test alert sent successfully.")
+            logger.info("Telegram test alert sent successfully.")
         else:
-            print("Telegram test alert failed — check credentials and network.")
+            logger.error("Telegram test alert failed — check credentials and network.")
         return success
 
     @property

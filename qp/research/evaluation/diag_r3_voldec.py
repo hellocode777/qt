@@ -1,5 +1,6 @@
 """R3 — Volatility Decomposition: 区分 Downside vs Upside 波动.
 
+
 假设: 真正的 Alpha 来自 "剧烈下跌后的高波动反转" → 应集中在 Downside Vol 高.
 若衰减来自波动定义变化, 则 Downside/Total 的区分会揭示机制.
 
@@ -10,6 +11,14 @@
   TotalVol    = std(log_ret, 20d) * sqrt252  (对照, 与 Volatility_20D 同源)
 全部 shift(1) 防泄漏.
 """
+
+# ─────────────────────────────────────────────────────────────
+# 研究诊断脚本（Research Diagnostic）— print 豁免说明
+# 本文件是一次性研究分析工具（顶层执行，输出分析表格），
+# 非生产库模块。print 为研究输出（表格/进度），按 CLAUDE.md
+# "No print()" 规则予以豁免：研究脚本保持可读性优先。
+# 生产库代码禁止参考此豁免。
+# ─────────────────────────────────────────────────────────────
 import polars as pl
 
 WEIGHTS = {
@@ -34,7 +43,7 @@ p = p.with_columns(
     (pl.col("lr_dn_sq").rolling_mean(20).over("symbol").sqrt()).alias("dn_vol"),
     (pl.col("lr_up_sq").rolling_mean(20).over("symbol").sqrt()).alias("up_vol"),
 )
-SQRT252 = 252 ** 0.5
+SQRT252 = 252**0.5
 p = p.with_columns(
     (pl.col("total_vol") * SQRT252).alias("TotalVol"),
     (pl.col("dn_vol") * SQRT252).alias("DownsideVol"),
@@ -62,17 +71,26 @@ for fname, w in WEIGHTS.items():
 df = df.with_columns(score.alias("composite"))
 df = df.with_columns(pl.col("trade_date").dt.year().alias("year"))
 df = df.with_columns(
-    pl.when(pl.col("year") <= 2021).then(pl.lit("2015-2021")).otherwise(pl.lit("2022-2026")).alias("period")
+    pl.when(pl.col("year") <= 2021)
+    .then(pl.lit("2015-2021"))
+    .otherwise(pl.lit("2022-2026"))
+    .alias("period")
 )
 
+
 def add_q(d, col, label):
-    return d.with_columns(
-        pl.col(col).rank("ordinal").over("trade_date").alias(f"_r_{label}")
-    ).with_columns(
-        (pl.col(f"_r_{label}") / pl.col(f"_r_{label}").count().over("trade_date")).alias(f"_p_{label}")
-    ).with_columns(
-        pl.col(f"_p_{label}").cut([0.2, 0.4, 0.6, 0.8], labels=Q_LABELS).alias(f"Q_{label}")
+    return (
+        d.with_columns(pl.col(col).rank("ordinal").over("trade_date").alias(f"_r_{label}"))
+        .with_columns(
+            (pl.col(f"_r_{label}") / pl.col(f"_r_{label}").count().over("trade_date")).alias(
+                f"_p_{label}"
+            )
+        )
+        .with_columns(
+            pl.col(f"_p_{label}").cut([0.2, 0.4, 0.6, 0.8], labels=Q_LABELS).alias(f"Q_{label}")
+        )
     )
+
 
 df = add_q(df, "Momentum_3M", "Mom")
 df = add_q(df, "DownsideVol_s", "DN")
@@ -85,10 +103,14 @@ print(f"{'':10s}", "".join(f"{q:>9s}" for q in Q_LABELS))
 for mq in Q_LABELS:
     vals = []
     for vq in Q_LABELS:
-        cell = df.filter((pl.col("Q_Mom")==mq)&(pl.col("Q_DN")==vq))
-        v = float(cell.select(pl.col("fwd_20").mean()).item())*100 if cell.height else float("nan")
+        cell = df.filter((pl.col("Q_Mom") == mq) & (pl.col("Q_DN") == vq))
+        v = (
+            float(cell.select(pl.col("fwd_20").mean()).item()) * 100
+            if cell.height
+            else float("nan")
+        )
         vals.append(v)
-    print(f"{'Mom '+mq:10s}", "".join(f"{v:9.2f}" for v in vals))
+    print(f"{'Mom ' + mq:10s}", "".join(f"{v:9.2f}" for v in vals))
 
 print("\n" + "=" * 82)
 print("R3B. Momentum Q × UpsideVol Q — 20日收益 % (全样本)")
@@ -97,10 +119,14 @@ print(f"{'':10s}", "".join(f"{q:>9s}" for q in Q_LABELS))
 for mq in Q_LABELS:
     vals = []
     for vq in Q_LABELS:
-        cell = df.filter((pl.col("Q_Mom")==mq)&(pl.col("Q_UP")==vq))
-        v = float(cell.select(pl.col("fwd_20").mean()).item())*100 if cell.height else float("nan")
+        cell = df.filter((pl.col("Q_Mom") == mq) & (pl.col("Q_UP") == vq))
+        v = (
+            float(cell.select(pl.col("fwd_20").mean()).item()) * 100
+            if cell.height
+            else float("nan")
+        )
         vals.append(v)
-    print(f"{'Mom '+mq:10s}", "".join(f"{v:9.2f}" for v in vals))
+    print(f"{'Mom ' + mq:10s}", "".join(f"{v:9.2f}" for v in vals))
 
 print("\n" + "=" * 82)
 print("R3C. 关键格 分时期 — 超跌×高波动 (下行 vs 上行)")
@@ -115,8 +141,12 @@ cells = [
 for label, c1, v1, c2, v2 in cells:
     rows = []
     for period in ["2015-2021", "2022-2026"]:
-        cell = df.filter((pl.col("period")==period)&(pl.col(c1)==v1)&(pl.col(c2)==v2))
-        ret = float(cell.select(pl.col("fwd_20").mean()).item())*100 if cell.height else float("nan")
+        cell = df.filter((pl.col("period") == period) & (pl.col(c1) == v1) & (pl.col(c2) == v2))
+        ret = (
+            float(cell.select(pl.col("fwd_20").mean()).item()) * 100
+            if cell.height
+            else float("nan")
+        )
         rows.append(ret)
-    delta = rows[0]-rows[1] if rows[0]==rows[0] and rows[1]==rows[1] else float("nan")
+    delta = rows[0] - rows[1] if rows[0] == rows[0] and rows[1] == rows[1] else float("nan")
     print(f"{label:<22s} {rows[0]:>10.2f} {rows[1]:>10.2f} {delta:>8.2f}")
