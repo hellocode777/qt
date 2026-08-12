@@ -36,7 +36,7 @@
 | 子目录 | 职责 | 关键文件 |
 |---|---|---|
 | factor_calculator.py / factor_processor.py | 因子计算与处理 | 顶层两文件 |
-| experiment | 实验系统（CLI 入口） | `run_multifactor_experiment.py`、`models.py` |
+| experiment | 实验系统（CLI 入口 → pipeline） | `pipeline/`、`models.py`、`tracker.py` |
 | model_trainer.py / trainer | LightGBM 训练 | 顶层 + trainer/ |
 | feature / label / split / evaluation | 特征/标签/数据集划分/评估 | 各子目录 |
 | pipeline | 研究 Pipeline | `pipeline/` |

@@ -1,0 +1,31 @@
+{
+  "version": "1.0.0",
+  "date_start": "2024-07-05",
+  "date_end": "2026-08-11",
+  "hash": "04063f1f141653be",
+  "row_count": 1523655,
+  "n_factors": 19,
+  "n_days": 510,
+  "created_at": "2026-08-12T06:34:48.899261+00:00",
+  "factors": [
+    "Momentum_6M",
+    "Momentum_3M_vol_adj",
+    "Volume_Concentration",
+    "Short_Term_Reversal_5D",
+    "Residual_Momentum_3M",
+    "Momentum_1M",
+    "Volume_Expansion_20_120",
+    "MaxDD_60D",
+    "Amplitude_5D",
+    "Amount_Momentum_20_120",
+    "Volume_Trend_10D",
+    "Volume_Ratio_5D",
+    "Trend_MA120",
+    "Volatility_60D",
+    "Volatility_20D",
+    "Momentum_3M",
+    "Volume_Price_Trend",
+    "Implied_Net_Flow",
+    "Price_Volume_Corr"
+  ]
+}

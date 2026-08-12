@@ -65,9 +65,10 @@
 - 产物：`data/monitoring/retrain_signals.parquet`
 
 ### qp experiment run multifactor
-- 入口：`commands/experiment.py` → `qp/research/experiment/run_multifactor_experiment.py`
+- 入口：`commands/experiment.py` → `qp/pipeline/multifactor_pipeline.py`（MultiFactorPipeline）
 - 示例：`qp experiment run multifactor --strategy momentum_vol_full --start 2024-01-01 --end 2026-07-23 --top-n 10 --rebalance 20`（加 `--skip-gate` 跳过门禁）
 - ⚠️ 需要 Gold 数据集；数据缺失先 `qp data fetch`
+- 历史脚本 `run_multifactor_experiment.py` 已于 2026-08-12 删除（被 CLI 取代，跨层违规）
 
 ### qp lineage snapshot
 - 入口：`commands/lineage.py` → `qp/lineage/engine.py`
