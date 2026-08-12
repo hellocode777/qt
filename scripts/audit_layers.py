@@ -23,6 +23,7 @@ import collections
 import os
 import re
 import sys
+from pathlib import Path
 
 ROOT = "/home/shuai/workspace/qt/qp"
 
@@ -80,8 +81,8 @@ def main() -> int:
                 path = os.path.join(dirpath, fn)
                 rel = os.path.relpath(path, root)
                 try:
-                    src = open(path, encoding="utf-8").read()
-                except Exception as e:  # noqa: BLE001 - audit tool, report & continue
+                    src = Path(path).read_text(encoding="utf-8")
+                except Exception as e:  # audit tool: report & continue
                     print(f"[WARN] 读取失败 {path}: {e}", file=sys.stderr)
                     continue
                 # 剥离 TYPE_CHECKING 块: 类型引用不是运行时依赖
@@ -122,7 +123,7 @@ def main() -> int:
     if unranked:
         print("=" * 70)
         print("【涉及组合根/未定层目录 (ADR-033 豁免, 仅记录)】")
-        for layer_dir, s_num, target, lineno, rel in unranked:
+        for layer_dir, _s_num, target, lineno, rel in unranked:
             note = COMPOSITION_ROOTS.get(target, "未定层")
             print(f"  {rel}:{lineno}  {layer_dir} -> {target}  [{note}]")
         print(f"  共 {len(unranked)} 条")
@@ -130,7 +131,7 @@ def main() -> int:
     print("=" * 70)
     print("【层间依赖矩阵 (去重后的文件数)】")
     files_by_edge = collections.Counter()
-    for layer_dir, s_num, target, lineno, rel in violations + horizontal + unranked:
+    for layer_dir, _s_num, target, _lineno, _rel in violations + horizontal + unranked:
         files_by_edge[(layer_dir, target)] += 1
     for (src, tgt), n in sorted(files_by_edge.items()):
         print(f"  {src:12s} -> {tgt:12s}  {n} 文件")
@@ -138,7 +139,7 @@ def main() -> int:
     print("=" * 70)
     print("【附加: 数据源直接调用 (ak. / akshare / tushare) 出现在 data 层之外】")
     found = 0
-    for layer_dir in list(LAYER_NUM) + ["pipeline", "web", "lineage"]:
+    for layer_dir in [*list(LAYER_NUM), "pipeline", "web", "lineage"]:
         base = os.path.join(root, layer_dir)
         if not os.path.isdir(base):
             continue
@@ -149,7 +150,7 @@ def main() -> int:
                     continue
                 path = os.path.join(dirpath, fn)
                 rel = os.path.relpath(path, root)
-                src = open(path, encoding="utf-8").read()
+                src = Path(path).read_text(encoding="utf-8")
                 for m in DS.finditer(src):
                     lineno = src[: m.start()].count("\n") + 1
                     if layer_dir != "data":
