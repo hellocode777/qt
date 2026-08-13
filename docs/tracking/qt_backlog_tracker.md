@@ -73,9 +73,12 @@
 - [ ] 因子失效诊断报告入 Obsidian
 - [ ] 决策：调方向 / 降权 / 换池 / 等 regime
 
-### #6 策略池扩容 ⭐⭐⭐⭐（依赖 #5）
+### #6 策略池扩容 ⭐⭐⭐⭐（依赖 #5，已解除）
 - **证据**: mvF 唯一 APPROVED；lvr_vol_mom1m（research）、lvr_vol_only（backtest_passed）待提升
-- [ ] （待 #5）选定候选 → 完整 validation gate → Paper Trading → APPROVED
+- **候选（2026-08-13）**: lvr_vol_only — IC=0.054, Sharpe=1.52, MaxDD=9.7；8/8 曾被批准 fa42821，backtest_passed 是 8/11 bug 残留
+- [x] 选定候选 lvr_vol_only（低波单因子，与 mvF 真分散化）
+- [x] Paper Trading 启动 `pt-8b63c05c`（0/30 天，与 mvF pt-bb27fc9d 并行）
+- [ ] 30 天后 evaluate() → APPROVED → 记录第二个生产策略
 
 ### #7 实盘闭环验证 ⭐⭐⭐
 - **证据**: ADR-032 现金账本已建，无证据走通完整周期
