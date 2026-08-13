@@ -15,21 +15,20 @@ Project
 ├── README.md                          ✅ 已存在，基本可用
 │
 ├── docs/
-│   ├── architecture.md                ❌ 不存在（需从 ADR+DP 合成）
-│   ├── module_overview.md             ❌ 不存在
-│   ├── workflow.md                    ❌ 不存在
+│   ├── architecture.md                ✅ 2026-08-13 从 ADR+DP+PROJECT_MAP 合成
+│   ├── module_overview.md             ✅ 2026-08-13 从 MODULE_MAP 提炼人读版
+│   ├── workflow.md                    ✅ 2026-08-13 新建（每日/开发/策略上线/数据/实验）
 │   ├── user_guide.md                  ⚠️ 部分（使用指南.md）
-│   ├── developer_guide.md             ❌ 不存在
-│   ├── api.md                         ❌ 不存在
+│   ├── developer_guide.md             ✅ 已存在（511 行，8/1）
+│   ├── api.md                         ✅ 已存在（435 行，8/1）
 │   │
-│   ├── adr/                           ✅ 完整（31 份）
+│   ├── adr/                           ⚠️ 33 份，但 ADR-001~030 为 0 字节空占位（后续补全）
 │   ├── tdr/                           ✅ 完整（10 份）
 │   ├── architecture/                  ✅ 完整（DP-001 ~ DP-010）
 │   ├── constitution/                  ✅ 完整（v4.2）
 │   ├── implementation/                ✅ 完整（coding-style, naming, testing）
 │   │
-│   └── archive/                       ❌ 需要创建，迁移旧文档
-│       └── old_plans/                 plan.md, plan_v1.md, progress.md ...
+│   └── archive/                       ✅ 已存在（old_plans 已迁入）
 ```
 
 ---
