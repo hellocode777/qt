@@ -27,14 +27,21 @@ def cmd_lineage_snapshot() -> int:
     except Exception as e:
         print(f"  ⚠ 数据集跳过 / Datasets skipped: {e}")
 
-    # 2. Features (Data Layer — FeatureStore)
+    # 2. Features (Research Layer — persisted FeatureRegistry)
     try:
-        from qp.data.feature_store.registry import FeatureRegistry
+        from qp.research.feature.registry import FeatureRegistry as ResearchFeatureRegistry
 
-        counts["features"] = lineage.sync_from_feature_registry(FeatureRegistry())
+        feature_registry = ResearchFeatureRegistry.load_from_json("data/factor_registry.json")
+        counts["features"] = lineage.sync_from_feature_registry(feature_registry)
         print(f"  ✅ 特征 / Features:    {counts['features']}")
+    except FileNotFoundError:
+        print(
+            "  ⚠ 特征跳过 / Features skipped: data/factor_registry.json 不存在，先跑 `qp factor register`"
+        )
+        counts["features"] = 0
     except Exception as e:
         print(f"  ⚠ 特征跳过 / Features skipped: {e}")
+        counts["features"] = 0
 
     # 3. Models (Research Layer — ModelRegistry)
     try:

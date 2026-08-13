@@ -1,0 +1,287 @@
+{
+  "updated_at": "2026-08-13T07:57:15.199187+00:00",
+  "n_factors": 20,
+  "factors": {
+    "Momentum_1M": {
+      "name": "Momentum_1M",
+      "class": "qp.research.feature.momentum.Momentum1M",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199107+00:00"
+    },
+    "Momentum_3M": {
+      "name": "Momentum_3M",
+      "class": "qp.research.feature.momentum.Momentum3M",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199122+00:00"
+    },
+    "Momentum_3M_vol_adj": {
+      "name": "Momentum_3M_vol_adj",
+      "class": "qp.research.feature.momentum.Momentum3MVolAdjusted",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199127+00:00"
+    },
+    "Momentum_6M": {
+      "name": "Momentum_6M",
+      "class": "qp.research.feature.momentum.Momentum6M",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199131+00:00"
+    },
+    "Residual_Momentum_3M": {
+      "name": "Residual_Momentum_3M",
+      "class": "qp.research.feature.momentum.ResidualMomentum3M",
+      "version": "1.0.0",
+      "category": "Momentum",
+      "lookback": 60,
+      "direction": -1,
+      "author": "Wei",
+      "description": "Beta-adjusted 3-month momentum (market-neutral residual return)",
+      "required_data": [
+        "daily_price",
+        "index_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199137+00:00"
+    },
+    "Short_Term_Reversal_5D": {
+      "name": "Short_Term_Reversal_5D",
+      "class": "qp.research.feature.momentum.ShortTermReversal5D",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199141+00:00"
+    },
+    "Amplitude_5D": {
+      "name": "Amplitude_5D",
+      "class": "qp.research.feature.money_flow.Amplitude5D",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199144+00:00"
+    },
+    "Implied_Net_Flow": {
+      "name": "Implied_Net_Flow",
+      "class": "qp.research.feature.money_flow.ImpliedNetFlow",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199147+00:00"
+    },
+    "Volume_Concentration": {
+      "name": "Volume_Concentration",
+      "class": "qp.research.feature.money_flow.VolumeConcentration",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199150+00:00"
+    },
+    "Earnings_Quality": {
+      "name": "Earnings_Quality",
+      "class": "qp.research.feature.quality.EarningsQuality",
+      "version": "1.0.0",
+      "category": "Quality",
+      "lookback": 1,
+      "direction": 1,
+      "author": "Wei",
+      "description": "Cashflow per share / EPS — cash backing ratio for earnings quality",
+      "required_data": [
+        "fundamental"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199154+00:00"
+    },
+    "Margin_Composite": {
+      "name": "Margin_Composite",
+      "class": "qp.research.feature.quality.MarginComposite",
+      "version": "1.0.0",
+      "category": "Quality",
+      "lookback": 1,
+      "direction": 1,
+      "author": "Wei",
+      "description": "(gross_margin + net_margin) / 2 — composite margin strength",
+      "required_data": [
+        "fundamental"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199158+00:00"
+    },
+    "Profit_Stability": {
+      "name": "Profit_Stability",
+      "class": "qp.research.feature.quality.ProfitStability",
+      "version": "1.0.0",
+      "category": "Quality",
+      "lookback": 20,
+      "direction": 1,
+      "author": "Wei",
+      "description": "Negative std(ROE) over 20 quarters — profitability consistency",
+      "required_data": [
+        "fundamental"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199161+00:00"
+    },
+    "ROE_Level": {
+      "name": "ROE_Level",
+      "class": "qp.research.feature.quality.ROELevel",
+      "version": "1.0.0",
+      "category": "Quality",
+      "lookback": 1,
+      "direction": 1,
+      "author": "Wei",
+      "description": "Return on Equity — raw profitability level, cross-sectionally normalized",
+      "required_data": [
+        "fundamental"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199164+00:00"
+    },
+    "MaxDD_60D": {
+      "name": "MaxDD_60D",
+      "class": "qp.research.feature.volatility.MaxDrawdown60D",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": 1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199168+00:00"
+    },
+    "Volatility_20D": {
+      "name": "Volatility_20D",
+      "class": "qp.research.feature.volatility.Volatility20D",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": 1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199171+00:00"
+    },
+    "Volatility_60D": {
+      "name": "Volatility_60D",
+      "class": "qp.research.feature.volatility.Volatility60D",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": 1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199174+00:00"
+    },
+    "Price_Volume_Corr": {
+      "name": "Price_Volume_Corr",
+      "class": "qp.research.feature.volume.PriceVolumeCorr",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199177+00:00"
+    },
+    "Volume_Price_Trend": {
+      "name": "Volume_Price_Trend",
+      "class": "qp.research.feature.volume.VolumePriceTrend",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199180+00:00"
+    },
+    "Volume_Ratio_5D": {
+      "name": "Volume_Ratio_5D",
+      "class": "qp.research.feature.volume.VolumeRatio5D",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199182+00:00"
+    },
+    "Volume_Trend_10D": {
+      "name": "Volume_Trend_10D",
+      "class": "qp.research.feature.volume.VolumeTrend10D",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": -1,
+      "author": "",
+      "description": "",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T07:57:15.199186+00:00"
+    }
+  }
+}

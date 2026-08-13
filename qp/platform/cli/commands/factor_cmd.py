@@ -447,8 +447,84 @@ def cmd_factor_update_health() -> int:
     return 0
 
 
+def cmd_factor_register(force: bool = False) -> int:
+    """Register all BaseFeature classes from qp/research/feature into the
+    persisted FeatureRegistry (data/factor_registry.json).
+
+    Direction is overridden from ALL_FACTOR_DIRECTIONS where available —
+    production factor classes default to +1, but momentum/volume factors
+    are used with direction=-1 (mean-reversion semantics).
+
+    Args:
+        force: Re-register even if a registry file already exists.
+
+    Returns:
+        0 on success, 1 on error.
+    """
+    import os
+
+    from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS
+    from qp.research.feature.registry import FeatureRegistry
+
+    registry_path = "data/factor_registry.json"
+    if os.path.exists(registry_path) and not force:
+        print(f"因子注册表已存在: {registry_path}（共 {_count_registered(registry_path)} 个因子）")
+        print("如需重新注册: qp factor register --force")
+        return 0
+
+    registry = FeatureRegistry()
+    classes = registry.scan_feature_classes()
+    print(f"扫描到 {len(classes)} 个 BaseFeature 子类")
+
+    registered = registry.auto_register_all(classes)
+    print(f"注册 {len(registered)} 个因子")
+
+    # 应用方向覆盖（ALL_FACTOR_DIRECTIONS 是权威方向源）
+    overridden = sum(
+        1
+        for name in registry._features
+        if name in ALL_FACTOR_DIRECTIONS
+        and ALL_FACTOR_DIRECTIONS[name] != registry._features[name].direction
+    )
+    if overridden:
+        print(f"方向覆盖 {overridden} 个（ALL_FACTOR_DIRECTIONS）")
+
+    registry.save(registry_path, direction_overrides=ALL_FACTOR_DIRECTIONS)
+    print()
+    # 重新加载以显示覆盖后的方向（类默认 direction 不反映 ALL_FACTOR_DIRECTIONS）
+    loaded = FeatureRegistry.load_from_json(registry_path)
+    print(loaded.catalog_summary())
+    print()
+    print(f"已持久化: {registry_path}")
+    return 0
+
+
+def _count_registered(path: str) -> int:
+    """Read n_factors from an existing registry JSON without full load."""
+    import json
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            payload = json.load(f)
+        return int(payload.get("n_factors", 0))
+    except Exception:
+        return 0
+
+
 def cmd_factor_catalog() -> int:
     """Show factor catalog grouped by category."""
+    import os
+
+    registry_path = "data/factor_registry.json"
+    if os.path.exists(registry_path):
+        from qp.research.feature.registry import FeatureRegistry
+
+        registry = FeatureRegistry.load_from_json(registry_path)
+        print(registry.catalog_summary())
+        print()
+        print(f"来源: {registry_path}（注册因子，`qp factor register` 维护）")
+        return 0
+
     try:
         from qp.research.feature.compute import (
             ALL_FACTOR_DESCRIPTIONS,

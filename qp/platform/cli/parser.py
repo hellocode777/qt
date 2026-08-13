@@ -723,6 +723,15 @@ def factor_catalog() -> None:
     raise SystemExit(cmd_factor_catalog())
 
 
+@factor.command("register")
+@click.option("--force", is_flag=True, help="Re-register even if registry exists.")
+def factor_register(force: bool) -> None:
+    """Register all BaseFeature classes into the persisted FeatureRegistry."""
+    from qp.platform.cli.commands.factor_cmd import cmd_factor_register
+
+    raise SystemExit(cmd_factor_register(force=force))
+
+
 @factor.command("compute")
 @click.option(
     "--date",
