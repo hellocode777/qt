@@ -143,6 +143,8 @@ class MultiFactorPipeline(BasePipeline):
             "lvr_vol_all_rev",
             "mvf_v2_expansion",
             "mvf_v2_amount",
+            "mvf_v2_interaction",
+            "mvf_noorth",
             "alpha_multi_factor_v1",
             "alpha_multi_factor_v2",
             "alpha_ensemble_v2",

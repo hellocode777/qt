@@ -416,6 +416,25 @@ def compute_cross_sectional_scores(
         # Re-sort dates after merge
         all_dates = sorted(all_raw.keys())
 
+    # ── Cross-sectional derived factors (e.g. Mom_Vol_Interaction) ──
+    # Interaction factors cannot be produced per-stock; derive them from the
+    # full cross-section once all raw factors are available (cache or on-the-fly).
+    if weights and "Mom_Vol_Interaction" in weights:
+        from qp.research.feature.interaction import compute_interaction_from_raw
+
+        derived = compute_interaction_from_raw(all_raw)
+        for date_str, sym_factors in derived.items():
+            if date_str not in all_raw:
+                all_raw[date_str] = {}
+            for symbol, factors in sym_factors.items():
+                all_raw[date_str].setdefault(symbol, {})["Mom_Vol_Interaction"] = factors[
+                    "Mom_Vol_Interaction"
+                ]
+        logger.info(
+            "🧩 截面派生因子 Mom_Vol_Interaction: {} 个日期",
+            len(derived),
+        )
+
     # ── Auto-generate composite factors (DP-002 v3) ──
     composite_names = {
         "LowVol_Composite",

@@ -288,6 +288,44 @@ MVF_V2_AMOUNT = register_config(
 
 
 # ------------------------------------------------------------------
+# 实验配置: Mom×Vol 交互因子增强 (2026-08-13, R5 → 正式因子)
+#   Mom_Vol_Interaction = z(Momentum_3M) × z(Volatility_20D)
+#   R5/验证: 增量 IC +0.0301 (2022-2026 +0.0385), Q1→Q5 单调, w=0.05 最优
+#   enhanced = composite + 0.05 × interaction → 权重 +0.05
+# ------------------------------------------------------------------
+
+MVF_V2_INTERACTION_WEIGHTS: dict[str, float] = {
+    "Amplitude_5D": -0.25,
+    "Volatility_20D": +0.22,
+    "Momentum_3M": -0.20,
+    "Volume_Concentration": -0.19,
+    "Volume_Trend_10D": -0.14,
+    "Mom_Vol_Interaction": +0.05,  # R5 增量因子 (方向 +1, 小权重增强)
+}
+
+MVF_V2_INTERACTION = register_config(
+    _make_mvf_v2_config(
+        "mvf_v2_interaction",
+        "mvF v2 (Mom×Vol 交互增强, w=0.05)",
+        MVF_V2_INTERACTION_WEIGHTS,
+    )
+)
+# 交互因子与 Mom/Vol 高度共线：VIF 正交化会剥离其信息（实测 IC 0.0708→0.0401，
+# turnover 1909%→7072%），必须关闭 orthogonalize（2026-08-13 验证）
+MVF_V2_INTERACTION.orthogonalize = False
+
+# 归因对照：5 因子原版 + 关 orthogonalize（区分「正交化开关」vs「交互因子」贡献）
+MVF_NOORTH = register_config(
+    _make_mvf_v2_config(
+        "mvf_noorth",
+        "mvF (5因子, 关正交化)",
+        dict(MOMENTUM_VOL_FULL_WEIGHTS),
+    )
+)
+MVF_NOORTH.orthogonalize = False
+
+
+# ------------------------------------------------------------------
 # 主运行函数
 # ------------------------------------------------------------------
 

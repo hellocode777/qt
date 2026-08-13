@@ -151,7 +151,12 @@ def compute_all_factors(
         result = result.join(p, on="trade_date", how="inner")
 
     if subset:
-        return result.drop_nulls(subset=subset)
+        # Drop unknown factor names (e.g. cross-sectional derived factors like
+        # Mom_Vol_Interaction that are injected later, not computed per-stock).
+        available_subset = [f for f in subset if f in result.columns]
+        if not available_subset:
+            return result
+        return result.drop_nulls(subset=available_subset)
     return result.drop_nulls()
 
 
