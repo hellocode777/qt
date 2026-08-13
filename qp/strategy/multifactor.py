@@ -1151,7 +1151,7 @@ class MultiFactorStrategy(BaseStrategy):
 
         day_scores = day_scores.sort("score", descending=True)
         day_scores = day_scores.with_columns(
-            pl.col("score").rank(descending=True).cast(pl.Int64).alias("rank")
+            pl.col("score").rank(descending=True, method="min").cast(pl.Int64).alias("rank")
         )
         day_scores = day_scores.filter(pl.col("rank") <= self._top_n)
 

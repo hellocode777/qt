@@ -257,7 +257,10 @@ class PaperTradingTracker:
                             "score", descending=True
                         )
                         today_scores = today_scores.with_columns(
-                            pl.col("score").rank(descending=True).cast(pl.Int64).alias("rank")
+                            pl.col("score")
+                            .rank(descending=True, method="min")
+                            .cast(pl.Int64)
+                            .alias("rank")
                         )
                         strategy = MultiFactorStrategy.from_today_scores(
                             run.strategy_id, today_scores, top_n=cfg.max_positions
