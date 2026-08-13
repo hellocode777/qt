@@ -1,7 +1,21 @@
 {
-  "updated_at": "2026-08-13T07:57:15.199187+00:00",
-  "n_factors": 20,
+  "updated_at": "2026-08-13T08:04:41.389607+00:00",
+  "n_factors": 21,
   "factors": {
+    "Mom_Vol_Interaction": {
+      "name": "Mom_Vol_Interaction",
+      "class": "qp.research.feature.interaction.MomentumVolatilityInteraction",
+      "version": "1.0.0",
+      "category": "Custom",
+      "lookback": 0,
+      "direction": 1,
+      "author": "",
+      "description": "z(Momentum_3M) × z(Volatility_20D) — R5 incremental factor (+0.033 IC, w≈0.05 optimal)",
+      "required_data": [
+        "daily_price"
+      ],
+      "registered_at": "2026-08-13T08:04:41.389513+00:00"
+    },
     "Momentum_1M": {
       "name": "Momentum_1M",
       "class": "qp.research.feature.momentum.Momentum1M",
@@ -14,7 +28,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199107+00:00"
+      "registered_at": "2026-08-13T08:04:41.389532+00:00"
     },
     "Momentum_3M": {
       "name": "Momentum_3M",
@@ -28,7 +42,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199122+00:00"
+      "registered_at": "2026-08-13T08:04:41.389537+00:00"
     },
     "Momentum_3M_vol_adj": {
       "name": "Momentum_3M_vol_adj",
@@ -42,7 +56,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199127+00:00"
+      "registered_at": "2026-08-13T08:04:41.389547+00:00"
     },
     "Momentum_6M": {
       "name": "Momentum_6M",
@@ -56,7 +70,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199131+00:00"
+      "registered_at": "2026-08-13T08:04:41.389550+00:00"
     },
     "Residual_Momentum_3M": {
       "name": "Residual_Momentum_3M",
@@ -71,7 +85,7 @@
         "daily_price",
         "index_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199137+00:00"
+      "registered_at": "2026-08-13T08:04:41.389554+00:00"
     },
     "Short_Term_Reversal_5D": {
       "name": "Short_Term_Reversal_5D",
@@ -85,7 +99,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199141+00:00"
+      "registered_at": "2026-08-13T08:04:41.389558+00:00"
     },
     "Amplitude_5D": {
       "name": "Amplitude_5D",
@@ -99,7 +113,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199144+00:00"
+      "registered_at": "2026-08-13T08:04:41.389560+00:00"
     },
     "Implied_Net_Flow": {
       "name": "Implied_Net_Flow",
@@ -113,7 +127,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199147+00:00"
+      "registered_at": "2026-08-13T08:04:41.389563+00:00"
     },
     "Volume_Concentration": {
       "name": "Volume_Concentration",
@@ -127,7 +141,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199150+00:00"
+      "registered_at": "2026-08-13T08:04:41.389566+00:00"
     },
     "Earnings_Quality": {
       "name": "Earnings_Quality",
@@ -141,7 +155,7 @@
       "required_data": [
         "fundamental"
       ],
-      "registered_at": "2026-08-13T07:57:15.199154+00:00"
+      "registered_at": "2026-08-13T08:04:41.389570+00:00"
     },
     "Margin_Composite": {
       "name": "Margin_Composite",
@@ -155,7 +169,7 @@
       "required_data": [
         "fundamental"
       ],
-      "registered_at": "2026-08-13T07:57:15.199158+00:00"
+      "registered_at": "2026-08-13T08:04:41.389574+00:00"
     },
     "Profit_Stability": {
       "name": "Profit_Stability",
@@ -169,7 +183,7 @@
       "required_data": [
         "fundamental"
       ],
-      "registered_at": "2026-08-13T07:57:15.199161+00:00"
+      "registered_at": "2026-08-13T08:04:41.389577+00:00"
     },
     "ROE_Level": {
       "name": "ROE_Level",
@@ -183,7 +197,7 @@
       "required_data": [
         "fundamental"
       ],
-      "registered_at": "2026-08-13T07:57:15.199164+00:00"
+      "registered_at": "2026-08-13T08:04:41.389580+00:00"
     },
     "MaxDD_60D": {
       "name": "MaxDD_60D",
@@ -197,7 +211,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199168+00:00"
+      "registered_at": "2026-08-13T08:04:41.389583+00:00"
     },
     "Volatility_20D": {
       "name": "Volatility_20D",
@@ -211,7 +225,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199171+00:00"
+      "registered_at": "2026-08-13T08:04:41.389586+00:00"
     },
     "Volatility_60D": {
       "name": "Volatility_60D",
@@ -225,7 +239,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199174+00:00"
+      "registered_at": "2026-08-13T08:04:41.389592+00:00"
     },
     "Price_Volume_Corr": {
       "name": "Price_Volume_Corr",
@@ -239,7 +253,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199177+00:00"
+      "registered_at": "2026-08-13T08:04:41.389594+00:00"
     },
     "Volume_Price_Trend": {
       "name": "Volume_Price_Trend",
@@ -253,7 +267,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199180+00:00"
+      "registered_at": "2026-08-13T08:04:41.389599+00:00"
     },
     "Volume_Ratio_5D": {
       "name": "Volume_Ratio_5D",
@@ -267,7 +281,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199182+00:00"
+      "registered_at": "2026-08-13T08:04:41.389602+00:00"
     },
     "Volume_Trend_10D": {
       "name": "Volume_Trend_10D",
@@ -281,7 +295,7 @@
       "required_data": [
         "daily_price"
       ],
-      "registered_at": "2026-08-13T07:57:15.199186+00:00"
+      "registered_at": "2026-08-13T08:04:41.389605+00:00"
     }
   }
 }

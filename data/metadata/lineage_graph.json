@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "exported_at": "2026-08-13T07:57:29.754470+00:00",
+  "exported_at": "2026-08-13T08:06:28.213200+00:00",
   "graph": {
     "directed": true,
     "multigraph": false,
@@ -11,7 +11,7 @@
         "data_id": "daily_price",
         "uri": "data/dataset/daily_price_latest.parquet",
         "version": "latest",
-        "registered_at": "2026-08-13T07:57:29.753055+00:00",
+        "registered_at": "2026-08-13T08:06:28.208517+00:00",
         "id": "data::daily_price::latest"
       },
       {
@@ -19,7 +19,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-07-31.parquet",
         "version": "2026-07-31",
-        "registered_at": "2026-08-13T07:57:29.753167+00:00",
+        "registered_at": "2026-08-13T08:06:28.208641+00:00",
         "id": "data::test_ds::2026-07-31"
       },
       {
@@ -27,7 +27,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-01.parquet",
         "version": "2026-08-01",
-        "registered_at": "2026-08-13T07:57:29.753211+00:00",
+        "registered_at": "2026-08-13T08:06:28.208689+00:00",
         "id": "data::test_ds::2026-08-01"
       },
       {
@@ -35,7 +35,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-02.parquet",
         "version": "2026-08-02",
-        "registered_at": "2026-08-13T07:57:29.753252+00:00",
+        "registered_at": "2026-08-13T08:06:28.208720+00:00",
         "id": "data::test_ds::2026-08-02"
       },
       {
@@ -43,7 +43,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-04.parquet",
         "version": "2026-08-04",
-        "registered_at": "2026-08-13T07:57:29.753277+00:00",
+        "registered_at": "2026-08-13T08:06:28.208746+00:00",
         "id": "data::test_ds::2026-08-04"
       },
       {
@@ -51,7 +51,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-05.parquet",
         "version": "2026-08-05",
-        "registered_at": "2026-08-13T07:57:29.753301+00:00",
+        "registered_at": "2026-08-13T08:06:28.208770+00:00",
         "id": "data::test_ds::2026-08-05"
       },
       {
@@ -59,7 +59,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-06.parquet",
         "version": "2026-08-06",
-        "registered_at": "2026-08-13T07:57:29.753323+00:00",
+        "registered_at": "2026-08-13T08:06:28.208790+00:00",
         "id": "data::test_ds::2026-08-06"
       },
       {
@@ -67,7 +67,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-07.parquet",
         "version": "2026-08-07",
-        "registered_at": "2026-08-13T07:57:29.753339+00:00",
+        "registered_at": "2026-08-13T08:06:28.208807+00:00",
         "id": "data::test_ds::2026-08-07"
       },
       {
@@ -75,7 +75,7 @@
         "data_id": "factor_values_daily",
         "uri": "data/dataset/factor_values_daily.parquet",
         "version": "latest",
-        "registered_at": "2026-08-13T07:57:29.753354+00:00",
+        "registered_at": "2026-08-13T08:06:28.208822+00:00",
         "id": "data::factor_values_daily::latest"
       },
       {
@@ -83,7 +83,7 @@
         "data_id": "daily_price_main",
         "uri": "data/dataset/daily_price_main_2026-08-07.parquet",
         "version": "2026-08-07",
-        "registered_at": "2026-08-13T07:57:29.753371+00:00",
+        "registered_at": "2026-08-13T08:06:28.208839+00:00",
         "id": "data::daily_price_main::2026-08-07"
       },
       {
@@ -91,7 +91,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-10.parquet",
         "version": "2026-08-10",
-        "registered_at": "2026-08-13T07:57:29.753386+00:00",
+        "registered_at": "2026-08-13T08:06:28.208860+00:00",
         "id": "data::test_ds::2026-08-10"
       },
       {
@@ -99,7 +99,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-11.parquet",
         "version": "2026-08-11",
-        "registered_at": "2026-08-13T07:57:29.753402+00:00",
+        "registered_at": "2026-08-13T08:06:28.208877+00:00",
         "id": "data::test_ds::2026-08-11"
       },
       {
@@ -107,7 +107,7 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-12.parquet",
         "version": "2026-08-12",
-        "registered_at": "2026-08-13T07:57:29.753421+00:00",
+        "registered_at": "2026-08-13T08:06:28.208895+00:00",
         "id": "data::test_ds::2026-08-12"
       },
       {
@@ -115,14 +115,23 @@
         "data_id": "test_ds",
         "uri": "data/dataset/test_ds_2026-08-13.parquet",
         "version": "2026-08-13",
-        "registered_at": "2026-08-13T07:57:29.753437+00:00",
+        "registered_at": "2026-08-13T08:06:28.208911+00:00",
         "id": "data::test_ds::2026-08-13"
+      },
+      {
+        "node_type": "feature",
+        "feature_name": "Mom_Vol_Interaction",
+        "code_hash": "1.0.0",
+        "registered_at": "2026-08-13T08:06:28.209059+00:00",
+        "point_in_time_safe": true,
+        "owner": "",
+        "id": "feature::Mom_Vol_Interaction::hash_1.0.0"
       },
       {
         "node_type": "feature",
         "feature_name": "Momentum_1M",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753583+00:00",
+        "registered_at": "2026-08-13T08:06:28.209093+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Momentum_1M::hash_1.0.0"
@@ -131,7 +140,7 @@
         "node_type": "feature",
         "feature_name": "Momentum_3M",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753616+00:00",
+        "registered_at": "2026-08-13T08:06:28.209116+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Momentum_3M::hash_1.0.0"
@@ -140,7 +149,7 @@
         "node_type": "feature",
         "feature_name": "Momentum_3M_vol_adj",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753638+00:00",
+        "registered_at": "2026-08-13T08:06:28.209133+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Momentum_3M_vol_adj::hash_1.0.0"
@@ -149,7 +158,7 @@
         "node_type": "feature",
         "feature_name": "Momentum_6M",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753656+00:00",
+        "registered_at": "2026-08-13T08:06:28.209149+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Momentum_6M::hash_1.0.0"
@@ -158,7 +167,7 @@
         "node_type": "feature",
         "feature_name": "Residual_Momentum_3M",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753674+00:00",
+        "registered_at": "2026-08-13T08:06:28.209165+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Residual_Momentum_3M::hash_1.0.0"
@@ -167,7 +176,7 @@
         "node_type": "feature",
         "feature_name": "Short_Term_Reversal_5D",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753690+00:00",
+        "registered_at": "2026-08-13T08:06:28.209181+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Short_Term_Reversal_5D::hash_1.0.0"
@@ -176,7 +185,7 @@
         "node_type": "feature",
         "feature_name": "Amplitude_5D",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753706+00:00",
+        "registered_at": "2026-08-13T08:06:28.209196+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Amplitude_5D::hash_1.0.0"
@@ -185,7 +194,7 @@
         "node_type": "feature",
         "feature_name": "Implied_Net_Flow",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753721+00:00",
+        "registered_at": "2026-08-13T08:06:28.209212+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Implied_Net_Flow::hash_1.0.0"
@@ -194,7 +203,7 @@
         "node_type": "feature",
         "feature_name": "Volume_Concentration",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753737+00:00",
+        "registered_at": "2026-08-13T08:06:28.209227+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Volume_Concentration::hash_1.0.0"
@@ -203,7 +212,7 @@
         "node_type": "feature",
         "feature_name": "Earnings_Quality",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753752+00:00",
+        "registered_at": "2026-08-13T08:06:28.209241+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Earnings_Quality::hash_1.0.0"
@@ -212,7 +221,7 @@
         "node_type": "feature",
         "feature_name": "Margin_Composite",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753769+00:00",
+        "registered_at": "2026-08-13T08:06:28.209257+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Margin_Composite::hash_1.0.0"
@@ -221,7 +230,7 @@
         "node_type": "feature",
         "feature_name": "Profit_Stability",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753785+00:00",
+        "registered_at": "2026-08-13T08:06:28.209277+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Profit_Stability::hash_1.0.0"
@@ -230,7 +239,7 @@
         "node_type": "feature",
         "feature_name": "ROE_Level",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753802+00:00",
+        "registered_at": "2026-08-13T08:06:28.209292+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::ROE_Level::hash_1.0.0"
@@ -239,7 +248,7 @@
         "node_type": "feature",
         "feature_name": "MaxDD_60D",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753818+00:00",
+        "registered_at": "2026-08-13T08:06:28.209308+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::MaxDD_60D::hash_1.0.0"
@@ -248,7 +257,7 @@
         "node_type": "feature",
         "feature_name": "Volatility_20D",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753831+00:00",
+        "registered_at": "2026-08-13T08:06:28.209322+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Volatility_20D::hash_1.0.0"
@@ -257,7 +266,7 @@
         "node_type": "feature",
         "feature_name": "Volatility_60D",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753918+00:00",
+        "registered_at": "2026-08-13T08:06:28.209336+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Volatility_60D::hash_1.0.0"
@@ -266,7 +275,7 @@
         "node_type": "feature",
         "feature_name": "Price_Volume_Corr",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753939+00:00",
+        "registered_at": "2026-08-13T08:06:28.209350+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Price_Volume_Corr::hash_1.0.0"
@@ -275,7 +284,7 @@
         "node_type": "feature",
         "feature_name": "Volume_Price_Trend",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753957+00:00",
+        "registered_at": "2026-08-13T08:06:28.209365+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Volume_Price_Trend::hash_1.0.0"
@@ -284,7 +293,7 @@
         "node_type": "feature",
         "feature_name": "Volume_Ratio_5D",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753974+00:00",
+        "registered_at": "2026-08-13T08:06:28.209380+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Volume_Ratio_5D::hash_1.0.0"
@@ -293,7 +302,7 @@
         "node_type": "feature",
         "feature_name": "Volume_Trend_10D",
         "code_hash": "1.0.0",
-        "registered_at": "2026-08-13T07:57:29.753989+00:00",
+        "registered_at": "2026-08-13T08:06:28.209394+00:00",
         "point_in_time_safe": true,
         "owner": "",
         "id": "feature::Volume_Trend_10D::hash_1.0.0"
@@ -302,56 +311,56 @@
         "node_type": "strategy",
         "strategy_id": "lvr_vol_mom1m",
         "lifecycle": "research",
-        "registered_at": "2026-08-13T07:57:29.754227+00:00",
+        "registered_at": "2026-08-13T08:06:28.212908+00:00",
         "id": "strategy::lvr_vol_mom1m"
       },
       {
         "node_type": "strategy",
         "strategy_id": "lvr_vol_only",
         "lifecycle": "backtest_passed",
-        "registered_at": "2026-08-13T07:57:29.754260+00:00",
+        "registered_at": "2026-08-13T08:06:28.212976+00:00",
         "id": "strategy::lvr_vol_only"
       },
       {
         "node_type": "strategy",
         "strategy_id": "momentum_v1.0",
         "lifecycle": "research",
-        "registered_at": "2026-08-13T07:57:29.754283+00:00",
+        "registered_at": "2026-08-13T08:06:28.213007+00:00",
         "id": "strategy::momentum_v1.0"
       },
       {
         "node_type": "strategy",
         "strategy_id": "momentum_vol_full",
         "lifecycle": "approved",
-        "registered_at": "2026-08-13T07:57:29.754304+00:00",
+        "registered_at": "2026-08-13T08:06:28.213030+00:00",
         "id": "strategy::momentum_vol_full"
       },
       {
         "node_type": "strategy",
         "strategy_id": "mvf_v2_amount",
         "lifecycle": "research",
-        "registered_at": "2026-08-13T07:57:29.754323+00:00",
+        "registered_at": "2026-08-13T08:06:28.213049+00:00",
         "id": "strategy::mvf_v2_amount"
       },
       {
         "node_type": "strategy",
         "strategy_id": "mvf_v2_expansion",
         "lifecycle": "research",
-        "registered_at": "2026-08-13T07:57:29.754340+00:00",
+        "registered_at": "2026-08-13T08:06:28.213066+00:00",
         "id": "strategy::mvf_v2_expansion"
       },
       {
         "node_type": "strategy",
         "strategy_id": "quality_v1.0",
         "lifecycle": "research",
-        "registered_at": "2026-08-13T07:57:29.754356+00:00",
+        "registered_at": "2026-08-13T08:06:28.213082+00:00",
         "id": "strategy::quality_v1.0"
       },
       {
         "node_type": "strategy",
         "strategy_id": "value_v1.0",
         "lifecycle": "research",
-        "registered_at": "2026-08-13T07:57:29.754372+00:00",
+        "registered_at": "2026-08-13T08:06:28.213097+00:00",
         "id": "strategy::value_v1.0"
       }
     ],
@@ -363,106 +372,114 @@
       "data_id": "daily_price",
       "uri": "data/dataset/daily_price_latest.parquet",
       "version": "latest",
-      "registered_at": "2026-08-13T07:57:29.753055+00:00"
+      "registered_at": "2026-08-13T08:06:28.208517+00:00"
     },
     "data::test_ds::2026-07-31": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-07-31.parquet",
       "version": "2026-07-31",
-      "registered_at": "2026-08-13T07:57:29.753167+00:00"
+      "registered_at": "2026-08-13T08:06:28.208641+00:00"
     },
     "data::test_ds::2026-08-01": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-01.parquet",
       "version": "2026-08-01",
-      "registered_at": "2026-08-13T07:57:29.753211+00:00"
+      "registered_at": "2026-08-13T08:06:28.208689+00:00"
     },
     "data::test_ds::2026-08-02": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-02.parquet",
       "version": "2026-08-02",
-      "registered_at": "2026-08-13T07:57:29.753252+00:00"
+      "registered_at": "2026-08-13T08:06:28.208720+00:00"
     },
     "data::test_ds::2026-08-04": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-04.parquet",
       "version": "2026-08-04",
-      "registered_at": "2026-08-13T07:57:29.753277+00:00"
+      "registered_at": "2026-08-13T08:06:28.208746+00:00"
     },
     "data::test_ds::2026-08-05": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-05.parquet",
       "version": "2026-08-05",
-      "registered_at": "2026-08-13T07:57:29.753301+00:00"
+      "registered_at": "2026-08-13T08:06:28.208770+00:00"
     },
     "data::test_ds::2026-08-06": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-06.parquet",
       "version": "2026-08-06",
-      "registered_at": "2026-08-13T07:57:29.753323+00:00"
+      "registered_at": "2026-08-13T08:06:28.208790+00:00"
     },
     "data::test_ds::2026-08-07": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-07.parquet",
       "version": "2026-08-07",
-      "registered_at": "2026-08-13T07:57:29.753339+00:00"
+      "registered_at": "2026-08-13T08:06:28.208807+00:00"
     },
     "data::factor_values_daily::latest": {
       "node_type": "data",
       "data_id": "factor_values_daily",
       "uri": "data/dataset/factor_values_daily.parquet",
       "version": "latest",
-      "registered_at": "2026-08-13T07:57:29.753354+00:00"
+      "registered_at": "2026-08-13T08:06:28.208822+00:00"
     },
     "data::daily_price_main::2026-08-07": {
       "node_type": "data",
       "data_id": "daily_price_main",
       "uri": "data/dataset/daily_price_main_2026-08-07.parquet",
       "version": "2026-08-07",
-      "registered_at": "2026-08-13T07:57:29.753371+00:00"
+      "registered_at": "2026-08-13T08:06:28.208839+00:00"
     },
     "data::test_ds::2026-08-10": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-10.parquet",
       "version": "2026-08-10",
-      "registered_at": "2026-08-13T07:57:29.753386+00:00"
+      "registered_at": "2026-08-13T08:06:28.208860+00:00"
     },
     "data::test_ds::2026-08-11": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-11.parquet",
       "version": "2026-08-11",
-      "registered_at": "2026-08-13T07:57:29.753402+00:00"
+      "registered_at": "2026-08-13T08:06:28.208877+00:00"
     },
     "data::test_ds::2026-08-12": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-12.parquet",
       "version": "2026-08-12",
-      "registered_at": "2026-08-13T07:57:29.753421+00:00"
+      "registered_at": "2026-08-13T08:06:28.208895+00:00"
     },
     "data::test_ds::2026-08-13": {
       "node_type": "data",
       "data_id": "test_ds",
       "uri": "data/dataset/test_ds_2026-08-13.parquet",
       "version": "2026-08-13",
-      "registered_at": "2026-08-13T07:57:29.753437+00:00"
+      "registered_at": "2026-08-13T08:06:28.208911+00:00"
     }
   },
   "feature_registry": {
+    "feature::Mom_Vol_Interaction::hash_1.0.0": {
+      "node_type": "feature",
+      "feature_name": "Mom_Vol_Interaction",
+      "code_hash": "1.0.0",
+      "registered_at": "2026-08-13T08:06:28.209059+00:00",
+      "point_in_time_safe": true,
+      "owner": ""
+    },
     "feature::Momentum_1M::hash_1.0.0": {
       "node_type": "feature",
       "feature_name": "Momentum_1M",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753583+00:00",
+      "registered_at": "2026-08-13T08:06:28.209093+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -470,7 +487,7 @@
       "node_type": "feature",
       "feature_name": "Momentum_3M",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753616+00:00",
+      "registered_at": "2026-08-13T08:06:28.209116+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -478,7 +495,7 @@
       "node_type": "feature",
       "feature_name": "Momentum_3M_vol_adj",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753638+00:00",
+      "registered_at": "2026-08-13T08:06:28.209133+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -486,7 +503,7 @@
       "node_type": "feature",
       "feature_name": "Momentum_6M",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753656+00:00",
+      "registered_at": "2026-08-13T08:06:28.209149+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -494,7 +511,7 @@
       "node_type": "feature",
       "feature_name": "Residual_Momentum_3M",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753674+00:00",
+      "registered_at": "2026-08-13T08:06:28.209165+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -502,7 +519,7 @@
       "node_type": "feature",
       "feature_name": "Short_Term_Reversal_5D",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753690+00:00",
+      "registered_at": "2026-08-13T08:06:28.209181+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -510,7 +527,7 @@
       "node_type": "feature",
       "feature_name": "Amplitude_5D",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753706+00:00",
+      "registered_at": "2026-08-13T08:06:28.209196+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -518,7 +535,7 @@
       "node_type": "feature",
       "feature_name": "Implied_Net_Flow",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753721+00:00",
+      "registered_at": "2026-08-13T08:06:28.209212+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -526,7 +543,7 @@
       "node_type": "feature",
       "feature_name": "Volume_Concentration",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753737+00:00",
+      "registered_at": "2026-08-13T08:06:28.209227+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -534,7 +551,7 @@
       "node_type": "feature",
       "feature_name": "Earnings_Quality",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753752+00:00",
+      "registered_at": "2026-08-13T08:06:28.209241+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -542,7 +559,7 @@
       "node_type": "feature",
       "feature_name": "Margin_Composite",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753769+00:00",
+      "registered_at": "2026-08-13T08:06:28.209257+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -550,7 +567,7 @@
       "node_type": "feature",
       "feature_name": "Profit_Stability",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753785+00:00",
+      "registered_at": "2026-08-13T08:06:28.209277+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -558,7 +575,7 @@
       "node_type": "feature",
       "feature_name": "ROE_Level",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753802+00:00",
+      "registered_at": "2026-08-13T08:06:28.209292+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -566,7 +583,7 @@
       "node_type": "feature",
       "feature_name": "MaxDD_60D",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753818+00:00",
+      "registered_at": "2026-08-13T08:06:28.209308+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -574,7 +591,7 @@
       "node_type": "feature",
       "feature_name": "Volatility_20D",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753831+00:00",
+      "registered_at": "2026-08-13T08:06:28.209322+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -582,7 +599,7 @@
       "node_type": "feature",
       "feature_name": "Volatility_60D",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753918+00:00",
+      "registered_at": "2026-08-13T08:06:28.209336+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -590,7 +607,7 @@
       "node_type": "feature",
       "feature_name": "Price_Volume_Corr",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753939+00:00",
+      "registered_at": "2026-08-13T08:06:28.209350+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -598,7 +615,7 @@
       "node_type": "feature",
       "feature_name": "Volume_Price_Trend",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753957+00:00",
+      "registered_at": "2026-08-13T08:06:28.209365+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -606,7 +623,7 @@
       "node_type": "feature",
       "feature_name": "Volume_Ratio_5D",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753974+00:00",
+      "registered_at": "2026-08-13T08:06:28.209380+00:00",
       "point_in_time_safe": true,
       "owner": ""
     },
@@ -614,7 +631,7 @@
       "node_type": "feature",
       "feature_name": "Volume_Trend_10D",
       "code_hash": "1.0.0",
-      "registered_at": "2026-08-13T07:57:29.753989+00:00",
+      "registered_at": "2026-08-13T08:06:28.209394+00:00",
       "point_in_time_safe": true,
       "owner": ""
     }
@@ -625,49 +642,49 @@
       "node_type": "strategy",
       "strategy_id": "lvr_vol_mom1m",
       "lifecycle": "research",
-      "registered_at": "2026-08-13T07:57:29.754227+00:00"
+      "registered_at": "2026-08-13T08:06:28.212908+00:00"
     },
     "strategy::lvr_vol_only": {
       "node_type": "strategy",
       "strategy_id": "lvr_vol_only",
       "lifecycle": "backtest_passed",
-      "registered_at": "2026-08-13T07:57:29.754260+00:00"
+      "registered_at": "2026-08-13T08:06:28.212976+00:00"
     },
     "strategy::momentum_v1.0": {
       "node_type": "strategy",
       "strategy_id": "momentum_v1.0",
       "lifecycle": "research",
-      "registered_at": "2026-08-13T07:57:29.754283+00:00"
+      "registered_at": "2026-08-13T08:06:28.213007+00:00"
     },
     "strategy::momentum_vol_full": {
       "node_type": "strategy",
       "strategy_id": "momentum_vol_full",
       "lifecycle": "approved",
-      "registered_at": "2026-08-13T07:57:29.754304+00:00"
+      "registered_at": "2026-08-13T08:06:28.213030+00:00"
     },
     "strategy::mvf_v2_amount": {
       "node_type": "strategy",
       "strategy_id": "mvf_v2_amount",
       "lifecycle": "research",
-      "registered_at": "2026-08-13T07:57:29.754323+00:00"
+      "registered_at": "2026-08-13T08:06:28.213049+00:00"
     },
     "strategy::mvf_v2_expansion": {
       "node_type": "strategy",
       "strategy_id": "mvf_v2_expansion",
       "lifecycle": "research",
-      "registered_at": "2026-08-13T07:57:29.754340+00:00"
+      "registered_at": "2026-08-13T08:06:28.213066+00:00"
     },
     "strategy::quality_v1.0": {
       "node_type": "strategy",
       "strategy_id": "quality_v1.0",
       "lifecycle": "research",
-      "registered_at": "2026-08-13T07:57:29.754356+00:00"
+      "registered_at": "2026-08-13T08:06:28.213082+00:00"
     },
     "strategy::value_v1.0": {
       "node_type": "strategy",
       "strategy_id": "value_v1.0",
       "lifecycle": "research",
-      "registered_at": "2026-08-13T07:57:29.754372+00:00"
+      "registered_at": "2026-08-13T08:06:28.213097+00:00"
     }
   }
 }
