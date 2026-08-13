@@ -20,7 +20,7 @@
 
 ## 已知项目语义（2026-08 实测，直接引用）
 
-- 因子方向：`momentum.py:235-237`、`volume.py:147-156` 明言负 IC → direction=-1；**看 IC 前先查 direction**
+- 因子方向：`momentum.py` 的 `MOMENTUM_DIRECTIONS`、`volume.py` 的 `VOLUME_DIRECTIONS`（同 `money_flow.py` 的 `MONEY_FLOW_DIRECTIONS`）明言负 IC → direction=-1；**看 IC 前先查 direction**
 - 生产读冻结快照：ADR-031 — APPROVED 策略读 `registry.get_approved()`，不读 `get_meta()`
 - 数据流：Raw 不可变只追加；Gold 在 `data/dataset/*.parquet`
 - 诊断工具：`qp/research/evaluation/quintile_diag.py`（分层诊断）；`scripts/audit_layers.py`（架构审计）
