@@ -217,7 +217,15 @@ MOMENTUM_VOL_FULL_CONFIG = register_config(
         model_mode=False,  # 回测默认线性加权；管道 .for_live() 开启 LightGBM
         quality_filter=True,
         industry_neutral=True,
-        orthogonalize=True,
+        # 2026-08-13 决策（Strategy Decision）：关闭 VIF 正交化。
+        # 依据：pooled VIF<1.5 但 3.8% 极端日截面触发正交化（VIF>19）剥离有效信号；
+        # 同 universe 分窗 OOS（500 只抽样→质量过滤后 161 只）：
+        #   IC 3 窗全胜（+0.011~+0.018）、换手 3 窗全降、超额 2/3 窗胜
+        #   （2019-2021 +22.9pp / 2024-2026 +32.9pp；2022-2023 反输 3.7pp）
+        # 全历史同 universe：IC 0.0706 vs 0.0557、超额 +79.3% vs -66.7%。
+        # 已知风险：2022-2023 反输 3.7pp、universe 161 只外推局限。
+        # 回滚：git revert 本 commit 即可恢复 orthogonalize=True。
+        orthogonalize=False,
         anti_chase=True,
         chase_threshold=0.20,
         chase_lookback=5,
