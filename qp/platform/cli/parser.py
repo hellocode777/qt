@@ -286,6 +286,18 @@ def experiment_clean(ctx: click.Context) -> None:
     raise SystemExit(cmd_experiment_clean())
 
 
+@experiment.command(
+    "optuna",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def experiment_optuna(ctx: click.Context) -> None:
+    """Run Optuna hyperparameter search for LambdaRank model (TDR-005)."""
+    from qp.platform.cli.commands.experiment import cmd_experiment_optuna
+
+    raise SystemExit(cmd_experiment_optuna())
+
+
 # ==================================================================
 # Model
 # ==================================================================

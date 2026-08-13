@@ -41,4 +41,20 @@ study.optimize(objective, n_trials=50)
 
 ## 当前状态
 
-Optuna 集成已规划但非默认。常规实验使用固定参数 + Purged CV。
+✅ **Optuna 集成已实现（2026-08-13）**，默认非启用。常规实验仍使用固定参数 + Purged CV。
+
+### 实现方式
+
+- **模块**: `qp/research/trainer/optuna_search.py` — `OptunaSearch` 类
+- **CLI**: `qp experiment optuna [--trials N] [--start] [--end] [--train-window] [--timeout] [--seed]`
+- **目标函数**: PurgedKFold OOS IC 均值（最大化），每折独立截面 z-score 标准化（防前视偏差）
+- **搜索空间**: num_leaves / max_depth / learning_rate / min_data_in_leaf / feature_fraction / bagging_fraction / lambda_l1 / lambda_l2（TPE 采样）
+- **基线对比**: 自动计算 DEFAULT_LGB_PARAMS 的 OOS IC，结果含 ΔIC
+- **结果保存**: `data/optuna/lgb_optuna_{ts}.json`（study_name + best_params + baseline）
+
+### 验证
+
+- 单元测试: `tests/unit/research/test_optuna_search.py`（合成数据端到端，5 用例）
+- 质量门: ruff format/check + pyright 0 errors + pytest 全过
+
+> ⚠️ 短样本最优参数勿直接写死进生产 — 先用完整 walk-forward 回测验证（rule.md §7.9）。

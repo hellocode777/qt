@@ -43,6 +43,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "httpx>=0.27.0",   # 修正为官方标准库 httpx
     "click>=8.1",
+    "optuna>=4.9.0",
 ]
 
 # 统一采用 PEP 735 标准声明开发依赖（移除了旧的 optional-dependencies.dev）

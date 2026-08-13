@@ -12,7 +12,7 @@
 | data | `commands/data_cmd.py` | fetch（拉取行情） |
 | decide | `commands/decide.py` | 生成/审阅投资决策 |
 | doctor | `commands/meta.py`（cmd_doctor） | 环境自检 |
-| experiment | `commands/experiment.py` | list, show, run, compare, validate, clean |
+| experiment | `commands/experiment.py` | list, show, run, compare, validate, clean, optuna |
 | factor | `commands/factor_cmd.py` | catalog, compute, health, list, report, update-health, validate |
 | fundamental | `commands/ingest.py`（cmd_fundamental） | 拉取基本面数据 |
 | ingest | `commands/ingest.py` | 从配置源导入数据（cmd_ingest） |

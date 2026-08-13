@@ -677,3 +677,173 @@ def cmd_experiment_clean() -> int:
 
     print(f"\n已删除 {deleted}/{len(to_delete)} 个旧实验文件")
     return 0
+
+
+def cmd_experiment_optuna() -> int:
+    """Run Optuna hyperparameter search for the LambdaRank model (TDR-005)."""
+    if len(sys.argv) < 3:
+        print("qp experiment optuna [options]", file=sys.stderr)
+        print("  Options:", file=sys.stderr)
+        print(
+            "    --trials N                 Number of Optuna trials (default 30)", file=sys.stderr
+        )
+        print("    --start YYYY-MM-DD         Start date (default 2019-01-01)", file=sys.stderr)
+        print("    --end YYYY-MM-DD           End date (default today)", file=sys.stderr)
+        print("    --symbols 000001,000002    Stock codes (default: all)", file=sys.stderr)
+        print(
+            "    --dataset NAME             Gold dataset name (default daily_price_latest)",
+            file=sys.stderr,
+        )
+        print("    --snapshot PATH            Experiment snapshot parquet", file=sys.stderr)
+        print("    --train-window N           Training window days (default 252)", file=sys.stderr)
+        print(
+            "    --timeout SECONDS          Search timeout (default: no timeout)", file=sys.stderr
+        )
+        print("    --seed N                   Random seed (default 42)", file=sys.stderr)
+        return 1
+
+    from datetime import date as _date
+
+    from qp.pipeline.multifactor_pipeline import MultiFactorPipeline
+    from qp.research.feature.compute import PRICE_VOLUME_FACTORS, compute_all_factors
+    from qp.research.model_trainer import FEATURES, WalkForwardScorer
+    from qp.research.trainer.optuna_search import OptunaSearch
+
+    args = sys.argv[3:]
+    trials = 30
+    start = "2019-01-01"
+    end = _date.today().isoformat()
+    symbols: list[str] = []
+    dataset = "daily_price_latest"
+    snapshot = ""
+    train_window = 252
+    timeout = 0.0
+    seed = 42
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--trials="):
+            trials = int(arg.split("=", 1)[1])
+        elif arg == "--trials" and i + 1 < len(args):
+            i += 1
+            trials = int(args[i])
+        elif arg.startswith("--start="):
+            start = arg.split("=", 1)[1]
+        elif arg == "--start" and i + 1 < len(args):
+            i += 1
+            start = args[i]
+        elif arg.startswith("--end="):
+            end = arg.split("=", 1)[1]
+        elif arg == "--end" and i + 1 < len(args):
+            i += 1
+            end = args[i]
+        elif arg.startswith("--symbols="):
+            symbols = [s for s in arg.split("=", 1)[1].split(",") if s]
+        elif arg == "--symbols" and i + 1 < len(args):
+            i += 1
+            symbols = [s for s in args[i].split(",") if s]
+        elif arg.startswith("--dataset="):
+            dataset = arg.split("=", 1)[1]
+        elif arg == "--dataset" and i + 1 < len(args):
+            i += 1
+            dataset = args[i]
+        elif arg.startswith("--snapshot="):
+            snapshot = arg.split("=", 1)[1]
+        elif arg == "--snapshot" and i + 1 < len(args):
+            i += 1
+            snapshot = args[i]
+        elif arg.startswith("--train-window="):
+            train_window = int(arg.split("=", 1)[1])
+        elif arg == "--train-window" and i + 1 < len(args):
+            i += 1
+            train_window = int(args[i])
+        elif arg.startswith("--timeout="):
+            timeout = float(arg.split("=", 1)[1])
+        elif arg == "--timeout" and i + 1 < len(args):
+            i += 1
+            timeout = float(args[i])
+        elif arg.startswith("--seed="):
+            seed = int(arg.split("=", 1)[1])
+        elif arg == "--seed" and i + 1 < len(args):
+            i += 1
+            seed = int(args[i])
+        i += 1
+
+    # ── 1. Load price data ──
+    print(f"📥 加载数据: {dataset} ({start} → {end})")
+    try:
+        if snapshot:
+            price_data = MultiFactorPipeline._load_snapshot(snapshot, symbols, start, end)
+        else:
+            price_data = MultiFactorPipeline._fetch_data(symbols, start, end, dataset)
+    except Exception as e:
+        print(f"❌ 数据加载失败: {e}", file=sys.stderr)
+        return 1
+
+    if not price_data:
+        print("❌ 数据为空", file=sys.stderr)
+        return 1
+    total_rows = sum(df.height for df in price_data.values())
+    print(f"   {len(price_data)} 只股票, {total_rows} 行日线数据")
+
+    # ── 2. Compute raw factors ──
+    print("🧮 计算原始因子...")
+    all_raw: dict[str, dict[str, dict[str, float]]] = {}
+    for code, df in price_data.items():
+        try:
+            factors = compute_all_factors(df.sort("trade_date"))
+        except Exception:
+            continue
+        if factors.is_empty():
+            continue
+        for row in factors.iter_rows(named=True):
+            date_str = str(row["trade_date"])
+            if date_str not in all_raw:
+                all_raw[date_str] = {}
+            all_raw[date_str][code] = {f: float(row[f]) for f in PRICE_VOLUME_FACTORS if f in row}
+    print(f"   原始因子: {len(all_raw)} 天截面")
+
+    # ── 3. Build flat dataset (same labeling as walk-forward) ──
+    print("🏷️ 构建训练数据集 (forward-return rank 标签)...")
+    scorer = WalkForwardScorer(train_window_days=train_window)
+    flat_df = scorer._build_flat_dataset(all_raw, price_data)
+    if flat_df.is_empty():
+        print("❌ flat 数据集为空 — 数据窗口不足或因子全 NaN", file=sys.stderr)
+        return 1
+    print(f"   数据集: {flat_df.height} 行, {flat_df['date'].n_unique()} 天")
+
+    # ── 4. Run Optuna search ──
+    searcher = OptunaSearch(
+        feature_cols=FEATURES,
+        train_window_days=train_window,
+        n_trials=trials,
+        seed=seed,
+        timeout_seconds=timeout,
+    )
+    try:
+        result = searcher.search(flat_df)
+    except ValueError as e:
+        print(f"❌ 搜索失败: {e}", file=sys.stderr)
+        return 1
+
+    # ── 5. Save result ──
+    import json
+    from pathlib import Path
+
+    out_dir = Path("data/optuna")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{result.study_name}.json"
+    out_path.write_text(
+        json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    print(f"💾 结果保存: {out_path}")
+
+    # ── 6. Baseline comparison hint ──
+    print()
+    print("💡 提示: 若最佳 OOS IC > 基线，可将最佳超参合入")
+    print("   qp/research/trainer/lgb_rank.py 的 DEFAULT_LGB_PARAMS 后重跑实验验证。")
+    print(
+        "   注意: 短样本最优参数勿直接写死进生产 — 先用完整 walk-forward 回测验证 (rule.md §7.9)。"
+    )
+    return 0
