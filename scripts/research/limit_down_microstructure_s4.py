@@ -9,8 +9,9 @@
 - 对照：同期全市场所有股票的最新报告
 """
 
-import polars as pl
 import sqlite3
+
+import polars as pl
 
 # ── 1. 基本面加载 + pivot ──
 conn = sqlite3.connect("/home/shuai/workspace/QuantTrading/data/quant.db")
