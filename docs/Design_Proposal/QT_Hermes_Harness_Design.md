@@ -14,6 +14,8 @@
 
 # 一、整体架构
 
+> **落地状态: ⚠️ 目标架构图（非现状）** — 实际已落地：`AGENTS.md` / `AI_PROJECT_CONTEXT.md` / `.hermes/memory/`（4 类目录+project-state+README）/ `docs/ai/`（四张地图 + QUANT_VERIFICATION_CHECKLIST）。**未建**：`.hermes/config/`、`.hermes/skills/`（12 个 qt-*）、`.hermes/agents/`（6 个角色）——原因见 §五/§十五 适配说明。实际源码目录是 `qp/`（12 层），docs 实际含 `constitution/ tdr/ archive/ Design_Proposal/ tracking/` 等。
+
 我建议最终形成：
 
 ```text
@@ -119,6 +121,8 @@ QT Repository
 
 # 二、`AGENTS.md`：整个 Harness 的最高层协议
 
+> **落地状态: ✅ 已实现** — `AGENTS.md`（项目根，22 节）。协议核心与设计稿一致：Source of Truth 优先级、Locate→Trace→Verify→Explain、证据分级（FACT/INFERENCE/HYPOTHESIS）、no-guessing、调查≠修改、最小 Context、Quant 专项验证（§20-21）、Git 纪律。
+
 这个文件我建议放在 repository root。
 
 它不是项目介绍，而是 **Agent Operating System**。
@@ -186,6 +190,8 @@ QT AI ENGINEERING PROTOCOL
 ---
 
 # 三、`AI_PROJECT_CONTEXT.md`
+
+> **落地状态: ✅ 已实现** — `AI_PROJECT_CONTEXT.md`（项目根，导航层，<200 行）。按设计稿模板：Project Identity / 12 层架构 / Runtime Flow / Research Flow / 指向 docs/ai/ 四图 + tracking，不写实现细节。
 
 这个文件应该非常短。
 
@@ -338,6 +344,8 @@ factor_health.py 第 238 行……
 
 # 四、AI Navigation Maps
 
+> **落地状态: ✅ 已实现** — `docs/ai/` 四张地图（PROJECT_MAP / MODULE_MAP / COMMAND_MAP / DATA_FLOW）+ `QUANT_VERIFICATION_CHECKLIST.md`。COMMAND_MAP 按 `qp` CLI 实测更新（2026-08-11）。更新规则：只写方法/机制，不写当前运行状态（避免过时）。
+
 这是你这个项目特别值得做的一层。
 
 你之前已经确定：
@@ -484,6 +492,8 @@ production data
 
 # 五、Skills 体系
 
+> **落地状态: ⚠️ 已适配（不建 12 个项目内 skill）** — 原因：Hermes 的 skills 加载自**全局** `~/.hermes/skills/`，项目内 `.hermes/skills/` 不会被自动加载；且 12 个拆分是过度工程、每次加载成本高。落地方式：职责全部并入全局 `qp-project` skill（18 个 references，已覆盖 understand/investigate/architecture/data/factor/strategy/validation/pipeline/debug/test/review/documentation）。边界：「能力在全局 skill、导航在项目」。
+
 这里是整个 Harness 的核心。
 
 我建议不要创建 30 个 Skill。
@@ -510,6 +520,8 @@ qt-documentation/
 ---
 
 # 六、Skill 之间的职责
+
+> **落地状态: ⚠️ 已并入 qp-project / AGENTS.md** — 本节及 §七~§十四 的 12 个 skill 职责设计已落实为 qp-project skill 的工作流（如因子诊断流程「先查 direction 再判失效」、research integrity 五结果区分、validation Gatekeeper 语义、测试分层按修改范围选择）。
 
 ## `qt-understand`
 
@@ -838,6 +850,8 @@ Unintended changes
 
 # 十五、Agent Roles
 
+> **落地状态: ❌ 未建项目内 agents 目录** — 不创建 `architect.md / quant-researcher.md / data-engineer.md / python-engineer.md / test-engineer.md / reviewer.md`。角色职责由 Hermes 主 agent 直接承担；分工协作通过 `delegate_task` 子代理（§十六）实现。
+
 Skills 和 Agents 不一样。
 
 **Skill = 能力**
@@ -945,6 +959,8 @@ Edge cases
 
 # 十六、一个任务不要只让一个 Agent 做到底
 
+> **落地状态: ⚠️ 部分落地** — Orchestrator + Specialist 模式存在：Hermes 主 agent 编排 + `delegate_task` 子代理分工（如批量调查/并行验证）。但无项目内独立 agent 定义文件（见 §十五）。
+
 这是我最推荐你的工作方式。
 
 例如：
@@ -992,6 +1008,8 @@ Final review
 ---
 
 # 十七、Memory 体系
+
+> **落地状态: ✅ 已实现** — `.hermes/memory/`：`decisions/ discoveries/ failures/ workflows/`（四类目录）+ `project-state.md` + `README.md`（记录四类语义 + Memory 优先级）。**注意**：正式 ADR 在 `docs/archive/adr/`（ADR-001~033），`.hermes/memory/decisions/` 只放非 ADR 级补充决策。
 
 Memory 千万不要变成：
 
@@ -1132,6 +1150,8 @@ Strategy 使用 5 个 factors
 
 # 二十、任务协议
 
+> **落地状态: ✅ 已实现** — 任务协议 Level 0-5 已写入 qp-project skill + AGENTS.md：L0 Explain / L1 Investigate / L2 Design / L3 Implement / L4 Refactor（架构分析+回归测试+diff 审查）/ L5 Production-sensitive（Plan+显式 approval+Tests+Review）。
+
 这是 Harness 最核心的协议。
 
 所有任务统一：
@@ -1241,6 +1261,8 @@ Review
 
 # 二十一、每个任务都应该产生 Task Record
 
+> **落地状态: ✅ 已实现** — `docs/templates/TASK_RECORD.md`（Task ID / Type / Goal / Scope / Files inspected / Evidence / Conclusion / Confidence / Changes / Tests / Follow-up），作为 `.hermes/memory/` 的来源。
+
 例如：
 
 ```text
@@ -1283,6 +1305,8 @@ Follow-up:
 ---
 
 # 二十二、Git 工作流
+
+> **落地状态: ⚠️ 已适配（方案 A，2026-08-13 确认）** — **维持 master 直推**（用户长期习惯，单人项目），未引入 feature 分支。落地为 AGENTS.md git 纪律：改动前 `git status`/`git diff` 审查、commit 前确认测试范围、GFW push 重试配置。设计稿「Hermes 不能直接改 main」未采用。
 
 我建议：
 
@@ -1352,6 +1376,8 @@ Documentation drift
 
 # 二十四、测试分层
 
+> **落地状态: ✅ 已落地为项目规范** — 门禁：`uvx ruff format --check` + `uvx ruff check` → `uv run pyright`（0 errors）→ 相关 pytest（先受影响模块局部测试，提交前问用户是否跑全量 1499 个 ~94s）。按修改范围选择测试，不盲目全量。
+
 我建议 QT 的验证流程：
 
 ```text
@@ -1418,6 +1444,8 @@ validation
 
 # 二十五、Quant-specific Verification
 
+> **落地状态: ✅ 已实现（设计稿最有价值部分）** — `docs/ai/QUANT_VERIFICATION_CHECKLIST.md`（11 项清单）+ AGENTS.md §20-21。量化改动自检项全部保留：look-ahead bias / future leakage / universe leakage / survivorship / factor direction / rebalance timing / transaction assumptions / missing data / corporate action / date alignment / train-test contamination。
+
 这是普通 coding agent 没有的，但你的 Hermes 必须有。
 
 涉及量化逻辑时自动检查：
@@ -1441,6 +1469,8 @@ validation
 ---
 
 # 二十六、Documentation Governance
+
+> **落地状态: ⚠️ 已适配** — Documentation Drift Check 方法论已入 qp-project skill（分层验证：路径级 / 行号级 / 命令级 / 状态级）；文档引用代码用「文件+符号名」禁行号；docs/ai/ 只写方法不写状态（去掉具体策略名/时间点后仍成立=方法）。
 
 最后建立一个：
 
@@ -1545,6 +1575,8 @@ user-guide.md         STALE
 
 # 二十八、我建议你最终把它收敛成这套目录
 
+> **落地状态: ⚠️ 目标目录（非现状），与实际差异** — `src/`→实际为 `qp/`；docs 实际多出 `constitution/ tdr/ archive/ Design_Proposal/ tracking/`；无 `.hermes/config/ .hermes/skills/ .hermes/agents/`（见 §一/§五/§十五）。已实现部分：AGENTS.md / AI_PROJECT_CONTEXT.md / .hermes/memory/ / docs/ai/。
+
 这是我认为目前最适合你 QT 的 **v1.0 Harness**：
 
 ```text
@@ -1611,6 +1643,8 @@ QT/
 ---
 
 # 二十九、最重要的三个设计决定
+
+> **落地状态: ✅ 三个决定全部落地** — ① Context≠知识库（AI_PROJECT_CONTEXT 只导航）② Skill≠Prompt（qp-project 是可执行 SOP）③ Memory≠Source of Truth（`.hermes/memory/README.md` 明文 Code > Tests > Runtime > Registry > Docs > Memory）。
 
 如果只记住三个东西，我建议记这三个。
 
