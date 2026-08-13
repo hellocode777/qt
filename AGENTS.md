@@ -350,6 +350,50 @@ using the minimum sufficient evidence.
 
 ---
 
+## 21. Quant-Specific Verification
+
+Whenever a change or conclusion involves quantitative logic
+(factor / IC / backtest / strategy / data pipeline / experiment),
+run the 11-item checklist in `docs/ai/QUANT_VERIFICATION_CHECKLIST.md`
+and report the result in the final answer.
+
+Checklist highlights (always verify, never assume):
+
+* Look-ahead bias — computations use only information available at time t
+* Future data leakage — training/validation/backtest windows do not leak future labels
+* Universe leakage — stock universe does not include future listings/delistings
+* Survivorship bias — conclusions not based only on currently listed stocks
+* Factor direction — a negative IC is EXPECTED for A-share momentum/price-volume
+  factors with direction=-1; check `qp/research/feature/*.py` raw definitions first
+* Rebalance timing — signal generation date aligned with execution date
+* Transaction assumptions — fees/stamp duty/slippage consistent with cost model
+* Missing data — suspensions/NaN handling not masked by `keep="last"` merges
+* Corporate action — price jumps are adjustments, not raw unadjusted moves
+* Date alignment — trade_date dtype (Date vs str) unified before joins
+* Train/test contamination — PurgedKFold purge/embargo effective;
+  never hardcode short-sample optimal parameters into production without
+  full walk-forward / OOS validation
+
+For non-quant changes (WebUI / docs), state "not quant-relevant" and skip.
+
+---
+
+## 22. Git Safety (master 直改纪律)
+
+This project works on `master` directly (single developer). Discipline instead of branches:
+
+1. Before any commit: run `git status` + `git diff` + `git diff --stat`
+2. Check for: unexpected files, unrelated changes, deleted files,
+   config changes, generated files, documentation drift
+3. Never commit `data/` runtime artifacts unless intended
+   (`data/strategy_registry.json` is tracked and can silently change lifecycle —
+   verify JSON validity and diff before committing)
+4. Commit message follows conventional commits (`feat/fix/docs/chore/refactor`)
+5. If a change touches strategy/risk/capital/decision/production paths,
+   it is production-sensitive: require explicit user approval before committing
+
+---
+
 ## 附录 A — 提问模板（用户侧）
 
 ```
@@ -384,3 +428,7 @@ Context：docs/ai/（四张地图）
 - 人读指南：`docs/user_guide.md`、`docs/developer_guide.md`
 - 架构决策：`docs/archive/adr/`（ADR-xxx，改架构先看）
 - 技术选型：`docs/tdr/`（TDR-xxx）
+- 项目导航（新 Agent 第一站）：`AI_PROJECT_CONTEXT.md`
+- 量化专项验证清单：`docs/ai/QUANT_VERIFICATION_CHECKLIST.md`（§21 配套）
+- 任务留痕模板：`docs/templates/TASK_RECORD.md`
+- 项目记忆：`.hermes/memory/`（README 说明四类目录 + Memory ≠ Source of Truth）
