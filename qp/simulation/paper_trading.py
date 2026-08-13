@@ -460,6 +460,8 @@ class PaperTradingTracker:
                     "n_trades": r.n_trades,
                     "daily_return": r.daily_return,
                     "total_cost": r.total_cost,
+                    "positions": dict(r.positions),
+                    "avg_costs": dict(r.avg_costs),
                 }
                 for r in run.daily_records
             ],
