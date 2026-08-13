@@ -63,17 +63,27 @@
 
 ---
 
-## 方向性探索（不在清单但值得想）
+## 待办清单（2026-08-13 更新 — 已规划项全部清零）
 
-### A. 策略池扩容
-- 现状: mvF 5因子 APPROVED 是唯一生产策略（ADR-031）；研究侧已有 10因子 + LightGBM
-- 目标: 把第二个策略推过 validation gate
-- 价值: ⭐⭐⭐⭐⭐（直接决定系统产出）
+### #5 因子失效应对 ⭐⭐⭐⭐⭐ 最紧迫
+- **证据**: `qp factor health` — 28 因子中 12 DEGRADED + 11 WEAKENING；10 因子模型 9 个近期反向（Momentum_3M ic_30d=-0.21、Amplitude_5D=-0.25），仅 Volatility_20D 健康（+0.25）；Optuna OOS IC 负（-0.0444）
+- **价值**: 决定生产策略（mvF）是否逆风；策略池扩容前提
+- [ ] mvF 生产策略 5 因子滚动 IC 健康度
+- [ ] 关键失效因子 OOS 验证（qp factor validate），区分真失效 vs 窗口噪音
+- [ ] 因子失效诊断报告入 Obsidian
+- [ ] 决策：调方向 / 降权 / 换池 / 等 regime
 
-### B. 实盘闭环验证
-- 现状: Portfolio 真实账户状态机 + 现金账本（ADR-032）已建成
-- 目标: 跑通一个完整「人工审核 → 建仓 → 平仓 → 记账」周期
-- 价值: 系统从「玩具」变「工具」的最后一步
+### #6 策略池扩容 ⭐⭐⭐⭐（依赖 #5）
+- **证据**: mvF 唯一 APPROVED；lvr_vol_mom1m（research）、lvr_vol_only（backtest_passed）待提升
+- [ ] （待 #5）选定候选 → 完整 validation gate → Paper Trading → APPROVED
+
+### #7 实盘闭环验证 ⭐⭐⭐
+- **证据**: ADR-032 现金账本已建，无证据走通完整周期
+- [ ] WebUI 建仓 → 持仓 → 卖出 → 现金回流 → 账户摘要核对
+- [ ] 验证 get_account_summary() 的 cash / equity / realized_pnl
+
+### ⏳ 进行中
+- Paper Trading 30 天验证 `pt-bb27fc9d`（0/30 天，8/11 启动，每天 `qp paper status`）
 
 ---
 
