@@ -218,6 +218,18 @@ A possible explanation that has not been verified.
 
 Never present an inference or hypothesis as an established fact.
 
+### 13.1 No-Inference Rule (user-mandated)
+
+Do NOT infer. Answers must be based only on verified evidence:
+
+1. If a claim was not verified against code/data/runtime/tests, do NOT state it as part of the answer.
+2. Instead: either verify it first, or explicitly state "not verified / unknown" and what evidence would be needed.
+3. Never fill gaps in an answer with reasoning, guesses, or plausible-sounding assumptions to make it more complete.
+4. When you did infer something, it must be labeled INFERENCE/HYPOTHESIS and the user may reject it — verified facts are the only safe content.
+5. Reading a fragment (grep hit, partial file, schema glimpse) is NOT verification of the full picture. Read the complete definition/flow before claiming understanding of it.
+
+This overrides the temptation to "connect the dots" — the user explicitly prefers "I don't know / insufficient evidence" over a confident guess.
+
 ---
 
 ## 14. Uncertainty
