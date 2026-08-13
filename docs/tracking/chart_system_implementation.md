@@ -317,7 +317,10 @@ WebUI 手动验证:
 
 | Step | 描述 | 状态 | 完成时间 |
 |------|------|------|----------|
-| 1 | 标准化 Parquet Schema | ⬜ 待开始 | — |
-| 2 | Service 层封装 | ⬜ 待开始 | — |
-| 3 | cockpit.js 图表模块化 | ⬜ 待开始 | — |
-| 4 | 修复实验页面图表 | ⬜ 待开始 | — |
+| 1 | 标准化 Parquet Schema | ✅ 已完成 | 2026-08-13 复核确认（代码早已实现：`_compute_backtest()` 返回 daily_benchmark/drawdown/return，daily_nav.parquet 5 列 schema） |
+| 2 | Service 层封装 | ✅ 已完成 | 2026-08-13 复核确认（`experiment_service.py` 已有 get_equity_curve/get_equity_json/get_trade_reconstruction；router 无 read_parquet） |
+| 3 | cockpit.js 图表模块化 | ✅ 已完成 | 2026-08-13 复核确认（QPCharts 模块导出 EquityCurve/DrawdownChart + _setupCanvas 工具） |
+| 4 | 修复实验页面图表 | ✅ 已完成 | 2026-08-13 复核确认（experiment_trades.html 用 Canvas + equity_json 注入 + drawdown 图） |
+
+> 📌 2026-08-13 复核结论：本规划文档创建于 2026-08-04，4 个 Step 在后续开发中已全部落地。
+> 本次仅做证据复核（代码 + ruff + pyright + service 导入），无代码改动。文档标记为完成。
