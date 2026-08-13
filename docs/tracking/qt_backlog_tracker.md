@@ -1,0 +1,78 @@
+# QP 项目待办追踪 / QP Backlog Tracker
+
+> 创建: 2026-08-13 | 来源: Hermes 讨论「qt 项目还有什么可做」+ Obsidian `1-Projects/qt项目待办.md`
+> 项目现状: 12 层架构已完整（359 源文件 / ~77K 行 / 1488 测试），框架层饱和；剩余为「已规划未落地」项
+
+---
+
+## 总体判断
+
+架构层基本完成。可做的事集中在 **4 个已规划未落地项 + 2 个方向性探索**。
+每项标注证据来源（TDR/tracking/TODO 注释），勾选状态与 Obsidian 待办同步。
+
+---
+
+## 待办清单
+
+### #1 Optuna 超参优化落地 ⭐ 推荐先做
+
+- **证据**: `docs/tdr/TDR-005-optuna.md` — 「已规划但非默认，常规实验用固定参数 + Purged CV」
+- **价值**: 直接提升模型质量；walk-forward/OOS/regime 验证的地基
+- **成本**: 中
+- **涉及**: `qp/research/trainer/lgb_rank.py`, `docs/tdr/TDR-005-optuna.md`
+
+- [ ] 读 lgb_rank.py + TDR-005，出集成方案
+- [ ] 接入 Optuna 搜索（num_leaves / learning_rate 等）
+- [ ] walk-forward + Purged CV 验证
+- [ ] 与固定参数基线对比，记录结果
+
+### #2 文档重建收尾
+
+- **证据**: `docs/doc_rebuild_tracker.md` 停在 Phase 1；architecture.md / module_overview.md / workflow.md / developer_guide.md / api.md 全缺失
+- **价值**: 工程完整度（不改变策略结果）
+- **成本**: 低
+
+- [ ] 从 ADR + DP 合成 architecture.md
+- [ ] 生成 module_overview.md / workflow.md
+- [ ] 生成 developer_guide.md / api.md
+
+### #3 WebUI 图表系统重构
+
+- **证据**: `docs/tracking/chart_system_implementation.md`「规划中」，Step 1 未完成——daily_nav.parquet 缺 benchmark 曲线、日收益率、回撤序列
+- **价值**: 可视化体验
+- **成本**: 中
+
+- [ ] Step 1: `qp/pipeline/multifactor_pipeline.py` `_compute_backtest()` 加 benchmark/drawdown 列
+- [ ] Step 2: Service 层封装（router 不直接读 parquet）
+- [ ] Step 3: 修复实验页面图表 bug
+
+### #4 策略自动发现
+
+- **证据**: `qp/pipeline/daily_pipeline.py:375` TODO — 「auto-discover validated strategies from ExperimentTracker」，当前策略手动注册
+- **价值**: 架构一致性
+- **成本**: 低
+
+- [ ] 从 ExperimentTracker 自动发现 APPROVED 策略
+- [ ] 替换手动注册逻辑
+
+---
+
+## 方向性探索（不在清单但值得想）
+
+### A. 策略池扩容
+- 现状: mvF 5因子 APPROVED 是唯一生产策略（ADR-031）；研究侧已有 10因子 + LightGBM
+- 目标: 把第二个策略推过 validation gate
+- 价值: ⭐⭐⭐⭐⭐（直接决定系统产出）
+
+### B. 实盘闭环验证
+- 现状: Portfolio 真实账户状态机 + 现金账本（ADR-032）已建成
+- 目标: 跑通一个完整「人工审核 → 建仓 → 平仓 → 记账」周期
+- 价值: 系统从「玩具」变「工具」的最后一步
+
+---
+
+## 关联
+
+- 架构导航: `docs/ai/PROJECT_MAP.md`
+- 镜像笔记: Obsidian `1-Projects/qt项目待办.md`
+- 相关整改: Obsidian `1-Projects/qt宪法合规整改.md` / `docs/constitution/rule.md`
