@@ -1,0 +1,77 @@
+{
+  "experiment_id": "multifactor_20260813_021901",
+  "status": "completed",
+  "created_at": "2026-08-13T02:19:01.879618+00:00",
+  "completed_at": "2026-08-13T02:19:01.879626+00:00",
+  "config": {
+    "experiment_id": "multifactor_20260813_021901",
+    "created_at": "2026-08-13T02:19:01.879618+00:00",
+    "description": "Multi-factor experiment: 5 factors, Top-10, rebalance=20d",
+    "strategy_name": "mvf_v2_amount",
+    "model_mode": 0.0,
+    "dataset_version": "daily_price_latest@2019-01-01_2026-08-13",
+    "features": [
+      "Amplitude_5D",
+      "Volatility_20D",
+      "Momentum_3M",
+      "Volume_Concentration",
+      "Amount_Momentum_20_120"
+    ],
+    "model_params": {
+      "Amplitude_5D": -0.2310188189487346,
+      "Volatility_20D": 0.20408825438027256,
+      "Momentum_3M": -0.20441271901362754,
+      "Volume_Concentration": -0.1709928617780662,
+      "Amount_Momentum_20_120": -0.18948734587929916
+    },
+    "cv_folds": 5,
+    "purge_days": 20,
+    "embargo_days": 5,
+    "train_start": "2019-01-01",
+    "train_end": "2026-08-13",
+    "test_start": "",
+    "test_end": "",
+    "tags": [
+      "multifactor",
+      "top10",
+      "rebalance20d"
+    ],
+    "git_commit": ""
+  },
+  "metrics": {
+    "experiment_id": "multifactor_20260813_021901",
+    "in_sample_ic": 0.0,
+    "out_of_sample_ic": 0.0,
+    "ic_mean": 0.0732,
+    "ic_ir": 0.51,
+    "ic_t_stat": 11.45,
+    "sharpe_ratio": 1.11,
+    "max_drawdown_pct": 7.24,
+    "excess_return_pct": 12.430000000000007,
+    "annual_return_pct": 12.2,
+    "annual_volatility_pct": 10.99,
+    "total_return_pct": 132.34,
+    "turnover_pct": 2019.56,
+    "n_days": 1846,
+    "feature_importance": {},
+    "custom": {}
+  },
+  "lineage": {
+    "dataset": "daily_price_latest@2019-01-01",
+    "features": [
+      "Amplitude_5D",
+      "Volatility_20D",
+      "Momentum_3M",
+      "Volume_Concentration",
+      "Amount_Momentum_20_120"
+    ],
+    "feature_versions": {},
+    "label": "",
+    "model_id": "",
+    "model_algo": "weighted_linear",
+    "strategy_id": "multifactor_top10"
+  },
+  "artifacts": [],
+  "errors": [],
+  "gate_result": null
+}
