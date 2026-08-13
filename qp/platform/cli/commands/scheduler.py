@@ -514,7 +514,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
-    # ── Job 5: email decision report (18:03 on weekdays) ──
+    # ── Job 5: email decision report (18:30 on weekdays) ──
     def job_email_report() -> None:
         """Send today's DecisionPackage as email after daily_pipeline completes."""
         with job_log_sink("email_report"):
