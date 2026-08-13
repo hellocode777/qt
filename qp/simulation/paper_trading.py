@@ -214,9 +214,59 @@ class PaperTradingTracker:
         if signals is None:
             registry = StrategyRegistry()
             if run.strategy_id in registry.list_strategies():
-                strategy = registry.get(run.strategy_id)
-                today = date.fromisoformat(trade_date)
-                signals = strategy.generate_signals(today)
+                # Strategy is persisted in the registry but may not have an
+                # in-process instance (registry stores metadata, instances are
+                # process-local). Build the strategy from its config so paper
+                # trading works from any fresh process (scheduler, CLI).
+                from qp.strategy.config import get_strategy_config
+
+                try:
+                    cfg = get_strategy_config(run.strategy_id)
+                except KeyError:
+                    cfg = None
+
+                if cfg is not None:
+                    # Fast-path: today's cross-sectional scores (ADR-031),
+                    # avoids the expensive full-history compute per day.
+                    from qp.strategy.multifactor import (
+                        MultiFactorStrategy,
+                        compute_cross_sectional_scores,
+                    )
+
+                    # price_data dict for the scorer (built once per day)
+                    score_price_map: dict[str, pl.DataFrame] = {}
+                    for row in prices.iter_rows(named=True):
+                        sym = str(row["symbol"])
+                        if sym not in score_price_map:
+                            score_price_map[sym] = prices.filter(pl.col("symbol") == sym)
+                    scores = compute_cross_sectional_scores(
+                        score_price_map,
+                        weights=dict(cfg.factors),
+                        min_history=60,
+                        industry_neutral=cfg.industry_neutral,
+                        orthogonalize=cfg.orthogonalize,
+                    )
+                    if isinstance(scores, tuple):
+                        scores = scores[0]
+                    today_scores = scores.filter(
+                        pl.col("trade_date").cast(pl.Utf8) <= str(trade_date)[:10]
+                    )
+                    if not today_scores.is_empty():
+                        latest = today_scores["trade_date"].max()
+                        today_scores = today_scores.filter(pl.col("trade_date") == latest).sort(
+                            "score", descending=True
+                        )
+                        today_scores = today_scores.with_columns(
+                            pl.col("score").rank(descending=True).cast(pl.Int64).alias("rank")
+                        )
+                        strategy = MultiFactorStrategy.from_today_scores(
+                            run.strategy_id, today_scores, top_n=cfg.max_positions
+                        )
+                        signals = strategy.generate_signals(str(trade_date)[:10])
+                if signals is None:
+                    strategy = registry.get(run.strategy_id)
+                    today = date.fromisoformat(trade_date)
+                    signals = strategy.generate_signals(today)
             else:
                 from qp.strategy.simple_rank import SimpleRankStrategy
 

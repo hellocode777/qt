@@ -427,6 +427,93 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
+    # ── Job 4.5: paper trading daily advance (18:05 on weekdays) ──
+    def job_paper_trading() -> None:
+        """Advance all active paper trading runs by one trading day.
+
+        For each incomplete run in data/paper_trading/*_paper.json:
+          1. Load latest market prices (same source as daily_pipeline).
+          2. run_day() → execute that day's trades against real prices.
+          3. When a run reaches 30 days, auto-evaluate:
+             PASS → lifecycle SHADOW_PRODUCTION (paper_trading_checks
+                    gate / human review continues to APPROVED per Rule 11)
+             FAIL → lifecycle RESEARCH.
+        """
+        with job_log_sink("paper_trading"):
+            from pathlib import Path
+
+            from qp.pipeline.daily_pipeline import _load_price_data
+            from qp.shared.types import StrategyLifecycle
+            from qp.simulation.paper_trading import PaperTradingTracker
+            from qp.strategy.registry import StrategyRegistry
+
+            _, flat_prices = _load_price_data()
+            if flat_prices.is_empty():
+                print("[scheduler] paper_trading: no price data, skipping")
+                watchdog_ping("paper_trading")
+                return
+
+            latest_date = str(flat_prices["trade_date"].max())
+            tracker = PaperTradingTracker()
+            state_dir = Path("data/paper_trading")
+
+            runs = []
+            for state_file in state_dir.glob("*_paper.json"):
+                strategy_id = state_file.name[: -len("_paper.json")]
+                run = tracker.load(strategy_id)
+                if run is not None and not run.is_complete:
+                    runs.append(run)
+            if not runs:
+                print("[scheduler] paper_trading: no active runs")
+                watchdog_ping("paper_trading")
+                return
+
+            registry = StrategyRegistry()
+            for run in runs:
+                # Idempotency guard: skip if this trading day was already
+                # recorded (e.g. scheduler restarts, manual + cron overlap).
+                if run.daily_records and str(run.daily_records[-1].date) >= latest_date:
+                    print(
+                        f"[scheduler] paper_trading: {run.strategy_id} "
+                        f"already at {latest_date}, skip"
+                    )
+                    continue
+                try:
+                    tracker.run_day(run, latest_date, flat_prices)
+                    print(
+                        f"[scheduler] paper_trading: {run.strategy_id} "
+                        f"day {run.elapsed_days}/30 equity={run.current_equity:,.0f}"
+                    )
+                    # Auto-evaluate on completion
+                    if run.is_complete:
+                        result = tracker.evaluate(run)
+                        if result.passed:
+                            registry.set_lifecycle(
+                                run.strategy_id, StrategyLifecycle.SHADOW_PRODUCTION
+                            )
+                            print(
+                                f"[scheduler] paper_trading: {run.strategy_id} PASSED → "
+                                f"SHADOW_PRODUCTION ({result.recommendation})"
+                            )
+                        else:
+                            registry.set_lifecycle(run.strategy_id, StrategyLifecycle.RESEARCH)
+                            print(
+                                f"[scheduler] paper_trading: {run.strategy_id} FAILED → "
+                                f"RESEARCH ({result.recommendation})"
+                            )
+                except Exception as exc:
+                    print(f"[scheduler] paper_trading: {run.strategy_id} error: {exc}")
+
+            watchdog_ping("paper_trading")
+
+    scheduler.add_job(
+        Job(
+            name="paper_trading",
+            task=job_paper_trading,
+            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="5"),
+        )
+    )
+
     # ── Job 5: email decision report (18:03 on weekdays) ──
     def job_email_report() -> None:
         """Send today's DecisionPackage as email after daily_pipeline completes."""
