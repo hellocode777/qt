@@ -63,7 +63,7 @@
 | generator.py / loader.py | 信号生成/加载 |
 | quality_filter.py / market_filter.py / market_regime.py | 质量/市场过滤、regime |
 | factor_composite.py / factor_layers.py / regime_ensemble.py / aggregator.py | 因子合成/分层/集成 |
-| ensemble/ | 策略融合（Step 9） |
+| ensemble/ | 策略融合（Step 9：等权合成全部 APPROVED 策略信号，N=1 直通） |
 | paper_trading.py | Paper Trading（Rule 11） |
 | models/ / signal/ / runner/ | 模型/信号/运行器 |
 

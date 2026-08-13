@@ -42,7 +42,7 @@
   2. Step 5 regime 检测 → 决定 `effective_top_n`
   3. **Step 6 选策略（ADR-031 Policy A）**：只选 `lifecycle == APPROVED`（registry.get_lifecycle）；无 APPROVED → 跳过+警告，**不回退 research**；权重读 `registry.get_approved(id)` 冻结快照（不读 meta）；调 `compute_today_signals()` 只算今日分数（O(stocks)）
   4. **Step 8 出信号**：逐策略 `strategy.generate_signals(today)` → 返回 `[symbol, raw_score, rank]`（已 top-N 过滤）→ Step 8.5 StrategyHealthLogger 记健康度
-  5. **Step 9 融合**：EnsembleEngine 等权融合多策略（FILL_ZERO 宇宙）
+  5. **Step 9 融合**：EnsembleEngine 等权融合 Step 6 选出的全部 APPROVED 策略信号（FILL_ZERO 宇宙）；策略集大小 = 当时 APPROVED 数量（N=1 时等效直通，N≥2 时等权合成）
   6. Step 10 风控/退出（止损 -7% / 止盈 / 回撤 20% / 行业超配 / 基本面恶化）→ Step 10.5 存信号快照到 `data/monitoring/online_signal_history.parquet` → Step 11 成本 → Step 12 资金分配（仅调仓日）
   7. **Step 13** DecisionPackage → `data/decisions/` → **Step 13.1 ShadowLedger.run_daily(today)** 模拟盘（假钱按决策包数量建仓，无 SELL 即持有，当日市值 mark-to-market）
 - ⚠️ 生产读冻结快照 `registry.get_approved(id)`，不读可变 meta（410dd8a）
@@ -76,12 +76,14 @@
 
 ### qp paper start <strategy_id>
 - 入口：`commands/paper.py` → `qp/strategy/paper_trading.py` + `qp/simulation/broker.py`
+- 机制：30 天周期验证**策略本身**（跟策略自选信号走，不经决策包/风控）；首日建仓 top-N，之后每周调仓，持仓跨日持久化
+- 自动推进：scheduler job `paper_trading`（工作日 18:05）对每个未完成 run 调 `run_day()`；30 天满自动 evaluate（Sharpe≥0.5 / MaxDD≤20% / 信号数 3-30）→ PASS=SHADOW_PRODUCTION / FAIL=RESEARCH
 - ⚠️ CLI 只校验已注册策略，不自动注册（否则污染 strategy_registry.json）
-- 状态文件固定 `data/paper_trading/{strategy_id}_paper.json`——回放验证会覆盖真实 run，验证完记得重启
+- ⚠️ 状态文件固定 `data/paper_trading/{strategy_id}_paper.json`——回放验证会覆盖真实 run，验证完记得重启
 
 ### qp scheduler（systemd 管理）
 - 服务：`qp-scheduler.service`，ExecStart=`python -m qp.platform.cli.main scheduler start`，Restart=always RestartSec=30
-- 5 个工作日 job：monitor_check 09:07 / retrain_notify 09:17 / pre_close_check 16:53 / daily_pipeline 18:00 / email_report 18:30
+- 6 个工作日 job：monitor_check 09:07 / retrain_notify 09:17 / pre_close_check 16:53 / daily_pipeline 18:00 / paper_trading 18:05 / email_report 18:30
 - 重启：sudo 或 `kill -TERM <MainPID>` 等 30s 自动拉起；**勿绕过 systemd 起第二实例**
 
 ## 查命令细节的方法

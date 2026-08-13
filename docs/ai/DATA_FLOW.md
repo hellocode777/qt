@@ -24,7 +24,7 @@ data/dataset/    ★ Gold Data Product（唯一公开接口）
 qp/research/     因子计算（factor_calculator/processor）→ 特征 → 标签 → 模型（LightGBM，Purged KFold）
   ▼  validation gate（qp/validation/，ADR-023/025/031：只放行 APPROVED）
 qp/strategy/     信号生成（compute_today_signals → generate_signals）
-  ▼  ensemble 融合
+  ▼  ensemble 融合（等权合成 Step 6 选出的全部 APPROVED 策略信号，N=1 等效直通）
 qp/portfolio/    组合构建 + 风控 + 资金分配（ADR-029：risk 归 portfolio）
   ▼
 qp/decision/     DecisionPackage → data/decisions/
