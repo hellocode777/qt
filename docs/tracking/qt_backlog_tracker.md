@@ -95,7 +95,7 @@
 - **报告**: Obsidian `技术深挖/跌停博弈微观结构研究-20260813.md` + skill reference `alpha-decay-r1-r5-study.md` R6 节
 - **生产含义**: mvF 维持原版；交互项 w≈0.05 仍最有希望；反转 Alpha 容量结构性收缩
 - [x] 全部完成（s1/s2/s3 + 报告 + skill 沉淀）
-- [ ] Future Work: join fundamentals 验证「跌停股更多基本面差/退市风险」
+- [x] Future Work: join fundamentals 验证「跌停股更多基本面差/退市风险」 → ✅ 2026-08-13：相对恶化扩大但全市场同期也恶化（confounder），部分支持
 
 ---
 
