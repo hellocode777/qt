@@ -22,7 +22,7 @@ Project
 │   ├── developer_guide.md             ✅ 已存在（511 行，8/1）
 │   ├── api.md                         ✅ 已存在（435 行，8/1）
 │   │
-│   ├── adr/                           ⚠️ 33 份，但 ADR-001~030 为 0 字节空占位（后续补全）
+│   ├── adr/                           ✅ 33 份完整（ADR-001~030 于 2026-08-13 从 dp.md 补全）
 │   ├── tdr/                           ✅ 完整（10 份）
 │   ├── architecture/                  ✅ 完整（DP-001 ~ DP-010）
 │   ├── constitution/                  ✅ 完整（v4.2）
