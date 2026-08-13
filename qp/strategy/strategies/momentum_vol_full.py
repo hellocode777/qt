@@ -243,6 +243,49 @@ MOMENTUM_VOL_FULL_CONFIG = register_config(
 
 
 # ------------------------------------------------------------------
+# 实验配置: Volume_Trend_10D 替换候选 (2026-08-13, 因子失效诊断 #5)
+#   Volume_Trend_10D ic_30d=0.000 (最弱因子) → 替换测试
+#   候选1: Volume_Expansion_20_120 (+1, 量能扩张=机构关注, volume.py:154)
+#   候选2: Amount_Momentum_20_120  (+1, 金额趋势=资金流确认, volume.py:155)
+#   权重沿用被替换因子的 -0.14 (方向翻转, 反向语义保留)
+# ------------------------------------------------------------------
+
+MVF_V2_EXPANSION_WEIGHTS: dict[str, float] = {
+    "Amplitude_5D": -0.25,
+    "Volatility_20D": +0.22,
+    "Momentum_3M": -0.20,
+    "Volume_Concentration": -0.19,
+    "Volume_Expansion_20_120": -0.14,  # 替换 Volume_Trend_10D (方向按 -1 反向)
+}
+
+MVF_V2_AMOUNT_WEIGHTS: dict[str, float] = {
+    "Amplitude_5D": -0.25,
+    "Volatility_20D": +0.22,
+    "Momentum_3M": -0.20,
+    "Volume_Concentration": -0.19,
+    "Amount_Momentum_20_120": -0.14,  # 替换 Volume_Trend_10D (方向按 -1 反向)
+}
+
+def _make_mvf_v2_config(name: str, display: str, factors: dict) -> StrategyConfig:
+    """Factory: momentum_vol_full 克隆 + 因子替换."""
+    base = MOMENTUM_VOL_FULL_CONFIG
+    import copy
+
+    c = copy.deepcopy(base)
+    c.name = name
+    c.display_name = display
+    c.factors = dict(factors)
+    return c
+
+MVF_V2_EXPANSION = register_config(
+    _make_mvf_v2_config("mvf_v2_expansion", "mvF v2 (量能扩张替换)", MVF_V2_EXPANSION_WEIGHTS)
+)
+MVF_V2_AMOUNT = register_config(
+    _make_mvf_v2_config("mvf_v2_amount", "mvF v2 (金额动量替换)", MVF_V2_AMOUNT_WEIGHTS)
+)
+
+
+# ------------------------------------------------------------------
 # 主运行函数
 # ------------------------------------------------------------------
 

@@ -125,6 +125,7 @@ class MultiFactorPipeline(BasePipeline):
         skip_gate: bool = params.get("skip_gate", False)
         model_mode: bool = params.get("model_mode", False)
         score_band: str | None = params.get("score_band", None)  # e.g. "60-80" = Q4 only
+        max_stocks: int = int(params.get("max_stocks", 0))  # 0 = all (memory guard)
 
         # ── Strategy mode ──
         use_full_strategy = strategy_name in (
@@ -140,6 +141,8 @@ class MultiFactorPipeline(BasePipeline):
             "lvr_vol_conc",
             "lvr_vol_mom",
             "lvr_vol_all_rev",
+            "mvf_v2_expansion",
+            "mvf_v2_amount",
             "alpha_multi_factor_v1",
             "alpha_multi_factor_v2",
             "alpha_ensemble_v2",
@@ -198,7 +201,9 @@ class MultiFactorPipeline(BasePipeline):
                 price_data = self._load_snapshot(data_snapshot, symbols, fetch_start, end_date_str)
                 logger.info("   📸 从实验快照加载: {}", data_snapshot)
             else:
-                price_data = self._fetch_data(symbols, fetch_start, end_date_str, dataset)
+                price_data = self._fetch_data(
+                    symbols, fetch_start, end_date_str, dataset, max_stocks=max_stocks
+                )
         except Exception as e:
             logger.error("数据获取失败: {}", e)
             result.status = PipelineStatus.FAILED
@@ -1176,11 +1181,20 @@ class MultiFactorPipeline(BasePipeline):
         start: str,
         end: str,
         dataset: str = "daily_price_main",
+        max_stocks: int = 0,
     ) -> dict[str, pl.DataFrame]:
         """Load from Gold dataset (CLAUDE.md: consumers read from Registry or parquet).
 
         The Gold tier is already ETL-cleaned, Contract-validated, and
         Universe-filtered. No additional processing needed.
+
+        Args:
+            symbols: explicit symbol list (empty = all stocks in dataset)
+            start: start date (inclusive)
+            end: end date (inclusive)
+            dataset: Gold dataset name
+            max_stocks: random-sample N stocks to bound memory (0 = all).
+                Deterministic via DEFAULT_SEED so experiments are reproducible.
         """
 
         # Resolve Gold path: try DatasetRegistry first, fallback to glob latest parquet
@@ -1239,6 +1253,24 @@ class MultiFactorPipeline(BasePipeline):
         if symbols:
             symbol_set = set(symbols)
             df_all = df_all.filter(pl.col("symbol").is_in(symbol_set))
+
+        # Random-sample N stocks to bound memory (deterministic via DEFAULT_SEED)
+        if max_stocks > 0:
+            from qp.shared.constants.seed import DEFAULT_SEED
+
+            unique_symbols = df_all["symbol"].unique().to_list()
+            if len(unique_symbols) > max_stocks:
+                import random
+
+                rng = random.Random(DEFAULT_SEED)  # noqa: S311 — 抽样非加密用途，seed 固定保证可复现
+                sample_codes = rng.sample(sorted(unique_symbols), max_stocks)
+                df_all = df_all.filter(pl.col("symbol").is_in(sample_codes))
+                logger.info(
+                    "    🎲 抽样 {} 只 (共 {} 只, seed={}) 控制内存",
+                    max_stocks,
+                    len(unique_symbols),
+                    DEFAULT_SEED,
+                )
 
         if df_all.is_empty():
             logger.warning("    数据为空")

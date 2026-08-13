@@ -347,6 +347,11 @@ def cmd_experiment_run() -> int:
         elif arg == "--score-band" and i + 1 < len(args):
             i += 1
             params["score_band"] = args[i]
+        elif arg.startswith("--max-stocks="):
+            params["max_stocks"] = int(arg.split("=", 1)[1])
+        elif arg == "--max-stocks" and i + 1 < len(args):
+            i += 1
+            params["max_stocks"] = int(args[i])
         i += 1
 
     # Check if comma-separated strategy list for batch run
@@ -700,6 +705,10 @@ def cmd_experiment_optuna() -> int:
             "    --timeout SECONDS          Search timeout (default: no timeout)", file=sys.stderr
         )
         print("    --seed N                   Random seed (default 42)", file=sys.stderr)
+        print(
+            "    --max-stocks N             Random sample N stocks (memory guard, default all)",
+            file=sys.stderr,
+        )
         return 1
 
     from datetime import date as _date
@@ -719,6 +728,7 @@ def cmd_experiment_optuna() -> int:
     train_window = 252
     timeout = 0.0
     seed = 42
+    max_stocks = 0  # 0 = all; >0 = random sample (memory guard for cgroup OOM)
 
     i = 0
     while i < len(args):
@@ -768,6 +778,11 @@ def cmd_experiment_optuna() -> int:
         elif arg == "--seed" and i + 1 < len(args):
             i += 1
             seed = int(args[i])
+        elif arg.startswith("--max-stocks="):
+            max_stocks = int(arg.split("=", 1)[1])
+        elif arg == "--max-stocks" and i + 1 < len(args):
+            i += 1
+            max_stocks = int(args[i])
         i += 1
 
     # ── 1. Load price data ──
@@ -786,6 +801,15 @@ def cmd_experiment_optuna() -> int:
         return 1
     total_rows = sum(df.height for df in price_data.values())
     print(f"   {len(price_data)} 只股票, {total_rows} 行日线数据")
+
+    # ── 1b. Random sample (memory guard for cgroup OOM) ──
+    if max_stocks > 0 and len(price_data) > max_stocks:
+        import random
+
+        rng = random.Random(seed)  # noqa: S311 — 抽样非加密用途，seed 固定保证可复现
+        sample_codes = rng.sample(sorted(price_data.keys()), max_stocks)
+        price_data = {c: price_data[c] for c in sample_codes}
+        print(f"   🎲 抽样 {max_stocks} 只股票 (seed={seed}) — 控制内存")
 
     # ── 2. Compute raw factors ──
     print("🧮 计算原始因子...")
