@@ -291,6 +291,24 @@ def compute_cross_sectional_scores(
     cache_used = not live_mode and _load_raw_factors_from_cache(all_raw, price_factor_names, logger)
     if cache_used:
         total_stocks = 0  # skip the loop below
+        # CRITICAL: cache loads the FULL market universe, but price_data may
+        # have been quality-filtered. Restrict cached raw factors to the
+        # filtered universe so cache hits don't bypass quality_filter.
+        if price_data:
+            valid_codes = set(price_data.keys())
+            filtered_raw: dict[str, dict[str, dict[str, float]]] = {}
+            for d, syms in all_raw.items():
+                kept = {s: f for s, f in syms.items() if s in valid_codes}
+                if kept:
+                    filtered_raw[d] = kept
+            dropped_syms = len(set().union(*[set(s.keys()) for s in all_raw.values()])) - len(
+                valid_codes
+            )
+            if dropped_syms > 0:
+                logger.info(
+                    "🧹 缓存命中后按质量过滤 universe 裁剪: 剔除 {} 只", max(dropped_syms, 0)
+                )
+            all_raw = filtered_raw
 
     for stock_idx, (code, df) in enumerate(price_data.items()):
         if total_stocks == 0:
