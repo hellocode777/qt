@@ -372,10 +372,12 @@ class DailyPipeline(BasePipeline):
             # O(stocks × dates)).  Full historical factor computation belongs
             # in the experiment phase.
             #
-            # TODO: auto-discover validated strategies from ExperimentTracker
-            #       (ExperimentTracker.list_experiments() → filter by status=completed
-            #        → extract strategy_name from config).  For now, hardcode
-            #        the primary validated strategy.
+            # Strategy auto-discovery (implemented): experiments that pass the
+            # validation gate auto-register with the StrategyRegistry
+            # (multifactor_pipeline._record_experiment).  Manual approval
+            # (qp strategy approve) promotes a strategy to APPROVED; the daily
+            # pipeline discovers APPROVED strategies from the Registry below —
+            # no hardcoding.  See ADR-031 + docs/workflow.md §3.
             registry = StrategyRegistry()
             registered_ids: list[str] = []
 
