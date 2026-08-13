@@ -266,6 +266,7 @@ MVF_V2_AMOUNT_WEIGHTS: dict[str, float] = {
     "Amount_Momentum_20_120": -0.14,  # 替换 Volume_Trend_10D (方向按 -1 反向)
 }
 
+
 def _make_mvf_v2_config(name: str, display: str, factors: dict) -> StrategyConfig:
     """Factory: momentum_vol_full 克隆 + 因子替换."""
     base = MOMENTUM_VOL_FULL_CONFIG
@@ -276,6 +277,7 @@ def _make_mvf_v2_config(name: str, display: str, factors: dict) -> StrategyConfi
     c.display_name = display
     c.factors = dict(factors)
     return c
+
 
 MVF_V2_EXPANSION = register_config(
     _make_mvf_v2_config("mvf_v2_expansion", "mvF v2 (量能扩张替换)", MVF_V2_EXPANSION_WEIGHTS)
