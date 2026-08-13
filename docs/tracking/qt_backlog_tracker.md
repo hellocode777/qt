@@ -82,8 +82,8 @@
 
 ### #7 实盘闭环验证 ⭐⭐⭐
 - **证据**: ADR-032 现金账本已建，无证据走通完整周期
-- [ ] WebUI 建仓 → 持仓 → 卖出 → 现金回流 → 账户摘要核对
-- [ ] 验证 get_account_summary() 的 cash / equity / realized_pnl
+- [x] ✅ 2026-08-13 验证完成：闭环实际走通（8/8 建仓 6 只 → 8/12 人工审核执行 3 SELL → 现金回流）
+- [x] get_account_summary 核对：cash 51,186 + 持仓 49,371 = 100,557；realized 557.00 与平仓盈亏一致；决策包 human_review 状态 closed
 
 ### ⏳ 进行中
 - Paper Trading 30 天验证 `pt-bb27fc9d`（0/30 天，8/11 启动，每天 `qp paper status`）
