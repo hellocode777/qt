@@ -7,6 +7,7 @@ Per docs/7_Portfolio_Risk_Layer.md §第四部分 "CVaR":
 Methods:
   - historical: average of returns below VaR threshold
   - parametric: closed-form for normal distribution
+  - bootstrap: cross-sectional day resampling (preserves correlation & fat tails)
 
 Usage:
     from qp.portfolio.budget import CVaRBudget
@@ -39,8 +40,10 @@ class CVaRBudget:
     """
 
     confidence: float = 0.95
-    method: str = "historical"
+    method: str = "bootstrap"
     max_single_cvar_pct: float = 0.15
+    n_boot: int = 5_000  # bootstrap 重采样次数（method="bootstrap"）
+    seed: int = 42
 
     # ------------------------------------------------------------------
     # Core CVaR computation
@@ -95,7 +98,7 @@ class CVaRBudget:
                 mu = float(ret_arr.mean())
                 sigma = float(ret_arr.std(ddof=1))
                 cvar_pct = self._parametric_cvar(mu, sigma)
-            else:
+            else:  # historical / bootstrap: 单股用历史分位数（不引入正态假设）
                 cvar_pct = self._historical_cvar(ret_arr)
 
             wt = weights.get(sym, 0.0)
@@ -108,7 +111,22 @@ class CVaRBudget:
         if n >= 2:
             # Build portfolio return series
             ret_matrix = self._build_return_matrix(returns, symbols)
-            if ret_matrix is not None and ret_matrix.shape[0] >= 30:
+            if self.method == "bootstrap":
+                # Cross-sectional day resampling — preserves correlation & fat tails
+                w_arr = np.array([weights.get(s, 0.0) for s in symbols])
+                port_rets = self._bootstrap_portfolio_returns(ret_matrix, w_arr)
+                if port_rets is not None and len(port_rets) > 0:
+                    portfolio_cvar_pct = self._historical_cvar(port_rets)
+                else:
+                    portfolio_cvar_pct = float(
+                        np.sqrt(
+                            sum(
+                                (per_stock_cvar_pct.get(s, 0.0) * weights.get(s, 0.0)) ** 2
+                                for s in symbols
+                            )
+                        )
+                    )
+            elif ret_matrix is not None and ret_matrix.shape[0] >= 30:
                 w_arr = np.array([weights.get(s, 0.0) for s in symbols])
                 port_rets = ret_matrix @ w_arr
                 if self.method == "parametric":
@@ -214,23 +232,27 @@ class CVaRBudget:
         return float(-tail.mean())
 
     def _parametric_cvar(self, mu: float, sigma: float) -> float:
-        """Parametric CVaR for normal distribution."""
+        """Parametric CVaR for normal distribution (loss-positive convention).
+
+        ES = μ - σ·φ(z_α)/α in return space (α = tail probability,
+        z_α = Φ⁻¹(α), φ = standard normal density).
+        CVaR (loss positive) = -ES = -μ + σ·φ(z_α)/α.
+        """
         from scipy.stats import norm
 
         alpha = 1.0 - self.confidence
         z = norm.ppf(alpha)
-        # CVaR = -(μ + σ * φ(z) / (1-α))
         phi_z = norm.pdf(z)
-        return float(-(mu + sigma * phi_z / (1.0 - self.confidence)))
+        return float(-mu + sigma * phi_z / alpha)
 
     def _cvar_from_vol(self, daily_vol: float) -> float:
-        """Approximate CVaR from daily vol (normal assumption)."""
+        """Approximate CVaR from daily vol (normal assumption, μ≈0)."""
         from scipy.stats import norm
 
         alpha = 1.0 - self.confidence
         z = norm.ppf(alpha)
         phi_z = norm.pdf(z)
-        return float(daily_vol * phi_z / (1.0 - self.confidence))
+        return float(daily_vol * phi_z / alpha)
 
     @staticmethod
     def _build_return_matrix(
@@ -252,3 +274,35 @@ class CVaRBudget:
             return None
 
         return wide.select(cols).to_numpy()
+
+    def _bootstrap_portfolio_returns(
+        self,
+        ret_matrix: np.ndarray | None,
+        w_arr: np.ndarray,
+    ) -> np.ndarray | None:
+        """Resample whole trading days (rows) with replacement → portfolio returns.
+
+        Key idea: draw complete cross-sectional rows, so correlation between
+        symbols is preserved. Missing days per symbol are treated as flat (0).
+
+        Args:
+            ret_matrix: T×N return matrix (T days, N symbols).
+            w_arr: N-length weight vector (aligned to matrix columns).
+
+        Returns:
+            Array of n_boot resampled portfolio returns (T×1 weighted sums),
+            or None if the matrix is unusable.
+        """
+        if ret_matrix is None or ret_matrix.shape[0] < 30 or len(w_arr) != ret_matrix.shape[1]:
+            return None
+
+        mat = np.nan_to_num(ret_matrix, nan=0.0)
+        w = w_arr.astype(float)
+        w_sum = w.sum()
+        if w_sum <= 0:
+            return None
+        w = w / w_sum
+
+        rng = np.random.default_rng(self.seed)
+        idx = rng.integers(0, mat.shape[0], size=self.n_boot)
+        return mat[idx, :] @ w

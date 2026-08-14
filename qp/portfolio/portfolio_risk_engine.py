@@ -83,6 +83,13 @@ class RiskEngineConfig:
     enable_beta_check: bool = False
     enable_st_check: bool = True
     lookback: int = 60
+    # VaR-based risk budget (Layer 7 §4, bootstrap method preserves correlation & fat tails)
+    enable_var_budget: bool = True
+    var_confidence: float = 0.95
+    var_max_single_pct: float = 0.15  # 单仓 VaR 贡献 ≤ 15% 组合 VaR
+    var_n_boot: int = 5_000
+    # 分散化有效性阈值：组合VaR/平均单股VaR 超过此值视为"伪分散"→ 压缩权重
+    var_diversification_threshold: float = 0.75
 
 
 # ------------------------------------------------------------------
@@ -367,10 +374,13 @@ class PortfolioRiskEngine:
         candidates: list[RiskApprovedCandidate],
         prices: pl.DataFrame,
     ) -> list[RiskApprovedCandidate]:
-        """Apply volatility-based risk budgeting.
+        """Apply risk budgeting (inverse volatility + optional VaR overlay).
 
         Inverse volatility: lower vol → higher weight budget.
         Higher vol → tighter weight cap.
+        VaR overlay (bootstrap): cap each position so its VaR contribution
+        stays ≤ var_max_single_pct of portfolio VaR. Bootstrap preserves
+        cross-sectional correlation & fat tails (see scripts/research/).
         """
         passed = [c for c in candidates if c.pass_status]
         if not passed:
@@ -380,6 +390,46 @@ class PortfolioRiskEngine:
         n = max(len(passed), 1)
         target_vol_per_position = self.config.annual_vol_target / n
 
+        # VaR-based diversification overlay (bootstrap method)
+        # Key insight: vol budget only sees per-stock vol, not cross-sectional
+        # correlation. Two perfectly correlated banks pass the vol budget at
+        # full weight, yet the portfolio is "fake diversified". We measure
+        # portfolio VaR (bootstrap, correlation-preserving) vs average
+        # single-stock VaR; a ratio above threshold → scale down all caps.
+        var_scale: float = 1.0
+        if self.config.enable_var_budget and len(passed) >= 2:
+            try:
+                from qp.portfolio.budget import VaRBudget
+
+                symbols = [c.symbol for c in passed]
+                returns = self._to_returns_frame(prices, symbols)
+                n = len(symbols)
+                eq_weights = dict.fromkeys(symbols, 1.0 / n)
+
+                var_budget = VaRBudget(
+                    method="bootstrap",
+                    confidence=self.config.var_confidence,
+                    n_boot=self.config.var_n_boot,
+                )
+                port_var = var_budget._bootstrap_portfolio_var(returns, symbols, eq_weights)
+                # Average single-stock VaR (historical percentile, no normality)
+                avg_stock_var = np.mean(
+                    [
+                        var_budget._historical_var(
+                            returns.filter(pl.col("symbol") == s)["ret"].drop_nulls().to_numpy()
+                        )
+                        for s in symbols
+                    ]
+                )
+                if port_var > 0 and avg_stock_var > 0:
+                    ratio = port_var / avg_stock_var
+                    thr = self.config.var_diversification_threshold
+                    if ratio > thr:
+                        var_scale = thr / ratio
+            except Exception:
+                # Never let VaR overlay break the pipeline — fall back to vol-only budget
+                var_scale = 1.0
+
         for c in candidates:
             if c.risk_volatility > 0:
                 # Weight needed to achieve target vol from this position
@@ -388,7 +438,30 @@ class PortfolioRiskEngine:
                 c.max_weight_limit = min(c.max_weight_limit, vol_budget_wt)
                 c.max_weight_limit = round(max(c.max_weight_limit, 0.0), 4)
 
+            # VaR overlay: if portfolio is "fake diversified" (high correlation),
+            # scale every position down proportionally.
+            if var_scale < 1.0:
+                c.max_weight_limit *= var_scale
+                c.max_weight_limit = round(max(c.max_weight_limit, 0.0), 4)
+
         return candidates
+
+    @staticmethod
+    def _to_returns_frame(
+        prices: pl.DataFrame,
+        symbols: list[str],
+    ) -> pl.DataFrame:
+        """Build [trade_date, symbol, ret] long frame from price data."""
+        if prices.is_empty() or "close" not in prices.columns:
+            return pl.DataFrame(
+                {"trade_date": [], "symbol": [], "ret": []},
+                schema={"trade_date": pl.Utf8, "symbol": pl.Utf8, "ret": pl.Float64},
+            )
+        px = prices.filter(pl.col("symbol").is_in(symbols)).sort(["symbol", "trade_date"])
+        px = px.with_columns(
+            (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1).alias("ret")
+        )
+        return px.drop_nulls(subset=["ret"]).select(["trade_date", "symbol", "ret"])
 
     # ------------------------------------------------------------------
     # Convenience: evaluate from AlphaSignalBatch

@@ -7,12 +7,14 @@ Per docs/7_Portfolio_Risk_Layer.md §第四部分 "VaR":
 Methods:
   - historical: empirical VaR from historical returns
   - parametric: VaR = μ - z_α * σ (assumes normality)
+  - bootstrap: portfolio VaR via cross-sectional day resampling
+    (preserves correlation & fat tails; per-stock VaR stays historical)
 
 Usage:
     from qp.portfolio.budget import VaRBudget
 
-    var = VaRBudget(method="historical", confidence=0.95)
-    result = var.allocate(returns_data, symbols, total_capital=100_000)
+    var = VaRBudget(method="bootstrap", confidence=0.95)
+    result = var.compute_var(returns_data, symbols, total_capital=100_000)
     # → per-symbol VaR limits in CNY
 """
 
@@ -39,10 +41,14 @@ class VaRBudget:
         target_annual_vol: Target portfolio annualized vol for scaling.
     """
 
-    method: str = "historical"
+    method: str = (
+        "bootstrap"  # default: cross-sectional day resampling (see _bootstrap_portfolio_var)
+    )
     confidence: float = 0.95
     max_single_var_pct: float = 0.15  # Max 15% of total VaR per position
     target_annual_vol: float = 0.15
+    n_boot: int = 5_000  # bootstrap 重采样次数（method="bootstrap"）
+    seed: int = 42
 
     # ------------------------------------------------------------------
     # Main API
@@ -106,15 +112,24 @@ class VaRBudget:
             per_stock_var_pct[sym] = round(var_pct, 4)
 
         # 2. Portfolio VaR
-        portfolio_values = np.array([total_capital * weights.get(s, 0.0) for s in symbols])
-        portfolio_var = float(
-            np.sqrt(
-                sum(
-                    (per_stock_var_pct[s] * portfolio_values[i]) ** 2 for i, s in enumerate(symbols)
+        #    - bootstrap: cross-sectional day resampling (preserves correlation
+        #      and fat tails — see scripts/research/bootstrap_var_compare.py)
+        #    - fallback: sqrt sum of squares (assumes independence, overstates
+        #      diversification benefit)
+        if self.method == "bootstrap":
+            portfolio_var_pct = self._bootstrap_portfolio_var(returns, symbols, weights)
+            portfolio_var = portfolio_var_pct * total_capital if total_capital > 0 else 0.0
+        else:
+            portfolio_values = np.array([total_capital * weights.get(s, 0.0) for s in symbols])
+            portfolio_var = float(
+                np.sqrt(
+                    sum(
+                        (per_stock_var_pct[s] * portfolio_values[i]) ** 2
+                        for i, s in enumerate(symbols)
+                    )
                 )
             )
-        )
-        portfolio_var_pct = portfolio_var / total_capital if total_capital > 0 else 0.0
+            portfolio_var_pct = portfolio_var / total_capital if total_capital > 0 else 0.0
 
         # 3. VaR contributions
         var_contribs: dict[str, float] = {}
@@ -187,6 +202,73 @@ class VaRBudget:
         """Empirical VaR from historical returns."""
         alpha = 1.0 - self.confidence
         return float(-np.percentile(returns, alpha * 100))
+
+    def _bootstrap_portfolio_var(
+        self,
+        returns: pl.DataFrame,
+        symbols: list[str],
+        weights: dict[str, float],
+    ) -> float:
+        """Portfolio VaR via cross-sectional day resampling (historical bootstrap).
+
+        Key idea: resample whole trading days (all symbols together) with
+        replacement, so the simulated portfolio return distribution preserves
+        both cross-sectional correlation and fat tails. Per-stock VaR in
+        compute_var() still uses the plain historical percentile.
+
+        Args:
+            returns: DataFrame with [trade_date, symbol, ret].
+            symbols: Stock codes in the portfolio.
+            weights: {symbol: weight}.
+
+        Returns:
+            Portfolio VaR as a fraction (0.05 → 5% loss at confidence level).
+        """
+        if not symbols or not weights:
+            return 0.0
+
+        # Pivot to a trade_date × symbol matrix.
+        wide = (
+            returns.filter(pl.col("symbol").is_in(symbols))
+            .select(["trade_date", "symbol", "ret"])
+            .pivot(on="symbol", index="trade_date", values="ret")
+        )
+        if wide.height < 30:
+            # Not enough history — fall back to independence assumption.
+            alpha = 1.0 - self.confidence
+            per_stock = [
+                float(
+                    -np.percentile(
+                        returns.filter(pl.col("symbol") == s)["ret"].drop_nulls().to_numpy(),
+                        alpha * 100,
+                    )
+                )
+                for s in symbols
+            ]
+            port_var = np.sqrt(
+                sum((per_stock[i] * weights.get(s, 0.0)) ** 2 for i, s in enumerate(symbols))
+            )
+            return float(port_var)
+
+        # Build weight vector aligned to columns (all symbols present after pivot).
+        cols = [c for c in wide.columns if c != "trade_date"]
+        w = np.array([weights.get(c, 0.0) for c in cols], dtype=float)
+        w_sum = w.sum()
+        if w_sum <= 0:
+            return 0.0
+        w = w / w_sum  # renormalize to cover missing columns
+
+        mat = wide.select(cols).to_numpy().astype(float)
+        # Missing days per symbol (suspension) → treat as flat return (0).
+        mat = np.nan_to_num(mat, nan=0.0)
+
+        rng = np.random.default_rng(self.seed)
+        idx = rng.integers(0, mat.shape[0], size=self.n_boot)
+        # Portfolio return for each resampled day: weighted sum across symbols.
+        port_rets = mat[idx, :] @ w
+
+        alpha = 1.0 - self.confidence
+        return float(-np.percentile(port_rets, alpha * 100))
 
     def _parametric_var(self, mu: float, sigma: float) -> float:
         """Parametric VaR assuming normality."""

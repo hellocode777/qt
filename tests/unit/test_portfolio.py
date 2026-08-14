@@ -928,6 +928,165 @@ class TestPortfolioRiskEngine:
         # 4 stocks → eq=25% → Top3=75% > 45% limit
         assert any("Top3" in c.rejection_reason for c in candidates[:3])
 
+    def test_var_budget_overlay_active_by_default(self) -> None:
+        """VaR budget overlay should run by default and tighten caps."""
+        from qp.portfolio.portfolio_risk_engine import (
+            PortfolioRiskEngine,
+            RiskEngineConfig,
+        )
+
+        # Raise position limit so 5 stocks at 20% pass; VaR overlay then applies
+        config = RiskEngineConfig(
+            enable_clustering=False,
+            limits={
+                "max_single_position": 0.25,
+                "max_single_sector": 0.50,
+                "max_single_cluster": 0.50,
+                "max_top3": 0.60,
+                "max_small_cap": 1.0,
+                "max_beta": 1.5,
+                "max_st": 0.0,
+                "max_suspended": 0.0,
+            },
+        )
+        engine = PortfolioRiskEngine(config=config)
+        symbols = ["600519.SH", "300750.SZ", "601318.SH", "000002.SZ", "600276.SH"]
+        signals = pl.DataFrame(
+            {
+                "symbol": symbols,
+                "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85],
+            }
+        )
+        prices = self._make_price_data(symbols, n_days=60)
+        candidates = engine.evaluate(signals, prices)
+
+        passed = [c for c in candidates if c.pass_status]
+        assert len(passed) >= 2
+        # Every passed candidate must have a sane, positive weight cap
+        for c in passed:
+            assert c.max_weight_limit > 0.0
+            assert c.max_weight_limit <= 0.25  # within (raised) position limit
+
+    def test_var_budget_overlay_tightens_highly_correlated(self) -> None:
+        """Correlated portfolio (pairwise < threshold) → VaR overlay scales caps down.
+
+        8 stocks sharing a dominant market factor: pairwise correlation ~0.8
+        passes the 0.85 correlation check, but the portfolio is "fake
+        diversified" (ratio ≈ 0.78 > 0.75) → VaR overlay must scale down.
+        """
+        import numpy as np
+
+        from qp.portfolio.portfolio_risk_engine import (
+            PortfolioRiskEngine,
+            RiskEngineConfig,
+        )
+
+        # 8 stocks: r_i = 1.0*market + 0.5*noise_i, market dominates
+        rng = np.random.default_rng(5)
+        n_days, n_stocks = 120, 8
+        market = rng.normal(0.0005, 0.02, n_days)
+        symbols = [f"S{i:03d}.SH" for i in range(n_stocks)]
+        rows: list[dict] = []
+        for sym in symbols:
+            noise = rng.normal(0.0, 0.01, n_days)
+            px = 100.0
+            for d in range(n_days):
+                px *= 1 + market[d] + noise[d]
+                rows.append(
+                    {
+                        "trade_date": f"2026-04-{d + 1:03d}",
+                        "symbol": sym,
+                        "close": px,
+                        "volume": 1e8,
+                    }
+                )
+        prices = pl.DataFrame(rows)
+
+        config = RiskEngineConfig(
+            enable_clustering=False,
+            limits={
+                "max_single_position": 0.50,
+                "max_single_sector": 1.0,  # 虚构代码同属 Other，禁用行业约束
+                "max_single_cluster": 0.50,
+                "max_top3": 0.60,
+                "max_small_cap": 1.0,
+                "max_beta": 1.5,
+                "max_st": 0.0,
+                "max_suspended": 0.0,
+            },
+        )
+        engine_var = PortfolioRiskEngine(config=config)
+        engine_vol = PortfolioRiskEngine(
+            config=RiskEngineConfig(
+                enable_clustering=False,
+                enable_var_budget=False,
+                limits=config.limits,
+            )
+        )
+
+        signals = pl.DataFrame(
+            {"symbol": symbols, "alpha_score": np.linspace(0.95, 0.60, n_stocks)}
+        )
+
+        with_var = engine_var.evaluate(signals, prices)
+        without_var = engine_vol.evaluate(signals, prices)
+
+        var_caps = {c.symbol: c.max_weight_limit for c in with_var if c.pass_status}
+        vol_caps = {c.symbol: c.max_weight_limit for c in without_var if c.pass_status}
+
+        # The correlated portfolio must have at least some passed names,
+        # and VaR overlay must scale them down vs vol-only.
+        assert len(var_caps) >= 2, f"expected ≥2 passed, got {len(var_caps)}"
+        for s in var_caps:
+            assert var_caps[s] < vol_caps[s], (
+                f"{s}: VaR overlay ({var_caps[s]:.4f}) must be strictly below "
+                f"vol-only budget ({vol_caps[s]:.4f})"
+            )
+            assert var_caps[s] > 0.0
+
+    def test_var_budget_overlay_does_not_shrink_diversified(self) -> None:
+        """Low-correlation portfolio → VaR overlay leaves caps unchanged."""
+        from qp.portfolio.portfolio_risk_engine import (
+            PortfolioRiskEngine,
+            RiskEngineConfig,
+        )
+
+        config = RiskEngineConfig(
+            enable_clustering=False,
+            limits={
+                "max_single_position": 0.15,
+                "max_single_sector": 0.50,
+                "max_single_cluster": 0.50,
+                "max_top3": 0.60,
+                "max_small_cap": 1.0,
+                "max_beta": 1.5,
+                "max_st": 0.0,
+                "max_suspended": 0.0,
+            },
+        )
+        engine_var = PortfolioRiskEngine(config=config)
+        engine_vol = PortfolioRiskEngine(
+            config=RiskEngineConfig(
+                enable_clustering=False,
+                enable_var_budget=False,
+                limits=config.limits,
+            )
+        )
+
+        symbols = ["600519.SH", "300750.SZ", "601318.SH", "000002.SZ", "600276.SH"]
+        signals = pl.DataFrame({"symbol": symbols, "alpha_score": [0.95, 0.91, 0.80, 0.72, 0.85]})
+        prices = self._make_price_data(symbols, n_days=120)
+
+        with_var = engine_var.evaluate(signals, prices)
+        without_var = engine_vol.evaluate(signals, prices)
+        var_caps = {c.symbol: c.max_weight_limit for c in with_var if c.pass_status}
+        vol_caps = {c.symbol: c.max_weight_limit for c in without_var if c.pass_status}
+
+        for s in var_caps:
+            assert var_caps[s] <= vol_caps[s] + 1e-9, (
+                f"{s}: overlay must never inflate caps ({var_caps[s]:.4f} > {vol_caps[s]:.4f})"
+            )
+
 
 class TestMarketCapExposure:
     """Test market cap classification and analysis."""
@@ -1191,6 +1350,50 @@ class TestVaRBudget:
         assert len(limits) == 3
         for _s, lim in limits.items():
             assert lim > 0
+
+    def test_bootstrap_var(self) -> None:
+        from qp.portfolio.budget.var_budget import VaRBudget
+
+        var = VaRBudget(method="bootstrap", confidence=0.95, n_boot=1_000)
+        returns = self._make_returns(["A", "B", "C"])
+        result = var.compute_var(returns, ["A", "B", "C"], total_capital=100_000)
+
+        assert "portfolio_var" in result
+        assert result["portfolio_var"] > 0
+        assert result["portfolio_var_pct"] > 0
+        assert len(result["per_stock_var"]) == 3
+
+    def test_bootstrap_var_preserves_correlation(self) -> None:
+        """Two perfectly correlated stocks → portfolio VaR ≈ single-stock VaR.
+
+        The old sqrt-sum-of-squares formula would halve it; bootstrap must
+        reflect the correlation through day-level resampling.
+        """
+        import numpy as np
+
+        from qp.portfolio.budget.var_budget import VaRBudget
+
+        rng = np.random.default_rng(7)
+        n_days = 200
+        rows = []
+        # Two stocks with identical returns (perfect correlation)
+        for d in range(n_days):
+            r = float(rng.normal(0.0, 0.02))
+            rows.append({"trade_date": f"2026-01-{d + 1:03d}", "symbol": "A", "ret": r})
+            rows.append({"trade_date": f"2026-01-{d + 1:03d}", "symbol": "B", "ret": r})
+        returns = pl.DataFrame(rows)
+
+        var_boot = VaRBudget(method="bootstrap", confidence=0.95, n_boot=5_000)
+        boot_pct = var_boot._bootstrap_portfolio_var(returns, ["A", "B"], {"A": 0.5, "B": 0.5})
+
+        # Perfectly correlated 50/50 portfolio: VaR should be ~single-stock VaR
+        single_pct = var_boot._historical_var(
+            returns.filter(pl.col("symbol") == "A")["ret"].to_numpy()
+        )
+        assert abs(boot_pct - single_pct) < 0.005, (
+            f"perfectly correlated portfolio VaR {boot_pct:.4f} "
+            f"should be ≈ single-stock {single_pct:.4f}, got diff {abs(boot_pct - single_pct):.4f}"
+        )
 
 
 class TestTrimAndRefill:
@@ -1466,6 +1669,66 @@ class TestCVaRBudget:
         assert len(limits) == 3
         for _s, lim in limits.items():
             assert lim > 0
+
+    def test_bootstrap_cvar(self) -> None:
+        from qp.portfolio.budget.cvar_budget import CVaRBudget
+
+        cvar = CVaRBudget(method="bootstrap", confidence=0.95, n_boot=1_000)
+        returns = self._make_returns(["A", "B", "C"])
+        result = cvar.compute_cvar(returns, ["A", "B", "C"], total_capital=100_000)
+
+        assert "portfolio_cvar" in result
+        assert result["portfolio_cvar"] > 0
+        assert result["portfolio_cvar_pct"] > 0
+        assert len(result["per_stock_cvar"]) == 3
+        assert result["cvar_ratio"] >= 1.0  # CVaR >= VaR always
+
+    def test_bootstrap_cvar_preserves_correlation(self) -> None:
+        """Perfectly correlated stocks → portfolio CVaR ≈ single-stock CVaR."""
+        import numpy as np
+
+        from qp.portfolio.budget.cvar_budget import CVaRBudget
+
+        rng = np.random.default_rng(9)
+        n_days = 200
+        rows = []
+        for d in range(n_days):
+            r = float(rng.normal(0.0, 0.02))
+            rows.append({"trade_date": f"2026-01-{d + 1:03d}", "symbol": "A", "ret": r})
+            rows.append({"trade_date": f"2026-01-{d + 1:03d}", "symbol": "B", "ret": r})
+        returns = pl.DataFrame(rows)
+
+        cvar_boot = CVaRBudget(method="bootstrap", confidence=0.95, n_boot=5_000)
+        boot_rets = cvar_boot._bootstrap_portfolio_returns(
+            cvar_boot._build_return_matrix(returns, ["A", "B"]),
+            np.array([0.5, 0.5]),
+        )
+        assert boot_rets is not None
+        boot_pct = cvar_boot._historical_cvar(boot_rets)
+        single_pct = cvar_boot._historical_cvar(
+            returns.filter(pl.col("symbol") == "A")["ret"].to_numpy()
+        )
+        assert abs(boot_pct - single_pct) < 0.005, (
+            f"perfectly correlated portfolio CVaR {boot_pct:.4f} "
+            f"should be ≈ single-stock {single_pct:.4f}"
+        )
+
+    def test_parametric_cvar_positive_and_ge_var(self) -> None:
+        """Regression: parametric CVaR was negative due to α vs (1-α) bug.
+
+        CVaR is an expected tail loss → must be > 0 and ≥ VaR.
+        """
+        from qp.portfolio.budget.cvar_budget import CVaRBudget
+        from qp.portfolio.budget.var_budget import VaRBudget
+
+        cvar = CVaRBudget(method="parametric", confidence=0.95)
+        var = VaRBudget(method="parametric", confidence=0.95)
+
+        cvar_pct = cvar._parametric_cvar(0.0005, 0.02)
+        var_pct = var._parametric_var(0.0005, 0.02)
+
+        assert cvar_pct > 0, f"parametric CVaR must be positive, got {cvar_pct:.4f}"
+        assert cvar_pct >= var_pct, f"CVaR ({cvar_pct:.4f}) must be ≥ VaR ({var_pct:.4f})"
 
 
 class TestPositionSizer:
