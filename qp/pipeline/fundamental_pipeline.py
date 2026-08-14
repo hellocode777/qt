@@ -12,7 +12,7 @@ from pathlib import Path
 import polars as pl
 from loguru import logger
 
-from qp.data.adapter.fundamental_adapter import FundamentalAdapter
+from qp.data.fundamental.adapter import FundamentalAdapter
 from qp.data.dataset.registry import DatasetRegistry
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
@@ -51,7 +51,11 @@ class FundamentalPipeline(BasePipeline):
         try:
             logger.info("拉取基本面数据: {} 只股票", len(symbol_list))
             adapter = FundamentalAdapter()
-            raw = adapter.fetch_raw(symbols=symbol_list)
+            raw = adapter.fetch_raw(
+                date(2000, 1, 1),
+                date.today(),
+                symbols=symbol_list,
+            )
             result.metrics["raw_rows"] = len(raw)
 
             if len(raw) == 0:
