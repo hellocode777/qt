@@ -55,7 +55,7 @@ class TestFullDataPipelineRun:
 
         with (
             tempfile.TemporaryDirectory() as tmp,
-            patch("qp.data.loader.full_pipeline.AKShareAdapter") as mock_adapt,
+            patch("qp.data.loader.full_pipeline.TencentAdapter") as mock_adapt,
             patch(
                 "qp.data.loader.full_pipeline.get_main_board_codes",
                 return_value=["600519", "000001", "000002"],
@@ -105,7 +105,7 @@ class TestFullDataPipelineRun:
     def test_run_batches_by_batch_size(self) -> None:
         with (
             tempfile.TemporaryDirectory() as tmp,
-            patch("qp.data.loader.full_pipeline.AKShareAdapter") as mock_adapt,
+            patch("qp.data.loader.full_pipeline.TencentAdapter") as mock_adapt,
             patch(
                 "qp.data.loader.full_pipeline.get_main_board_codes",
                 return_value=["600519", "000001", "000002"],
@@ -146,7 +146,7 @@ class TestFullDataPipelineRun:
 
         with (
             tempfile.TemporaryDirectory() as tmp,
-            patch("qp.data.loader.full_pipeline.AKShareAdapter") as mock_adapt,
+            patch("qp.data.loader.full_pipeline.TencentAdapter") as mock_adapt,
             patch(
                 "qp.data.loader.full_pipeline.get_main_board_codes",
                 return_value=["600519", "000001", "000002"],

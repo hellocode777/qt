@@ -71,3 +71,6 @@ htmlcov/
 data/dataset/*.bak_*
 data/fundamental_cache/
 data/capital_flow_cache/
+
+# 归档数据（大文件，不进 git）
+data/archive/

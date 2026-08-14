@@ -38,8 +38,8 @@ class TestNonDemoHappyPath:
         monkeypatch.chdir(tmp_path)
         clean_df = _real_clean_df()
 
-        with patch("qp.data.adapter.sina_adapter.SinaAdapter") as mock_sina:
-            adapter = mock_sina.return_value
+        with patch("qp.data.adapter.tencent_adapter.TencentAdapter") as mock_tx:
+            adapter = mock_tx.return_value
             adapter.fetch_raw.return_value = clean_df.to_pandas()
 
             pipeline = DataPipeline()
@@ -48,7 +48,7 @@ class TestNonDemoHappyPath:
         assert result.status.value == "success"
         assert result.metrics["raw_rows"] > 0
         assert result.metrics["cleaned_rows"] > 0
-        assert result.metadata["source"] == "sina"
+        assert result.metadata["source"] == "tencent"  # 2026-08-14: 唯一数据源
         assert result.metadata["data_hash"]  # sha256 computed
 
         # Gold dataset written
@@ -81,8 +81,8 @@ class TestNonDemoHappyPath:
         existing = clean_df.with_columns(pl.lit(100.0).alias("close"))
         existing.write_parquet(out_dir / "daily_price_latest.parquet")
 
-        with patch("qp.data.adapter.sina_adapter.SinaAdapter") as mock_sina:
-            adapter = mock_sina.return_value
+        with patch("qp.data.adapter.tencent_adapter.TencentAdapter") as mock_tx:
+            adapter = mock_tx.return_value
             adapter.fetch_raw.return_value = clean_df.to_pandas()
             pipeline = DataPipeline()
             result = pipeline.run(_ctx())
@@ -101,6 +101,14 @@ class TestNonDemoHappyPath:
             result = pipeline.run(_ctx(source="tencent"))
         assert result.metadata["source"] == "tencent"
         assert result.status.value == "success"
+
+    def test_source_sina_rejected(self, tmp_path, monkeypatch) -> None:
+        """2026-08-14: 新浪路径已废弃 — 显式 --source=sina 必须 FAILED，绝不 fallback."""
+        monkeypatch.chdir(tmp_path)
+        pipeline = DataPipeline()
+        result = pipeline.run(_ctx(source="sina"))
+        assert result.status.value == "failed"
+        assert any("唯一数据源" in e or "tencent" in e for e in result.errors)
 
 
 class TestNonDemoFailures:
@@ -135,20 +143,15 @@ class TestNonDemoFailures:
         mock_sina.assert_not_called()
         assert result.status.value == "success"
 
-    def test_sina_fallback_to_tencent(self, tmp_path, monkeypatch) -> None:
-        """Sina returns empty (short span) → Tencent fallback succeeds."""
+    def test_tencent_empty_fails_no_fallback(self, tmp_path, monkeypatch) -> None:
+        """2026-08-14: 腾讯唯一源 — Tencent 返回空 → 直接 FAILED，无新浪兜底."""
         monkeypatch.chdir(tmp_path)
-        clean_df = _real_clean_df()
-        with (
-            patch("qp.data.adapter.sina_adapter.SinaAdapter") as mock_sina,
-            patch("qp.data.adapter.tencent_adapter.TencentAdapter") as mock_tx,
-        ):
-            mock_sina.return_value.fetch_raw.return_value = pd.DataFrame()
-            mock_tx.return_value.fetch_raw.return_value = clean_df.to_pandas()
+        with patch("qp.data.adapter.tencent_adapter.TencentAdapter") as mock_tx:
+            mock_tx.return_value.fetch_raw.return_value = pd.DataFrame()
             pipeline = DataPipeline()
             result = pipeline.run(_ctx())
-        assert result.metadata["source"] == "sina→tencent"
-        assert result.status.value == "success"
+        assert result.status.value == "failed"
+        assert any("0 rows" in e or "network" in e for e in result.errors)
 
 
 class TestAtomicWrite:
@@ -164,14 +167,14 @@ class TestAtomicWrite:
         sentinel.write_parquet(out_dir / "daily_price_latest.parquet")
 
         with (
-            patch("qp.data.adapter.sina_adapter.SinaAdapter") as mock_sina,
+            patch("qp.data.adapter.tencent_adapter.TencentAdapter") as mock_tx,
             # write_parquet becomes a no-op → tmp file never created → verify fails
             patch(
                 "qp.data.pipeline.pl.DataFrame.write_parquet",
                 return_value=None,
             ),
         ):
-            mock_sina.return_value.fetch_raw.return_value = clean_df.to_pandas()
+            mock_tx.return_value.fetch_raw.return_value = clean_df.to_pandas()
             pipeline = DataPipeline()
             result = pipeline.run(_ctx())
 

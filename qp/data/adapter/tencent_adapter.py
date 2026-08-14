@@ -68,6 +68,7 @@ class TencentAdapter(BaseDataSource):
 
         n_total = len(symbols)
         all_rows: list[dict] = []
+        n_failed = 0
         for i, code in enumerate(symbols):
             if i > 0:
                 time.sleep(0.3)  # avoid rate limiting (WAF blocks below ~0.2s)
@@ -76,7 +77,9 @@ class TencentAdapter(BaseDataSource):
                 rows = self._fetch_one_stock(tc, code, s_dt, e_dt)
                 all_rows.extend(rows)
             except Exception:
-                pass
+                # 只有网络/接口故障才算失败；退市/无效代码返回空是正常的
+                # （腾讯 day 空数组，如 000024 招商地产已退市）。
+                n_failed += 1
             # Progress: print every 50 stocks or at the end
             # 豁免 print() 硬规则：终端进度条（stderr + \r 刷新），logger 无法做覆盖式进度 UI
             if (i + 1) % 50 == 0 or i == n_total - 1:
@@ -87,6 +90,16 @@ class TencentAdapter(BaseDataSource):
                     end="",
                     file=__import__("sys").stderr,
                     flush=True,
+                )
+            # 腾讯是唯一数据源（2026-08-14）: 网络失败率 > 5% 说明接口异常
+            # （WAF 限流 / 网络故障），继续静默拉取只会产出空洞数据。
+            # 直接抛错退出，由上层决定重试或告警，绝不静默降级。
+            done = i + 1
+            if done >= 20 and n_failed / done > 0.05:
+                raise RuntimeError(
+                    f"Tencent fetch network failure rate {n_failed}/{done} "
+                    f"({n_failed / done:.1%}) > 5% — interface likely rate-limited "
+                    f"or blocked; aborting (唯一数据源腾讯, 无 fallback, 见 DP-002)"
                 )
 
         if not all_rows:
@@ -150,19 +163,31 @@ class TencentAdapter(BaseDataSource):
             # NO qfq suffix: `kline/kline` without adjustment returns raw `day`
             # prices. fqkline/get+qfq is BANNED (negative-price corruption bug).
             param = f"{tc},day,{seg_start},{seg_end},2000"
-            try:
-                r = requests.get(url, params={"param": param}, headers=headers, timeout=30)
-                if not r.text or not r.text.strip():
-                    continue
-                data = r.json()
-            except requests.RequestException:
-                continue
-            except ValueError:
-                # Non-JSON response
-                continue
+            # Retry transient failures (WAF / connection) up to 3 times.
+            data: dict | None = None
+            for attempt in range(3):
+                try:
+                    r = requests.get(url, params={"param": param}, headers=headers, timeout=30)
+                    if r.text and r.text.strip():
+                        data = r.json()
+                        break
+                except requests.RequestException:
+                    pass
+                except ValueError:
+                    pass
+                if attempt < 2:
+                    time.sleep(1.0 * (attempt + 1))
+
+            if data is None:
+                # 网络/接口故障（重试3次仍无响应）→ 抛异常，由 fetch_raw 计为失败。
+                # 绝不静默返回空：那会把"接口挂了"伪装成"该股无数据"。
+                raise RuntimeError(
+                    f"Tencent kline request failed after 3 attempts: {tc} {seg_start}~{seg_end}"
+                )
 
             klines = self._extract_klines(data, tc)
             if not klines:
+                # 代码无效/退市（day 空数组，如 000024 招商地产已退市）→ 正常返回空。
                 continue
 
             for row in klines:

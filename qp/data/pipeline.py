@@ -60,9 +60,14 @@ class DataPipeline(BasePipeline):
 
         try:
             # Step 1: Fetch raw data via configured adapter
-            # --source=sina|tencent|demo  (default: sina → tencent fallback)
+            # 数据源策略（2026-08-14, critical）: 腾讯 kline 是唯一数据源。
+            #   - 只使用 TencentAdapter（kline/kline 无复权参数 → 不复权原始价）
+            #   - 不 fallback 到新浪/akshare：多源复权状态不一致曾污染
+            #     daily_price_latest（2026-08-14 事故，见 DP-002）。
+            #   - 腾讯失败 → 直接报错退出，绝不静默降级。
+            # --source 仅接受 tencent（或 demo 供离线测试）。
             use_demo = context.parameters.get("demo", False)
-            source = context.parameters.get("source", "sina")
+            source = context.parameters.get("source", "tencent")
 
             if use_demo:
                 from qp.data.adapter.demo_adapter import DemoAdapter
@@ -85,34 +90,17 @@ class DataPipeline(BasePipeline):
                     else adapter.fetch_raw(start_date, end_date)
                 )
             else:
-                # Default: Sina for recent data (<5yr), Tencent for long history.
-                # Tencent has 0.3s sleep + 0.2s segment gap to avoid WAF.
-                from qp.data.adapter.sina_adapter import SinaAdapter
-                from qp.data.adapter.tencent_adapter import TencentAdapter
-
-                date_span = (end_date - start_date).days
-                if date_span > 1800:  # >5 years → Tencent handles segmentation
-                    adapter = TencentAdapter()
-                    result.metadata["source"] = "tencent"
-                else:
-                    adapter = SinaAdapter()
-                    result.metadata["source"] = "sina"
-
-                raw = (
-                    adapter.fetch_raw(start_date, end_date, symbols=symbols)
-                    if symbols
-                    else adapter.fetch_raw(start_date, end_date)
+                # 唯一合法源是腾讯；旧配置若残留 sina → 明确报错而非 fallback。
+                result = PipelineResult(
+                    status=PipelineStatus.FAILED,
+                    pipeline_name=self.name,
+                    run_id=context.run_id,
                 )
-
-                if len(raw) == 0 and date_span <= 1800:
-                    # Sina failed → try Tencent
-                    result.metadata["source"] = "sina→tencent"
-                    adapter = TencentAdapter()
-                    raw = (
-                        adapter.fetch_raw(start_date, end_date, symbols=symbols)
-                        if symbols
-                        else adapter.fetch_raw(start_date, end_date)
-                    )
+                result.errors.append(
+                    f"Unsupported --source={source!r}: 唯一数据源是 'tencent' "
+                    f"(2026-08-14 起，多源复权不一致已废弃新浪/akshare 路径，见 DP-002)"
+                )
+                return result
 
             if not use_demo and len(raw) == 0:
                 result = PipelineResult(
