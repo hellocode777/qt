@@ -40,13 +40,13 @@
       }
     },
     {
-      "date": "2026-08-12",
-      "equity": 99555.01880232753,
+      "date": "2026-08-13",
+      "equity": 125562.64880232753,
       "cash": 6445.054802327528,
       "n_positions": 10,
-      "n_signals": 110,
+      "n_signals": 131,
       "n_trades": 0,
-      "daily_return": -0.0009343874807560271,
+      "daily_return": 0.26006027766732,
       "total_cost": 0,
       "positions": {
         "000408": 2100,
