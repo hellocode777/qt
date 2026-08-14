@@ -53,6 +53,48 @@
         "meta": {}
       }
     },
+    "value_v1.0": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "1.0.0",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "",
+        "description": "",
+        "tags": [],
+        "weights": {},
+        "parameters": {},
+        "backtest_ic": 0.0,
+        "backtest_sharpe": 0.0,
+        "backtest_max_dd": 0.0,
+        "backtest_excess_return": 0.0
+      },
+      "active": false
+    },
+    "quality_v1.0": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "1.0.0",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "",
+        "description": "",
+        "tags": [],
+        "weights": {},
+        "parameters": {},
+        "backtest_ic": 0.0,
+        "backtest_sharpe": 0.0,
+        "backtest_max_dd": 0.0,
+        "backtest_excess_return": 0.0
+      },
+      "active": false
+    },
     "mvf_noorth": {
       "lifecycle": "research",
       "meta": {
@@ -83,81 +125,6 @@
         "backtest_sharpe": 0.9,
         "backtest_max_dd": 23.5,
         "backtest_excess_return": 21.849999999999998
-      },
-      "active": false
-    },
-    "momentum_v1.0": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "1.0.0",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "",
-        "description": "",
-        "tags": [],
-        "weights": {},
-        "parameters": {},
-        "backtest_ic": 0.0,
-        "backtest_sharpe": 0.0,
-        "backtest_max_dd": 0.0,
-        "backtest_excess_return": 0.0
-      },
-      "active": false
-    },
-    "mvf_v2_expansion": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "v20260813",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "experiment",
-        "description": "",
-        "tags": [],
-        "weights": {
-          "Amplitude_5D": -0.25,
-          "Volatility_20D": 0.22,
-          "Momentum_3M": -0.2,
-          "Volume_Concentration": -0.19,
-          "Volume_Expansion_20_120": -0.14
-        },
-        "parameters": {
-          "top_n": 10,
-          "rebalance": 20,
-          "industry_neutral": true,
-          "orthogonalize": true,
-          "anti_chase": true
-        },
-        "backtest_ic": 0.0717,
-        "backtest_sharpe": 1.1,
-        "backtest_max_dd": 7.15,
-        "backtest_excess_return": 6.02000000000001
-      },
-      "active": false
-    },
-    "value_v1.0": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "1.0.0",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "",
-        "description": "",
-        "tags": [],
-        "weights": {},
-        "parameters": {},
-        "backtest_ic": 0.0,
-        "backtest_sharpe": 0.0,
-        "backtest_max_dd": 0.0,
-        "backtest_excess_return": 0.0
       },
       "active": false
     },
@@ -194,7 +161,7 @@
       },
       "active": false
     },
-    "quality_v1.0": {
+    "momentum_v1.0": {
       "lifecycle": "research",
       "meta": {
         "strategy_version": "1.0.0",
@@ -242,6 +209,39 @@
         "backtest_sharpe": 0.67,
         "backtest_max_dd": 16.59,
         "backtest_excess_return": -0.14999999999999858
+      },
+      "active": false
+    },
+    "mvf_v2_expansion": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "v20260813",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "experiment",
+        "description": "",
+        "tags": [],
+        "weights": {
+          "Amplitude_5D": -0.25,
+          "Volatility_20D": 0.22,
+          "Momentum_3M": -0.2,
+          "Volume_Concentration": -0.19,
+          "Volume_Expansion_20_120": -0.14
+        },
+        "parameters": {
+          "top_n": 10,
+          "rebalance": 20,
+          "industry_neutral": true,
+          "orthogonalize": true,
+          "anti_chase": true
+        },
+        "backtest_ic": 0.0717,
+        "backtest_sharpe": 1.1,
+        "backtest_max_dd": 7.15,
+        "backtest_excess_return": 6.02000000000001
       },
       "active": false
     },

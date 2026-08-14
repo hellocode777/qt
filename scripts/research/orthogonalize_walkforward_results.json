@@ -1,0 +1,62 @@
+[
+  {
+    "strategy": "momentum_vol_full",
+    "window": "2019-2021",
+    "ic": 0.0315,
+    "sharpe": 0.48,
+    "excess": -77.93,
+    "mdd": 16.69,
+    "turnover": 1930.57,
+    "annual": 7.82
+  },
+  {
+    "strategy": "momentum_vol_full",
+    "window": "2022-2023",
+    "ic": 0.0272,
+    "sharpe": -0.23,
+    "excess": -10.31,
+    "mdd": 17.33,
+    "turnover": 968.52,
+    "annual": -6.83
+  },
+  {
+    "strategy": "momentum_vol_full",
+    "window": "2024-2026",
+    "ic": 0.0457,
+    "sharpe": 0.92,
+    "excess": 25.21,
+    "mdd": 17.85,
+    "turnover": 1286.46,
+    "annual": 20.47
+  },
+  {
+    "strategy": "mvf_noorth",
+    "window": "2019-2021",
+    "ic": 0.057,
+    "sharpe": 0.75,
+    "excess": -58.24000000000001,
+    "mdd": 16.86,
+    "turnover": 1437.34,
+    "annual": 13.43
+  },
+  {
+    "strategy": "mvf_noorth",
+    "window": "2022-2023",
+    "ic": 0.0777,
+    "sharpe": -0.12,
+    "excess": -4.960000000000001,
+    "mdd": 26.47,
+    "turnover": 853.17,
+    "annual": -3.9
+  },
+  {
+    "strategy": "mvf_noorth",
+    "window": "2024-2026",
+    "ic": 0.0668,
+    "sharpe": 0.6,
+    "excess": -5.239999999999998,
+    "mdd": 18.65,
+    "turnover": 984.91,
+    "annual": 10.72
+  }
+]
