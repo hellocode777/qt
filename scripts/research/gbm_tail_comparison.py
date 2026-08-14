@@ -4,9 +4,10 @@
 方法：每只股票用自身 μ/σ 模拟等长序列，汇总后与真实分布对比。
 """
 
-import polars as pl
-import numpy as np
 import matplotlib
+import numpy as np
+import polars as pl
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats
@@ -37,7 +38,7 @@ print(f"真实样本量: {len(real_ret):,}  股票数: {df['symbol'].n_unique()}
 
 # ---------- 2. GBM 模拟（每只股票用自身 μ/σ 模拟等长序列） ----------
 sim_rets = []
-for sym, g in df.group_by("symbol"):
+for _sym, g in df.group_by("symbol"):
     mu = g["ret"].mean()
     sigma = g["ret"].std()
     n = g.height

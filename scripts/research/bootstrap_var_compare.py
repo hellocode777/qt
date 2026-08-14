@@ -18,9 +18,10 @@
 
 import argparse
 
+import matplotlib
 import numpy as np
 import polars as pl
-import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -146,7 +147,7 @@ def main():
     print(f"真实/GBM 倍数: {var1(cum_hist)/var1(cum_gbm):.2f}x")
 
     # ---------- 图 ----------
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    _, axes = plt.subplots(1, 2, figsize=(13, 5))
 
     ax = axes[0]
     ax.hist(real, bins=200, density=True, alpha=0.5, color="#d62728", label="真实 A 股")
