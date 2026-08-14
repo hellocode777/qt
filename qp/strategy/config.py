@@ -109,6 +109,27 @@ class StrategyConfig:
         c.model_mode = True
         return c
 
+    def with_overrides(self, **overrides: Any) -> StrategyConfig:
+        """返回应用了覆盖项的新副本（不修改原配置）。
+
+        用于实验 CLI 参数覆盖策略配置（--orthogonalize / --quality-filter /
+        --industry-neutral / --top-n / --rebalance / --model 等）。
+        未知字段会被忽略（不报错），保证与旧调用兼容。
+
+        Args:
+            **overrides: StrategyConfig 字段名 → 新值。如
+                orthogonalize=False, quality_filter=True。
+
+        Returns:
+            修改后的配置副本。原配置对象保持不变。
+        """
+        c = copy.deepcopy(self)
+        valid_keys = {f.name for f in self.__dataclass_fields__.values()}
+        for key, value in overrides.items():
+            if key in valid_keys:
+                setattr(c, key, value)
+        return c
+
     def to_dict(self) -> dict[str, Any]:
         """序列化为字典，用于保存回测快照。"""
         return asdict(self)

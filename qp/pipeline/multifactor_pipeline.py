@@ -237,6 +237,22 @@ class MultiFactorPipeline(BasePipeline):
             if frozen_override:
                 logger.info("   🔒 权重冻结 (复现模式): {}", freeze_weights)
 
+        # CLI experiment overrides applied onto a config copy (never mutate
+        # the registered strategy config).
+        cli_overrides: dict[str, Any] = {
+            key: params[key]
+            for key in (
+                "orthogonalize",
+                "quality_filter",
+                "industry_neutral",
+                "anti_chase",
+                "model_mode",
+                "max_positions",
+                "rebalance_freq",
+            )
+            if key in params
+        }
+
         if use_full_strategy:
             (
                 signals,
@@ -254,6 +270,7 @@ class MultiFactorPipeline(BasePipeline):
                 model_mode=model_mode,
                 config_override=frozen_override,
                 score_band=score_band,
+                cli_overrides=cli_overrides,
             )
             from qp.strategy.config import get_strategy_config
 
@@ -407,6 +424,7 @@ class MultiFactorPipeline(BasePipeline):
                             model_mode=model_mode,
                             config_override=optimized_config,
                             score_band=score_band,
+                            cli_overrides=cli_overrides,
                         )
                         ic2 = evaluate_factor_ic(
                             scores2 if not scores2.is_empty() else scores,
@@ -862,6 +880,7 @@ class MultiFactorPipeline(BasePipeline):
         model_mode: bool = False,
         config_override: StrategyConfig | None = None,
         score_band: str | None = None,
+        cli_overrides: dict[str, Any] | None = None,
     ) -> tuple[pl.DataFrame, pl.DataFrame, dict, dict, pl.DataFrame, dict | None]:
         """Run the momentum_vol_full strategy through the strategy layer.
 
@@ -908,6 +927,20 @@ class MultiFactorPipeline(BasePipeline):
             config = config_override
         else:
             config = get_strategy_config(strategy_name)
+        # Always work on a private copy — never mutate the registered config
+        # object shared across sessions/experiments.
+        config = config.with_overrides()
+
+        # Apply CLI experiment overrides onto the copy (never mutate the
+        # registered config — get_strategy_config returns the shared object).
+        if cli_overrides:
+            config = config.with_overrides(**cli_overrides)
+            logger.info(
+                "   配置覆盖: {}",
+                {k: v for k, v in cli_overrides.items()},
+            )
+
+        # Positional CLI params always apply (top_n / rebalance / model_mode)
         config.max_positions = top_n
         config.rebalance_freq = rebalance_freq
         config.sell_buffer_multiplier = max(1, sell_buffer // top_n) if top_n > 0 else 2
