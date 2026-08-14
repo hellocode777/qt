@@ -2,7 +2,7 @@
 
 Implements the Data Tier system (CLAUDE.md §133, dp.md §7.7):
 
-  AKShare ──► Raw ──► Bronze ──► Silver ──► Gold
+  Tencent ──► Raw ──► Bronze ──► Silver ──► Gold
   (external)   Adapter  ETL       Contract   Universe+PIT
                output   cleaning  validate   DatasetRegistry
 
@@ -22,8 +22,8 @@ from typing import Any
 import pandas as pd
 import polars as pl
 
-from qp.data.adapter.akshare_adapter import AKShareAdapter
 from qp.data.adapter.code_list import get_main_board_codes
+from qp.data.adapter.tencent_adapter import TencentAdapter  # 主源（不复权原始价）
 from qp.data.cleaning.etl_pipeline import ETLPipeline
 from qp.data.cleaning.repair import repair_all
 from qp.data.contract.daily_price import DailyPriceContract
@@ -96,7 +96,10 @@ class FullDataPipeline(BasePipeline):
         # ── Load codes ──
         logger.info("═══ FullDataPipeline: Raw → Bronze → Silver → Gold ═══")
         logger.info("股票池: 主板 (排除创业板/科创板/ST)")
-        adapter = AKShareAdapter()
+        # 主源 = 腾讯 kline（不复权原始价，2026-08-14 架构修订，见 DP-002/TDR-001）
+        # ⛔ 不要改回 AKShareAdapter：akshare 全量拉会被东财限流/GFW 挡，
+        # 且 adjust="qfq" 会把复权价混入原始价表。
+        adapter = TencentAdapter()
         codes = get_main_board_codes()
         logger.info("共 {} 只", len(codes))
 
@@ -127,6 +130,18 @@ class FullDataPipeline(BasePipeline):
             )
 
         raw_df = pl.concat(all_raw, how="diagonal_relaxed")  # type: ignore[arg-type]
+
+        # ── Column-name normalization: 中文列名 → 标准英文列名 ──
+        # Tencent/Sina return 中文列（日期/开盘/...）+ 冗余 symbol，akshare 曾返回英文列。
+        # 复用 CleaningEngine.COLUMN_MAP（权威映射，勿重复定义）。
+        # Data Layer 对源不可知（ADR-017）：统一到英文列名再进入 ETL。
+        from qp.data.cleaning.engine import CleaningEngine
+
+        raw_df = raw_df.drop([c for c in ("股票代码",) if c in raw_df.columns])
+        _map = {k: v for k, v in CleaningEngine.COLUMN_MAP.items() if k in raw_df.columns}
+        if _map:
+            raw_df = raw_df.rename(_map)
+        raw_df = raw_df.with_columns(pl.col("trade_date").cast(pl.Utf8))
 
         # ── Dual-timestamp annotation (data_layer.md §1) ──
         raw_df = annotate_timestamps_pl(raw_df)
