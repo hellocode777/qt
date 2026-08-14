@@ -60,6 +60,88 @@ def test_adapter_fetch_raw_empty_without_symbols() -> None:
     assert df.empty
 
 
+def test_fetch_sina_maps_columns(tmp_path, monkeypatch) -> None:
+    """新浪源列映射 + 分页（第一页有数据，第二页空 → 停）。"""
+    import json
+
+    fake_sina = [
+        {
+            "opendate": "2026-08-13",
+            "trade": "1355.29",
+            "changeratio": "0.0091",
+            "netamount": "763667782.19",
+            "ratioamount": "0.1767",
+            "r0_net": "710637602.52",
+            "r1_net": "66175957.63",
+            "r2_net": "-13145777.96",
+            "r3_net": "0.0000",
+        },
+        {
+            "opendate": "2026-08-12",
+            "trade": "1344.40",
+            "changeratio": "-0.0015",
+            "netamount": "352437836.97",
+            "ratioamount": "0.0760",
+            "r0_net": "292392408.98",
+            "r1_net": "51555860.21",
+            "r2_net": "8489567.78",
+            "r3_net": "0.0000",
+        },
+    ]
+    calls: dict[str, int] = {"n": 0}
+
+    class FakeResp:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        def raise_for_status(self) -> None:
+            pass
+
+    def fake_get(url: str, params: dict | None = None, timeout: int | None = None):
+        assert "MoneyFlow.ssl_qsfx_lscjfb" in url
+        assert params is not None
+        assert params["daima"] == "sh600519"
+        calls["n"] += 1
+        payload = fake_sina if params["page"] == 1 else []
+        return FakeResp(json.dumps(payload))
+
+    monkeypatch.setattr("qp.data.capital_flow.adapter.requests.get", fake_get)
+
+    adapter = CapitalFlowAdapter(cache_dir=str(tmp_path / "cf_cache"))
+    monkeypatch.setattr(adapter, "_fetch_eastmoney", lambda symbol: None)
+    df = adapter._fetch_sina("600519")
+    assert df is not None
+    assert list(df["date"].to_list()) == ["2026-08-13", "2026-08-12"]
+    assert df["symbol"].to_list() == ["600519", "600519"]
+    assert df["main_net_flow"].dtype == float
+    assert df["main_net_flow"].to_list()[0] == 763667782.19
+    assert calls["n"] == 1  # 第一页 2 条 < 100 → 直接停，不再请求下一页
+
+
+def test_fetch_single_falls_back_to_sina(tmp_path, monkeypatch) -> None:
+    """_fetch_single 东财失败时自动用新浪源。"""
+    import pandas as pd
+
+    adapter = CapitalFlowAdapter(cache_dir=str(tmp_path / "cf_cache"))
+    monkeypatch.setattr(adapter, "_fetch_eastmoney", lambda symbol: None)
+    monkeypatch.setattr(
+        adapter,
+        "_fetch_sina",
+        lambda symbol: pd.DataFrame(
+            {
+                "date": ["2026-08-13"],
+                "symbol": [symbol],
+                "main_net_flow": [100.0],
+            }
+        ),
+    )
+    df = adapter._fetch_single("600519")
+    assert df is not None
+    assert df["main_net_flow"].to_list() == [100.0]
+    # 已缓存
+    assert (tmp_path / "cf_cache" / "600519.json").exists()
+
+
 # ── CapitalFlowPipeline ──
 
 

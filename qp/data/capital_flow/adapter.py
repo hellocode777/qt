@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import requests
 from loguru import logger
 
 from qp.shared.protocols.base_data_source import BaseDataSource
@@ -58,9 +59,16 @@ def _market_tag(code: str) -> str:
 
 
 class CapitalFlowAdapter(BaseDataSource):
-    """AkShare adapter for individual stock capital flow data.
+    """Adapter for individual stock capital flow data.
 
     Fetches main force net inflow + order-size breakdown per stock.
+
+    Sources:
+        - ``sina`` (default): Sina MoneyFlow API (vip.stock.finance.sina.com.cn).
+          Works behind GFW where eastmoney is blocked. Returns ~4000 daily rows
+          per stock (main_net_flow / super_large / large / medium / small nets).
+        - ``eastmoney``: AkShare eastmoney interface (main force + pct breakdown).
+          May be unreachable in some networks; only use if sina is undesirable.
 
     Usage:
         adapter = CapitalFlowAdapter()
@@ -68,9 +76,16 @@ class CapitalFlowAdapter(BaseDataSource):
                                 symbols=["600519"])
     """
 
-    def __init__(self, cache_dir: str | Path = _DEFAULT_CACHE_DIR) -> None:
+    def __init__(
+        self,
+        cache_dir: str | Path = _DEFAULT_CACHE_DIR,
+        source: str = "sina",
+    ) -> None:
         self._cache_dir = Path(cache_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
+        if source not in ("sina", "eastmoney"):
+            raise ValueError(f"Unknown capital flow source: {source!r}")
+        self._source = source
 
     @property
     def dataset_name(self) -> str:
@@ -121,13 +136,34 @@ class CapitalFlowAdapter(BaseDataSource):
     # ------------------------------------------------------------------
 
     def _fetch_single(self, symbol: str) -> pd.DataFrame | None:
-        """Fetch capital flow for one stock, with Parquet cache."""
+        """Fetch capital flow for one stock, with JSON cache.
+
+        Uses the configured source directly (default ``sina``) — no
+        eastmoney-first probing (it times out behind GFW on every stock).
+        """
         # Try cache
         cached = self._load_cache(symbol)
         if cached is not None:
             return cached
 
-        # Fetch from AkShare
+        if self._source == "eastmoney":
+            df = self._fetch_eastmoney(symbol)
+            if df is None or df.empty:
+                return None
+            df = self._normalize_eastmoney_df(df, symbol)
+        else:
+            df = self._fetch_sina(symbol)
+
+        if df is None or df.empty:
+            return None
+
+        # Cache
+        self._save_cache(symbol, df)
+        logger.debug("{} 资金流: {} 条", symbol, len(df))
+        return df
+
+    def _fetch_eastmoney(self, symbol: str) -> pd.DataFrame | None:
+        """Fetch via AkShare eastmoney interface; None on failure."""
         try:
             import akshare as ak
 
@@ -154,17 +190,18 @@ class CapitalFlowAdapter(BaseDataSource):
                     if val is not None:
                         os.environ[key] = val
         except Exception as e:
-            logger.debug("{} 资金流获取失败: {}", symbol, e)
+            logger.debug("{} 东财资金流获取失败: {}", symbol, e)
             return None
 
         if df is None or df.empty:
             return None
+        return df
 
-        # Rename columns
+    @staticmethod
+    def _normalize_eastmoney_df(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """Rename eastmoney Chinese columns + coerce numerics."""
         df = df.rename(columns=_CAPITAL_FLOW_COLUMNS)
         df["symbol"] = symbol
-
-        # Ensure numeric columns
         numeric_cols = [
             "close",
             "change_pct",
@@ -182,10 +219,83 @@ class CapitalFlowAdapter(BaseDataSource):
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df
 
-        # Cache
-        self._save_cache(symbol, df)
-        logger.debug("{} 资金流: {} 条", symbol, len(df))
+    def _fetch_sina(self, symbol: str) -> pd.DataFrame | None:
+        """Fetch capital flow from Sina MoneyFlow API (GFW fallback).
+
+        API: MoneyFlow.ssl_qsfx_lscjfb
+        Fields: opendate, trade, changeratio, netamount, ratioamount,
+        r0_net (超大单), r1_net (大单), r2_net (中单), r3_net (小单).
+
+        Paged (num=100) to cover the full requested history.
+        """
+        import json
+
+        market = _market_tag(symbol)
+        prefix = f"{market}{symbol}"
+        base_url = (
+            "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+            "MoneyFlow.ssl_qsfx_lscjfb"
+        )
+
+        rows: list[dict[str, Any]] = []
+        try:
+            page = 1
+            while page <= 100:  # safety cap
+                resp = requests.get(
+                    base_url,
+                    params={
+                        "page": page,
+                        "num": 100,
+                        "sort": "opendate",
+                        "asc": 0,
+                        "daima": prefix,
+                    },
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                batch = json.loads(resp.text)
+                if not batch:
+                    break
+                rows.extend(batch)
+                if len(batch) < 100:
+                    break
+                page += 1
+        except Exception as e:
+            logger.debug("{} 新浪资金流获取失败: {}", symbol, e)
+            return None
+
+        if not rows:
+            return None
+
+        df = pd.DataFrame(rows)
+        df = df.rename(
+            columns={
+                "opendate": "date",
+                "trade": "close",
+                "changeratio": "change_pct",
+                "netamount": "main_net_flow",
+                "ratioamount": "main_net_flow_pct",
+                "r0_net": "super_large_net",
+                "r1_net": "large_net",
+                "r2_net": "medium_net",
+                "r3_net": "small_net",
+            }
+        )
+        df["symbol"] = symbol
+        for col in [
+            "close",
+            "change_pct",
+            "main_net_flow",
+            "main_net_flow_pct",
+            "super_large_net",
+            "large_net",
+            "medium_net",
+            "small_net",
+        ]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         return df
 
     def _cache_path(self, symbol: str) -> Path:
