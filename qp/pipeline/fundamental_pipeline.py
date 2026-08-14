@@ -12,8 +12,8 @@ from pathlib import Path
 import polars as pl
 from loguru import logger
 
-from qp.data.fundamental.adapter import FundamentalAdapter
 from qp.data.dataset.registry import DatasetRegistry
+from qp.data.fundamental.adapter import FundamentalAdapter
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
