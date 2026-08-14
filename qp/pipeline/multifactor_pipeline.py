@@ -1770,6 +1770,8 @@ class MultiFactorPipeline(BasePipeline):
                 "n_days": n_trading_days,
                 "n_trades": int(result.metrics.get("n_trades", 0)),
                 "turnover_pct": float(result.metrics.get("turnover_pct", 0.0)),
+                "total_cost": float(result.metrics.get("total_cost", 0.0)),
+                "final_equity": float(result.metrics.get("final_equity", 0.0)),
             },
             lineage_graph={
                 "dataset": f"{dataset}@{start_date}",

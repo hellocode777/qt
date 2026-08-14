@@ -99,6 +99,8 @@ class ExperimentTracker(BaseExperimentTracker):
             annual_volatility_pct=metrics.get("annual_volatility_pct", 0.0),
             total_return_pct=metrics.get("total_return_pct", 0.0),
             turnover_pct=metrics.get("turnover_pct", 0.0),
+            total_cost=metrics.get("total_cost", 0.0),
+            final_equity=metrics.get("final_equity", 0.0),
             n_days=int(metrics.get("n_days", 0)),
             feature_importance=config.get("feature_importance", {}),
         )
@@ -292,6 +294,8 @@ class ExperimentTracker(BaseExperimentTracker):
                 annual_volatility_pct=met_data.get("annual_volatility_pct", 0.0),
                 total_return_pct=met_data.get("total_return_pct", 0.0),
                 turnover_pct=met_data.get("turnover_pct", 0.0),
+                total_cost=met_data.get("total_cost", 0.0),
+                final_equity=met_data.get("final_equity", 0.0),
                 n_days=int(met_data.get("n_days", 0)),
                 feature_importance=met_data.get("feature_importance", {}),
                 custom=met_data.get("custom", {}),

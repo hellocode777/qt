@@ -112,6 +112,8 @@ class ExperimentMetrics:
     annual_volatility_pct: float = 0.0
     total_return_pct: float = 0.0
     turnover_pct: float = 0.0
+    total_cost: float = 0.0
+    final_equity: float = 0.0
     n_days: int = 0
     feature_importance: dict[str, float] = field(default_factory=dict)
     custom: dict[str, float] = field(default_factory=dict)
@@ -131,6 +133,8 @@ class ExperimentMetrics:
             "annual_volatility_pct": self.annual_volatility_pct,
             "total_return_pct": self.total_return_pct,
             "turnover_pct": self.turnover_pct,
+            "total_cost": self.total_cost,
+            "final_equity": self.final_equity,
             "n_days": self.n_days,
             "feature_importance": self.feature_importance,
             "custom": self.custom,
