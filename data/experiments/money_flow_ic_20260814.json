@@ -1,187 +1,351 @@
 {
   "date": "2026-08-14",
-  "min_stocks_per_day": 15,
+  "min_stocks_per_day": 20,
   "horizons": [
-    5
+    1,
+    3,
+    5,
+    10,
+    20
   ],
   "factors": {
     "MF_NetFlow_5D": {
       "horizons": {
+        "1": {
+          "ic_mean": -0.0336,
+          "ic_ir": 0.32,
+          "ic_t_stat": 19.97,
+          "ic_positive_pct": 35.6,
+          "n_days": 3970,
+          "all_pass": true
+        },
+        "3": {
+          "ic_mean": -0.0368,
+          "ic_ir": 0.35,
+          "ic_t_stat": 22.16,
+          "ic_positive_pct": 35.3,
+          "n_days": 3968,
+          "all_pass": true
+        },
         "5": {
-          "ic_mean": -0.0369,
-          "ic_ir": 0.29,
-          "ic_t_stat": 18.14,
-          "ic_positive_pct": 38.5,
-          "n_days": 3965,
-          "all_pass": false
+          "ic_mean": -0.0357,
+          "ic_ir": 0.35,
+          "ic_t_stat": 22.02,
+          "ic_positive_pct": 35.3,
+          "n_days": 3966,
+          "all_pass": true
+        },
+        "10": {
+          "ic_mean": -0.0361,
+          "ic_ir": 0.36,
+          "ic_t_stat": 22.86,
+          "ic_positive_pct": 35.8,
+          "n_days": 3961,
+          "all_pass": true
+        },
+        "20": {
+          "ic_mean": -0.0427,
+          "ic_ir": 0.43,
+          "ic_t_stat": 26.87,
+          "ic_positive_pct": 33.3,
+          "n_days": 3951,
+          "all_pass": true
         }
       },
       "direction_verdict": -1,
-      "direction_basis": "H5 IC=-0.0369",
+      "direction_basis": "H20 IC=-0.0427",
       "quintiles": [
         {
           "_q": "Q1",
-          "m": 0.0030305492238869914
+          "m": 0.0029498224187680124
         },
         {
           "_q": "Q2",
-          "m": 0.002829892791080278
+          "m": 0.00303394970280601
         },
         {
           "_q": "Q3",
-          "m": 0.0024470491567634796
+          "m": 0.002923608412598524
         },
         {
           "_q": "Q4",
-          "m": 0.002069896557739466
+          "m": 0.0023896742687734606
         },
         {
           "_q": "Q5",
-          "m": 0.001165875569536264
+          "m": 0.0009932916532403736
         }
       ]
     },
     "MF_NetFlow_20D": {
       "horizons": {
+        "1": {
+          "ic_mean": -0.0358,
+          "ic_ir": 0.33,
+          "ic_t_stat": 21.08,
+          "ic_positive_pct": 35.4,
+          "n_days": 3970,
+          "all_pass": true
+        },
+        "3": {
+          "ic_mean": -0.0465,
+          "ic_ir": 0.44,
+          "ic_t_stat": 27.46,
+          "ic_positive_pct": 32.4,
+          "n_days": 3968,
+          "all_pass": true
+        },
         "5": {
-          "ic_mean": -0.0532,
-          "ic_ir": 0.4,
-          "ic_t_stat": 25.31,
-          "ic_positive_pct": 33.6,
-          "n_days": 3965,
+          "ic_mean": -0.0529,
+          "ic_ir": 0.5,
+          "ic_t_stat": 31.46,
+          "ic_positive_pct": 30.3,
+          "n_days": 3966,
+          "all_pass": true
+        },
+        "10": {
+          "ic_mean": -0.0621,
+          "ic_ir": 0.58,
+          "ic_t_stat": 36.73,
+          "ic_positive_pct": 27.1,
+          "n_days": 3961,
+          "all_pass": true
+        },
+        "20": {
+          "ic_mean": -0.0722,
+          "ic_ir": 0.65,
+          "ic_t_stat": 41.02,
+          "ic_positive_pct": 25.1,
+          "n_days": 3951,
           "all_pass": true
         }
       },
       "direction_verdict": -1,
-      "direction_basis": "H5 IC=-0.0532",
+      "direction_basis": "H20 IC=-0.0722",
       "quintiles": [
         {
           "_q": "Q1",
-          "m": 0.003650678701158798
+          "m": 0.0037511844844782135
         },
         {
           "_q": "Q2",
-          "m": 0.0031826915272123333
+          "m": 0.0034684785723276064
         },
         {
           "_q": "Q3",
-          "m": 0.002446432275515254
+          "m": 0.002928124125325393
         },
         {
           "_q": "Q4",
-          "m": 0.0020125869617300812
+          "m": 0.002073643722202914
         },
         {
           "_q": "Q5",
-          "m": 0.0002637657214337445
+          "m": 7.039606286622879e-05
         }
       ]
     },
     "MF_SuperLarge_5D": {
       "horizons": {
+        "1": {
+          "ic_mean": -0.0264,
+          "ic_ir": 0.34,
+          "ic_t_stat": 21.24,
+          "ic_positive_pct": 35.5,
+          "n_days": 3970,
+          "all_pass": true
+        },
+        "3": {
+          "ic_mean": -0.0291,
+          "ic_ir": 0.39,
+          "ic_t_stat": 24.44,
+          "ic_positive_pct": 34.8,
+          "n_days": 3968,
+          "all_pass": true
+        },
         "5": {
-          "ic_mean": -0.027,
-          "ic_ir": 0.26,
-          "ic_t_stat": 16.58,
-          "ic_positive_pct": 39.1,
-          "n_days": 3965,
-          "all_pass": false
+          "ic_mean": -0.0278,
+          "ic_ir": 0.38,
+          "ic_t_stat": 24.0,
+          "ic_positive_pct": 34.7,
+          "n_days": 3966,
+          "all_pass": true
+        },
+        "10": {
+          "ic_mean": -0.0276,
+          "ic_ir": 0.39,
+          "ic_t_stat": 24.57,
+          "ic_positive_pct": 34.7,
+          "n_days": 3961,
+          "all_pass": true
+        },
+        "20": {
+          "ic_mean": -0.0322,
+          "ic_ir": 0.46,
+          "ic_t_stat": 28.66,
+          "ic_positive_pct": 31.4,
+          "n_days": 3951,
+          "all_pass": true
         }
       },
       "direction_verdict": -1,
-      "direction_basis": "H5 IC=-0.0270",
+      "direction_basis": "H20 IC=-0.0322",
       "quintiles": [
         {
           "_q": "Q1",
-          "m": 0.0022514898116732106
+          "m": 0.0021154990745674103
         },
         {
           "_q": "Q2",
-          "m": 0.002800631690884343
+          "m": 0.0031005700847993984
         },
         {
           "_q": "Q3",
-          "m": 0.0033209051235877046
+          "m": 0.00378216478488367
         },
         {
           "_q": "Q4",
-          "m": 0.002651976593210805
+          "m": 0.0028097890619427496
         },
         {
           "_q": "Q5",
-          "m": 0.0005177829198847968
+          "m": 0.00048203615451634723
         }
       ]
     },
     "MF_Flow_Streak": {
       "horizons": {
+        "1": {
+          "ic_mean": -0.0153,
+          "ic_ir": 0.2,
+          "ic_t_stat": 12.33,
+          "ic_positive_pct": 40.0,
+          "n_days": 3970,
+          "all_pass": false
+        },
+        "3": {
+          "ic_mean": -0.0112,
+          "ic_ir": 0.15,
+          "ic_t_stat": 9.57,
+          "ic_positive_pct": 43.5,
+          "n_days": 3968,
+          "all_pass": false
+        },
         "5": {
-          "ic_mean": -0.0136,
+          "ic_mean": -0.0135,
+          "ic_ir": 0.18,
+          "ic_t_stat": 11.37,
+          "ic_positive_pct": 42.3,
+          "n_days": 3966,
+          "all_pass": false
+        },
+        "10": {
+          "ic_mean": -0.0092,
+          "ic_ir": 0.13,
+          "ic_t_stat": 8.09,
+          "ic_positive_pct": 44.1,
+          "n_days": 3961,
+          "all_pass": false
+        },
+        "20": {
+          "ic_mean": -0.0099,
           "ic_ir": 0.14,
-          "ic_t_stat": 8.71,
-          "ic_positive_pct": 44.4,
-          "n_days": 3965,
+          "ic_t_stat": 9.05,
+          "ic_positive_pct": 44.7,
+          "n_days": 3951,
           "all_pass": false
         }
       },
       "direction_verdict": -1,
-      "direction_basis": "H5 IC=-0.0136",
+      "direction_basis": "H1 IC=-0.0153",
       "quintiles": [
         {
           "_q": "Q1",
-          "m": 0.002217022447404779
+          "m": 0.002563963959283106
         },
         {
           "_q": "Q2",
-          "m": 0.0026619287950623892
+          "m": 0.0029888659738486626
         },
         {
           "_q": "Q3",
-          "m": 0.0026743464921413517
+          "m": 0.0028262556843896935
         },
         {
           "_q": "Q4",
-          "m": 0.002501896457197265
+          "m": 0.0024351840159729226
         },
         {
           "_q": "Q5",
-          "m": 0.0014793169340021175
+          "m": 0.0014753317453807466
         }
       ]
     },
     "MF_Flow_1D": {
       "horizons": {
+        "1": {
+          "ic_mean": -0.0191,
+          "ic_ir": 0.19,
+          "ic_t_stat": 11.93,
+          "ic_positive_pct": 41.1,
+          "n_days": 3970,
+          "all_pass": false
+        },
+        "3": {
+          "ic_mean": -0.0146,
+          "ic_ir": 0.15,
+          "ic_t_stat": 9.49,
+          "ic_positive_pct": 44.6,
+          "n_days": 3968,
+          "all_pass": false
+        },
         "5": {
-          "ic_mean": -0.0215,
+          "ic_mean": -0.02,
+          "ic_ir": 0.21,
+          "ic_t_stat": 12.94,
+          "ic_positive_pct": 42.1,
+          "n_days": 3966,
+          "all_pass": false
+        },
+        "10": {
+          "ic_mean": -0.0165,
           "ic_ir": 0.18,
-          "ic_t_stat": 11.2,
-          "ic_positive_pct": 42.7,
-          "n_days": 3965,
+          "ic_t_stat": 11.07,
+          "ic_positive_pct": 43.7,
+          "n_days": 3961,
+          "all_pass": false
+        },
+        "20": {
+          "ic_mean": -0.0187,
+          "ic_ir": 0.2,
+          "ic_t_stat": 12.82,
+          "ic_positive_pct": 42.0,
+          "n_days": 3951,
           "all_pass": false
         }
       },
       "direction_verdict": -1,
-      "direction_basis": "H5 IC=-0.0215",
+      "direction_basis": "H5 IC=-0.0200",
       "quintiles": [
         {
           "_q": "Q1",
-          "m": 0.0026535161540484284
+          "m": 0.002618722677929558
         },
         {
           "_q": "Q2",
-          "m": 0.002707745285220201
+          "m": 0.0027331471100352175
         },
         {
           "_q": "Q3",
-          "m": 0.00239476339087116
+          "m": 0.0027203737200946873
         },
         {
           "_q": "Q4",
-          "m": 0.00211998343827525
+          "m": 0.0024623533738930147
         },
         {
           "_q": "Q5",
-          "m": 0.001660087367949467
+          "m": 0.0017548140007386719
         }
       ]
     }

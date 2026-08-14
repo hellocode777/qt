@@ -251,8 +251,12 @@ class MarketRegimeDetector:
         if index_df is None or index_df.is_empty():
             return pl.DataFrame()
 
-        df = index_df.sort("date")
-        dates = df["date"].cast(pl.Utf8).to_list()
+        # Normalize column name (accept both "date" and "trade_date" — Gold
+        # dataset uses trade_date, legacy strategy callers passed date)
+        if "date" in index_df.columns and "trade_date" not in index_df.columns:
+            index_df = index_df.rename({"date": "trade_date"})
+        df = index_df.sort("trade_date")
+        dates = df["trade_date"].cast(pl.Utf8).to_list()
 
         results: list[dict[str, Any]] = []
 

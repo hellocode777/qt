@@ -160,7 +160,10 @@ def main() -> None:
 
     cf = load_capital_flow(args.min_stocks)
     wide = compute_factor_wide(cf)
+    # 2026-08-14 OOM fix: _build_adj_price is O(9.4M rows) — compute ONCE and
+    # reuse for IC + quintiles instead of rebuilding per factor (was 5x rebuild).
     price = _build_adj_price(cf)
+    del cf  # free the 9.4M-row raw frame; only `wide` + `price` stay resident
 
     print(f"\n=== Money Flow Factor IC Diagnostics ({date.today()}) ===")
     print(f"stocks: {wide.select(pl.col('symbol').n_unique()).item()} | "
@@ -216,8 +219,8 @@ def main() -> None:
                 pl.col("date").cast(pl.Utf8).alias("trade_date"), "symbol", f
             ).with_columns(pl.col(f).alias("_f"))
             # join adjusted-price fwd returns (ex-adjustment safe, same source as IC)
-            pdf = _build_adj_price(cf)
-            pdf = pdf.with_columns(
+            # OOM fix: reuse `price` computed once at main() — do NOT rebuild per factor
+            pdf = price.with_columns(
                 (pl.col("close").shift(-h_quint).over("symbol") / pl.col("close") - 1.0)
                 .alias(f"fwd_{h_quint}")
             )

@@ -38,6 +38,20 @@ class MarketStatus(StrEnum):
 # ------------------------------------------------------------------
 
 
+def _normalize_index_date_col(index_df: pl.DataFrame) -> pl.DataFrame:
+    """Accept both 'date' (legacy strategy convention) and 'trade_date' (data-layer convention).
+
+    ``data/dataset/index_csi300.parquet`` uses ``trade_date`` like all other
+    Gold datasets; older strategy callers passed ``date``. Normalize once here
+    so downstream logic can rely on ``trade_date``.
+    """
+    if index_df is None or index_df.is_empty():
+        return index_df
+    if "date" in index_df.columns and "trade_date" not in index_df.columns:
+        return index_df.rename({"date": "trade_date"})
+    return index_df
+
+
 def _compute_ma(close: pl.Series, period: int) -> pl.Series:
     """Simple moving average of close prices."""
     return close.rolling_mean(period)
@@ -82,7 +96,8 @@ def check_market_environment(
             "index_ma_slow": None,
         }
 
-    df = index_df.sort("date")
+    index_df = _normalize_index_date_col(index_df)
+    df = index_df.sort("trade_date")
     close = df["close"]
 
     df = df.with_columns(
@@ -182,7 +197,8 @@ def filter_signals(
     if index_df is None or index_df.is_empty():
         return signals_df
 
-    df_idx = index_df.sort("date")
+    index_df = _normalize_index_date_col(index_df)
+    df_idx = index_df.sort("trade_date")
     close = df_idx["close"]
     df_idx = df_idx.with_columns(_compute_ma(close, ma_period).alias("_ma"))
 
@@ -202,7 +218,7 @@ def filter_signals(
         above_ma = above_ma & golden_cross
 
     # Build date → market_ok lookup
-    dates_arr = df_idx["date"].to_list()
+    dates_arr = df_idx["trade_date"].to_list()
     above_arr = above_ma.to_list()
     date_ok_map = dict(zip(dates_arr, above_arr, strict=True))
 
