@@ -847,7 +847,27 @@ class MultiFactorPipeline(BasePipeline):
                 # Update metadata if strategy exists, otherwise just save
                 # (strategy instance may not be registered yet — that's ok,
                 #  Daily Pipeline will register it with from_today_scores)
-                if strategy_name in registry.list_strategies():
+                #
+                # ⚠️ Production-state guard (2026-08-14): experiments must NOT
+                # overwrite the meta of strategies that have left RESEARCH —
+                # a backtest run (even a worse control group) used to silently
+                # replace the approved strategy's meta (weights / backtest_* /
+                # orthogonalize) in the registry. Full experiment results are
+                # already persisted in data/experiments/*.json; registry meta
+                # stays as the production snapshot. Only RESEARCH-lifecycle
+                # strategies get auto-updated by experiments.
+                _lifecycle = (
+                    registry.get_lifecycle(strategy_name)
+                    if strategy_name in registry.list_strategies()
+                    else None
+                )
+                if _lifecycle is not None and _lifecycle != StrategyLifecycle.RESEARCH:
+                    logger.info(
+                        "🔒 实验不覆盖注册表 meta（策略 {} 生命周期={}，非 RESEARCH）",
+                        strategy_name,
+                        _lifecycle.value,
+                    )
+                elif strategy_name in registry.list_strategies():
                     registry.set_meta(strategy_name, meta)
                 else:
                     # Register metadata-only entry for cross-process persistence

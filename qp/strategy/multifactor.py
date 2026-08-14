@@ -65,12 +65,19 @@ def _load_raw_factors_from_cache(
     all_raw: dict[str, dict[str, dict[str, float]]],
     price_factor_names: set[str],
     logger: Any,
+    expected_symbols: int | None = None,
 ) -> bool:
     """Populate ``all_raw`` from the experiment cache if valid.
 
     Returns True when the cache was loaded, False on cache miss.
     The cache is keyed by (trade_date, symbol) and stores all 19 raw
     factor columns — independent of which factors a specific strategy asks for.
+
+    ``expected_symbols``: when provided, a cache whose symbol coverage is far
+    smaller than the current price_data universe (e.g. a leftover sampled
+    subset from a previous --max-stocks run) is treated as a cache miss —
+    loading it would silently distort results. Cover threshold: cache must
+    cover >= 80% of expected symbols.
     """
     from pathlib import Path as _P
 
@@ -93,6 +100,18 @@ def _load_raw_factors_from_cache(
     available = [f for f in price_factor_names if f in cache_df.columns]
     if len(available) < len(price_factor_names):
         return False  # cache missing required factors → recompute
+
+    if expected_symbols is not None:
+        cache_symbols = set(cache_df["symbol"].unique().to_list())
+        # A leftover sampled cache (e.g. 500 of 3000) must not be reused.
+        # Require the cache to be at least a near-full-universe snapshot.
+        if len(cache_symbols) < int(expected_symbols * 0.8):
+            logger.info(
+                "🚫 缓存股票覆盖不足 ({} 只 < 预期 {} 只的 80%) — 视为残缺缓存，重算",
+                len(cache_symbols),
+                expected_symbols,
+            )
+            return False
 
     logger.info(
         "📦 实验缓存命中: {} factors × {} dates → 跳过逐stock计算",
@@ -288,7 +307,11 @@ def compute_cross_sectional_scores(
     all_raw: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
 
     total_stocks = len(price_data)
-    cache_used = not live_mode and _load_raw_factors_from_cache(all_raw, price_factor_names, logger)
+    # Pass the current universe size so a leftover sampled cache
+    # (e.g. --max-stocks 500) is rejected instead of silently reused.
+    cache_used = not live_mode and _load_raw_factors_from_cache(
+        all_raw, price_factor_names, logger, expected_symbols=total_stocks
+    )
     if cache_used:
         total_stocks = 0  # skip the loop below
         # CRITICAL: cache loads the FULL market universe, but price_data may
@@ -393,7 +416,12 @@ def compute_cross_sectional_scores(
             logger.info("🧮 因子计算: {}/{}", stock_idx + 1, total_stocks)
 
     # ── Save to experiment cache for future runs ──
-    if not cache_used and not live_mode and price_factor_names:
+    # ⚠️ 2026-08-14: only save when this run computed a near-full universe.
+    # A sampled run (--max-stocks 500) must NOT overwrite the full-market
+    # cache — otherwise subsequent experiments silently reuse a 500-stock
+    # subset (results distorted). Threshold: keep the cache full-universe
+    # (>= 2000 symbols), matching the main-board universe size.
+    if not cache_used and not live_mode and price_factor_names and total_stocks >= 2000:
         _save_raw_factors_to_cache(all_raw, logger)
 
     # Sort dates
