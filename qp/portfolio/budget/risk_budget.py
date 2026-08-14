@@ -57,7 +57,13 @@ class RiskBudgetResult:
 
 @dataclass
 class RiskBudget:
-    """Base class for risk budgeting strategies."""
+    """Base class for risk budgeting strategies.
+
+    The base implementation allocates inversely to volatility
+    (budget_i ∝ 1/σ_i) — the documented MVP approach. Subclasses
+    (e.g. :class:`MaxDiversificationBudget`) override ``allocate``
+    for alternative risk-budget semantics.
+    """
 
     target_vol: float = 0.15  # Target portfolio annualized vol
 
@@ -69,6 +75,10 @@ class RiskBudget:
     ) -> RiskBudgetResult:
         """Allocate risk budget across positions.
 
+        Base implementation: inverse-volatility weights scaled to the
+        target portfolio vol (zero-correlation approximation). Concrete
+        subclasses override with their own allocation logic.
+
         Args:
             volatilities: {symbol: annualized_vol}.
             symbols: Ordered symbol list (default: sorted volatilities keys).
@@ -77,7 +87,38 @@ class RiskBudget:
         Returns:
             RiskBudgetResult with per-symbol weight caps.
         """
-        raise NotImplementedError
+        if symbols is None:
+            symbols = sorted(volatilities.keys())
+
+        n = len(symbols)
+        if n == 0:
+            return RiskBudgetResult(total_vol_target=self.target_vol)
+
+        inv_vols = np.array([1.0 / max(volatilities.get(s, 0.30), 0.01) for s in symbols])
+        raw_weights = inv_vols / inv_vols.sum()
+
+        # Scale to target portfolio vol (zero-correlation approximation).
+        vols_arr = np.array([volatilities.get(s, 0.30) for s in symbols])
+        est_port_vol = float(np.sqrt(np.sum((raw_weights**2) * (vols_arr**2))))
+        if est_port_vol > 0:
+            raw_weights = raw_weights * (self.target_vol / est_port_vol)
+            raw_weights /= raw_weights.sum()
+
+        est_port_vol = float(np.sqrt(np.sum((raw_weights**2) * (vols_arr**2))))
+        weight_caps = {s: round(float(w), 6) for s, w in zip(symbols, raw_weights, strict=True)}
+        risk_contribs = {
+            s: round(
+                weight_caps.get(s, 0.0) * volatilities.get(s, 0.30) / max(self.target_vol, 0.01), 4
+            )
+            for s in symbols
+        }
+
+        return RiskBudgetResult(
+            weight_caps=weight_caps,
+            risk_contributions=risk_contribs,
+            total_vol_target=self.target_vol,
+            estimated_portfolio_vol=round(est_port_vol, 4),
+        )
 
 
 @dataclass
@@ -177,6 +218,88 @@ class VolatilityBudget(RiskBudget):
             weight_caps=weight_caps,
             risk_contributions=risk_contribs,
             cluster_budgets=cluster_budgets,
+            total_vol_target=self.target_vol,
+            estimated_portfolio_vol=round(est_port_vol, 4),
+        )
+
+
+@dataclass
+class MaxDiversificationBudget(RiskBudget):
+    """Maximum-diversification risk budget (MDP-lite).
+
+    Weight_i ∝ σ_i^-1 normalized to a target portfolio vol — this is
+    the classic most-diversified portfolio under a zero-correlation
+    approximation. Differs from :class:`VolatilityBudget` in that it
+    caps extreme weights more aggressively (max_single_weight floor)
+    and reports risk contributions scaled by target vol.
+
+    Attributes:
+        target_vol: Target portfolio annualized volatility (default 15%).
+        max_single_weight: Hard cap on any single position weight.
+    """
+
+    max_single_weight: float = 0.25
+
+    def allocate(
+        self,
+        volatilities: dict[str, float],
+        symbols: list[str] | None = None,
+        weights: dict[str, float] | None = None,
+    ) -> RiskBudgetResult:
+        """Allocate risk budget via maximum diversification.
+
+        Args:
+            volatilities: {symbol: annualized_vol}.
+            symbols: Ordered symbol list.
+            weights: Current weights (optional, ignored by this strategy).
+
+        Returns:
+            RiskBudgetResult with weight caps and risk contributions.
+        """
+        if symbols is None:
+            symbols = sorted(volatilities.keys())
+
+        n = len(symbols)
+        if n == 0:
+            return RiskBudgetResult(total_vol_target=self.target_vol)
+
+        inv_vols = np.array([1.0 / max(volatilities.get(s, 0.30), 0.01) for s in symbols])
+        raw_weights = inv_vols / inv_vols.sum()
+
+        # Scale to target portfolio vol (zero-correlation approximation).
+        vols_arr = np.array([volatilities.get(s, 0.30) for s in symbols])
+        est_port_vol = float(np.sqrt(np.sum((raw_weights**2) * (vols_arr**2))))
+        if est_port_vol > 0:
+            raw_weights = raw_weights * (self.target_vol / est_port_vol)
+            raw_weights /= raw_weights.sum()
+
+        # Apply hard cap AFTER normalization so the cap is a true maximum.
+        # Capped portfolio sums to < 1 — the residual is implicitly unallocated
+        # cash (MDP keeps a risk buffer).
+        weight_caps: dict[str, float] = {}
+        for s, w in zip(symbols, raw_weights, strict=True):
+            capped = min(float(w), self.max_single_weight)
+            weight_caps[s] = round(capped, 6)
+
+        risk_contribs = {
+            s: round(
+                weight_caps.get(s, 0.0) * volatilities.get(s, 0.30) / max(self.target_vol, 0.01), 4
+            )
+            for s in symbols
+        }
+
+        est_port_vol = float(
+            np.sqrt(
+                np.sum(
+                    np.array(list(weight_caps.values())) ** 2
+                    * np.array([volatilities.get(s, 0.30) for s in symbols]) ** 2
+                )
+            )
+        )
+
+        return RiskBudgetResult(
+            weight_caps=weight_caps,
+            risk_contributions=risk_contribs,
             total_vol_target=self.target_vol,
             estimated_portfolio_vol=round(est_port_vol, 4),
         )

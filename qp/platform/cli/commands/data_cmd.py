@@ -5,6 +5,21 @@ from __future__ import annotations
 import sys
 
 
+def cmd_data_index() -> int:
+    """Fetch CSI300 index daily data (for market filter + regime detection)."""
+    from qp.data.dataset.index_provider import fetch_index_data
+
+    args = sys.argv[3:] if len(sys.argv) > 3 else []
+    force = "--force" in args
+    try:
+        path = fetch_index_data(force=force)
+        print(f"Index data written: {path}")
+        return 0
+    except Exception as exc:
+        print(f"Index fetch failed: {exc}")
+        return 1
+
+
 def cmd_data_fetch() -> int:
     """Fetch full main-board data through complete Data Layer pipeline."""
     from qp.data.loader.full_pipeline import FullDataPipeline

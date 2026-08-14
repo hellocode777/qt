@@ -6,6 +6,7 @@ Per docs/7_Portfolio_Risk_Layer.md §第四部分:
 
 from qp.portfolio.budget.cvar_budget import CVaRBudget
 from qp.portfolio.budget.risk_budget import (
+    MaxDiversificationBudget,
     RiskBudget,
     RiskBudgetResult,
     VolatilityBudget,
@@ -14,6 +15,7 @@ from qp.portfolio.budget.var_budget import VaRBudget
 
 __all__ = [
     "CVaRBudget",
+    "MaxDiversificationBudget",
     "RiskBudget",
     "RiskBudgetResult",
     "VaRBudget",

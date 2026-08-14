@@ -12,6 +12,7 @@ from qp.portfolio.allocator import (
 )
 from qp.portfolio.budget import (
     CVaRBudget,
+    MaxDiversificationBudget,
     RiskBudget,
     RiskBudgetResult,
     VaRBudget,
@@ -69,6 +70,7 @@ __all__ = [
     "LiquidityExposure",
     "MarketCapExposure",
     "MarketImpactModel",
+    "MaxDiversificationBudget",
     "MeanVarianceOptimizer",
     "NAVLedger",
     "NormalizationResult",

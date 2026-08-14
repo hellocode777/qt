@@ -16,6 +16,32 @@ def cmd_pipeline_list() -> int:
     return 0
 
 
+def cmd_capital_flow() -> int:
+    """Fetch capital flow (主力净流入/北向持股) for the main-board universe."""
+    from qp.pipeline.capital_flow_pipeline import CapitalFlowPipeline
+    from qp.platform.pipeline.context import PipelineContext
+
+    pipeline = CapitalFlowPipeline()
+
+    kwargs: dict = {}
+    args = sys.argv[2:]
+    for arg in args:
+        if arg == "--quick":
+            kwargs["quick"] = True
+        elif arg == "--northbound":
+            kwargs["northbound"] = True
+
+    context = PipelineContext(pipeline_name=pipeline.name, parameters=kwargs)
+    result = pipeline.run(context)
+
+    print(f"Status: {result.status.value}")
+    print(f"Symbols: {result.metrics.get('output_symbols', 'N/A')}")
+    print(f"Rows:    {result.metrics.get('raw_rows', 'N/A')}")
+    print(f"Output:  {result.artifacts[0] if result.artifacts else 'N/A'}")
+
+    return 0 if result.status.value == "success" else 1
+
+
 def cmd_fundamental() -> int:
     """Run fundamental data fetch pipeline."""
     from qp.pipeline.fundamental_pipeline import FundamentalPipeline

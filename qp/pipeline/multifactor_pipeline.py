@@ -973,6 +973,12 @@ class MultiFactorPipeline(BasePipeline):
         fundamental_data = self._load_fundamental_data()
         n_fund = len(fundamental_data)
 
+        # Load capital flow data (主力净流入) — available for flow features
+        capital_flow_data = self._load_capital_flow_data()
+        n_flow = len(capital_flow_data)
+        if n_flow > 0:
+            logger.info("资金流数据可用: {} 只股票 (可接资金流特征/过滤)", n_flow)
+
         # Load valuation data (PE_TTM, PB, PCF_OCF from EPS/NAV + close)
         valuation_data = self._load_valuation_data(
             symbols=list(price_data.keys()),
@@ -1089,6 +1095,40 @@ class MultiFactorPipeline(BasePipeline):
         return result
 
     @staticmethod
+    def _load_capital_flow_data() -> dict[str, pl.DataFrame]:
+        """Load capital flow data (主力净流入/北向持股) from local parquet.
+
+        Reads ``data/dataset/capital_flow_latest.parquet`` produced by
+        CapitalFlowPipeline (``qp ingest capital-flow``, source: AkShare).
+        Returns {code: DataFrame(date, main_net_flow, ...)} — empty dict if
+        the file is missing (downstream flow features skip gracefully).
+        """
+        path = Path("data/dataset/capital_flow_latest.parquet")
+        if not path.exists():
+            logger.info(
+                "资金流 parquet 不存在 ({}) — 资金流特征跳过。先运行 `qp ingest capital-flow`",
+                path,
+            )
+            return {}
+
+        try:
+            raw = pl.read_parquet(path)
+        except Exception as e:
+            logger.warning("资金流 parquet 读取失败 ({}): 资金流特征跳过", e)
+            return {}
+
+        if raw.is_empty() or "symbol" not in raw.columns:
+            return {}
+
+        result: dict[str, pl.DataFrame] = {}
+        for code, group in raw.group_by("symbol"):
+            symbol = str(code[0])
+            df = group.drop("symbol").sort("date")
+            result[symbol] = df
+        logger.info("💰 资金流数据: {} 只股票", len(result))
+        return result
+
+    @staticmethod
     def _load_valuation_data(
         symbols: list[str],
         price_data: dict[str, pl.DataFrame],
@@ -1133,13 +1173,30 @@ class MultiFactorPipeline(BasePipeline):
         return result
 
     def _load_index_data(self) -> pl.DataFrame | None:
-        """Load CSI300 index data for market filter.
+        """Load CSI300 index data for market filter / regime detection.
 
-        Deprecated: previously read from QuantTrading quant.db
-        (index_daily). That dependency was removed (2026-08-14);
-        returns None so market filter/regime detection is skipped.
+        Reads the local Gold dataset (data/dataset/index_csi300.parquet,
+        produced by ``qp data index``). If the file is missing, attempts a
+        one-time AkShare fetch (lazy network fallback); returns None only
+        when both fail (market filter / regime detection skipped).
         """
-        return None
+        from qp.data.dataset.index_provider import (
+            fetch_index_data,
+            load_index_data,
+        )
+
+        # Try local Gold dataset first; if missing, one-time network fetch.
+        local = load_index_data()
+        if local is not None:
+            return local
+
+        logger.info("指数数据缺失，尝试拉取...")
+        try:
+            fetch_index_data(force=False)
+            return load_index_data()
+        except Exception as exc:
+            logger.warning("指数拉取失败（市场过滤跳过）: {}", exc)
+            return None
 
     @staticmethod
     def _load_snapshot(

@@ -81,6 +81,17 @@ def fundamental() -> None:
     raise SystemExit(cmd_fundamental())
 
 
+@cli.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def capital_flow(ctx: click.Context) -> None:
+    """Fetch capital flow data (主力净流入/北向持股) for all stocks."""
+    from qp.platform.cli.commands.ingest import cmd_capital_flow
+
+    raise SystemExit(cmd_capital_flow())
+
+
 @cli.command()
 def pipeline() -> None:
     """Pipeline subcommands. Try: qp pipeline list"""
@@ -345,6 +356,18 @@ def data_fetch(ctx: click.Context) -> None:
     from qp.platform.cli.commands.data_cmd import cmd_data_fetch
 
     raise SystemExit(cmd_data_fetch())
+
+
+@data.command(
+    "index",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def data_index(ctx: click.Context) -> None:
+    """Fetch CSI300 index daily data for market filter + regime detection."""
+    from qp.platform.cli.commands.data_cmd import cmd_data_index
+
+    raise SystemExit(cmd_data_index())
 
 
 # ==================================================================
