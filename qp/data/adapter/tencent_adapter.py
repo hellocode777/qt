@@ -3,6 +3,14 @@
 Uses web.ifzq.gtimg.cn as the primary data source (TDR-001).
 More stable than AkShare in restricted network environments.
 Implements BaseDataSource to isolate the Data Layer from the specific provider.
+
+⚠️ 复权状态约定（2026-08-14, critical）:
+  本 adapter 只取 **不复权原始价**（kline/kline 接口的 `day` 字段）。
+  复权一律在计算层用 adj_factor 表（akshare qfq-factor）按需调整。
+
+  ⛔ 禁止使用 `fqkline/get` + `qfq` 接口（历史负价格坏数据 bug，
+  600438 2018-10 曾返回 -0.068 等负价格，污染 daily_price_latest）。
+  该接口在本项目已废弃，见 docs/architecture/data/DP-002-data-layer.md。
 """
 
 from __future__ import annotations
@@ -20,9 +28,11 @@ from qp.shared.protocols.base_data_source import BaseDataSource
 class TencentAdapter(BaseDataSource):
     """Tencent Finance API-based A-share daily price data adapter.
 
-    API: https://web.ifzq.gtimg.cn/appstock/app/fqkline/get
+    API: https://ifzq.gtimg.cn/appstock/app/kline/kline  (raw `day` series)
     Each request returns up to ~730 trading days of daily K-line data.
     Longer periods are automatically split into segments.
+
+    ⛔ Do NOT use fqkline/get + qfq (deprecated — see module docstring).
     """
 
     DEFAULT_SYMBOLS: list[str] = CORE_SYMBOLS
@@ -121,7 +131,7 @@ class TencentAdapter(BaseDataSource):
         The Tencent API returns at most ~730 records per call.  Longer periods
         are split into ~2.5-year segments automatically.
         """
-        url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get"
+        url = "https://ifzq.gtimg.cn/appstock/app/kline/kline"  # raw (unadjusted) day series
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -137,7 +147,9 @@ class TencentAdapter(BaseDataSource):
         for i, (seg_start, seg_end) in enumerate(segments):
             if i > 0:
                 time.sleep(0.2)  # gap between segments for same stock
-            param = f"{tc},day,{seg_start},{seg_end},2000,qfq"
+            # NO qfq suffix: `kline/kline` without adjustment returns raw `day`
+            # prices. fqkline/get+qfq is BANNED (negative-price corruption bug).
+            param = f"{tc},day,{seg_start},{seg_end},2000"
             try:
                 r = requests.get(url, params={"param": param}, headers=headers, timeout=30)
                 if not r.text or not r.text.strip():
@@ -176,15 +188,14 @@ class TencentAdapter(BaseDataSource):
     def _extract_klines(data: dict, tc: str) -> list | None:
         """Extract K-line array from the nested Tencent JSON response.
 
-        Response structure:
-          {"data": {"sh600519": {"qfqday": [...], "day": [...]}}}
+        Response structure (kline/kline, NO adjustment):
+          {"data": {"sh600519": {"day": [...]}}}
 
-        Prefers ``day`` over ``qfqday`` because the API occasionally returns
-        an empty ``qfqday`` list while ``day`` has complete data.  Both keys
-        contain forward-adjusted (qfq) prices when the request specifies qfq.
+        Only `day` (raw, unadjusted) is used. `qfqday`/`hfqday` keys belong
+        to the fqkline endpoint which is BANNED (negative-price corruption).
         """
         symbol_data = data.get("data", {}).get(tc, {})
-        return symbol_data.get("day") or symbol_data.get("qfqday") or None
+        return symbol_data.get("day") or None
 
     @staticmethod
     def _build_segments(start: datetime, end: datetime) -> list[tuple[str, str]]:

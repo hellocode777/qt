@@ -1,41 +1,45 @@
-# TDR-001: AkShare
+# TDR-001: 数据源（AkShare → 腾讯主源 + AkShare 复权因子）
 
-> Technology Decision Record — 数据源
+> Technology Decision Record — 数据源（2026-08-14 修订）
 
 ## 选择
 
-**AkShare** — 开源 A 股金融数据接口库。
+**主源：腾讯 Finance API**（`kline/kline`，不复权原始价）— 长历史主源
+**复权因子：AkShare**（`stock_zh_a_daily(adjust="qfq-factor")`）— 独立因子表
+**辅助源：新浪**（`getKLineData`，不复权原始价）— 近期增量 + 交叉验证
 
 ## 理由
 
-- 免费、无 API Key 依赖（降低个人使用门槛）
-- 覆盖 A 股日线、分钟线、财务数据、行业分类
-- 纯 Python 实现，与项目技术栈一致
-- 活跃维护，社区支持好
+- 腾讯 `kline/kline` 无复权参数返回干净原始价（已验证 600438 2015-2026 全历史无坏数据）
+- AkShare qfq-factor 提供标准复权因子表（`[ex_date, qfq_factor]`，最新除权日=1.0）
+- 三源全部对齐「不复权原始价」，消除复权状态混存事故（2026-08-14）
+- 免费、无 API Key 依赖
+
+## ⛔ 废弃
+
+- **腾讯 `fqkline/get` + `qfq` 接口**：负价格坏数据 bug（600438 2018-10 实证），禁止使用
+- **akshare `adjust="qfq"/"hfq"` 写入价格表**：复权价混入原始价表，禁止
 
 ## 使用方式
 
-通过 `BaseDataSource` 适配器封装，消费者永远不知道数据来自 AkShare（ADR-013, ADR-017）。
+通过 `BaseDataSource` 适配器封装，消费者永远不知道数据来自哪个源（ADR-013, ADR-017）。
 
 ```python
 # qp/data/adapter/ 中的适配器
-class AkShareAdapter(BaseDataSource):
-    def fetch_raw(self, start_date, end_date, **kwargs):
-        # 调用 ak.stock_zh_a_hist(...)
-        ...
+class TencentAdapter(BaseDataSource):   # kline/kline 无复权参数
+    def fetch_raw(self, start_date, end_date, **kwargs): ...
+
+class AKShareAdapter(BaseDataSource):   # fetch_raw 用 adjust=""
+    def fetch_raw(self, start_date, end_date, **kwargs): ...
+    def get_adjust_factor(self, symbols, ...): ...  # qfq-factor 因子表
+
+# qp/data/dataset/adjust_factor.py
+close_qfq = close_raw / qfq_factor  # 公式（实测验证）
 ```
-
-## 替代方案评估
-
-| 方案 | 优点 | 缺点 |
-|------|------|------|
-| Tushare | 数据质量高 | 需要积分/付费 |
-| Baostock | 免费 | 数据更新慢 |
-| **AkShare** ✅ | 免费、活跃 | 接口偶尔变动 |
 
 ## 配置
 
 ```toml
 [data]
-default_source = "akshare"
+default_source = "tencent"  # 主源；sina/akshare 为辅助
 ```

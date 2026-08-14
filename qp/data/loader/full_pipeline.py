@@ -156,6 +156,9 @@ class FullDataPipeline(BasePipeline):
         raw_df = _normalize_volume_unit(raw_df, logger)
 
         etl = ETLPipeline()
+        # adj_factors=None: 价格表只存不复权原始价（2026-08-14 架构修订，
+        # 见 DP-002）。复权在计算层用 adj_factor.parquet 按需做。
+        # ⛔ 不要在此传复权因子 —— 会把复权价混入原始价表。
         etl_result = etl.run(raw_df, adj_factors=None)
         bronze_df = etl_result.df
         bronze_df = repair_all(bronze_df, validate_amount=False)

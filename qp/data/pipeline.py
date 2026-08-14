@@ -421,6 +421,32 @@ def _validate_data_gate(
                 if row_drift > 0.30:
                     errors.append(f"Cold-start row drift {row_drift:.1%}: {prev_rows} → {n_rows}")
 
+    # ── 8. 涨跌停合理性检查 (price-limit sanity) ──
+    # A-share daily limit: main board ±10%, ChiNext/STAR ±20%, ST ±5%.
+    # A |1-day return| > 21% on RAW (unadjusted) prices can only be an
+    # ex-dividend jump or data corruption. On an *incremental batch* that
+    # should never happen (no ex-dates in a fresh batch); flag it hard.
+    # (2026-08-14: 600438 corruption showed -50%/-41% consecutive jumps —
+    #   this gate would have caught it. See DP-002-data-layer.md.)
+    if all(c in df.columns for c in ("symbol", "trade_date", "close")):
+        try:
+            _px = df.sort(["symbol", "trade_date"]).with_columns(
+                pl.col("trade_date").cast(pl.Utf8).alias("_td")
+            ).with_columns(
+                (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1.0).alias("_ret1")
+            )
+            _jumps = _px.filter(pl.col("_ret1").abs() > 0.21)
+            if _jumps.height > 0:
+                _sym_bad = _jumps.select(pl.col("symbol").n_unique()).item()
+                _max_ret = _jumps.select(pl.col("_ret1").abs().max()).item()
+                errors.append(
+                    f"{_jumps.height} rows with |1-day return| > 21% "
+                    f"(across {_sym_bad} symbols, max |ret|={_max_ret:.2%}) — "
+                    f"possible data corruption or unadjusted ex-date"
+                )
+        except Exception:
+            pass  # sanity check is advisory
+
     return errors
 
 

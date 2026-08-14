@@ -86,6 +86,12 @@ uv run qp data fetch --skip-etl
 
 数据处理流程：**Raw → Bronze（清洗）→ Silver（校验）→ Gold（数据集）**
 
+> ⚠️ **复权策略（2026-08-14 起）**：价格表只存**不复权原始价**。
+> 腾讯 adapter 使用 `kline/kline`（无复权参数）接口；复权因子独立存
+> `data/dataset/adj_factor.parquet`（akshare qfq-factor），计算层按需调整。
+> **腾讯 `fqkline/get` + `qfq` 接口已废弃**（负价格坏数据 bug），任何代码/脚本不得再使用。
+> 详见 `docs/architecture/data/DP-002-data-layer.md`。
+
 ### 3.2 Demo 合成数据（快速体验）
 
 ```bash
