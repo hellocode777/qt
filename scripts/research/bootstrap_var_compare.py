@@ -51,6 +51,7 @@ def load_real_returns(path: str = PRICE_PATH) -> np.ndarray:
 
 # ---------- 三种日收益生成模型 ----------
 
+
 def model_historical_bootstrap(real: np.ndarray, n: int, seed: int | None = None) -> np.ndarray:
     """M1: 从真实收益池重采样（分块保留聚集性？此处简单重采样，可换 block）。"""
     rng = np.random.default_rng(seed if seed is not None else RNG.integers(0, 2**31))
@@ -63,8 +64,9 @@ def model_gbm(mu: float, sigma: float, n: int, seed: int | None = None) -> np.nd
     return mu + sigma * rng.standard_normal(n)
 
 
-def model_gbm_limited(mu: float, sigma: float, n: int, limit: float = LIMIT_PCT,
-                      seed: int | None = None) -> np.ndarray:
+def model_gbm_limited(
+    mu: float, sigma: float, n: int, limit: float = LIMIT_PCT, seed: int | None = None
+) -> np.ndarray:
     """M3: GBM + 涨跌停截断。"""
     rets = model_gbm(mu, sigma, n, seed=seed)
     return np.clip(rets, -limit, limit)
@@ -72,19 +74,25 @@ def model_gbm_limited(mu: float, sigma: float, n: int, limit: float = LIMIT_PCT,
 
 # ---------- VaR 估计 ----------
 
+
 def var1(a: np.ndarray, level: float = 0.01) -> float:
     """1% 单日 VaR（用分位数，正值表示亏损幅度）。"""
     return -np.percentile(a, level * 100)
 
 
-def bootstrap_var_ci(real: np.ndarray, level: float, n_boot: int = 500,
-                     sample_size: int = 200_000) -> tuple[float, float, float]:
+def bootstrap_var_ci(
+    real: np.ndarray, level: float, n_boot: int = 500, sample_size: int = 200_000
+) -> tuple[float, float, float]:
     """对真实收益的 VaR 做 bootstrap 置信区间（分块可选，默认简单重采样）。
 
     返回 (点估计, 95% CI 下界, 95% CI 上界)。
     """
     rng = np.random.default_rng(7)
-    pool = real if len(real) <= 1_000_000 else real[np.random.default_rng(3).choice(len(real), 1_000_000, replace=False)]
+    pool = (
+        real
+        if len(real) <= 1_000_000
+        else real[np.random.default_rng(3).choice(len(real), 1_000_000, replace=False)]
+    )
     boot_vars = []
     for _ in range(n_boot):
         s = rng.choice(pool, size=sample_size, replace=True)
@@ -99,7 +107,7 @@ def simulate_paths(generator, n_paths: int, horizon: int, seed: int) -> np.ndarr
     cum = np.ones(n_paths)
     for _ in range(horizon):
         rets = generator(n_paths, seed=int(rng.integers(0, 2**31)))
-        cum *= (1 + rets)
+        cum *= 1 + rets
     return cum - 1
 
 
@@ -130,21 +138,24 @@ def main():
     print(f"    95% CI (1%): [{ci_lo:.4%}, {ci_hi:.4%}]")
     print(f"{'M2 纯GBM':<24}{v_gbm1:>9.4%}{v_gbm5:>10.4%}")
     print(f"{'M3 GBM+涨跌停':<24}{v_lim1:>9.4%}{v_lim5:>10.4%}")
-    print(f"1% VaR 真实/GBM 倍数: {v_hist1/v_gbm1:.2f}x   5% VaR 倍数: {v_hist5/v_gbm5:.2f}x")
+    print(f"1% VaR 真实/GBM 倍数: {v_hist1 / v_gbm1:.2f}x   5% VaR 倍数: {v_hist5 / v_gbm5:.2f}x")
 
     # ---------- 20 日路径 VaR ----------
     print(f"\n=== {args.horizon} 日路径终点 1% VaR（{args.paths:,} 条路径） ===")
-    cum_hist = simulate_paths(lambda n, seed: model_historical_bootstrap(real, n, seed),
-                              args.paths, args.horizon, seed=11)
-    cum_gbm = simulate_paths(lambda n, seed: model_gbm(mu, sigma, n, seed),
-                             args.paths, args.horizon, seed=12)
-    cum_gbm_lim = simulate_paths(lambda n, seed: model_gbm_limited(mu, sigma, n, seed),
-                                 args.paths, args.horizon, seed=13)
+    cum_hist = simulate_paths(
+        lambda n, seed: model_historical_bootstrap(real, n, seed), args.paths, args.horizon, seed=11
+    )
+    cum_gbm = simulate_paths(
+        lambda n, seed: model_gbm(mu, sigma, n, seed), args.paths, args.horizon, seed=12
+    )
+    cum_gbm_lim = simulate_paths(
+        lambda n, seed: model_gbm_limited(mu, sigma, n, seed), args.paths, args.horizon, seed=13
+    )
 
     print(f"{'M1 历史bootstrap':<24}{var1(cum_hist):>9.4%}")
     print(f"{'M2 纯GBM':<24}{var1(cum_gbm):>9.4%}")
     print(f"{'M3 GBM+涨跌停':<24}{var1(cum_gbm_lim):>9.4%}")
-    print(f"真实/GBM 倍数: {var1(cum_hist)/var1(cum_gbm):.2f}x")
+    print(f"真实/GBM 倍数: {var1(cum_hist) / var1(cum_gbm):.2f}x")
 
     # ---------- 图 ----------
     _, axes = plt.subplots(1, 2, figsize=(13, 5))
@@ -152,17 +163,24 @@ def main():
     ax = axes[0]
     ax.hist(real, bins=200, density=True, alpha=0.5, color="#d62728", label="真实 A 股")
     x = np.linspace(-0.11, 0.11, 500)
-    ax.plot(x, (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((x - mu) ** 2) / (2 * sigma**2)),
-            color="#1f77b4", lw=2, label="GBM 假设 N(μ,σ²)")
+    ax.plot(
+        x,
+        (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((x - mu) ** 2) / (2 * sigma**2)),
+        color="#1f77b4",
+        lw=2,
+        label="GBM 假设 N(μ,σ²)",
+    )
     ax.axvline(-0.10, color="gray", ls="--", lw=1, label="跌停线 -10%")
     ax.set_xlim(-0.11, 0.11)
     ax.set_title("日收益分布")
     ax.legend(fontsize=8)
 
     ax = axes[1]
-    for data, label, color in [(cum_hist, "历史 bootstrap", "#d62728"),
-                               (cum_gbm, "纯 GBM", "#1f77b4"),
-                               (cum_gbm_lim, "GBM+涨跌停", "#2ca02c")]:
+    for data, label, color in [
+        (cum_hist, "历史 bootstrap", "#d62728"),
+        (cum_gbm, "纯 GBM", "#1f77b4"),
+        (cum_gbm_lim, "GBM+涨跌停", "#2ca02c"),
+    ]:
         ax.hist(data, bins=100, density=True, alpha=0.4, color=color, label=label)
     ax.set_title(f"{args.horizon} 日路径终点收益分布")
     ax.legend(fontsize=8)

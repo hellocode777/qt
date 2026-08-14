@@ -22,12 +22,8 @@ price = pl.read_parquet("data/dataset/daily_price_latest.parquet")
 
 # 按股票分组算收益率（pct_change），过滤异常
 df = (
-    price
-    .sort(["symbol", "trade_date"])
-    .with_columns(
-        pl.col("close").pct_change().alias("ret")
-        .over("symbol", order_by="trade_date")
-    )
+    price.sort(["symbol", "trade_date"])
+    .with_columns(pl.col("close").pct_change().alias("ret").over("symbol", order_by="trade_date"))
     .filter(pl.col("ret").is_not_null())
     .filter((pl.col("ret") > -0.21) & (pl.col("ret") < 0.21))  # 剔除除权跳变等异常
     .select(["symbol", "trade_date", "ret"])
@@ -48,6 +44,7 @@ for _sym, g in df.group_by("symbol"):
 sim_ret = np.concatenate(sim_rets)
 print(f"模拟样本量: {len(sim_ret):,}")
 
+
 # ---------- 3. 统计对比 ----------
 def describe(a):
     return {
@@ -61,14 +58,17 @@ def describe(a):
         "最大跌幅": a.min(),
     }
 
+
 real_d, sim_d = describe(real_ret), describe(sim_ret)
 print("\n=== 对比表（日收益率） ===")
 print(f"{'指标':<10}{'真实A股':>14}{'GBM模拟':>14}")
 for k in real_d:
     print(f"{k:<10}{real_d[k]:>14.6f}{sim_d[k]:>14.6f}")
 
-print(f"\n尾部差距: 真实1%分位 {real_d['1%分位']:.4f} vs 正态 {sim_d['1%分位']:.4f} → "
-      f"真实风险是正态假设的 {real_d['1%分位']/sim_d['1%分位']:.1f} 倍")
+print(
+    f"\n尾部差距: 真实1%分位 {real_d['1%分位']:.4f} vs 正态 {sim_d['1%分位']:.4f} → "
+    f"真实风险是正态假设的 {real_d['1%分位'] / sim_d['1%分位']:.1f} 倍"
+)
 
 # ---------- 4. 图 ----------
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
@@ -77,8 +77,13 @@ fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 ax = axes[0]
 ax.hist(real_ret, bins=200, density=True, alpha=0.6, color="#d62728", label="真实 A 股")
 x = np.linspace(real_ret.min(), real_ret.max(), 500)
-ax.plot(x, stats.norm.pdf(x, real_d["均值"], real_d["标准差"]),
-        color="#1f77b4", lw=2, label="GBM 假设 N(μ,σ²)")
+ax.plot(
+    x,
+    stats.norm.pdf(x, real_d["均值"], real_d["标准差"]),
+    color="#1f77b4",
+    lw=2,
+    label="GBM 假设 N(μ,σ²)",
+)
 ax.set_xlim(-0.11, 0.11)
 ax.set_title("日收益分布：真实 vs GBM 假设")
 ax.legend()
