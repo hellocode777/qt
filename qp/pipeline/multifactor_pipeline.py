@@ -1001,139 +1001,34 @@ class MultiFactorPipeline(BasePipeline):
 
     @staticmethod
     def _load_fundamental_data() -> dict[str, pl.DataFrame]:
-        """Load fundamental data from QuantTradingDB for quality filter.
+        """Load fundamental data for quality filter.
 
-        Pivots EAV model (code, report_date, publish_date, field_name, value)
-        into per-code DataFrames with columns [report_date, publish_date,
-        ROE, gross_margin, revenue_growth, net_margin, debt_ratio,
-        net_profit_growth, EPS, NAV].
-
-        Returns:
-            {code: DataFrame} — empty dict if DB unavailable.
+        Deprecated: previously read from QuantTrading quant.db. The
+        QuantTrading dependency has been removed (2026-08-14); returns
+        empty dict so the quality filter is skipped gracefully.
         """
-        try:
-            import sqlite3
-
-            db_path = "/home/shuai/workspace/QuantTrading/data/quant.db"
-            conn = sqlite3.connect(db_path)
-
-            # Query all fundamental data
-            rows = conn.execute(
-                "SELECT code, report_date, publish_date, field_name, field_value "
-                "FROM fundamental_data "
-                "ORDER BY code, report_date"
-            ).fetchall()
-            conn.close()
-
-            if not rows:
-                return {}
-
-            # Collect by code
-            from collections import defaultdict
-
-            code_data: dict[str, dict[str, dict[str, float | str]]] = defaultdict(
-                lambda: defaultdict(dict)
-            )
-            # code → {report_date → {field_name: value, ..., "publish_date": str}}
-
-            for code, report_date, publish_date, field_name, field_value in rows:
-                rd = str(report_date)
-                code_data[code][rd][field_name] = float(field_value)
-                if "publish_date" not in code_data[code][rd]:
-                    code_data[code][rd]["publish_date"] = str(publish_date)
-
-            # Convert to DataFrames
-            QUALITY_FIELDS = [
-                "ROE",
-                "gross_margin",
-                "revenue_growth",
-                "net_margin",
-                "debt_ratio",
-                "net_profit_growth",
-                "EPS",
-                "NAV",
-            ]
-
-            result: dict[str, pl.DataFrame] = {}
-            for code, date_map in code_data.items():
-                records = []
-                for report_date, fields in date_map.items():
-                    record = {
-                        "report_date": report_date,
-                        "publish_date": fields.get("publish_date", report_date),
-                    }
-                    for f in QUALITY_FIELDS:
-                        record[f] = fields.get(f, None)
-                    records.append(record)
-
-                if records:
-                    result[code] = pl.DataFrame(records).sort("report_date")
-
-            return result
-        except Exception:
-            return {}
+        return {}
 
     @staticmethod
     def _load_valuation_data(
         symbols: list[str],
         price_data: dict[str, pl.DataFrame],
     ) -> dict[str, pl.DataFrame]:
-        """Load valuation data (PE_TTM, PB, PCF_OCF) from quant.db.
+        """Load valuation data (PE_TTM, PB, PCF_OCF).
 
-        Returns:
-            {symbol: pl.DataFrame(trade_date, PE_TTM, PB, PCF_OCF)}.
+        Deprecated: previously read from QuantTrading quant.db via
+        qp.data.valuation.loader. That dependency was removed (2026-08-14);
+        returns empty dict so valuation-based filters are skipped gracefully.
         """
-        try:
-            from qp.data.valuation.loader import load_valuation_data
-
-            return load_valuation_data(symbols, price_data)
-        except Exception:
-            return {}
+        return {}
 
     def _load_index_data(self) -> pl.DataFrame | None:
-        """Load CSI300 index data from QuantTradingDB for market filter.
+        """Load CSI300 index data for market filter.
 
-        Falls back to None if the DB is unavailable — strategy will
-        skip market filter and regime detection gracefully.
+        Deprecated: previously read from QuantTrading quant.db
+        (index_daily). That dependency was removed (2026-08-14);
+        returns None so market filter/regime detection is skipped.
         """
-        try:
-            import sqlite3
-
-            db_path = "/home/shuai/workspace/QuantTrading/data/quant.db"
-            conn = sqlite3.connect(db_path)
-            rows = conn.execute(
-                "SELECT date, open, high, low, close, volume "
-                "FROM index_daily WHERE code = '000001' "
-                "ORDER BY date"
-            ).fetchall()
-            conn.close()
-
-            if not rows:
-                return None
-
-            idx_df = pl.DataFrame(
-                [
-                    {
-                        "date": r[0],
-                        "open": float(r[1] or 0),
-                        "high": float(r[2] or 0),
-                        "low": float(r[3] or 0),
-                        "close": float(r[4] or 0),
-                        "volume": float(r[5] or 0),
-                    }
-                    for r in rows
-                ]
-            )
-            logger.info(
-                "   📊 上证指数(000001) 数据: {} 行 ({} → {})",
-                idx_df.height,
-                idx_df["date"].min(),
-                idx_df["date"].max(),
-            )
-            return idx_df
-        except Exception as e:
-            logger.info("   指数数据不可用 ({}): 大盘过滤/市场状态将跳过", e)
-
         return None
 
     @staticmethod

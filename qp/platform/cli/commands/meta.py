@@ -100,7 +100,7 @@ def cmd_help() -> int:
     print()
     print("Phase 1 (available):")
     print("  qp data fetch [--batch=500] [--skip-etl]")
-    print("                                Fetch full main-board data from quant.db")
+    print("                                Fetch full main-board data from AKShare")
     print("  qp ingest --demo              Ingest with synthetic demo data")
     print("  qp ingest 2024-01-01 2024-12-31  Ingest date range")
     print("  qp run daily --demo           Full pipeline with demo data")

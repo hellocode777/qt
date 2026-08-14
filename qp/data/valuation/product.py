@@ -258,6 +258,80 @@ class ValuationDataProduct:
 # ------------------------------------------------------------------
 
 
+def compute_valuation(
+    symbol: str,
+    price_df: pl.DataFrame,
+    fund_df: pl.DataFrame,
+) -> pl.DataFrame | None:
+    """Compute daily PE_TTM, PB, PCF_OCF from fundamentals + close prices.
+
+    PIT-compliant: for each trading day, uses the latest fundamental data
+    whose publish_date <= trade_date.
+
+    Args:
+        symbol: Stock code.
+        price_df: [trade_date, close], sorted by trade_date.
+        fund_df: [report_date, publish_date, EPS, NAV, cashflow_per_share],
+                 sorted by report_date.
+
+    Returns:
+        DataFrame [symbol, trade_date, PE_TTM, PB, PCF_OCF] or None.
+    """
+    if price_df.is_empty() or fund_df.is_empty():
+        return None
+
+    price_df = price_df.sort("trade_date")
+    fund_df = fund_df.sort("report_date")
+
+    dates = price_df["trade_date"].cast(pl.Utf8).to_list()
+    closes = price_df["close"].to_list()
+    pub_dates = fund_df["publish_date"].cast(pl.Utf8).to_list()
+
+    rows: list[dict] = []
+    for i, td in enumerate(dates):
+        close_val = closes[i]
+        if close_val is None or close_val <= 0:
+            continue
+
+        row: dict = {"symbol": symbol, "trade_date": td}
+        has_any = False
+
+        for field in _VALUATION_INPUTS:
+            if field not in fund_df.columns:
+                continue
+
+            # Find latest visible value (publish_date <= td)
+            vals = fund_df[field].to_list()
+            val = None
+            for j in range(len(pub_dates) - 1, -1, -1):
+                if pub_dates[j] <= td:
+                    v = vals[j]
+                    if v is not None and (not isinstance(v, float) or v == v):
+                        val = float(v)
+                    break
+
+            if val is None or val <= 0:
+                continue
+
+            if field == "EPS":
+                row["PE_TTM"] = round(close_val / val, 2)
+                has_any = True
+            elif field == "NAV":
+                row["PB"] = round(close_val / val, 2)
+                has_any = True
+            elif field == "cashflow_per_share":
+                row["PCF_OCF"] = round(close_val / val, 2)
+                has_any = True
+
+        if has_any:
+            rows.append(row)
+
+    if not rows:
+        return None
+
+    return pl.DataFrame(rows)
+
+
 def _get_latest_visible(
     df: pl.DataFrame,
     field: str,

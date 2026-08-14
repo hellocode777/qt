@@ -55,7 +55,11 @@ class TestFullDataPipelineRun:
 
         with (
             tempfile.TemporaryDirectory() as tmp,
-            patch("qp.data.loader.full_pipeline.QuantTradingDBAdapter") as mock_adapt,
+            patch("qp.data.loader.full_pipeline.AKShareAdapter") as mock_adapt,
+            patch(
+                "qp.data.loader.full_pipeline.get_main_board_codes",
+                return_value=["600519", "000001", "000002"],
+            ),
             patch("qp.data.loader.full_pipeline.DIR_RAW", Path(tmp) / "raw"),
             patch("qp.data.loader.full_pipeline.DIR_BRONZE", Path(tmp) / "bronze"),
             patch("qp.data.loader.full_pipeline.DIR_SILVER", Path(tmp) / "silver"),
@@ -71,7 +75,6 @@ class TestFullDataPipelineRun:
             ),
         ):
             adapter = mock_adapt.return_value
-            adapter.get_codes.return_value = ["600519", "000001"]
             adapter.fetch_raw.return_value = _sample_raw_pd()
 
             etl = mock_etl.return_value
@@ -102,7 +105,11 @@ class TestFullDataPipelineRun:
     def test_run_batches_by_batch_size(self) -> None:
         with (
             tempfile.TemporaryDirectory() as tmp,
-            patch("qp.data.loader.full_pipeline.QuantTradingDBAdapter") as mock_adapt,
+            patch("qp.data.loader.full_pipeline.AKShareAdapter") as mock_adapt,
+            patch(
+                "qp.data.loader.full_pipeline.get_main_board_codes",
+                return_value=["600519", "000001", "000002"],
+            ),
             patch("qp.data.loader.full_pipeline.DIR_RAW", Path(tmp) / "raw"),
             patch("qp.data.loader.full_pipeline.DIR_BRONZE", Path(tmp) / "bronze"),
             patch("qp.data.loader.full_pipeline.DIR_SILVER", Path(tmp) / "silver"),
@@ -118,7 +125,6 @@ class TestFullDataPipelineRun:
             ),
         ):
             adapter = mock_adapt.return_value
-            adapter.get_codes.return_value = ["600519", "000001", "000002"]
             adapter.fetch_raw.return_value = _sample_raw_pd().head(1)
 
             etl = mock_etl.return_value
@@ -140,7 +146,11 @@ class TestFullDataPipelineRun:
 
         with (
             tempfile.TemporaryDirectory() as tmp,
-            patch("qp.data.loader.full_pipeline.QuantTradingDBAdapter") as mock_adapt,
+            patch("qp.data.loader.full_pipeline.AKShareAdapter") as mock_adapt,
+            patch(
+                "qp.data.loader.full_pipeline.get_main_board_codes",
+                return_value=["600519", "000001", "000002"],
+            ),
             patch("qp.data.loader.full_pipeline.DIR_RAW", Path(tmp) / "raw"),
             patch("qp.data.loader.full_pipeline.DIR_BRONZE", Path(tmp) / "bronze"),
             patch("qp.data.loader.full_pipeline.DIR_SILVER", Path(tmp) / "silver"),

@@ -2,7 +2,7 @@
 
 Implements the Data Tier system (CLAUDE.md §133, dp.md §7.7):
 
-  quant.db ──► Raw ──► Bronze ──► Silver ──► Gold
+  AKShare ──► Raw ──► Bronze ──► Silver ──► Gold
   (external)   Adapter  ETL       Contract   Universe+PIT
                output   cleaning  validate   DatasetRegistry
 
@@ -22,7 +22,8 @@ from typing import Any
 import pandas as pd
 import polars as pl
 
-from qp.data.adapter.quant_trading_db_adapter import QuantTradingDBAdapter
+from qp.data.adapter.akshare_adapter import AKShareAdapter
+from qp.data.adapter.code_list import get_main_board_codes
 from qp.data.cleaning.etl_pipeline import ETLPipeline
 from qp.data.cleaning.repair import repair_all
 from qp.data.contract.daily_price import DailyPriceContract
@@ -95,8 +96,8 @@ class FullDataPipeline(BasePipeline):
         # ── Load codes ──
         logger.info("═══ FullDataPipeline: Raw → Bronze → Silver → Gold ═══")
         logger.info("股票池: 主板 (排除创业板/科创板/ST)")
-        adapter = QuantTradingDBAdapter()
-        codes = adapter.get_codes(board="main")
+        adapter = AKShareAdapter()
+        codes = get_main_board_codes()
         logger.info("共 {} 只", len(codes))
 
         total_batches = (len(codes) + batch_size - 1) // batch_size
@@ -114,7 +115,7 @@ class FullDataPipeline(BasePipeline):
             batch_codes = codes[batch_i * batch_size : (batch_i + 1) * batch_size]
             start_d = date.fromisoformat(start_date)
             end_d = date.fromisoformat(end_date)
-            raw_pd = adapter.fetch_raw(start_d, end_d, codes=batch_codes)
+            raw_pd = adapter.fetch_raw(start_d, end_d, symbols=batch_codes)
             if not raw_pd.empty:
                 all_raw.append(pl.from_pandas(raw_pd))
             logger.info(
@@ -238,7 +239,7 @@ class FullDataPipeline(BasePipeline):
             version=version,
             path=str(gold_path),
             metadata={
-                "source": "quant_trading_db",
+                "source": "akshare",
                 "board": "main",
                 "start_date": start_date,
                 "end_date": end_date,

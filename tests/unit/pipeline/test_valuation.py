@@ -1,4 +1,4 @@
-"""Tests for _compute_valuation() — PIT-aligned PE/PB computation.
+"""Tests for compute_valuation() — PIT-aligned PE/PB computation.
 
 Verifies that the valuation helper honours point-in-time alignment:
 a 2024 trade date must never see EPS/NAV from a future report.
@@ -11,7 +11,7 @@ from datetime import date
 import polars as pl
 import pytest
 
-from qp.data.valuation.loader import _compute_valuation
+from qp.data.valuation.product import compute_valuation
 
 
 class TestComputeValuation:
@@ -55,7 +55,7 @@ class TestComputeValuation:
             }
         )
 
-        result = _compute_valuation("000001", price_df, fund_df)
+        result = compute_valuation("000001", price_df, fund_df)
         assert result is not None
         assert result.height == 3
 
@@ -92,7 +92,7 @@ class TestComputeValuation:
             }
         )
 
-        result = _compute_valuation("000002", price_df, fund_df)
+        result = compute_valuation("000002", price_df, fund_df)
         # No publish_date <= 2020-01-15 → empty result
         assert result is None or result.is_empty()
 
@@ -109,7 +109,7 @@ class TestComputeValuation:
             }
         )
 
-        result = _compute_valuation("C", price_df, fund_df)
+        result = compute_valuation("C", price_df, fund_df)
         # No valid EPS/NAV values in visible reports → None
         assert result is None
 
@@ -135,7 +135,7 @@ class TestComputeValuation:
             }
         )
 
-        result = _compute_valuation("D", price_df, fund_df)
+        result = compute_valuation("D", price_df, fund_df)
         assert result is not None
 
         rows = list(result.iter_rows(named=True))
@@ -148,7 +148,7 @@ class TestComputeValuation:
 
     def test_empty_price_data(self) -> None:
         """Empty price DataFrame → None."""
-        result = _compute_valuation(
+        result = compute_valuation(
             "X",
             pl.DataFrame(),
             pl.DataFrame(
@@ -166,5 +166,5 @@ class TestComputeValuation:
     def test_empty_fundamental_data(self) -> None:
         """Empty fundamental DataFrame → None."""
         price_df = pl.DataFrame({"trade_date": [date(2024, 1, 1)], "close": [100.0]})
-        result = _compute_valuation("Y", price_df, pl.DataFrame())
+        result = compute_valuation("Y", price_df, pl.DataFrame())
         assert result is None

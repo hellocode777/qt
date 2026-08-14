@@ -38,7 +38,7 @@ def _detect_date_column(df_columns: list[str]) -> str | None:
     """Detect the date/trade_date column regardless of naming convention.
 
     Adaptors may return Chinese column names (AKShare/Tencent/Demo) or
-    English column names (QuantTradingDBAdapter). This function finds the
+    English column names. This function finds the
     correct column to use as the basis for source_event_time.
     """
     for candidate in ("trade_date", "日期"):
