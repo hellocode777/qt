@@ -65,10 +65,7 @@ __all__ = [
     # Concrete strategies
     "MomentumStrategy",
     "NormMethod",
-    "PaperTradingResult",
-    "PaperTradingRun",
-    # Paper trading
-    "PaperTradingTracker",
+    # Paper trading (actual classes live in qp.simulation.paper_trading)
     "QualityStrategy",
     "RegimeResult",
     "RunnerResult",
