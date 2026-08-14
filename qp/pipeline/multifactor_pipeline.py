@@ -33,6 +33,7 @@ Usage via CLI:
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -1001,26 +1002,82 @@ class MultiFactorPipeline(BasePipeline):
 
     @staticmethod
     def _load_fundamental_data() -> dict[str, pl.DataFrame]:
-        """Load fundamental data for quality filter.
+        """Load fundamental data for quality filter from local parquet.
 
-        Deprecated: previously read from QuantTrading quant.db. The
-        QuantTrading dependency has been removed (2026-08-14); returns
-        empty dict so the quality filter is skipped gracefully.
+        Reads ``data/dataset/fundamentals_latest.parquet`` produced by
+        FundamentalPipeline (``qp ingest fundamental``, source: AkShare
+        via FundamentalAdapter). Returns {code: DataFrame(report_date,
+        publish_date, ROE, gross_margin, ...)} — empty dict if the
+        file is missing (quality filter skipped gracefully).
         """
-        return {}
+        path = Path("data/dataset/fundamentals_latest.parquet")
+        if not path.exists():
+            logger.info(
+                "基本面 parquet 不存在 ({}) — 质量过滤跳过。先运行 `qp ingest fundamental`",
+                path,
+            )
+            return {}
+
+        try:
+            raw = pl.read_parquet(path)
+        except Exception as e:
+            logger.warning("基本面 parquet 读取失败 ({}): 质量过滤跳过", e)
+            return {}
+
+        if raw.is_empty() or "symbol" not in raw.columns:
+            return {}
+
+        result: dict[str, pl.DataFrame] = {}
+        for code, group in raw.group_by("symbol"):
+            symbol = str(code[0])
+            df = group.drop("symbol").sort("report_date")
+            result[symbol] = df
+        logger.info("📊 基本面数据: {} 只股票 (质量过滤启用)", len(result))
+        return result
 
     @staticmethod
     def _load_valuation_data(
         symbols: list[str],
         price_data: dict[str, pl.DataFrame],
     ) -> dict[str, pl.DataFrame]:
-        """Load valuation data (PE_TTM, PB, PCF_OCF).
+        """Load valuation data (PE_TTM, PB, PCF_OCF) from fundamentals + close.
 
-        Deprecated: previously read from QuantTrading quant.db via
-        qp.data.valuation.loader. That dependency was removed (2026-08-14);
-        returns empty dict so valuation-based filters are skipped gracefully.
+        Computed PIT-compliant via qp.data.valuation.product.compute_valuation
+        (publish_date <= trade_date), using the local fundamentals parquet.
+        Returns {symbol: DataFrame(trade_date, PE_TTM, PB, PCF_OCF)}.
         """
-        return {}
+        from qp.data.valuation.product import compute_valuation
+
+        path = Path("data/dataset/fundamentals_latest.parquet")
+        if not path.exists():
+            return {}
+
+        try:
+            raw = pl.read_parquet(path)
+        except Exception:
+            return {}
+
+        if raw.is_empty() or "symbol" not in raw.columns:
+            return {}
+
+        # Group fundamentals by symbol
+        fund_by_symbol: dict[str, pl.DataFrame] = {}
+        for code, group in raw.group_by("symbol"):
+            fund_by_symbol[str(code[0])] = group.drop("symbol").sort("report_date")
+
+        result: dict[str, pl.DataFrame] = {}
+        for sym in symbols:
+            fund_df = fund_by_symbol.get(sym)
+            price_df = price_data.get(sym)
+            if fund_df is None or price_df is None or price_df.is_empty():
+                continue
+            val = compute_valuation(sym, price_df, fund_df)
+            if val is not None and not val.is_empty():
+                result[sym] = val
+
+        if result:
+            logger.info("💰 估值数据: {} 只股票 (PE/PB 过滤启用)", len(result))
+        return result
 
     def _load_index_data(self) -> pl.DataFrame | None:
         """Load CSI300 index data for market filter.
