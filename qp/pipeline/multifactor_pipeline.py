@@ -937,7 +937,7 @@ class MultiFactorPipeline(BasePipeline):
             config = config.with_overrides(**cli_overrides)
             logger.info(
                 "   配置覆盖: {}",
-                {k: v for k, v in cli_overrides.items()},
+                dict(cli_overrides),
             )
 
         # Positional CLI params always apply (top_n / rebalance / model_mode)
