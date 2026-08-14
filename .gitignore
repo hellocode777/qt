@@ -70,3 +70,4 @@ htmlcov/
 *.key
 data/dataset/*.bak_*
 data/fundamental_cache/
+data/capital_flow_cache/
