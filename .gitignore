@@ -69,3 +69,4 @@ htmlcov/
 *.pem
 *.key
 data/dataset/*.bak_*
+data/fundamental_cache/
