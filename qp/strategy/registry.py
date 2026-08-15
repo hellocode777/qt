@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from loguru import logger
+
 from qp.shared.protocols.base_strategy import BaseStrategy
 from qp.shared.types import RebalanceSchedule, StrategyLifecycle
 from qp.strategy.approved import cast_dict
@@ -39,6 +41,21 @@ _LINEAGE_REQUIRED_STATES: frozenset[StrategyLifecycle] = frozenset(
         StrategyLifecycle.PRODUCTION,
     }
 )
+
+
+def _coerce_float(value: object, default: float = 0.0) -> float:
+    """Coerce a JSON backtest metric to float.
+
+    Backtest metrics may be absent (null) for strategies that have not
+    been backtested yet — treat those as ``default`` (0.0) instead of
+    crashing the whole registry load with ``float('None')``.
+    """
+    if value is None:
+        return default
+    try:
+        return float(str(value))
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass
@@ -141,10 +158,10 @@ class StrategyMeta:
             tags=list(cast("list[str]", data.get("tags", []))),
             weights=weights,
             parameters=parameters,
-            backtest_ic=float(str(data.get("backtest_ic", 0.0))),
-            backtest_sharpe=float(str(data.get("backtest_sharpe", 0.0))),
-            backtest_max_dd=float(str(data.get("backtest_max_dd", 0.0))),
-            backtest_excess_return=float(str(data.get("backtest_excess_return", 0.0))),
+            backtest_ic=_coerce_float(data.get("backtest_ic", 0.0)),
+            backtest_sharpe=_coerce_float(data.get("backtest_sharpe", 0.0)),
+            backtest_max_dd=_coerce_float(data.get("backtest_max_dd", 0.0)),
+            backtest_excess_return=_coerce_float(data.get("backtest_excess_return", 0.0)),
         )
 
 
@@ -185,12 +202,23 @@ class StrategyRegistry:
     # ------------------------------------------------------------------
 
     def _load(self) -> None:
-        """Load lifecycle, metadata, and approved snapshots from disk."""
+        """Load lifecycle, metadata, and approved snapshots from disk.
+
+        Each strategy entry is parsed independently — a corrupt entry
+        (e.g. null backtest metrics from a not-yet-backtested strategy)
+        is skipped with a warning instead of failing the entire registry
+        load (which would blank the WebUI strategy list).
+        """
         if not self._registry_file.exists():
             return
         try:
             data = json.loads(self._registry_file.read_text())
-            for sid, entry in data.get("strategies", {}).items():
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Strategy registry load failed: {}", exc)
+            return
+
+        for sid, entry in data.get("strategies", {}).items():
+            try:
                 lifecycle_raw = entry.get("lifecycle", "research")
                 try:
                     self._lifecycles[sid] = StrategyLifecycle(lifecycle_raw)
@@ -203,8 +231,13 @@ class StrategyRegistry:
                 if approved_raw and isinstance(approved_raw, dict):
                     self._approved[sid] = cast_dict(approved_raw)
                     self._active_versions[sid] = bool(entry.get("active", False))
-        except (json.JSONDecodeError, OSError):
-            pass
+            except Exception as exc:
+                logger.warning(
+                    "Strategy registry: skipping corrupt entry '{}': {}",
+                    sid,
+                    exc,
+                )
+                continue
 
     def _save(self) -> None:
         """Persist lifecycle, metadata, and approved snapshots to disk."""
