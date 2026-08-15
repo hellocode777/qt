@@ -454,11 +454,22 @@ def compute_cross_sectional_scores(
 
     # ── Merge extra factors (pre-computed fundamental/alternative) ──
     if extra_factors:
+        # 2026-08-15 OOM fix: extra_factors (e.g. full-market MF_NetFlow_20D
+        # dict) can be ~3x larger than the quality-filtered universe. Restrict
+        # to the filtered universe (price_data keys) to avoid memory blowup.
+        valid_extra_codes: set[str] | None = None
+        if price_data:
+            valid_extra_codes = set(price_data.keys())
+        n_extra = 0
         for date_str, sym_factors in extra_factors.items():
             for symbol, factors in sym_factors.items():
+                if valid_extra_codes is not None and symbol not in valid_extra_codes:
+                    continue
                 for fname, fval in factors.items():
                     if fval is not None and fval == fval:  # not NaN
                         all_raw[date_str][symbol][fname] = float(fval)
+                        n_extra += 1
+        logger.info("   资金流因子合并: {} 条 (universe 裁剪后)", n_extra)
         # Re-sort dates after merge
         all_dates = sorted(all_raw.keys())
 

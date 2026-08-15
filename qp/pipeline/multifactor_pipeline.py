@@ -1047,7 +1047,30 @@ class MultiFactorPipeline(BasePipeline):
 
                 flow_needed = [f for f in REAL_MONEY_FLOW_FACTORS if f in config.factors]
                 if flow_needed:
+                    # 2026-08-15 OOM fix: pre-filter to quality-qualified codes so
+                    # the extra_factors dict is ~3x smaller (full market → ~974).
+                    # The strategy engine re-filters identically; this only shrinks
+                    # the dict we carry in memory across the 3 strategy passes.
+                    qualified_flow_codes: set[str] | None = None
+                    if config.quality_filter:
+                        try:
+                            from qp.strategy.quality_filter import apply_quality_filter
+
+                            qf = apply_quality_filter(
+                                price_data,
+                                fundamental_data or {},
+                                valuation_data or {},
+                            )
+                            if qf:
+                                qualified_flow_codes = set(qf)
+                        except Exception:
+                            qualified_flow_codes = None
                     for code, cf_df in capital_flow_data.items():
+                        if (
+                            qualified_flow_codes is not None
+                            and code not in qualified_flow_codes
+                        ):
+                            continue
                         try:
                             # _prep sorts on ["symbol","date"] — re-add symbol col
                             cf_sym = cf_df.with_columns(pl.lit(code).alias("symbol"))
@@ -1550,7 +1573,10 @@ class MultiFactorPipeline(BasePipeline):
                                     "order_type": "market",
                                 }
                             )
-                            del cost_basis[rx.symbol]
+                            # 2026-08-15 fix: risk exit may reference a symbol with
+                            # no cost-basis entry (e.g. bought before backtest window
+                            # or never filled) — .pop() instead of del to avoid KeyError.
+                            cost_basis.pop(rx.symbol, None)
                             risk_exit_hits += 1
                             if TradeReason.STOP_LOSS in rx.reasons:  # type: ignore[truthy-function]
                                 stop_loss_hits += 1
@@ -2160,7 +2186,14 @@ def _compute_factor_ic_attribution(
                     "cashflow_per_share",
                 }
             )
-            or (extra_factors and fname in extra_factors)
+            or (
+                extra_factors
+                and any(
+                    fname in sym_factors
+                    for date_factors in extra_factors.values()
+                    for sym_factors in date_factors.values()
+                )
+            )
         )
         # Residual_Momentum_3M requires index_df to compute
         if fname == "Residual_Momentum_3M" and index_df is None:

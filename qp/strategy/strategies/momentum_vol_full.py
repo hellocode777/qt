@@ -526,6 +526,10 @@ def run_momentum_vol_full(
         score_percentile_min=score_percentile_min,
         score_percentile_max=score_percentile_max,
         score_smooth_days=getattr(config, "score_smooth_days", 1),
+        # 2026-08-15 fix: extra_factors (pre-computed alternative factors e.g.
+        # MF_NetFlow_20D) must be forwarded to the core strategy engine —
+        # previously dropped here, so extra factors never affected scoring.
+        extra_factors=overrides.get("extra_factors"),
     )
 
     diagnostics = None

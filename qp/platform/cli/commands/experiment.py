@@ -323,6 +323,27 @@ def cmd_experiment_run() -> int:
             params["model_mode"] = True
         elif arg == "--compare":
             params["compare"] = True
+        elif arg.startswith("--freeze-weights="):
+            import json as _json
+
+            try:
+                params["freeze_weights"] = {
+                    str(k): float(v)
+                    for k, v in _json.loads(arg.split("=", 1)[1]).items()
+                }
+            except (ValueError, AttributeError):
+                print("  ⚠ --freeze-weights 需要 JSON 对象，忽略", file=sys.stderr)
+        elif arg == "--freeze-weights" and i + 1 < len(args):
+            import json as _json
+
+            i += 1
+            try:
+                params["freeze_weights"] = {
+                    str(k): float(v)
+                    for k, v in _json.loads(args[i]).items()
+                }
+            except (ValueError, AttributeError):
+                print("  ⚠ --freeze-weights 需要 JSON 对象，忽略", file=sys.stderr)
         elif arg.startswith("--strategy="):
             params["strategy"] = arg.split("=", 1)[1]
         elif arg == "--strategy" and i + 1 < len(args):
