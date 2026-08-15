@@ -51,18 +51,21 @@ def _ic_frame(score: pl.DataFrame, price: pl.DataFrame, h: int) -> pl.DataFrame:
     pdf = price.with_columns(
         (pl.col("close").shift(-h).over("symbol") / pl.col("close") - 1.0).alias(f"fwd_{h}")
     )
-    return (
-        score.join(pdf.select(["trade_date", "symbol", f"fwd_{h}"]), on=["trade_date", "symbol"], how="inner")
-        .drop_nulls()
-    )
+    return score.join(
+        pdf.select(["trade_date", "symbol", f"fwd_{h}"]), on=["trade_date", "symbol"], how="inner"
+    ).drop_nulls()
 
 
 def _daily_ic(jd: pl.DataFrame, h: int) -> dict:
     """Rank IC per day, then mean/IR/t over days."""
-    by_day = jd.group_by("trade_date").agg(
-        pl.corr(pl.col("score").rank(), pl.col(f"fwd_{h}").rank()).alias("rho"),
-        pl.len().alias("n"),
-    ).filter(pl.col("n") >= 20)
+    by_day = (
+        jd.group_by("trade_date")
+        .agg(
+            pl.corr(pl.col("score").rank(), pl.col(f"fwd_{h}").rank()).alias("rho"),
+            pl.len().alias("n"),
+        )
+        .filter(pl.col("n") >= 20)
+    )
     rho = by_day.select(pl.col("rho")).to_series().to_list()
     n = len(rho)
     if n == 0:
@@ -74,7 +77,7 @@ def _daily_ic(jd: pl.DataFrame, h: int) -> dict:
     return {
         "ic_mean": round(m, 4),
         "ic_ir": round(m / sd, 2) if sd > 0 else None,
-        "ic_t": round(m / (sd / (n ** 0.5)), 1) if sd > 0 else None,
+        "ic_t": round(m / (sd / (n**0.5)), 1) if sd > 0 else None,
         "n_days": n,
         "n_pos": sum(1 for x in rho if x > 0),
     }
@@ -82,14 +85,18 @@ def _daily_ic(jd: pl.DataFrame, h: int) -> dict:
 
 def _quintile_means(jd: pl.DataFrame, h: int) -> dict:
     """Q1-Q5 mean fwd return (Q1 = lowest score)."""
-    q = jd.with_columns(
-        pl.col("score").rank("ordinal").over("trade_date").alias("_r")
-    ).with_columns(
-        (pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct")
-    ).with_columns(
-        pl.col("_pct").cut([0.2, 0.4, 0.6, 0.8], labels=["Q1", "Q2", "Q3", "Q4", "Q5"]).alias("_q")
+    q = (
+        jd.with_columns(pl.col("score").rank("ordinal").over("trade_date").alias("_r"))
+        .with_columns((pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct"))
+        .with_columns(
+            pl.col("_pct")
+            .cut([0.2, 0.4, 0.6, 0.8], labels=["Q1", "Q2", "Q3", "Q4", "Q5"])
+            .alias("_q")
+        )
     )
-    rows = q.group_by("_q").agg(pl.col(f"fwd_{h}").mean().alias("m")).sort("_q").iter_rows(named=True)
+    rows = (
+        q.group_by("_q").agg(pl.col(f"fwd_{h}").mean().alias("m")).sort("_q").iter_rows(named=True)
+    )
     return {r["_q"]: round(r["m"] * 100, 3) for r in rows}
 
 
@@ -116,9 +123,7 @@ def main() -> None:
     # R3: walk-forward
     print(f"=== {FACTOR} walk-forward (4 windows) ===")
     for lo, hi in WINDOWS:
-        sub = score.filter(
-            pl.col("trade_date").is_between(pl.lit(lo), pl.lit(hi))
-        )
+        sub = score.filter(pl.col("trade_date").is_between(pl.lit(lo), pl.lit(hi)))
         print(f"\n--- {lo} ~ {hi} (rows={sub.height}) ---")
         win: dict = {"horizons": {}}
         for h in (5, 10, 20):
@@ -126,7 +131,9 @@ def main() -> None:
             ic = _daily_ic(jd, h)
             win["horizons"][str(h)] = ic
             if ic["ic_mean"] is not None:
-                print(f"  H={h:>2d}: IC={ic['ic_mean']:+.4f} | IR={ic['ic_ir']} | t={ic['ic_t']} | n={ic['n_days']} | pos%={ic['n_pos']/ic['n_days']*100:.0f}%")
+                print(
+                    f"  H={h:>2d}: IC={ic['ic_mean']:+.4f} | IR={ic['ic_ir']} | t={ic['ic_t']} | n={ic['n_days']} | pos%={ic['n_pos'] / ic['n_days'] * 100:.0f}%"
+                )
             else:
                 print(f"  H={h:>2d}: no valid cross-section")
         q = _quintile_means(_ic_frame(sub, price, 5), 5)
@@ -138,20 +145,26 @@ def main() -> None:
     print("\n=== Size decomposition (turnover tercile proxy) ===")
     jd5 = _ic_frame(score, price, 5)
     sz = jd5.join(turnover, on=["trade_date", "symbol"], how="left").drop_nulls()
-    sz = sz.with_columns(
-        pl.col("turnover").rank("ordinal").over("trade_date").alias("_r")
-    ).with_columns(
-        (pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct")
-    ).with_columns(
-        pl.when(pl.col("_pct") <= 1 / 3).then(pl.lit("Small"))
-        .when(pl.col("_pct") <= 2 / 3).then(pl.lit("Mid"))
-        .otherwise(pl.lit("Large")).alias("size")
+    sz = (
+        sz.with_columns(pl.col("turnover").rank("ordinal").over("trade_date").alias("_r"))
+        .with_columns((pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct"))
+        .with_columns(
+            pl.when(pl.col("_pct") <= 1 / 3)
+            .then(pl.lit("Small"))
+            .when(pl.col("_pct") <= 2 / 3)
+            .then(pl.lit("Mid"))
+            .otherwise(pl.lit("Large"))
+            .alias("size")
+        )
     )
     for bucket in ("Small", "Mid", "Large"):
         b = sz.filter(pl.col("size") == bucket)
         ic = _daily_ic(b, 5)
         q = _quintile_means(b, 5)
-        print(f"  {bucket:6s}: IC={ic['ic_mean']} | t={ic['ic_t']} | n={ic['n_days']} | Q1-Q5: " + " ".join(f"{k}={v}" for k, v in q.items()))
+        print(
+            f"  {bucket:6s}: IC={ic['ic_mean']} | t={ic['ic_t']} | n={ic['n_days']} | Q1-Q5: "
+            + " ".join(f"{k}={v}" for k, v in q.items())
+        )
         report["size"][bucket] = {"ic_h5": ic, "quintiles_h5": q}
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)

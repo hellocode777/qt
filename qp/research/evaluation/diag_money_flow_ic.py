@@ -58,8 +58,15 @@ def _coerce_schema(df: pl.DataFrame) -> pl.DataFrame:
     date/symbol as Utf8.
     """
     float_cols = [
-        "close", "change_pct", "turnover", "main_net_flow", "main_net_flow_pct",
-        "super_large_net", "large_net", "medium_net", "small_net",
+        "close",
+        "change_pct",
+        "turnover",
+        "main_net_flow",
+        "main_net_flow_pct",
+        "super_large_net",
+        "large_net",
+        "medium_net",
+        "small_net",
     ]
     casts: list[pl.Expr] = []
     for c in float_cols:
@@ -91,8 +98,10 @@ def load_capital_flow(min_stocks: int) -> pl.DataFrame:
         df = df.unique(subset=["symbol", "date"])
         n_sym = df.select(pl.col("symbol").n_unique()).item()
         if n_sym >= min_stocks:
-            print(f"[info] loaded {len(files)} cache files -> {df.height} rows, "
-                  f"{n_sym} symbols", file=sys.stderr)
+            print(
+                f"[info] loaded {len(files)} cache files -> {df.height} rows, {n_sym} symbols",
+                file=sys.stderr,
+            )
             return df
         print(f"[warn] cache covers {n_sym} symbols < {min_stocks}", file=sys.stderr)
 
@@ -166,8 +175,10 @@ def main() -> None:
     del cf  # free the 9.4M-row raw frame; only `wide` + `price` stay resident
 
     print(f"\n=== Money Flow Factor IC Diagnostics ({date.today()}) ===")
-    print(f"stocks: {wide.select(pl.col('symbol').n_unique()).item()} | "
-          f"rows: {wide.height} | horizons: {horizons}\n")
+    print(
+        f"stocks: {wide.select(pl.col('symbol').n_unique()).item()} | "
+        f"rows: {wide.height} | horizons: {horizons}\n"
+    )
 
     report: dict = {
         "date": str(date.today()),
@@ -183,8 +194,9 @@ def main() -> None:
         score = factor_score_df(wide, f)
 
         # IC decay across horizons
-        decay = compute_ic_decay(score, price, horizons=horizons,
-                                 min_stocks_per_day=args.min_stocks)
+        decay = compute_ic_decay(
+            score, price, horizons=horizons, min_stocks_per_day=args.min_stocks
+        )
         f_report: dict = {"horizons": {}}
         best: tuple[float, int] | None = None
         for h in horizons:
@@ -221,13 +233,19 @@ def main() -> None:
             # join adjusted-price fwd returns (ex-adjustment safe, same source as IC)
             # OOM fix: reuse `price` computed once at main() — do NOT rebuild per factor
             pdf = price.with_columns(
-                (pl.col("close").shift(-h_quint).over("symbol") / pl.col("close") - 1.0)
-                .alias(f"fwd_{h_quint}")
+                (pl.col("close").shift(-h_quint).over("symbol") / pl.col("close") - 1.0).alias(
+                    f"fwd_{h_quint}"
+                )
             )
-            jd = j.rename({f: "score"}).join(
-                pdf.select(["trade_date", "symbol", f"fwd_{h_quint}"]),
-                on=["trade_date", "symbol"], how="inner",
-            ).drop_nulls()
+            jd = (
+                j.rename({f: "score"})
+                .join(
+                    pdf.select(["trade_date", "symbol", f"fwd_{h_quint}"]),
+                    on=["trade_date", "symbol"],
+                    how="inner",
+                )
+                .drop_nulls()
+            )
             if not jd.is_empty():
                 qr = _quintile_mean(jd, h_quint)
                 f_report["quintiles"] = qr
@@ -239,6 +257,7 @@ def main() -> None:
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUT_DIR / f"money_flow_ic_{date.today().strftime('%Y%m%d')}.json"
+
     # Defensive: walk the report and coerce any non-JSON-native scalars.
     def _clean(o: object) -> object:
         if isinstance(o, dict):
@@ -258,12 +277,14 @@ def main() -> None:
 
 def _quintile_mean(jd: pl.DataFrame, h: int) -> list[dict]:
     """Mean forward return per quintile (Q1=lowest score) for the joined frame."""
-    d = jd.with_columns(
-        pl.col("score").rank("ordinal").over("trade_date").alias("_r")
-    ).with_columns(
-        (pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct")
-    ).with_columns(
-        pl.col("_pct").cut([0.2, 0.4, 0.6, 0.8], labels=["Q1", "Q2", "Q3", "Q4", "Q5"]).alias("_q")
+    d = (
+        jd.with_columns(pl.col("score").rank("ordinal").over("trade_date").alias("_r"))
+        .with_columns((pl.col("_r") / pl.col("_r").count().over("trade_date")).alias("_pct"))
+        .with_columns(
+            pl.col("_pct")
+            .cut([0.2, 0.4, 0.6, 0.8], labels=["Q1", "Q2", "Q3", "Q4", "Q5"])
+            .alias("_q")
+        )
     )
     return list(
         d.group_by("_q").agg(pl.col(f"fwd_{h}").mean().alias("m")).sort("_q").iter_rows(named=True)

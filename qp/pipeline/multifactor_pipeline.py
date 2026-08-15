@@ -1063,7 +1063,9 @@ class MultiFactorPipeline(BasePipeline):
                                 }
                                 if not fdict:
                                     continue
-                                extra_factors_flow.setdefault(d, {}).setdefault(code, {}).update(fdict)
+                                extra_factors_flow.setdefault(d, {}).setdefault(code, {}).update(
+                                    fdict
+                                )
                         except Exception:
                             continue
                     logger.info(

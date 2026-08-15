@@ -110,9 +110,9 @@ def qfq_price(
         .agg(pl.col("qfq_factor").last().alias("qfq_factor"))
     )
     out = r.join(joined, on=["_d", "symbol"], how="left")
-    out = out.with_columns(
-        (pl.col(close_col) / pl.col("qfq_factor")).alias("close_qfq")
-    ).drop(["_d"])
+    out = out.with_columns((pl.col(close_col) / pl.col("qfq_factor")).alias("close_qfq")).drop(
+        ["_d"]
+    )
     return out
 
 

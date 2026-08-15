@@ -4,6 +4,7 @@ Guards the critical fix: the adapter must ONLY use `day` (unadjusted)
 from the kline/kline endpoint and must NEVER fall back to qfqday/hfqday
 (the fqkline endpoint is BANNED — negative-price corruption bug).
 """
+
 from qp.data.adapter.tencent_adapter import TencentAdapter
 
 

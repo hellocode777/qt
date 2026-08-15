@@ -200,9 +200,9 @@ class MFFlow1D(RealMoneyFlowMixin, BaseFeature):
     def compute(self, data_map: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = self._prep(data_map["capital_flow"])
         df = df.with_columns(
-            (
-                pl.col("main_net_flow") / pl.col("amount_f64").replace(0.0, None)
-            ).alias("feature_value")
+            (pl.col("main_net_flow") / pl.col("amount_f64").replace(0.0, None)).alias(
+                "feature_value"
+            )
         )
         df = df.with_columns(pl.col("feature_value").shift(1).over("symbol"))
         df = df.drop_nulls(subset=["feature_value"])
@@ -228,18 +228,18 @@ def compute_real_money_flow_factors(
     amount_sum20 = pl.col("amount_f64").rolling_sum(20).replace(0.0, None)
 
     computed = {
-        "MF_NetFlow_5D": (
-            pl.col("main_net_flow").rolling_sum(5) / amount_sum5
-        ).alias("MF_NetFlow_5D"),
-        "MF_NetFlow_20D": (
-            pl.col("main_net_flow").rolling_sum(20) / amount_sum20
-        ).alias("MF_NetFlow_20D"),
-        "MF_SuperLarge_5D": (
-            pl.col("super_large_net").rolling_sum(5) / amount_sum5
-        ).alias("MF_SuperLarge_5D"),
-        "MF_Flow_1D": (
-            pl.col("main_net_flow") / pl.col("amount_f64").replace(0.0, None)
-        ).alias("MF_Flow_1D"),
+        "MF_NetFlow_5D": (pl.col("main_net_flow").rolling_sum(5) / amount_sum5).alias(
+            "MF_NetFlow_5D"
+        ),
+        "MF_NetFlow_20D": (pl.col("main_net_flow").rolling_sum(20) / amount_sum20).alias(
+            "MF_NetFlow_20D"
+        ),
+        "MF_SuperLarge_5D": (pl.col("super_large_net").rolling_sum(5) / amount_sum5).alias(
+            "MF_SuperLarge_5D"
+        ),
+        "MF_Flow_1D": (pl.col("main_net_flow") / pl.col("amount_f64").replace(0.0, None)).alias(
+            "MF_Flow_1D"
+        ),
     }
 
     # Apply the four rolling/ratio factors (dict values are already aliased Exprs)
@@ -265,7 +265,5 @@ def compute_real_money_flow_factors(
 
     # PIT: shift(1) — factor for day T uses only data ≤ T-1
     factor_cols = [c for c in keep if c != "date"]
-    result = result.with_columns(
-        [pl.col(c).shift(1).alias(c) for c in factor_cols]
-    )
+    result = result.with_columns([pl.col(c).shift(1).alias(c) for c in factor_cols])
     return result.drop_nulls(subset=factor_cols)

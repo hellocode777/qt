@@ -418,10 +418,12 @@ def _validate_data_gate(
     #   this gate would have caught it. See DP-002-data-layer.md.)
     if all(c in df.columns for c in ("symbol", "trade_date", "close")):
         try:
-            _px = df.sort(["symbol", "trade_date"]).with_columns(
-                pl.col("trade_date").cast(pl.Utf8).alias("_td")
-            ).with_columns(
-                (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1.0).alias("_ret1")
+            _px = (
+                df.sort(["symbol", "trade_date"])
+                .with_columns(pl.col("trade_date").cast(pl.Utf8).alias("_td"))
+                .with_columns(
+                    (pl.col("close") / pl.col("close").shift(1).over("symbol") - 1.0).alias("_ret1")
+                )
             )
             _jumps = _px.filter(pl.col("_ret1").abs() > 0.21)
             if _jumps.height > 0:
