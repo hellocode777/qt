@@ -1066,10 +1066,7 @@ class MultiFactorPipeline(BasePipeline):
                         except Exception:
                             qualified_flow_codes = None
                     for code, cf_df in capital_flow_data.items():
-                        if (
-                            qualified_flow_codes is not None
-                            and code not in qualified_flow_codes
-                        ):
+                        if qualified_flow_codes is not None and code not in qualified_flow_codes:
                             continue
                         try:
                             # _prep sorts on ["symbol","date"] — re-add symbol col

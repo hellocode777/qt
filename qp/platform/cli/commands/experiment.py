@@ -328,8 +328,7 @@ def cmd_experiment_run() -> int:
 
             try:
                 params["freeze_weights"] = {
-                    str(k): float(v)
-                    for k, v in _json.loads(arg.split("=", 1)[1]).items()
+                    str(k): float(v) for k, v in _json.loads(arg.split("=", 1)[1]).items()
                 }
             except (ValueError, AttributeError):
                 print("  ⚠ --freeze-weights 需要 JSON 对象，忽略", file=sys.stderr)
@@ -339,8 +338,7 @@ def cmd_experiment_run() -> int:
             i += 1
             try:
                 params["freeze_weights"] = {
-                    str(k): float(v)
-                    for k, v in _json.loads(args[i]).items()
+                    str(k): float(v) for k, v in _json.loads(args[i]).items()
                 }
             except (ValueError, AttributeError):
                 print("  ⚠ --freeze-weights 需要 JSON 对象，忽略", file=sys.stderr)
