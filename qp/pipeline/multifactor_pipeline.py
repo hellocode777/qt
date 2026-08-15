@@ -1056,11 +1056,11 @@ class MultiFactorPipeline(BasePipeline):
                                 continue
                             for row in fac.iter_rows(named=True):
                                 d = str(row.get("date"))
-                                fdict: dict[str, float] = {
-                                    f: float(row.get(f))
-                                    for f in flow_needed
-                                    if row.get(f) is not None
-                                }
+                                fdict: dict[str, float] = {}
+                                for f in flow_needed:
+                                    val = row.get(f)
+                                    if val is not None:
+                                        fdict[f] = float(val)
                                 if not fdict:
                                     continue
                                 extra_factors_flow.setdefault(d, {}).setdefault(code, {}).update(
