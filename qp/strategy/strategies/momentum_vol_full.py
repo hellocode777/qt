@@ -249,6 +249,57 @@ MOMENTUM_VOL_FULL_CONFIG = register_config(
     )
 )
 
+# momentum_vol_mf — momentum_vol_full + MF_NetFlow_20D（2026-08-15 研究候选）
+# ------------------------------------------------------------------
+# 依据（全市场 3059 只，干净数据）:
+#   MF_NetFlow_20D IC=-0.072 IR=0.65 Q1→Q5 完全单调（diag_money_flow_ic）
+#   walk-forward 4 窗全稳（IC -0.060~-0.083, t>14）
+#   增量 IC（控制 momentum_vol_full composite）: -0.025, t=-14.5（偏相关）
+#   权重 -0.18 = 反转方向；原 5 因子按比例缩放至合计 0.82
+MOMENTUM_VOL_MF_WEIGHTS: dict[str, float] = {
+    "Amplitude_5D": -0.1912,
+    "Volatility_20D": +0.1495,
+    "Momentum_3M": -0.1942,
+    "Volume_Concentration": -0.1441,
+    "Volume_Trend_10D": -0.1411,
+    "MF_NetFlow_20D": -0.1800,
+}
+
+MOMENTUM_VOL_MF_CONFIG = register_config(
+    StrategyConfig(
+        name="momentum_vol_mf",
+        display_name="动量+成交量+资金流(完整版)",
+        factors=dict(MOMENTUM_VOL_MF_WEIGHTS),
+        max_positions=10,
+        rebalance_freq=20,
+        sell_buffer_multiplier=2,
+        model_mode=False,
+        quality_filter=True,
+        industry_neutral=True,
+        orthogonalize=False,
+        anti_chase=True,
+        chase_threshold=0.20,
+        chase_lookback=5,
+        use_market_filter=True,
+        regime_positions={
+            "bull": 5,
+            "sideways_up": 8,
+            "neutral": 10,
+            "sideways_down": 12,
+            "bear": 15,
+            "crisis": 20,
+        },
+        regime_freq={
+            "bull": 15,
+            "sideways_up": 20,
+            "neutral": 20,
+            "sideways_down": 30,
+            "bear": 40,
+            "crisis": 60,
+        },
+    )
+)
+
 
 # ------------------------------------------------------------------
 # 实验配置: Volume_Trend_10D 替换候选 (2026-08-13, 因子失效诊断 #5)

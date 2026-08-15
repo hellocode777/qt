@@ -131,6 +131,7 @@ class MultiFactorPipeline(BasePipeline):
         # ── Strategy mode ──
         use_full_strategy = strategy_name in (
             "momentum_vol_full",
+            "momentum_vol_mf",  # 2026-08-15: full + MF_NetFlow_20D (research)
             "mvf",
             "mv_full",
             "full",
@@ -1029,6 +1030,53 @@ class MultiFactorPipeline(BasePipeline):
                     float(parts[1]),
                     float(parts[0]) / 20 + 1,
                 )
+
+        # ── Real money-flow factors (MF_NetFlow_20D etc.) from capital_flow ──
+        # capital_flow_data is {code: DataFrame(date, main_net_flow, ...)}.
+        # Compute REAL_MONEY_FLOW factors per stock and expose them to the
+        # strategy engine as extra_factors {date: {symbol: {fname: value}}}.
+        # (2026-08-15: MF_NetFlow_20D validated IC -0.072 / IR 0.65 / monotonic,
+        #  incremental IC over momentum_vol_full -0.025 t=-14.5 → production gate.)
+        extra_factors_flow: dict[str, dict[str, dict[str, float]]] = {}
+        if capital_flow_data:
+            try:
+                from qp.research.feature.money_flow_real import (
+                    REAL_MONEY_FLOW_FACTORS,
+                    compute_real_money_flow_factors,
+                )
+
+                flow_needed = [f for f in REAL_MONEY_FLOW_FACTORS if f in config.factors]
+                if flow_needed:
+                    for code, cf_df in capital_flow_data.items():
+                        try:
+                            # _prep sorts on ["symbol","date"] — re-add symbol col
+                            cf_sym = cf_df.with_columns(pl.lit(code).alias("symbol"))
+                            fac = compute_real_money_flow_factors(cf_sym, subset=flow_needed)
+                            if fac is None or fac.is_empty():
+                                continue
+                            for row in fac.iter_rows(named=True):
+                                d = str(row.get("date"))
+                                fdict: dict[str, float] = {
+                                    f: float(row.get(f))
+                                    for f in flow_needed
+                                    if row.get(f) is not None
+                                }
+                                if not fdict:
+                                    continue
+                                extra_factors_flow.setdefault(d, {}).setdefault(code, {}).update(fdict)
+                        except Exception:
+                            continue
+                    logger.info(
+                        "   资金流因子: {} 只 × {} ({} 个交易日)",
+                        len({s for _, sf in extra_factors_flow.items() for s in sf}),
+                        flow_needed,
+                        len(extra_factors_flow),
+                    )
+            except Exception as e:
+                logger.warning("资金流因子计算失败 ({}): 跳过", e)
+
+        if extra_factors_flow:
+            extra_overrides["extra_factors"] = extra_factors_flow
         strategy_result = run_func(
             price_data=price_data,
             config=config,
