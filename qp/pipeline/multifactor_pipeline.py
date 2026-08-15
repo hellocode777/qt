@@ -1049,22 +1049,38 @@ class MultiFactorPipeline(BasePipeline):
                 if flow_needed:
                     # 2026-08-15 OOM fix: pre-filter to quality-qualified codes so
                     # the extra_factors dict is ~3x smaller (full market → ~974).
-                    # The strategy engine re-filters identically; this only shrinks
-                    # the dict we carry in memory across the 3 strategy passes.
+                    # 2026-08-15 PIT fix: use the PIT universe union (code is
+                    # kept if it passes on ANY date) so we never drop a stock
+                    # that the PIT engine would admit mid-period. The static
+                    # filter would use "latest" values and could exclude stocks
+                    # that were qualified at trading time.
                     qualified_flow_codes: set[str] | None = None
                     if config.quality_filter:
                         try:
-                            from qp.strategy.quality_filter import apply_quality_filter
+                            from qp.strategy.quality_filter import build_pit_universe
 
-                            qf = apply_quality_filter(
+                            qf_pit = build_pit_universe(
                                 price_data,
                                 fundamental_data or {},
                                 valuation_data or {},
                             )
-                            if qf:
-                                qualified_flow_codes = set(qf)
+                            if qf_pit:
+                                qualified_flow_codes = set().union(*qf_pit.values())
                         except Exception:
-                            qualified_flow_codes = None
+                            try:
+                                from qp.strategy.quality_filter import (
+                                    apply_quality_filter,
+                                )
+
+                                qf = apply_quality_filter(
+                                    price_data,
+                                    fundamental_data or {},
+                                    valuation_data or {},
+                                )
+                                if qf:
+                                    qualified_flow_codes = set(qf)
+                            except Exception:
+                                qualified_flow_codes = None
                     for code, cf_df in capital_flow_data.items():
                         if qualified_flow_codes is not None and code not in qualified_flow_codes:
                             continue

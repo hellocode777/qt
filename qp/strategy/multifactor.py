@@ -193,6 +193,7 @@ def compute_cross_sectional_scores(
     regime_weights: dict[str, dict[str, float]] | None = None,
     regime_map: dict[str, str] | None = None,
     index_df: pl.DataFrame | None = None,
+    pit_universe: dict[str, set[str]] | None = None,
 ) -> pl.DataFrame | tuple[pl.DataFrame, dict[str, Any]]:
     """Compute daily cross-sectional multi-factor scores for all stocks.
 
@@ -520,6 +521,31 @@ def compute_cross_sectional_scores(
     if live_mode and len(all_dates) > live_lookback_dates:
         keep_dates = set(all_dates[-live_lookback_dates:])
         all_raw = {d: all_raw[d] for d in all_dates if d in keep_dates}
+        all_dates = sorted(all_raw.keys())
+
+    # ── PIT quality universe (2026-08-15 fix): restrict each date's stock
+    # pool to stocks that passed quality/valuation checks AS OF that date.
+    # Replaces the old static filter whose "latest" values leaked future
+    # info and made results depend on the snapshot cutoff date.
+    if pit_universe:
+        before_n = sum(len(syms) for syms in all_raw.values())
+        filtered_raw: dict[str, dict[str, dict[str, float]]] = {}
+        for d, syms in all_raw.items():
+            allowed = pit_universe.get(d)
+            if allowed is None:
+                filtered_raw[d] = syms  # date not in universe map → keep all
+                continue
+            kept = {s: f for s, f in syms.items() if s in allowed}
+            if kept:
+                filtered_raw[d] = kept
+        after_n = sum(len(syms) for syms in filtered_raw.values())
+        if after_n < before_n:
+            logger.info(
+                "🧩 PIT 质量过滤: 裁剪 {}/{} 个股票-日期单元",
+                before_n - after_n,
+                before_n,
+            )
+        all_raw = filtered_raw
         all_dates = sorted(all_raw.keys())
 
     # ── Factor pipeline ──
@@ -892,19 +918,39 @@ def run_multifactor_strategy(
         weights = get_default_factor_weights()
 
     # ── 0. Quality filter ──
-    qualified_codes: set[str] | None = None
+    # 2026-08-15 PIT fix: build a point-in-time universe {date: set[code]}
+    # instead of statically pruning price_data once with "latest" values
+    # (which leaked future info and made results depend on the snapshot
+    # cutoff date). The PIT universe is applied inside
+    # compute_cross_sectional_scores per date.
+    pit_universe: dict[str, set[str]] | None = None
     if quality_filter:
-        from qp.strategy.quality_filter import apply_quality_filter
+        from qp.strategy.quality_filter import build_pit_universe
 
-        qualified_codes = apply_quality_filter(
-            price_data,
-            fundamental_data or {},
-            valuation_data or {},
-        )
-        if qualified_codes:
-            filtered = len(price_data) - len(qualified_codes)
-            if filtered > 0:
-                price_data = {k: v for k, v in price_data.items() if k in qualified_codes}
+        try:
+            pit_universe = build_pit_universe(
+                price_data,
+                fundamental_data or {},
+                valuation_data or {},
+            )
+            if pit_universe:
+                logger.info(
+                    "🧩 PIT 质量过滤: {} 个交易日 universe 已构建",
+                    len(pit_universe),
+                )
+        except Exception as e:
+            logger.warning("PIT 质量过滤失败 ({}), 回退静态过滤", e)
+            from qp.strategy.quality_filter import apply_quality_filter
+
+            qualified_codes = apply_quality_filter(
+                price_data,
+                fundamental_data or {},
+                valuation_data or {},
+            )
+            if qualified_codes:
+                filtered = len(price_data) - len(qualified_codes)
+                if filtered > 0:
+                    price_data = {k: v for k, v in price_data.items() if k in qualified_codes}
 
     # ── 1. Cross-sectional scoring ──
     is_live = force_rebalance_today and holdings is not None
@@ -923,6 +969,7 @@ def run_multifactor_strategy(
         extra_factors=extra_factors,
         regime_weights=regime_weights,
         regime_map=regime_map,
+        pit_universe=pit_universe,
         index_df=index_df,
     )
 

@@ -236,6 +236,188 @@ def apply_quality_filter(
     return passed
 
 
+def build_pit_universe(
+    price_data: dict[str, pl.DataFrame],
+    fundamental_data: dict[str, pl.DataFrame] | None = None,
+    valuation_data: dict[str, pl.DataFrame] | None = None,
+    quality_config: dict[str, dict[str, float]] | None = None,
+    valuation_config: dict[str, dict[str, float]] | None = None,
+    skip_st_check: bool = True,
+) -> dict[str, set[str]]:
+    """Build a point-in-time (PIT) quality universe: {trade_date: set[code]}.
+
+    Fixes the look-ahead bug in :func:`apply_quality_filter` (2026-08-15):
+    the static version uses the snapshot's *final* fundamental/valuation
+    values to judge every date, which leaks future information and makes
+    results depend on the snapshot cutoff date. This version evaluates each
+    stock on each trade date using only data published on or before that date
+    (``publish_date <= trade_date`` for fundamentals, same-day PE_TTM for
+    valuation).
+
+    Returns:
+        Dict mapping trade_date (str) → set of stock codes that pass all
+        quality/valuation checks as of that date. Stocks without fundamental
+        or valuation data pass by default (same policy as the static filter).
+    """
+    import numpy as np
+
+    if quality_config is None:
+        quality_config = DEFAULT_QUALITY_FILTERS
+    if valuation_config is None:
+        valuation_config = DEFAULT_VALUATION_FILTERS
+    if fundamental_data is None:
+        fundamental_data = {}
+    if valuation_data is None:
+        valuation_data = {}
+
+    # ── Collect all trade dates across the universe ──
+    all_dates: list[str] = sorted(
+        {
+            d
+            for df in price_data.values()
+            if df is not None and "trade_date" in df.columns
+            for d in df["trade_date"].cast(pl.Utf8).to_list()
+        }
+    )
+    if not all_dates:
+        return {}
+
+    universe: dict[str, set[str]] = {d: set() for d in all_dates}
+
+    quality_fields = list(quality_config.keys())
+    hard_fields = ["ROE", "debt_ratio"]
+    all_check_fields = set(quality_fields) | set(hard_fields)
+
+    for code, price_df in price_data.items():
+        if price_df is None or price_df.is_empty():
+            continue
+        if "trade_date" not in price_df.columns:
+            continue
+
+        price_df = price_df.sort("trade_date")
+        price_dates = price_df["trade_date"].cast(pl.Utf8)
+        price_dates_list = price_dates.to_list()
+        n_days = len(price_dates_list)
+
+        fund_df = fundamental_data.get(code)
+        val_df = valuation_data.get(code)
+
+        # ── Precompute PIT-aligned fundamental series (publish_date <= d) ──
+        # Array per field: value known as of each price date (NaN if unknown).
+        fund_aligned: dict[str, np.ndarray] = {}
+        # Full (publish_date, value) history per field for ROE streak check
+        roe_history: list[tuple[str, float]] = []
+        if fund_df is not None and not fund_df.is_empty() and "publish_date" in fund_df.columns:
+            pub = fund_df["publish_date"]
+            # publish_date → str (YYYY-MM-DD) for comparison with trade_date
+            pub_str = (
+                pub.dt.strftime("%Y-%m-%d").cast(pl.Utf8).to_list()
+                if pub.dtype != pl.Utf8
+                else pub.to_list()
+            )
+            for f in all_check_fields:
+                if f not in fund_df.columns:
+                    continue
+                col = fund_df[f]
+                vals = col.to_list()
+                # Build list of (publish_date_str, value) for non-null entries
+                pairs = [
+                    (pd_, v)
+                    for pd_, v in zip(pub_str, vals, strict=False)
+                    if v is not None and v == v
+                ]
+                if not pairs:
+                    continue
+                pairs.sort(key=lambda x: x[0])
+                dates_arr = np.array([p[0] for p in pairs], dtype=str)
+                vals_arr = np.array([p[1] for p in pairs], dtype=np.float64)
+                # searchsorted: last publish_date <= trade_date
+                idx = np.searchsorted(dates_arr, price_dates_list, side="right") - 1
+                arr = np.full(n_days, np.nan, dtype=np.float64)
+                mask = idx >= 0
+                arr[mask] = vals_arr[np.clip(idx[mask], 0, len(vals_arr) - 1)]
+                fund_aligned[f] = arr
+                if f == "ROE":
+                    roe_history = pairs
+
+        # ── PIT-aligned ROE streak: consecutive negative ROE reports as of d ──
+        # roe_streak[i] = number of most recent consecutive negative ROE reports
+        # whose publish_date <= price_dates_list[i] (0 if not enough history).
+        roe_streak: np.ndarray = np.zeros(n_days, dtype=np.int64)
+        if roe_history:
+            roe_dates = np.array([p[0] for p in roe_history], dtype=str)
+            roe_vals = np.array([p[1] for p in roe_history], dtype=np.float64)
+            streak_by_report: list[int] = []
+            cur = 0
+            for rv in roe_vals:
+                cur = cur + 1 if rv < 0 else 0
+                streak_by_report.append(cur)
+            streak_arr = np.array(streak_by_report, dtype=np.int64)
+            idx = np.searchsorted(roe_dates, price_dates_list, side="right") - 1
+            mask = idx >= 0
+            roe_streak[mask] = streak_arr[np.clip(idx[mask], 0, len(streak_arr) - 1)]
+
+        # ── PE_TTM from same-day valuation (PIT by construction) ──
+        pe_arr: np.ndarray | None = None
+        if val_df is not None and not val_df.is_empty() and "PE_TTM" in val_df.columns:
+            v = val_df.sort("trade_date")
+            vd = v["trade_date"].cast(pl.Utf8).to_list()
+            vp = v["PE_TTM"].to_list()
+            vmap = {
+                d_: float(p_) for d_, p_ in zip(vd, vp, strict=False) if p_ is not None and p_ == p_
+            }
+            pe_arr = np.array([vmap.get(d_, np.nan) for d_ in price_dates_list], dtype=np.float64)
+
+        # ── Evaluate each date ──
+        for i, d in enumerate(price_dates_list):
+            # Hard cutoff 1: ROE consecutive negative years (PIT streak)
+            roe_years: int = HARD_CUTOFFS.get("roe_consecutive_negative_years", 2)
+            if roe_streak[i] >= roe_years:
+                continue
+
+            # Soft quality thresholds (latest known value as of date d)
+            fail = False
+            for f, rule in quality_config.items():
+                if f not in fund_aligned:
+                    continue
+                v = fund_aligned[f][i]
+                if np.isnan(v):
+                    continue
+                min_val = rule.get("min")
+                max_val = rule.get("max")
+                if min_val is not None and v < min_val:
+                    fail = True
+                    break
+                if max_val is not None and v > max_val:
+                    fail = True
+                    break
+            if fail:
+                continue
+
+            # Hard cutoff 2: absolute debt ratio
+            debt_arr = fund_aligned.get("debt_ratio")
+            if debt_arr is not None and not np.isnan(debt_arr[i]):
+                debt_max: float = HARD_CUTOFFS.get("debt_ratio_absolute_max", 95.0)
+                if debt_arr[i] > debt_max:
+                    continue
+
+            # Valuation: 0 < PE_TTM < 200 (same-day)
+            if pe_arr is not None:
+                pe_v = pe_arr[i]
+                if not np.isnan(pe_v):
+                    pe_rule = valuation_config.get("PE_TTM", {})
+                    min_p = pe_rule.get("min")
+                    max_p = pe_rule.get("max")
+                    if min_p is not None and pe_v < min_p:
+                        continue
+                    if max_p is not None and pe_v > max_p:
+                        continue
+
+            universe[d].add(code)
+
+    return universe
+
+
 def _log_filter_summary(
     total: int,
     passed: int,
