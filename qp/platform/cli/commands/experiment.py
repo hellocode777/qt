@@ -328,6 +328,8 @@ def cmd_experiment_run() -> int:
             params["resume"] = args[i]
         elif arg == "--model":
             params["model_mode"] = True
+        elif arg == "--optimize-weights":
+            params["optimize_weights"] = True
         elif arg == "--compare":
             params["compare"] = True
         elif arg.startswith("--freeze-weights="):
@@ -451,6 +453,40 @@ def cmd_experiment_run() -> int:
         print(f"   权重: {frozen_wt}")
         print(f"   快照: {snapshot_file}")
         print()
+
+    # ── Default frozen weights from approved registry (reproduction mode) ──
+    # Plain `experiment run --strategy X` should reproduce the approved
+    # configuration by default (freeze approved weights), not silently run
+    # IC-optimized weights.  Explicit --optimize-weights opts out.
+    # (2026-08-16: 053102 vs 044652 mismatch — default run used optimized
+    #  weights + window-local calendar; the approved weights were frozen
+    #  in the registry but never applied to plain runs.)
+    if (
+        not resume_id
+        and not params.get("freeze_weights")
+        and not params.get("optimize_weights")
+        and params.get("strategy")
+    ):
+        try:
+            from qp.strategy.approved import ApprovedStrategy
+            from qp.strategy.registry import StrategyRegistry
+
+            _reg = StrategyRegistry()
+            _apr = _reg.get_approved(str(params.get("strategy", "")))
+            if isinstance(_apr, ApprovedStrategy) and _apr.weights:
+                params["freeze_weights"] = dict(_apr.weights)
+                print(
+                    f"🔒 默认冻结 approved 权重 (registry {_apr.version}): {_apr.weights}",
+                )
+                print(
+                    "   提示: 想跑 IC 权重优化请显式加 --optimize-weights",
+                )
+                print()
+        except Exception as _e:  # pragma: no cover - registry errors shouldn't block
+            print(
+                f"⚠️ 读取 approved registry 失败 ({_e})，继续默认运行",
+                file=sys.stderr,
+            )
 
     strategy_val = str(params.get("strategy", ""))
     strategies: list[str] = []
