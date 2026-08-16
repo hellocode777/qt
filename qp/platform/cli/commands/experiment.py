@@ -308,6 +308,10 @@ def cmd_experiment_run() -> int:
             params["top_n"] = int(arg.split("=", 1)[1])
         elif arg.startswith("--rebalance="):
             params["rebalance_freq"] = int(arg.split("=", 1)[1])
+        elif arg.startswith("--rebalance-offset="):
+            # 2026-08-16: align windowed runs with full-range rebalance
+            # calendar (see generate_rebalance_signals docstring).
+            params["rebalance_offset"] = int(arg.split("=", 1)[1])
         elif arg.startswith("--orthogonalize"):
             # Accept both --orthogonalize and --orthogonalize=True (2026-08-16
             # fix: the =True form silently fell through and the flag was

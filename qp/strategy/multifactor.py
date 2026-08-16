@@ -632,6 +632,7 @@ def generate_rebalance_signals(
     scores: pl.DataFrame,
     top_n: int = 5,
     rebalance_freq: int = 20,
+    rebalance_offset: int = 0,
     force_rebalance_today: bool = False,
     holdings: set[str] | None = None,
     chased_codes: set[str] | None = None,
@@ -689,7 +690,13 @@ def generate_rebalance_signals(
     has_regime = regime_map is not None and regime_positions is not None
 
     # Rebalance day indices
-    rebalance_indices = list(range(0, len(all_dates), rebalance_freq))
+    # 2026-08-16 fix: `rebalance_offset` aligns a windowed experiment's
+    # calendar with a full-range run (offset = index of the window's first
+    # date within the full-range date sequence, mod rebalance_freq). Without
+    # it, a windowed run re-numbers trading days from the window start, so
+    # rebalance dates differ from the full-range calendar and the two runs
+    # hold different names on the same date (not apples-to-apples).
+    rebalance_indices = list(range(rebalance_offset, len(all_dates), rebalance_freq))
 
     # Add last day if it's far enough from last rebalance
     last_idx = len(all_dates) - 1
@@ -856,6 +863,7 @@ def run_multifactor_strategy(
     weights: dict[str, float] | None = None,
     top_n: int = 5,
     rebalance_freq: int = 20,
+    rebalance_offset: int = 0,
     min_history: int = 60,
     fundamental_data: dict[str, pl.DataFrame] | None = None,
     valuation_data: dict[str, pl.DataFrame] | None = None,
@@ -991,6 +999,7 @@ def run_multifactor_strategy(
         scores,  # type: ignore[arg-type]
         top_n=top_n,
         rebalance_freq=rebalance_freq,
+        rebalance_offset=rebalance_offset,
         force_rebalance_today=force_rebalance_today,
         holdings=holdings,
         sell_buffer_rank=sell_buffer_rank,

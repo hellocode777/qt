@@ -436,6 +436,10 @@ def run_momentum_vol_full(
     weights = dict(config.factors)
     top_n = config.max_positions
     rebalance_freq = config.rebalance_freq
+    # 2026-08-16: windowed-run calendar alignment (see
+    # generate_rebalance_signals docstring) — pass-through from CLI
+    # --rebalance-offset=N, default 0 = full-range behavior.
+    rebalance_offset: int = int(overrides.get("rebalance_offset", 0))
     sell_buffer_rank = config.get_sell_buffer_rank()
 
     logger.info("📋 {}", config.describe().replace("\n", "\n📋 "))
@@ -506,6 +510,7 @@ def run_momentum_vol_full(
         weights=weights,
         top_n=top_n,
         rebalance_freq=rebalance_freq,
+        rebalance_offset=rebalance_offset,
         fundamental_data=fundamental_data or {},
         valuation_data=valuation_data or {},
         industry_neutral=config.industry_neutral,

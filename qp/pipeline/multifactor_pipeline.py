@@ -250,6 +250,7 @@ class MultiFactorPipeline(BasePipeline):
                 "model_mode",
                 "max_positions",
                 "rebalance_freq",
+                "rebalance_offset",
             )
             if key in params
         }
@@ -1030,6 +1031,15 @@ class MultiFactorPipeline(BasePipeline):
                     float(parts[1]),
                     float(parts[0]) / 20 + 1,
                 )
+
+        # 2026-08-16: windowed-run calendar alignment — pass through the CLI
+        # --rebalance-offset to the strategy runner so a windowed experiment
+        # shares the full-range rebalance calendar (apples-to-apples).
+        if cli_overrides and "rebalance_offset" in cli_overrides:
+            extra_overrides["rebalance_offset"] = int(cli_overrides["rebalance_offset"])
+            logger.info(
+                "   📅 调仓日历对齐: rebalance_offset={}", extra_overrides["rebalance_offset"]
+            )
 
         # ── Real money-flow factors (MF_NetFlow_20D etc.) from capital_flow ──
         # capital_flow_data is {code: DataFrame(date, main_net_flow, ...)}.
