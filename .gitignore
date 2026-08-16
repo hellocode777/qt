@@ -42,6 +42,7 @@ data/positions/
 data/positions.bak-*/
 data/reports/
 data/experiments/*/
+data/experiments/*.json
 data/dataset/registry.json
 data/dataset/*_metadata.json
 data/knowledge/
