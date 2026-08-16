@@ -190,6 +190,13 @@ class DataPipeline(BasePipeline):
             # ── Step 5: Merge with existing data ──
             if output_path.exists():
                 existing = pl.read_parquet(str(output_path))
+                # 统一 trade_date dtype：历史遗留的 String/Date 混合经
+                # diagonal_relaxed concat 会被提升为 String，污染全库
+                # （FactorCalculator 等下游 Date 字面量比较报错）。
+                if existing.schema.get("trade_date") == pl.String:
+                    existing = existing.with_columns(pl.col("trade_date").str.to_date())
+                if clean.schema.get("trade_date") == pl.String:
+                    clean = clean.with_columns(pl.col("trade_date").str.to_date())
                 key_cols = ["trade_date", "symbol"]
                 if all(c in clean.columns for c in key_cols) and all(
                     c in existing.columns for c in key_cols

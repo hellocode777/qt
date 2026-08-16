@@ -79,6 +79,10 @@ class FactorCalculator:
             Empty DataFrame if no stocks have sufficient history.
         """
         target_date = _to_date(date) if date else self._latest_date(price_df)
+        # 统一 trade_date dtype：daily_price_latest 曾因 String/Date 混合并被
+        # 提升为 String（polars concat diagonal_relaxed），导致 Date 字面量比较报错。
+        if price_df.schema.get("trade_date") == pl.String:
+            price_df = price_df.with_columns(pl.col("trade_date").str.to_date())
         # Use pl.lit for type-safe comparison with Date columns
         price_slice = price_df.filter(pl.col("trade_date") <= pl.lit(target_date))
 
