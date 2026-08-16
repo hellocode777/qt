@@ -103,37 +103,6 @@ def test_load_index_data_reads_file(tmp_path, monkeypatch) -> None:
     assert df["close"].to_list() == [4015.0, 4030.0]
 
 
-def test_fetch_index_data_sh000001_writes_separate_file(tmp_path, monkeypatch) -> None:
-    """Shanghai Composite (sh000001) writes to its own dataset file."""
-    monkeypatch.chdir(tmp_path)
-
-    import pandas as pd
-
-    fake = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2026-01-05", "2026-01-06"]),
-            "open": [3000.0, 3010.0],
-            "high": [3010.0, 3020.0],
-            "low": [2990.0, 3000.0],
-            "close": [3005.0, 3012.0],
-            "volume": [1.0e9, 1.2e9],
-        }
-    )
-
-    def fake_fetch(symbol: str):
-        assert symbol == "sh000001"
-        return fake
-
-    monkeypatch.setattr("akshare.stock_zh_index_daily", fake_fetch)
-    out = index_provider.fetch_index_data(force=True, symbol="sh000001")
-    # sh000001 uses a fixed module-level relative path (data/dataset/...)
-    assert out.name == "index_sh000001.parquet"
-    assert out.exists()
-    df = pl.read_parquet(out)
-    assert df.height == 2
-    assert df["close"].to_list() == [3005.0, 3012.0]
-
-
 def test_pipeline_load_index_data_with_local_file(tmp_path, monkeypatch) -> None:
     """pipeline._load_index_data reads the Gold dataset (no network)."""
     from qp.pipeline.multifactor_pipeline import MultiFactorPipeline

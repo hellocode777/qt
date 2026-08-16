@@ -691,16 +691,8 @@ class MultiFactorPipeline(BasePipeline):
         # ── Stage 5: Backtest (Layer 7 SimulatedBroker) ──
         logger.info("[5/6] 回测 (SimulatedBroker, 信号日调仓)...")
         _bt_offset = int(cli_overrides.get("rebalance_offset", 0)) if cli_overrides else 0
-        # Benchmark index: 上证指数 (sh000001) by default, fallback None
-        # (equal-weight all-stocks median) when unavailable.
-        _bench_idx = self._load_index_data(symbol="sh000001")
         bt = self._compute_backtest(
-            signals,
-            price_data,
-            scores=scores,
-            top_n=top_n,
-            rebalance_offset=_bt_offset,
-            benchmark_index=_bench_idx,
+            signals, price_data, scores=scores, top_n=top_n, rebalance_offset=_bt_offset
         )
         logger.info("   总收益:    {:+.2f}%", bt["total_return_pct"])
         logger.info("   年化夏普:  {:.2f}", bt["sharpe"])
@@ -726,12 +718,9 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["risk_exit_hits"] = float(bt.get("risk_exit_hits", 0))
 
         # ── Stage 6: Benchmark ──
-        logger.info("[6/6] 基准对比 (上证指数)...")
-        _bench_ret_idx = self._load_index_data(symbol="sh000001")
-        bench_ret = self._benchmark_return(
-            price_data, symbols, start_date_str, end_date_str, benchmark_index=_bench_ret_idx
-        )
-        logger.info("   上证指数持有: {:+.2f}%", bench_ret)
+        logger.info("[6/6] 基准对比 (等权持有)...")
+        bench_ret = self._benchmark_return(price_data, symbols, start_date_str, end_date_str)
+        logger.info("   等权买入持有: {:+.2f}%", bench_ret)
         result.metrics["benchmark_return_pct"] = bench_ret
 
         excess = bt["total_return_pct"] - bench_ret
@@ -1282,13 +1271,13 @@ class MultiFactorPipeline(BasePipeline):
             logger.info("💰 估值数据: {} 只股票 (PE/PB 过滤启用)", len(result))
         return result
 
-    def _load_index_data(self, symbol: str = "sh000300") -> pl.DataFrame | None:
-        """Load index data for market filter / regime detection / benchmark.
+    def _load_index_data(self) -> pl.DataFrame | None:
+        """Load CSI300 index data for market filter / regime detection.
 
-        Reads the local Gold dataset (data/dataset/index_<symbol>.parquet,
+        Reads the local Gold dataset (data/dataset/index_csi300.parquet,
         produced by ``qp data index``). If the file is missing, attempts a
         one-time AkShare fetch (lazy network fallback); returns None only
-        when both fail (market filter / regime detection / benchmark skipped).
+        when both fail (market filter / regime detection skipped).
         """
         from qp.data.dataset.index_provider import (
             fetch_index_data,
@@ -1296,14 +1285,14 @@ class MultiFactorPipeline(BasePipeline):
         )
 
         # Try local Gold dataset first; if missing, one-time network fetch.
-        local = load_index_data(symbol)
+        local = load_index_data()
         if local is not None:
             return local
 
         logger.info("指数数据缺失，尝试拉取...")
         try:
-            fetch_index_data(force=False, symbol=symbol)
-            return load_index_data(symbol)
+            fetch_index_data(force=False)
+            return load_index_data()
         except Exception as exc:
             logger.warning("指数拉取失败（市场过滤跳过）: {}", exc)
             return None
@@ -1466,7 +1455,6 @@ class MultiFactorPipeline(BasePipeline):
         scores: pl.DataFrame | None = None,
         top_n: int = 10,
         rebalance_offset: int = 0,
-        benchmark_index: pl.DataFrame | None = None,
     ) -> dict[str, Any]:
         """Broker-based backtest via Layer 7 SimulatedBroker.
 
@@ -1476,11 +1464,6 @@ class MultiFactorPipeline(BasePipeline):
 
         Uses SimulatedBroker for realistic execution with slippage and cost
         tracking, replacing the previous hand-rolled dict loop (ADR-029).
-
-        Benchmark: when ``benchmark_index`` is provided (columns trade_date +
-        close), the daily benchmark curve is the index close normalized to
-        initial capital.  Otherwise it falls back to the equal-weight
-        all-stocks median close (legacy behaviour).
         """
         from qp.portfolio.risk_exit import RiskExitConfig, RiskExitManager, TradeReason
         from qp.simulation.broker import SimulatedBroker
@@ -1538,32 +1521,9 @@ class MultiFactorPipeline(BasePipeline):
         daily_equity: list[float] = []
         daily_benchmark: list[float] = []
 
-        # ── Benchmark baseline ──
-        # When an index DataFrame is provided, the benchmark is the index
-        # close normalized to initial capital (e.g. 上证指数 sh000001).
-        # Otherwise fall back to equal-weight all-stocks median close
-        # (legacy behaviour).
-        benchmark_index_map: dict[str, float] = {}
-        base_index_close = 0.0
-        if benchmark_index is not None and not benchmark_index.is_empty():
-            try:
-                idx_df = benchmark_index.sort("trade_date")
-                if "close" in idx_df.columns:
-                    for _r in idx_df.iter_rows(named=True):
-                        benchmark_index_map[str(_r["trade_date"])[:10]] = float(_r["close"])
-                    base_index_close = float(idx_df["close"].head(1).item())
-            except Exception:
-                benchmark_index_map = {}
-                base_index_close = 0.0
-            if base_index_close <= 0:
-                benchmark_index_map = {}
-        if benchmark_index_map:
-            logger.info("   基准: 指数 (sh000001 上证指数) 归一化至初始资金")
-        else:
-            logger.info("   基准: 等权全市场中位数 (无指数数据)")
-
+        # ── Benchmark baseline: equal-weight all-stocks buy-and-hold ──
         base_avg_close = 0.0
-        if not benchmark_index_map and all_dates:
+        if all_dates:
             first_day_df = all_prices.filter(pl.col("trade_date") == all_dates[0])
             if not first_day_df.is_empty():
                 first_close = first_day_df["close"]
@@ -1794,29 +1754,22 @@ class MultiFactorPipeline(BasePipeline):
                 eq_now = daily_equity[-1]
             daily_equity.append(eq_now)
 
-            # ── Daily benchmark ──
-            # Index-based (e.g. 上证指数) when available; otherwise
-            # equal-weight all-stocks median close (legacy, robust to
-            # penny-stock outliers).
+            # ── Daily benchmark: equal-weight all-stocks ──
+            # Use median close (robust to penny-stock outliers)
+            day_all = all_prices.filter(pl.col("trade_date") == d)
             prev_bench = daily_benchmark[-1] if daily_benchmark else initial_capital
-            idx_close = benchmark_index_map.get(d_str)
-            if idx_close is not None and base_index_close > 0:
-                bench_now = initial_capital * (idx_close / base_index_close)
+            if not day_all.is_empty():
+                day_close = day_all["close"].filter(day_all["close"] >= 1.0)
+                if len(day_close) < 100:
+                    day_close = day_all["close"]
+                day_median = float(day_close.median())  # type: ignore[arg-type]  # polars median 类型推断噪音
+                bench_now = initial_capital * (day_median / base_avg_close)
+                # Cap extreme single-day jumps (>3x = data glitch)
+                if bench_now > prev_bench * 3:
+                    bench_now = prev_bench
                 daily_benchmark.append(bench_now)
             else:
-                day_all = all_prices.filter(pl.col("trade_date") == d)
-                if not day_all.is_empty():
-                    day_close = day_all["close"].filter(day_all["close"] >= 1.0)
-                    if len(day_close) < 100:
-                        day_close = day_all["close"]
-                    day_median = float(day_close.median())  # type: ignore[arg-type]  # polars median 类型推断噪音
-                    bench_now = initial_capital * (day_median / base_avg_close)
-                    # Cap extreme single-day jumps (>3x = data glitch)
-                    if bench_now > prev_bench * 3:
-                        bench_now = prev_bench
-                    daily_benchmark.append(bench_now)
-                else:
-                    daily_benchmark.append(prev_bench)
+                daily_benchmark.append(prev_bench)
 
             if eq_now < min_equity:
                 min_equity = eq_now
@@ -1908,31 +1861,13 @@ class MultiFactorPipeline(BasePipeline):
         symbols: list[str],
         start: str,
         end: str,
-        benchmark_index: pl.DataFrame | None = None,
     ) -> float:
-        """Benchmark buy-and-hold return for comparison.
+        """Equal-weight buy-and-hold return for comparison.
 
-        When ``benchmark_index`` is provided (上证指数 sh000001), returns
-        the index close-to-close return over [start, end].  Otherwise falls
-        back to equal-weight all-stocks average return (legacy behaviour).
-        The legacy path caps individual stock returns at 1000% (11x) to
-        limit the influence of extreme penny-stock outliers, and filters
-        stocks with initial price < 1.0 to exclude shell companies.
+        Caps individual stock returns at 1000% (11x) to limit the influence
+        of extreme penny-stock outliers while preserving the market signal.
+        Also filters stocks with initial price < 1.0 to exclude shell companies.
         """
-        if benchmark_index is not None and not benchmark_index.is_empty():
-            try:
-                idx_df = benchmark_index.sort("trade_date")
-                idx_start = idx_df.filter(pl.col("trade_date").cast(pl.Utf8) >= start)
-                idx_end = idx_df.filter(pl.col("trade_date").cast(pl.Utf8) <= end)
-                if not idx_start.is_empty() and not idx_end.is_empty():
-                    px_first = float(idx_start.head(1)["close"].item())
-                    px_last = float(idx_end.tail(1)["close"].item())
-                    if px_first > 0:
-                        return round((px_last / px_first - 1) * 100, 2)
-            except Exception:
-                pass
-            # fall through to legacy equal-weight on index failure
-
         total_ret = 0.0
         count = 0
         # Use all loaded stocks if no symbol filter
