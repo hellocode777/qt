@@ -308,10 +308,13 @@ def cmd_experiment_run() -> int:
             params["top_n"] = int(arg.split("=", 1)[1])
         elif arg.startswith("--rebalance="):
             params["rebalance_freq"] = int(arg.split("=", 1)[1])
-        elif arg == "--industry-neutral":
-            params["industry_neutral"] = True
-        elif arg == "--orthogonalize":
+        elif arg.startswith("--orthogonalize"):
+            # Accept both --orthogonalize and --orthogonalize=True (2026-08-16
+            # fix: the =True form silently fell through and the flag was
+            # ignored, making orthogonalize on/off comparisons identical).
             params["orthogonalize"] = True
+        elif arg.startswith("--industry-neutral"):
+            params["industry_neutral"] = True
         elif arg == "--skip-gate":
             params["skip_gate"] = True
         elif arg.startswith("--resume="):
