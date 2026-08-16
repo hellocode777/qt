@@ -209,7 +209,9 @@ class DailyPipeline(BasePipeline):
             today = date.today()
             run_id_short = context.run_id[:8] if context.run_id else "unknown"
             # V2.1: 调仓日 = 每月前5个自然日（近似每月第一个交易周）
-            is_rebalance_day = today.day <= 5
+            # --force-rebalance 可强制当调仓日处理（建仓/手动重平衡用）
+            force_rebalance = bool(context.parameters.get("force_rebalance", False))
+            is_rebalance_day = force_rebalance or today.day <= 5
 
             # ================================================================
             # Step 0: System state check (#8 fix)
@@ -795,6 +797,8 @@ class DailyPipeline(BasePipeline):
             # Step 12: Capital allocation (Layer 8 engine) — only on rebalance day
             # ================================================================
             orders: list[Order] = []
+            tp: Any = None
+            alloc_capital = total_capital
             if is_rebalance_day and not filtered_signals.is_empty():
                 # Build candidates DataFrame for CapitalAllocator
                 # CapitalAllocator expects pandas with columns:
@@ -817,12 +821,15 @@ class DailyPipeline(BasePipeline):
                     [
                         "symbol",
                         (pl.col(score_col) if score_col else pl.lit(0.5)).alias("alpha_score"),
-                        pl.lit(0.15).alias("max_weight_limit"),
+                        pl.lit(0.08).alias("max_weight_limit"),
                         pl.lit("").alias("risk_cluster"),
                     ]
                 )
                 candidates_pd = candidates_pl.to_pandas()
 
+                # 按 regime 建议敞口缩放分配资本（如 sideways_down → 30%）。
+                # 不缩放时 equal_weight 对 5 只候选会给 20%/只，超过风控 8% 上限。
+                alloc_capital = total_capital * suggested_position_pct
                 alloc_config = CapitalAllocatorConfig(
                     method=alloc_method,
                     cash_buffer=0.05,
@@ -831,12 +838,15 @@ class DailyPipeline(BasePipeline):
                 allocator = CapitalAllocator(alloc_config)
                 alloc_result = allocator.run(
                     candidates=candidates_pd,
-                    total_capital=total_capital,
+                    total_capital=alloc_capital,
                     date=today.isoformat(),
                 )
 
                 tp = alloc_result.target_portfolio
                 result.metadata["allocator_used"] = str(alloc_result.allocator_used)
+                result.metadata["alloc_capital"] = (
+                    f"{alloc_capital:.0f} (regime exposure {suggested_position_pct:.0%})"
+                )
                 result.metrics["n_positions_out"] = tp.n_equities if tp else 0
                 result.metrics["cash_reserve"] = round(tp.cash_reserve, 4) if tp else 0.0
                 result.metrics["allocated_positions"] = tp.n_equities if tp else 0
@@ -845,14 +855,29 @@ class DailyPipeline(BasePipeline):
                     result.metadata["alloc_warnings"] = "; ".join(alloc_result.warnings)
 
                 # Generate orders from TargetPortfolio
+                # 最新收盘价 lookup（金额 → 股数）
+                px_map: dict[str, float] = {}
+                if not prices.is_empty():
+                    latest_px = (
+                        prices.sort("trade_date", descending=True)
+                        .unique(subset=["symbol"], keep="first")
+                        .select(["symbol", "close"])
+                    )
+                    px_map = {
+                        str(r["symbol"]): float(r["close"]) for r in latest_px.iter_rows(named=True)
+                    }
+
                 for pos in tp.positions if tp else []:
                     sym = str(pos.get("symbol", ""))
                     if sym == "CASH":
                         continue
                     wt = float(pos.get("target_weight", 0))  # type: ignore[arg-type]
                     if wt > 0:
-                        amount = wt * total_capital
-                        quantity = int(amount // 100 * 100)  # Round to lots
+                        amount = wt * alloc_capital
+                        px = px_map.get(sym, 0.0)
+                        if px <= 0:
+                            continue
+                        quantity = int(amount / px // 100 * 100)  # 金额→股数→整手
                         if quantity > 0:
                             orders.append(Order(symbol=sym, side="BUY", quantity=quantity))
 
@@ -1112,12 +1137,27 @@ class DailyPipeline(BasePipeline):
                     subset=["symbol"], keep="first"
                 )
                 try:
+                    from dataclasses import replace
+
                     engine = DecisionEngine()
+                    # 用 allocator 的实际目标权重 + 敞口资本，否则 recommendations
+                    # 会按满仓等权 20% 计算股数（与 allocator orders 脱节，
+                    # approve 时 PositionLedger 建仓会变成满仓）。
+                    alloc_weights = {
+                        str(pos.get("symbol", "")): float(pos.get("target_weight", 0.0))
+                        for pos in (tp.positions if tp else [])
+                        if str(pos.get("symbol", "")) != "CASH"
+                    }
+                    report_risk = (
+                        replace(risk_report, position_weights=alloc_weights)
+                        if risk_report is not None and alloc_weights
+                        else risk_report
+                    )
                     decision_report = engine.generate(
                         signals=filtered_signals,
                         prices=latest_prices,
-                        risk_report=risk_report,
-                        total_capital=total_capital,
+                        risk_report=report_risk,
+                        total_capital=alloc_capital,
                         strategy_id="multi_strategy_ensemble",
                         market_regime=regime_label,
                     )
