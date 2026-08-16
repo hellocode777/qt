@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
-import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qp.decision.decision_package import DecisionPackage
 
 
-def cmd_decide() -> int:
+def cmd_decide(
+    force: bool = False,
+    review: bool = False,
+    history: bool = False,
+    show: str = "",
+    capital: float = 0.0,
+    action: str = "",
+    notes: str = "",
+    strategy_id: str = "simple_rank_v1.0",
+) -> int:
     """Load or generate daily DecisionPackage.
 
     Default: loads today's DecisionPackage from data/decisions/.
@@ -33,35 +41,9 @@ def cmd_decide() -> int:
     from qp.strategy.simple_rank import SimpleRankStrategy
 
     today = date.today()
-
-    # Parse flags
-    force = False
-    review = False
-    show_history = False
-    show_id = ""
-    strategy_id = "simple_rank_v1.0"
-    total_capital = 100_000.0
-
-    args = sys.argv[2:]
-    i = 0
-    while i < len(args):
-        arg = args[i]
-        if arg == "--force":
-            force = True
-        elif arg == "--review":
-            review = True
-        elif arg == "--history":
-            show_history = True
-        elif arg.startswith("--show="):
-            show_id = arg.split("=", 1)[1]
-        elif arg == "--show" and i + 1 < len(args):
-            i += 1
-            show_id = args[i]
-        elif arg.startswith("--capital="):
-            total_capital = float(arg.split("=")[1])
-        elif not arg.startswith("--"):
-            strategy_id = arg
-        i += 1
+    total_capital = capital if capital > 0 else 100_000.0
+    show_history = history
+    show_id = show
 
     # ── --history: list all past decisions ──
     if show_history:
@@ -73,8 +55,6 @@ def cmd_decide() -> int:
 
     # ── --review [--action approve|reject|modify] [--notes ...]: human review ──
     if review:
-        action = _parse_flag_arg(args, "--action", "")
-        notes = _parse_flag_arg(args, "--notes", "")
         return cmd_decide_review(today, action=action, notes=notes)
 
     # ── Default / --force: load or generate DecisionPackage ──

@@ -437,11 +437,41 @@ def knowledge_search(query: str | None) -> None:
 
 
 @cli.command()
-def decide() -> None:
+@click.option(
+    "--force", is_flag=True, help="Re-run daily pipeline to generate a fresh DecisionPackage"
+)
+@click.option("--review", is_flag=True, help="Open today's DecisionPackage for human review")
+@click.option("--history", is_flag=True, help="List all past decision packages")
+@click.option("--show", default="", help="Display a specific DecisionPackage (ID or suffix)")
+@click.option("--capital", type=float, default=0.0, help="Total capital (default 100000)")
+@click.option("--action", default="", help="Review action: approve/reject/modify")
+@click.option("--notes", default="", help="Review notes")
+@click.option("--strategy", "strategy_id", default="simple_rank_v1.0", help="Legacy strategy_id")
+def decide(
+    force: bool,
+    review: bool,
+    history: bool,
+    show: str,
+    capital: float,
+    action: str,
+    notes: str,
+    strategy_id: str,
+) -> None:
     """Generate and review investment decisions."""
     from qp.platform.cli.commands.decide import cmd_decide
 
-    raise SystemExit(cmd_decide())
+    raise SystemExit(
+        cmd_decide(
+            force=force,
+            review=review,
+            history=history,
+            show=show,
+            capital=capital,
+            action=action,
+            notes=notes,
+            strategy_id=strategy_id,
+        )
+    )
 
 
 # ==================================================================
