@@ -344,7 +344,7 @@ var QPCharts = (function () {
       { color: '#2563eb', label: '组合净值 Portfolio' },
     ];
     if (benchmark && opts.showBenchmark) {
-      legendItems.push({ color: '#10b981', label: '等权基准 Benchmark' });
+      legendItems.push({ color: '#10b981', label: '上证指数 Benchmark' });
     }
     _drawLegend(ctx, legendItems, pad.left, 10);
 
@@ -521,7 +521,7 @@ function initEquityChart() {
     if (!rawData || rawData.length === 0) return;
 
     // Map from simulation data format to QPCharts format.
-    // NOTE: shadow 盘没有真实基准（等权基准只存在于实验 daily_nav），
+    // NOTE: shadow 盘没有真实基准（上证指数/等权基准只存在于实验 daily_nav），
     // 之前把 market_value 当 benchmark 传入是假基准 → 已移除，只画总权益。
     var dates = rawData.map(function (d) { return d.date; });
     var portfolio = rawData.map(function (d) { return d.total_equity; });
