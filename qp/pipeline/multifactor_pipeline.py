@@ -690,7 +690,10 @@ class MultiFactorPipeline(BasePipeline):
 
         # ── Stage 5: Backtest (Layer 7 SimulatedBroker) ──
         logger.info("[5/6] 回测 (SimulatedBroker, 信号日调仓)...")
-        bt = self._compute_backtest(signals, price_data, scores=scores, top_n=top_n)
+        _bt_offset = int(cli_overrides.get("rebalance_offset", 0)) if cli_overrides else 0
+        bt = self._compute_backtest(
+            signals, price_data, scores=scores, top_n=top_n, rebalance_offset=_bt_offset
+        )
         logger.info("   总收益:    {:+.2f}%", bt["total_return_pct"])
         logger.info("   年化夏普:  {:.2f}", bt["sharpe"])
         logger.info("   最大回撤:  {:.2f}%", bt["max_dd_pct"])
@@ -1451,6 +1454,7 @@ class MultiFactorPipeline(BasePipeline):
         initial_capital: float = 100_000,
         scores: pl.DataFrame | None = None,
         top_n: int = 10,
+        rebalance_offset: int = 0,
     ) -> dict[str, Any]:
         """Broker-based backtest via Layer 7 SimulatedBroker.
 
@@ -1537,13 +1541,21 @@ class MultiFactorPipeline(BasePipeline):
         min_equity = initial_capital
         min_date = str(all_dates[0]) if all_dates else ""
         rebalance_freq = 20  # match generate_rebalance_signals default
+        # 2026-08-16: honor rebalance_offset so a windowed experiment's
+        # backtest rebalances on the same calendar as its signal generator
+        # (and as the full-range run).
+        offset_mod = rebalance_offset % rebalance_freq if rebalance_offset else 0
 
         # Track cost basis per symbol (for stop loss calculation)
         cost_basis: dict[str, float] = {}
 
         for trading_day_idx, d in enumerate(all_dates):
             d_str = str(d)
-            is_rebalance_day = trading_day_idx % rebalance_freq == 0
+            is_rebalance_day = (
+                (trading_day_idx - offset_mod) % rebalance_freq == 0
+                if rebalance_offset
+                else trading_day_idx % rebalance_freq == 0
+            )
 
             # Build price & ADV maps for this trading day
             day_prices = all_prices.filter(pl.col("trade_date") == d)

@@ -320,8 +320,23 @@ def compute_cross_sectional_scores(
         # filtered universe so cache hits don't bypass quality_filter.
         if price_data:
             valid_codes = set(price_data.keys())
-            filtered_raw: dict[str, dict[str, dict[str, float]]] = {}
+            # 2026-08-16: also restrict to price_data's date range. The cache
+            # stores the full factor history (from min_history cutoff), but a
+            # windowed experiment must rebalance on the calendar that starts
+            # at its own window start (offset alignment is then computed
+            # against the same price calendar for full-range and windowed
+            # runs). Without date clipping, all_raw's dates come from the
+            # cache, whose start drifts every time the cache is rebuilt
+            # (min_history drops the first ~60 days) → rebalance calendars
+            # between experiments silently diverge.
+            valid_dates = set()
+            for _c, df in price_data.items():
+                if df is not None and "trade_date" in df.columns:
+                    valid_dates.update(df["trade_date"].cast(pl.Utf8).to_list())
+            filtered_raw = {}
             for d, syms in all_raw.items():
+                if d not in valid_dates:
+                    continue
                 kept = {s: f for s, f in syms.items() if s in valid_codes}
                 if kept:
                     filtered_raw[d] = kept
@@ -333,6 +348,14 @@ def compute_cross_sectional_scores(
                     "🧹 缓存命中后按质量过滤 universe 裁剪: 剔除 {} 只", max(dropped_syms, 0)
                 )
             all_raw = filtered_raw
+            _cds = sorted(filtered_raw.keys())
+            if _cds:
+                logger.info(
+                    "📅 缓存日期裁剪: {} 天 ({} → {})",
+                    len(_cds),
+                    _cds[0],
+                    _cds[-1],
+                )
 
     for stock_idx, (code, df) in enumerate(price_data.items()):
         if total_stocks == 0:
