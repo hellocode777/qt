@@ -293,6 +293,23 @@ class SimulatedBroker(BaseBroker):
                 order["reject_reason"] = "No price available"
                 continue
 
+            # 2026-08-16 fix: never allow short-selling. A SELL must never
+            # exceed the shares actually held. Duplicate sells (e.g. risk
+            # exit + same-day rebalance) would otherwise drive shares
+            # negative and market_value negative, poisoning get_equity().
+            # Trim (or reject) BEFORE computing slippage/cost so the
+            # recorded trade matches the executed quantity.
+            if side == "SELL":
+                held_pos = self._positions.get(symbol)
+                held_shares = int(held_pos.shares) if held_pos else 0
+                if quantity > held_shares:
+                    if held_shares <= 0:
+                        order["status"] = "REJECTED"
+                        order["reject_reason"] = "No position to sell"
+                        continue
+                    quantity = held_shares
+                    order["quantity"] = quantity
+
             # Compute slippage
             slippage_per_share = self._slippage_model.compute(
                 price=price,
@@ -366,6 +383,10 @@ class SimulatedBroker(BaseBroker):
                 # right after execution (not only after the next set_prices)
                 pos.market_value = total_shares * fill_price
             else:
+                # 2026-08-16 defensive backstop (primary guard is up in the
+                # order-execution loop): never let shares go negative.
+                if quantity > pos.shares:
+                    quantity = pos.shares
                 pos.shares -= quantity
                 if pos.shares == 0:
                     pos.avg_cost = 0.0
