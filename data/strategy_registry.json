@@ -1,5 +1,139 @@
 {
   "strategies": {
+    "momentum_v1.0": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "1.0.0",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "",
+        "description": "",
+        "tags": [],
+        "weights": {},
+        "parameters": {},
+        "backtest_ic": 0.0,
+        "backtest_sharpe": 0.0,
+        "backtest_max_dd": 0.0,
+        "backtest_excess_return": 0.0
+      },
+      "active": false
+    },
+    "value_v1.0": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "1.0.0",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "",
+        "description": "",
+        "tags": [],
+        "weights": {},
+        "parameters": {},
+        "backtest_ic": 0.0,
+        "backtest_sharpe": 0.0,
+        "backtest_max_dd": 0.0,
+        "backtest_excess_return": 0.0
+      },
+      "active": false
+    },
+    "momentum_vol_full": {
+      "lifecycle": "approved",
+      "meta": {
+        "strategy_version": "v20260814",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "experiment",
+        "description": "",
+        "tags": [],
+        "weights": {
+          "Amplitude_5D": -0.23311635475996745,
+          "Volatility_20D": 0.1822620016273393,
+          "Momentum_3M": -0.2367778681855167,
+          "Volume_Concentration": -0.1757526444263629,
+          "Volume_Trend_10D": -0.17209113100081366
+        },
+        "parameters": {
+          "top_n": 10,
+          "rebalance": 20,
+          "industry_neutral": true,
+          "orthogonalize": false,
+          "anti_chase": true
+        },
+        "backtest_ic": 0.0845,
+        "backtest_sharpe": 1.99,
+        "backtest_max_dd": 9.21,
+        "backtest_excess_return": 56.33
+      },
+      "active": true,
+      "approved": {
+        "strategy_id": "momentum_vol_full",
+        "version": "v20260811",
+        "approved_at": "2026-08-12T10:33:36.047479+08:00",
+        "approved_by": "Wei",
+        "weights": {
+          "Amplitude_5D": -0.25,
+          "Volatility_20D": 0.22,
+          "Momentum_3M": -0.2,
+          "Volume_Concentration": -0.19,
+          "Volume_Trend_10D": -0.14
+        },
+        "parameters": {
+          "top_n": 10,
+          "rebalance": 20,
+          "industry_neutral": true,
+          "orthogonalize": true,
+          "anti_chase": true
+        },
+        "backtest_summary": {
+          "ic": 0.0701,
+          "sharpe": 0.42,
+          "max_dd": 24.87,
+          "excess_return": 1.97
+        },
+        "validation_report_id": "",
+        "validation_report": {
+          "status": "PASS",
+          "score": 100.0,
+          "confidence": 1.0,
+          "rules": [
+            {
+              "rule_name": "rank_ic",
+              "status": "PASS",
+              "score": 0.0692,
+              "threshold": 0.02,
+              "actual_value": 0.0692,
+              "detail": "Mean IC from backtest"
+            },
+            {
+              "rule_name": "sharpe_ratio",
+              "status": "PASS",
+              "score": 1.06,
+              "threshold": 0.5,
+              "actual_value": 1.06,
+              "detail": "Sharpe ratio from backtest"
+            }
+          ],
+          "failed_rules": [],
+          "recommendation": "Backtest metrics recalibrated 2026-08-16 after fixing static quality-filter look-ahead, broker short-sell, CLI =True flag, and backtest rebalance_offset bugs. Full-range 2019-2026 run (experiment purged 2026-08-16): IC 0.0701 / Sharpe 0.42 / MaxDD 24.87% / excess +1.97%. Windowed same-calendar: 2019-21 +44.11%, 2022-23 +6.04%, 2024-26 +87.67%.",
+          "metrics": {
+            "ic_mean": 0.0701,
+            "sharpe_ratio": 0.42,
+            "max_drawdown_pct": 24.87,
+            "excess_return_pct": 1.97
+          }
+        },
+        "meta": {}
+      }
+    },
     "lvr_vol_mom1m": {
       "lifecycle": "research",
       "meta": {
@@ -30,7 +164,7 @@
       },
       "active": false
     },
-    "momentum_vol_mf": {
+    "mvf_v2_expansion": {
       "lifecycle": "research",
       "meta": {
         "strategy_version": "v20260815",
@@ -43,12 +177,11 @@
         "description": "",
         "tags": [],
         "weights": {
-          "Amplitude_5D": -0.1912,
-          "Volatility_20D": 0.1495,
-          "Momentum_3M": -0.1942,
-          "Volume_Concentration": -0.1441,
-          "Volume_Trend_10D": -0.1411,
-          "MF_NetFlow_20D": -0.18
+          "Amplitude_5D": -0.25,
+          "Volatility_20D": 0.22,
+          "Momentum_3M": -0.2,
+          "Volume_Concentration": -0.19,
+          "Volume_Expansion_20_120": -0.14
         },
         "parameters": {
           "top_n": 10,
@@ -57,10 +190,31 @@
           "orthogonalize": false,
           "anti_chase": true
         },
-        "backtest_ic": 0.0708,
-        "backtest_sharpe": 0.43,
-        "backtest_max_dd": 60.53,
-        "backtest_excess_return": -5.039999999999999
+        "backtest_ic": 0.0669,
+        "backtest_sharpe": 0.36,
+        "backtest_max_dd": 64.4,
+        "backtest_excess_return": 1.730000000000004
+      },
+      "active": false
+    },
+    "quality_v1.0": {
+      "lifecycle": "research",
+      "meta": {
+        "strategy_version": "1.0.0",
+        "model_version": "",
+        "feature_version": "",
+        "feature_set": [],
+        "rebalance_frequency": "daily",
+        "rebalance_day": 0,
+        "owner": "",
+        "description": "",
+        "tags": [],
+        "weights": {},
+        "parameters": {},
+        "backtest_ic": 0.0,
+        "backtest_sharpe": 0.0,
+        "backtest_max_dd": 0.0,
+        "backtest_excess_return": 0.0
       },
       "active": false
     },
@@ -150,7 +304,7 @@
         "meta": {}
       }
     },
-    "mvf_v2_expansion": {
+    "momentum_vol_mf": {
       "lifecycle": "research",
       "meta": {
         "strategy_version": "v20260815",
@@ -163,11 +317,12 @@
         "description": "",
         "tags": [],
         "weights": {
-          "Amplitude_5D": -0.25,
-          "Volatility_20D": 0.22,
-          "Momentum_3M": -0.2,
-          "Volume_Concentration": -0.19,
-          "Volume_Expansion_20_120": -0.14
+          "Amplitude_5D": -0.1912,
+          "Volatility_20D": 0.1495,
+          "Momentum_3M": -0.1942,
+          "Volume_Concentration": -0.1441,
+          "Volume_Trend_10D": -0.1411,
+          "MF_NetFlow_20D": -0.18
         },
         "parameters": {
           "top_n": 10,
@@ -176,10 +331,10 @@
           "orthogonalize": false,
           "anti_chase": true
         },
-        "backtest_ic": 0.0669,
-        "backtest_sharpe": 0.36,
-        "backtest_max_dd": 64.4,
-        "backtest_excess_return": 1.730000000000004
+        "backtest_ic": 0.0708,
+        "backtest_sharpe": 0.43,
+        "backtest_max_dd": 60.53,
+        "backtest_excess_return": -5.039999999999999
       },
       "active": false
     },
@@ -215,169 +370,6 @@
         "backtest_excess_return": 20.750000000000007
       },
       "active": false
-    },
-    "momentum_v1.0": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "1.0.0",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "",
-        "description": "",
-        "tags": [],
-        "weights": {},
-        "parameters": {},
-        "backtest_ic": 0.0,
-        "backtest_sharpe": 0.0,
-        "backtest_max_dd": 0.0,
-        "backtest_excess_return": 0.0
-      },
-      "active": false
-    },
-    "value_v1.0": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "1.0.0",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "",
-        "description": "",
-        "tags": [],
-        "weights": {},
-        "parameters": {},
-        "backtest_ic": 0.0,
-        "backtest_sharpe": 0.0,
-        "backtest_max_dd": 0.0,
-        "backtest_excess_return": 0.0
-      },
-      "active": false
-    },
-    "quality_v1.0": {
-      "lifecycle": "research",
-      "meta": {
-        "strategy_version": "1.0.0",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "",
-        "description": "",
-        "tags": [],
-        "weights": {},
-        "parameters": {},
-        "backtest_ic": 0.0,
-        "backtest_sharpe": 0.0,
-        "backtest_max_dd": 0.0,
-        "backtest_excess_return": 0.0
-      },
-      "active": false
-    },
-    "momentum_vol_full": {
-      "lifecycle": "approved",
-      "meta": {
-        "strategy_version": "v20260814",
-        "model_version": "",
-        "feature_version": "",
-        "feature_set": [],
-        "rebalance_frequency": "daily",
-        "rebalance_day": 0,
-        "owner": "experiment",
-        "description": "",
-        "tags": [],
-        "weights": {
-          "Amplitude_5D": -0.23311635475996745,
-          "Volatility_20D": 0.1822620016273393,
-          "Momentum_3M": -0.2367778681855167,
-          "Volume_Concentration": -0.1757526444263629,
-          "Volume_Trend_10D": -0.17209113100081366
-        },
-        "parameters": {
-          "top_n": 10,
-          "rebalance": 20,
-          "industry_neutral": true,
-          "orthogonalize": false,
-          "anti_chase": true
-        },
-        "backtest_ic": 0.0845,
-        "backtest_sharpe": 1.99,
-        "backtest_max_dd": 9.21,
-        "backtest_excess_return": 56.33,
-        "backtest_recalibrated_2026_08_16": {
-          "full_range": "",
-          "ic": 0.0701,
-          "sharpe": 0.42,
-          "max_dd": 24.87,
-          "excess_return": 1.97,
-          "note": "Experiment data purged 2026-08-16 (fresh start). Recalibration record kept for history; run a new full-range backtest to refresh."
-        }
-      },
-      "active": true,
-      "approved": {
-        "strategy_id": "momentum_vol_full",
-        "version": "v20260811",
-        "approved_at": "2026-08-12T10:33:36.047479+08:00",
-        "approved_by": "Wei",
-        "weights": {
-          "Amplitude_5D": -0.25,
-          "Volatility_20D": 0.22,
-          "Momentum_3M": -0.2,
-          "Volume_Concentration": -0.19,
-          "Volume_Trend_10D": -0.14
-        },
-        "parameters": {
-          "top_n": 10,
-          "rebalance": 20,
-          "industry_neutral": true,
-          "orthogonalize": true,
-          "anti_chase": true
-        },
-        "backtest_summary": {
-          "ic": 0.0701,
-          "sharpe": 0.42,
-          "max_dd": 24.87,
-          "excess_return": 1.97
-        },
-        "validation_report_id": "",
-        "validation_report": {
-          "status": "PASS",
-          "score": 100.0,
-          "confidence": 1.0,
-          "rules": [
-            {
-              "rule_name": "rank_ic",
-              "status": "PASS",
-              "score": 0.0692,
-              "threshold": 0.02,
-              "actual_value": 0.0692,
-              "detail": "Mean IC from backtest"
-            },
-            {
-              "rule_name": "sharpe_ratio",
-              "status": "PASS",
-              "score": 1.06,
-              "threshold": 0.5,
-              "actual_value": 1.06,
-              "detail": "Sharpe ratio from backtest"
-            }
-          ],
-          "failed_rules": [],
-          "recommendation": "Backtest metrics recalibrated 2026-08-16 after fixing static quality-filter look-ahead, broker short-sell, CLI =True flag, and backtest rebalance_offset bugs. Full-range 2019-2026 run (experiment purged 2026-08-16): IC 0.0701 / Sharpe 0.42 / MaxDD 24.87% / excess +1.97%. Windowed same-calendar: 2019-21 +44.11%, 2022-23 +6.04%, 2024-26 +87.67%.",
-          "metrics": {
-            "ic_mean": 0.0701,
-            "sharpe_ratio": 0.42,
-            "max_drawdown_pct": 24.87,
-            "excess_return_pct": 1.97
-          }
-        },
-        "meta": {}
-      }
     }
   }
 }
