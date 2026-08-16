@@ -100,7 +100,7 @@
     "lvr_vol_only": {
       "lifecycle": "backtest_passed",
       "meta": {
-        "strategy_version": "multifactor_20260807_020018",
+        "strategy_version": "multifactor_20260816_085748",
         "model_version": "",
         "feature_version": "",
         "feature_set": [],
@@ -122,7 +122,15 @@
         "backtest_ic": 0.0543,
         "backtest_sharpe": 1.52,
         "backtest_max_dd": 9.7,
-        "backtest_excess_return": 26.730000000000004
+        "backtest_excess_return": 26.730000000000004,
+        "benchmark_recalibrated_2026_08_16": {
+          "full_range": "multifactor_20260816_085748",
+          "benchmark": "sh000001",
+          "excess_return": 114.34,
+          "max_dd": 8.36,
+          "ic": 0.0644,
+          "note": "Benchmark changed to Shanghai Composite; single-factor Volatility_20D beats 5F on excess."
+        }
       },
       "active": false,
       "approved": {
@@ -310,12 +318,13 @@
         "backtest_max_dd": 9.21,
         "backtest_excess_return": 56.33,
         "backtest_recalibrated_2026_08_16": {
-          "full_range": "multifactor_20260816_044353",
+          "full_range": "multifactor_20260816_082431",
+          "benchmark": "sh000001 (Shanghai Composite)",
           "ic": 0.0701,
           "sharpe": 0.42,
           "max_dd": 24.87,
-          "excess_return": 1.97,
-          "note": "Approved block was stale bug-era short-window numbers; real full-range baseline after PIT/short/CLI/backtest fixes."
+          "excess_return": -2.79,
+          "note": "Benchmark changed from equal-weight all-stocks median to Shanghai Composite."
         }
       },
       "active": true,
@@ -342,7 +351,7 @@
           "ic": 0.0701,
           "sharpe": 0.42,
           "max_dd": 24.87,
-          "excess_return": 1.97
+          "excess_return": -2.79
         },
         "validation_report_id": "",
         "validation_report": {
@@ -368,12 +377,12 @@
             }
           ],
           "failed_rules": [],
-          "recommendation": "Backtest metrics recalibrated 2026-08-16 after fixing static quality-filter look-ahead, broker short-sell, CLI =True flag, and backtest rebalance_offset bugs. Full-range 2019-2026 run multifactor_20260816_044353: IC 0.0701 / Sharpe 0.42 / MaxDD 24.87% / excess +1.97%. Windowed same-calendar: 2019-21 +44.11%, 2022-23 +6.04%, 2024-26 +87.67%.",
+          "recommendation": "Benchmark switched to Shanghai Composite (sh000001) 2026-08-16. Full-range excess now -2.79% vs index (+59.30% index over 2019-2026); windowed: 19-21 +61.09% / 22-23 +13.50% / 24-26 +92.56% (orth off).",
           "metrics": {
             "ic_mean": 0.0701,
             "sharpe_ratio": 0.42,
             "max_drawdown_pct": 24.87,
-            "excess_return_pct": 1.97
+            "excess_return_pct": -2.79
           }
         },
         "meta": {}

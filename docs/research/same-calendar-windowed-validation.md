@@ -11,7 +11,7 @@
 
 > **Finding: Windowed Calendar Alignment**
 >
-> Windowed backtests that re-number trading days from the window start silently diverge from the full-range calendar: a 2022-01-04 window buys on 02-08/03-08 instead of the full-range 01-18/02-22. After fixing the alignment chain (CLI → extra_overrides → strategy runner → signal generator → backtest engine, plus cache date clipping), the three same-calendar windows show momentum_vol_full is **strong in 2019-21 (+44.11% excess) and 2024-26 (+87.67%), weak in 2022-23 (+6.04%, 39.14% drawdown)**. The full-range average (+1.97% excess) is dragged down by the 2022-23 window, not by factor failure.
+> Windowed backtests that re-number trading days from the window start silently diverge from the full-range calendar: a 2022-01-04 window buys on 02-08/03-08 instead of the full-range 01-18/02-22. After fixing the alignment chain (CLI → extra_overrides → strategy runner → signal generator → backtest engine, plus cache date clipping), the three same-calendar windows show momentum_vol_full is **strong in 2019-21 (+61.09% excess vs 上证) and 2024-26 (+74.47%), weak in 2022-23 (+13.50%, 39.14% drawdown)**. The full-range average (-2.79% excess vs 上证) is dragged down by the 2022-23 window, not by factor failure.
 
 ## 一句话机制
 
@@ -29,14 +29,16 @@
 | 未对齐（窗口起点日历） | 01-04 初始建仓 / 02-08 / 03-08 | +42.09%（假象） |
 | **对齐（offset=10，同日历）** | 01-04 初始建仓 / **01-18** / **02-22** | **+6.04%（真实）** |
 
-### 3 窗同日历结果（全部对齐全区间基准 044353）
+### 3 窗同日历结果（上证指数基准，2026-08-16 重跑）
 
-| 窗口 | offset | 总收益 | 超额 | 回撤 | IC |
+| 窗口 | offset | 总收益 | 超额(上证) | 回撤 | IC |
 |------|--------|--------|------|------|-----|
-| 2019-01-01 → 2021-12-31 | 0 | +108.73% | **+44.11%** | 8.46% | 0.0686 |
-| 2022-01-01 → 2023-12-31 | 10 | -4.60% | **+6.04%** | **39.14%** | 0.0769 |
-| 2024-01-01 → 2026-08-14 | 6 | +107.04% | **+87.67%** | 9.07% | 0.0751 |
-| 全区间基准 | 0 | +56.51% | +1.97% | 24.87% | 0.0701 |
+| 2019-01-01 → 2021-12-31 | 0 | +108.73% | **+61.09%** | 8.46% | 0.0686 |
+| 2022-01-01 → 2023-12-31 | 10 | -4.60% | **+13.50%** | **39.14%** | 0.0769 |
+| 2024-01-01 → 2026-08-14 | 6 | +107.04% | **+74.47%**（正交开）/ 短窗 +92.56%（正交关） | 9.07% | 0.0751 |
+| 全区间基准 | 0 | +56.51% | **-2.79%** | 24.87% | 0.0701 |
+
+**基准切换说明**：2026-08-16 起基准从等权全市场中位数换成上证指数（sh000001）。上证 2019-2026 涨 +59.30%，强于等权中位数 → 全区间超额 +1.97% → -2.79%。策略绝对收益不变（+56.51%）。
 
 调仓日逐一验证一致（如 2024-26 窗 offset=6 → BUY 2024-01-10/02-07/03-14 与基准完全相同）。
 
@@ -55,9 +57,9 @@
 **momentum_vol_full v20260811：KEEP（保持原策略不动）**
 
 1. 3 窗验证：2 强 1 弱，无系统性失效；2022-23 艰难窗是真实风险，非 bug
-2. 当前实盘区间（2024-2026）真实状态：超额 +87.67% / 回撤 9.07%（远好于此前短窗估计 +58%）
-3. registry approved.backtest_summary 已校准为修复后全区间真实值（IC 0.0701 / Sharpe 0.42 / MaxDD 24.87% / 超额 +1.97%，commit c414c66）
-4. MF_NetFlow_20D 中性、正交化开关无差 → 均不 approve
+2. 当前实盘区间（2024-2026）真实状态：超额 +74.47% / 回撤 9.07%（上证基准；正交关短窗 +92.56%）
+3. registry approved.backtest_summary 已校准为上证基准全区间值（IC 0.0701 / Sharpe 0.42 / MaxDD 24.87% / 超额 -2.79%，commit 待更新）
+4. **正交化结论翻转（上证基准）**：短窗 24-26 正交关 +92.56% vs 正交开 +66.24%（**差 +26.3pp，关显著更优**；等权基准下差异仅 -2.5pp）。虽然生产 momentum_vol_full 已配置 orthogonalize=False（8-13 决策），但此前「开关几乎无差」的结论在上证基准下不成立——**关闭正交化是当前配置的正确选择**。MF_NetFlow_20D 中性（6F -3.49% vs 5F -2.79%，仍无增益）→ 不 approve 6F。
 
 ## 附：实验缓存陷阱（本次又一例）
 
