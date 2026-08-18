@@ -17,8 +17,6 @@ from qp.monitoring.factor_health_logger import FactorHealthLogger
 def _fresh_logger(tmp_path, monkeypatch):
     logger = FactorHealthLogger()
     # Redirect storage to a temp dir so we don't touch real data.
-    import qp.monitoring.factor_health_logger as m
-
     monkeypatch.setattr(logger, "_base", tmp_path)
     return logger
 
