@@ -284,6 +284,31 @@ class DailyPipeline(BasePipeline):
                     logger.warning("Factor calculator unavailable (non-fatal): {}", e)
 
             # ================================================================
+            # Step 1.6: Incremental factor health refresh (DP-002 v4)
+            #   - Appends new daily IC days to factor_ic_series.parquet
+            #   - Logs fresh health snapshot to factor_health.parquet
+            #   - Lightweight (seconds), dedup-safe; non-fatal on failure.
+            # ================================================================
+            try:
+                from qp.monitoring.factor_health_pipeline import FactorHealthPipeline
+
+                fh_pipeline = FactorHealthPipeline()
+                fh_result = fh_pipeline.run_incremental()
+                if fh_result.status == PipelineStatus.SUCCESS:
+                    logger.info(
+                        "FactorHealth incremental: {} factors updated, {} skipped",
+                        fh_result.metrics.get("n_factors_updated", 0),
+                        fh_result.metrics.get("n_factors_skipped", 0),
+                    )
+                else:
+                    logger.warning(
+                        "FactorHealth incremental PARTIAL/FAILED: {}",
+                        fh_result.errors[:3],
+                    )
+            except Exception as e:
+                logger.warning("Factor health refresh unavailable (non-fatal): {}", e)
+
+            # ================================================================
             # Step 2: Feature computation (momentum + volatility)
             # ================================================================
             feature_pipeline = FeaturePipeline()

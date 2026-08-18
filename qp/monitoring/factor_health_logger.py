@@ -171,15 +171,13 @@ class FactorHealthLogger:
         existing_path = self._ic_series_path
         if existing_path.exists():
             existing = pl.read_parquet(existing_path)
-            # Dedup: remove existing rows for same (factor_name, date)
-            existing_dates = set(
-                existing.filter(pl.col("factor_name") == factor_name)["date"].to_list()
-            )
+            # Dedup: remove existing rows whose (factor_name, date) collides
+            # with the NEW records — keep all other history intact.
+            # (Fix: previously removed the ENTIRE factor's history, which
+            # only worked because update-health passed full-history records.)
+            new_dates = set(new_df["date"].to_list())
             existing = existing.filter(
-                ~(
-                    (pl.col("factor_name") == factor_name)
-                    & pl.col("date").is_in(list(existing_dates))
-                )
+                ~((pl.col("factor_name") == factor_name) & pl.col("date").is_in(list(new_dates)))
             )
             combined = pl.concat([existing, new_df], how="vertical")
             combined.write_parquet(existing_path)

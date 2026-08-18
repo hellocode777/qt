@@ -1,7 +1,7 @@
 # QP (Quant Platform) 用户指南
 
 > 个人量化研究与投资决策操作系统
-> 更新日期：2026-08-10
+> 更新日期：2026-08-18
 
 ---
 
@@ -248,8 +248,8 @@ uv run qp experiment run multifactor \
 | `--model` | 启用 ML LambdaRank 模型 | 关闭（线性加权） |
 | `--top-n <N>` | 持仓股票数 | 10 |
 | `--rebalance <N>` | 调仓周期（天） | 20 |
-| `--industry-neutral` | 行业中性化 | 关闭 |
-| `--orthogonalize` | 因子正交化 | 关闭 |
+| `--industry-neutral` | 行业中性化 | 开启（策略配置默认） |
+| `--orthogonalize` | 因子正交化 | 关闭（momentum_vol_full 自 2026-08-13 起关闭，VIF 极端日剥离有效信号） |
 | `--skip-gate` | 跳过验证门禁 | 关闭 |
 | `--symbols <codes>` | 自定义股票池 | 全部主板 |
 | `--dataset <name>` | 数据集名称 | `daily_price_main` |
@@ -405,6 +405,7 @@ NORMAL → WARNING → HALT_BUY → FULL_STOP
 每次检查自动写入：
 - `data/monitoring/system_health_log.parquet` — 每日健康快照
 - `data/monitoring/system_state.parquet` — 系统状态机
+- `data/monitoring/factor_health.parquet` / `factor_ic_series.parquet` — 因子健康（有 factor_daily_ics 输入时）
 - `data/monitoring/retrain_signals.parquet` — 需要重训时写入信号
 - `data/knowledge/failure_analysis/` — 触发 PAUSE_BUY 以上时自动归档
 
@@ -448,13 +449,42 @@ for s in l.load_history(days=30).iter_rows(named=True):
 "
 ```
 
-### 7.4 市场状态检测
+### 7.4 因子健康监控（Factor Health）
+
+每个因子按**生命周期状态机**持续追踪：`RESEARCH → VALIDATED → PRODUCTION → WEAKENING → DEGRADED → RETIRED → ARCHIVED`。判定基于滚动 IC（30/90/252 日）、IC_IR、IC 衰减斜率（-0.001/日 ≈ 一年 -25% IC）。
+
+```bash
+# 因子健康总览（生命周期 + 滚动 IC + 衰减斜率）
+uv run qp factor list
+
+# 单个因子详情
+uv run qp factor health Volume_Concentration
+
+# 因子研究报告（markdown）
+uv run qp factor report <factor_name>
+
+# 全量重算因子健康（约 2 分钟/因子 × 19 因子）
+# 用于数据修复后重建；平时由 daily_pipeline Step 1.6 增量更新
+uv run qp factor update-health
+
+# 因子目录
+uv run qp factor catalog
+```
+
+数据文件：
+- `data/monitoring/factor_health.parquet` — 因子健康快照（按 factor+date 去重）
+- `data/monitoring/factor_ic_series.parquet` — 日度 IC 序列（增量追加）
+
+> **日常无需手动执行**：每日 18:00 daily_pipeline 的 Step 1.6 自动增量更新；
+> 09:07 monitor_check 读取该数据做因子健康检查。`update-health` 仅在全量重建/数据修复后使用。
+
+### 7.5 市场状态检测
 
 ```bash
 uv run qp monitor regime
 ```
 
-### 7.5 告警通道测试
+### 7.6 告警通道测试
 
 ```bash
 uv run qp monitor alert-test
@@ -531,34 +561,38 @@ uv run qp paper status simple_rank_v1.0
 
 ## 11. 自动化调度
 
-四个定时任务串起来，构成完整的**每日投资决策自动化闭环**：
+六个定时任务串起来，构成完整的**每日投资决策自动化闭环**：
 
 ```
-08:00  data_fetch        拉取行情 + 基本面数据
-         │                  ├─ AkShare/Tushare → Raw → Bronze → Silver → Gold
-         │                  └─ 写入 data/dataset/
-         │
 09:07  monitor_check     全维度安全扫描
          │                  ├─ Market Regime (8 种状态, 含流动性危机/风格切换)
          │                  ├─ 7 个熔断触发器 (回撤/PSI/连续亏损/异常换手/模型衰减)
          │                  ├─ PSI 特征漂移
          │                  ├─ Model Decay (IC 衰减检测)
+         │                  ├─ Factor Health (因子健康，读取 factor_ic_series.parquet)
          │                  └─ Strategy Health (0-100 评分)
          │                  ├─ → system_health_log.parquet
          │                  ├─ → system_state 状态机更新
          │                  ├─ → 异常自动归档 KnowledgeArchive
          │                  └─ → 触发 retrain signal (如需重训)
          │
-16:53  pre_close_check   收盘前二次确认
-         │                  └─ 快速 KillSwitchPipeline (同上)
+09:17  retrain_notify     检查重训练信号，发邮件提醒（重训需人工）
          │
-17:57  daily_pipeline    策略决策
+16:53  pre_close_check   收盘前二次确认
+         │                  └─ 快速 KillSwitchPipeline (同上，STOP 时跳过当日 daily_pipeline)
+         │
+18:00  daily_pipeline    策略决策
          │                  ├─ Step 0: 读取 SystemState (PAUSED+ 自动跳过)
-         │                  ├─ 数据摄入 → 特征计算 → 策略发现 → 验证门禁
+         │                  ├─ 数据摄入 → 因子计算 → 特征计算 → 策略发现 → 验证门禁
          │                  ├─ 策略执行 → 信号融合 → 风控过滤 → 成本估算
          │                  ├─ 资金分配 → DecisionPackage
+         │                  ├─ Step 1.6: 因子健康增量更新 (factor_health.parquet)
          │                  └─ data/decisions/dp-2026-07-25-xxx.json
          │                     data/decisions/trade_decision_audit.parquet (T2)
+         │
+18:05  paper_trading      模拟盘推进：执行当日交易，满 30 天自动评估
+         │
+18:30  email_report       发送今日 DecisionPackage 邮件
          │
       ┌─ 闭环反馈 ─────────────────────────────────────┐
       │  FailureArchiveLogger → ClusterAnalyzer        │
@@ -607,14 +641,15 @@ tail -f logs/$(date +%F)/email_report.log
 
 > 每个 Job 写入当天日期子目录，每天一个新文件，自动清理 7 天前的旧目录。
 
-### 11.2 五任务时间表
+### 11.2 六任务时间表
 
 | 时间 | Job | 执行内容 | watchdog |
 |------|-----|----------|----------|
-| 09:07 | `monitor_check` | KillSwitchPipeline 全扫描 + SystemState + RetrainSignal 消费 | `data/monitoring/watchdog/monitor_check.ping` |
+| 09:07 | `monitor_check` | KillSwitchPipeline 全扫描（regime/漂移/衰减/因子健康/策略健康）+ SystemState + RetrainSignal 消费 | `data/monitoring/watchdog/monitor_check.ping` |
 | 09:17 | `retrain_notify` | 检查重训练信号，发邮件提醒 | `data/monitoring/watchdog/retrain_notify.ping` |
-| 16:53 | `pre_close_check` | KillSwitchPipeline 收盘前二次确认 | `data/monitoring/watchdog/pre_close_check.ping` |
-| 18:00 | `daily_pipeline` | DailyPipeline: 数据→特征→策略→风控→DecisionPackage | `data/monitoring/watchdog/daily_pipeline.ping` |
+| 16:53 | `pre_close_check` | KillSwitchPipeline 收盘前二次确认（STOP → 跳过当日 daily_pipeline） | `data/monitoring/watchdog/pre_close_check.ping` |
+| 18:00 | `daily_pipeline` | DailyPipeline: 数据→因子→特征→策略→风控→DecisionPackage + 因子健康增量更新 | `data/monitoring/watchdog/daily_pipeline.ping` |
+| 18:05 | `paper_trading` | 模拟盘推进：执行当日交易，30 天到期自动评估 PASS/FAIL | `data/monitoring/watchdog/paper_trading.ping` |
 | 18:30 | `email_report` | 发送今日 DecisionPackage 邮件 | `data/monitoring/watchdog/email_report.ping` |
 
 ### 11.3 监控 Scheduler 本身
@@ -638,10 +673,14 @@ logs/
 │   ├── retrain_notify.log           # Job 2
 │   ├── pre_close_check.log          # Job 3
 │   ├── daily_pipeline.log           # Job 4
+│   ├── paper_trading.log            # Job 4.5
 │   └── email_report.log             # Job 5
 
 data/
 ├── monitoring/
+│   ├── factor_health.parquet        # 因子健康快照（IC/IR/衰减/生命周期）
+│   ├── factor_ic_series.parquet     # 因子日度 IC 序列（增量追加，按 factor+date 去重）
+│   ├── strategy_health.parquet      # 策略健康记录
 │   ├── system_health_log.parquet    # T1: 每日健康快照
 │   ├── system_state.parquet         # 系统状态机
 │   ├── system_state_log.parquet     # 状态转换不可变日志
@@ -809,10 +848,13 @@ journalctl --user -u qp-web -f
 
 | 命令 | 说明 |
 |------|------|
-| `qp data fetch [--start=] [--end=] [--batch=] [--skip-etl]` | 全量主板数据拉取 |
+| `qp data fetch [--start=] [--end=] [--batch=] [--skip-etl]` | 全量主板数据拉取（腾讯源，不复权） |
+| `qp data index` | 拉取沪深300 指数日线（市场过滤/状态检测用） |
+| `qp capital-flow` | 拉取资金流数据（主力净流入/北向持股） |
 | `qp fundamental` | 拉取基本面数据 |
 | `qp ingest [start] [end] [--demo]` | 数据摄入（支持 Demo） |
 | `qp run daily [--demo]` | 端到端每日管道 |
+| `qp lineage <dataset>` | 数据血缘图 |
 
 ### 实验与研究
 
@@ -829,6 +871,19 @@ journalctl --user -u qp-web -f
 | `qp model list` | 列出模型 |
 | `qp model show <id>` | 模型详情 |
 | `qp retrain [strategy] [--dry-run]` | 模型重训 |
+
+### 因子
+
+| 命令 | 说明 |
+|------|------|
+| `qp factor list` | 因子健康总览（生命周期/IC/IR/衰减） |
+| `qp factor health [name]` | 单因子健康详情或总览 |
+| `qp factor report <name>` | 因子研究报告（markdown） |
+| `qp factor update-health` | 全量重算因子健康（数据修复后使用） |
+| `qp factor validate <name> --persist` | 单因子验证（可持久化到 factor_health.parquet） |
+| `qp factor compute` | 计算每日因子值 → factor_values_daily.parquet |
+| `qp factor catalog` | 因子目录（按类别分组） |
+| `qp factor register` | 注册所有 BaseFeature 到因子注册表 |
 
 ### 策略生命周期
 
@@ -849,6 +904,16 @@ journalctl --user -u qp-web -f
 |------|------|
 | `qp portfolio report` | KPI 仪表盘 |
 | `qp portfolio risk` | 风控分析 |
+
+### 持仓
+
+| 命令 | 说明 |
+|------|------|
+| `qp position list` | 当前持仓列表 |
+| `qp position show <symbol>` | 单只持仓详情 |
+| `qp position pnl` | 持仓盈亏 |
+| `qp position history` | 持仓历史 |
+| `qp position close <symbol>` | 平仓 |
 
 ### 模拟交易
 
@@ -901,11 +966,14 @@ journalctl --user -u qp-web -f
 ```
 sudo systemctl start qp-scheduler   # 启动（已配置开机自启）
 
-  08:00 → data_fetch       自动拉取行情+基本面
   09:07 → monitor_check    KillSwitchPipeline 全扫描
+  09:17 → retrain_notify   重训信号检查
   16:53 → pre_close_check  收盘前二次确认
-  17:57 → daily_pipeline   产出 DecisionPackage
+  18:00 → daily_pipeline   产出 DecisionPackage（含因子健康增量更新）
+  18:05 → paper_trading    模拟盘推进
+  18:30 → email_report     邮件日报
 
+  → factor_health / factor_ic_series  每日自动更新
   → system_health_log  每日自动写入
   → system_state       跨 Pipeline 状态同步
   → watchdog ping      每个 Job 执行留痕
@@ -1105,25 +1173,27 @@ qp/
 
 ### 15.4 当前策略
 
-| 策略 | ID | 类型 |
-|------|-----|------|
-| SimpleRank | `simple_rank_v1.0` | 单因子排序 |
-| Momentum | `momentum_v1.0` | 动量策略 |
-| Value | `value_v1.0` | 价值策略 |
-| Quality | `quality_v1.0` | 质量策略 |
-| Momentum+Vol | `momentum_vol_full` | 5 因子反转 |
-| **Alpha多因子 v1** | `alpha_multi_factor_v1` | **12 因子多因子** |
-| **Alpha多因子 v2** | `alpha_multi_factor_v2` | **14 因子反转版** |
+**生产策略（registry approved + active）：**
 
-`alpha_multi_factor_v2` 是目前的主力策略，包含 5 组 14 因子：
+| 策略 | ID | 类型 | 状态 |
+|------|-----|------|------|
+| Momentum+Vol | `momentum_vol_full` | 5 因子反转 | 🚀 **PRODUCTION**（唯一 active） |
 
-| 组 | 权重 | 因子 |
-|------|------|------|
-| Short-term Reversal | 25% | Short_Term_Reversal_5D, Momentum_1M, Momentum_3M |
-| Value Reversal | 25% | Earnings_Yield, PB, PCF_OCF |
-| Quality | 20% | ROE, Profit_Stability, Cash_Quality |
-| Low Risk | 15% | Volatility_60D, MaxDD_60D |
-| Liquidity | 15% | Volume_Expansion_20_120, Amount_Momentum_20_120 |
+`momentum_vol_full` 5 因子权重（由全量 IC 归因确定，registry 冻结值）：
+
+| 因子 | 权重 | IC 依据 |
+|------|------|---------|
+| Amplitude_5D | -0.233 | IC=-0.072 |
+| Volatility_20D | +0.182 | IC=+0.063（唯一正向，低波异象） |
+| Momentum_3M | -0.237 | IC=-0.057（A股反转） |
+| Volume_Concentration | -0.176 | IC=-0.055 |
+| Volume_Trend_10D | -0.172 | IC=-0.041 |
+
+**研究/回测通过策略（registry 记录）：** `mvf_noorth`、`mvf_v2_amount`、`mvf_v2_expansion`、`mvf_v2_vol_conc`、`lvr_vol_only`、`lvr_vol_mom1m` 等（lifecycle=research/backtest_passed，均非 active）。
+
+**代码注册的实验策略（未进 registry）：** `alpha_multi_factor_v1`（12 因子）、`alpha_multi_factor_v2`（14 因子反转版）。
+
+> 策略选择逻辑（daily_pipeline）：第 1 优先 APPROVED 策略（当前为 momentum_vol_full）；无则退回 research 策略（有权重+backtest_ic）；最后兜底 hardcode。
 
 ---
 

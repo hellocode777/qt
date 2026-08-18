@@ -181,12 +181,20 @@ def cmd_factor_report(factor_name: str = "") -> int:
 
 
 def _load_full_price() -> pl.DataFrame | None:
-    """Load the full daily price dataset."""
+    """Load the full daily price dataset (prefers the latest snapshot).
+
+    Priority: daily_price_latest.parquet (registered @latest) over dated
+    main snapshots — previously the glob picked the lexicographically last
+    file (e.g. daily_price_main_2026-08-14.parquet), silently serving stale
+    data to update-health after a newer latest file appeared.
+    """
     import polars as pl
 
+    latest = Path("data/dataset/daily_price_latest.parquet")
+    if latest.exists():
+        return pl.read_parquet(latest)
+
     price_files = sorted(Path("data/dataset").glob("daily_price_*.parquet"))
-    if not price_files:
-        price_files = sorted(Path("data/dataset").glob("daily_price_latest*.parquet"))
     if not price_files:
         return None
     return pl.read_parquet(str(price_files[-1]))

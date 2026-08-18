@@ -226,7 +226,28 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             except Exception:
                 price_data = {}
 
-            ctx = _make_ctx("scheduled_monitor", price_data=price_data)
+            # Load recent factor daily IC series so the KillSwitchPipeline's
+            # factor-health sub-check actually runs (previously
+            # factor_daily_ics was never populated → _check_factor_health
+            # silently returned None).
+            try:
+                from qp.monitoring.factor_health_logger import FactorHealthLogger
+
+                fh_logger = FactorHealthLogger()
+                ic_by_factor: dict[str, list[float]] = {}
+                for fname, sdf in fh_logger.load_all_ic_series().items():
+                    # Last 60 IC days — enough for the health state machine
+                    ics = sdf["ic"].tail(60).to_list()
+                    if len(ics) >= 10:
+                        ic_by_factor[fname] = ics
+            except Exception:
+                ic_by_factor = {}
+
+            ctx = _make_ctx(
+                "scheduled_monitor",
+                price_data=price_data,
+                factor_daily_ics=ic_by_factor,
+            )
             pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
             result = pipeline.run(ctx)
 
