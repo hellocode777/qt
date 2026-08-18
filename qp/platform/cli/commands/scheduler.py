@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import signal
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from qp.platform.runtime.application import Application
@@ -219,10 +219,13 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             # Load price data so regime detection and online rolling-IC
             # monitoring receive real market data (previously the context
             # carried no price_data, so checks silently used defaults).
+            price_data: Any = {}
             try:
                 from qp.pipeline.daily_pipeline import _load_price_data
 
-                price_data, _ = _load_price_data()
+                _, flat_prices = _load_price_data()
+                if flat_prices is not None and not flat_prices.is_empty():
+                    price_data = flat_prices
             except Exception:
                 price_data = {}
 

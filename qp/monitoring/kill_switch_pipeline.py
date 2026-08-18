@@ -219,10 +219,26 @@ class KillSwitchPipeline(BasePipeline):
 
     def _check_regime(self, context: Any) -> RegimeResult | None:
         """Detect current market regime from price data."""
-        prices = getattr(context, "price_data", None)
+        prices = self._get_price_data(context)
         if prices is None:
             return None
         return self._regime_engine.classify(prices)
+
+    @staticmethod
+    def _get_price_data(context: Any) -> Any:
+        """Read price data from context — attribute or parameters.
+
+        Callers historically attached ``price_data`` as a context attribute
+        (``PipelineContext(pipeline_name=..., price_data=...)``), while
+        scheduler/CLI build contexts via ``parameters={...}``.  Read both
+        so regime detection and online-IC monitoring get real market data
+        regardless of how the context was constructed.
+        """
+        prices = getattr(context, "price_data", None)
+        if prices is None:
+            params = getattr(context, "parameters", {}) or {}
+            prices = params.get("price_data")
+        return prices
 
     def _check_drift(self, context: Any) -> tuple[float, list[str]]:
         """Check for feature/prediction distribution drift.
@@ -299,7 +315,7 @@ class KillSwitchPipeline(BasePipeline):
         """
         self._last_monitored_strategy = ""
         try:
-            prices = getattr(context, "price_data", None)
+            prices = self._get_price_data(context)
             if not prices:
                 return 0.0, False
 

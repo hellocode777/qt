@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 def cmd_monitor_check() -> int:
     """Run full KillSwitchPipeline — regime + drift + decay + kill switch + health."""
@@ -14,7 +16,35 @@ def cmd_monitor_check() -> int:
     print("=== QP 监控检查 / Monitor Check ===")
     print(f"  时间 / Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+    # Load price data so regime detection and online rolling-IC
+    # monitoring receive real market data (mirrors scheduler.monitor_check).
+    price_data: Any = {}
+    try:
+        from qp.pipeline.daily_pipeline import _load_price_data
+
+        _, flat_prices = _load_price_data()
+        if flat_prices is not None and not flat_prices.is_empty():
+            price_data = flat_prices
+    except Exception:
+        pass
+
+    # Load recent factor daily IC series so the KillSwitchPipeline's
+    # factor-health sub-check actually runs.
+    ic_by_factor: dict[str, list[float]] = {}
+    try:
+        from qp.monitoring.factor_health_logger import FactorHealthLogger
+
+        fh_logger = FactorHealthLogger()
+        for fname, sdf in fh_logger.load_all_ic_series().items():
+            ics = sdf["ic"].tail(60).to_list()
+            if len(ics) >= 10:
+                ic_by_factor[fname] = ics
+    except Exception:
+        pass
+
     ctx = PipelineContext(pipeline_name="cli_monitor_check")
+    ctx.parameters["price_data"] = price_data
+    ctx.parameters["factor_daily_ics"] = ic_by_factor
     pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
     result = pipeline.run(ctx)
 
