@@ -207,7 +207,13 @@ def _compute_factor_scores(
     """Build factor score DataFrame from full price history."""
     import polars as pl
 
+    from qp.research.factor_calculator import _build_index_proxy
     from qp.research.feature.compute import compute_all_factors
+
+    # Residual_Momentum_3M requires a market index (beta adjustment).
+    # FactorCalculator builds a proxy automatically; mirror that here so
+    # update-health computes the factor instead of skipping it.
+    index_df = _build_index_proxy(price_df) if factor_name == "Residual_Momentum_3M" else None
 
     rows: list[dict] = []
     symbols = price_df["symbol"].unique().to_list()
@@ -216,7 +222,11 @@ def _compute_factor_scores(
         if stock_df.height < 60:
             continue
         try:
-            factors = compute_all_factors(stock_df, subset=[factor_name])
+            factors = compute_all_factors(
+                stock_df,
+                subset=[factor_name],
+                index_df=index_df,
+            )
             if factors.is_empty():
                 continue
             for row in factors.iter_rows(named=True):
