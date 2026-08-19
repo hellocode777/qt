@@ -122,8 +122,12 @@
           <span class="font-mono">{{ data_quality.daily_end_date }}</span>
         </div>
         <div>
-          <span class="c-muted">今日数据集: </span>
-          <span class="font-mono">{{ data_quality.datasets_today }} 个</span>
+          <span class="c-muted">今日更新: </span>
+          <span class="font-mono">
+            {% if data_quality.today_entries %}
+              {% for e in data_quality.today_entries %}{{ e.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}无{% endif %}
+          </span>
         </div>
       </div>
       {% if data_quality.quality_checks %}
