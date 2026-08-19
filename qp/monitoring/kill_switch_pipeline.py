@@ -312,7 +312,6 @@ class KillSwitchPipeline(BasePipeline):
         try:
             from pathlib import Path
 
-            import numpy as np
             import polars as pl
 
             from qp.monitoring.drift import DriftMonitor
