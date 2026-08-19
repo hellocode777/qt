@@ -183,7 +183,7 @@ class DataQualityService:
         """Get health status for all data sources.
 
         Checks ``data/metadata/sources.json`` first; falls back to health
-        inferred from dataset presence (Sina + Tencent).
+        inferred from the dataset registry's source metadata.
         """
         if self._sources_path.exists():
             try:
@@ -222,39 +222,43 @@ class DataQualityService:
         return result
 
     def _inferred_source_health(self) -> list[dict[str, Any]]:
-        """Infer source health from dataset files when sources.json is absent."""
+        """Infer source health from the dataset registry.
+
+        Builds the source list from each registry entry's ``metadata.source``
+        field instead of a hardcoded sina+tencent pair. A source is shown
+        only if it produced at least one registered dataset; demo entries
+        (``source == "demo"``) are excluded.
+        """
         registry = self._read_registry()
-        has_data = len(registry) > 0
-        return [
-            {
-                "source_name": "sina",
-                "description": "新浪财经 API — 日线行情",
-                "data_kind": "daily_ohlcv",
-                "health_status": "healthy" if has_data else "unknown",
-                "status_label": "正常" if has_data else "未检测",
-                "last_success": "",
-                "consecutive_failures": 0,
-                "fetch_error_count": 0,
-                "avg_latency": 0.0,
-                "health_notes": "",
-                "icon": "🟢" if has_data else "⚪",
-                "badge_class": "badge-green" if has_data else "badge-gray",
-            },
-            {
-                "source_name": "tencent",
-                "description": "腾讯财经 API — 长周期历史数据",
-                "data_kind": "daily_ohlcv",
-                "health_status": "healthy" if has_data else "unknown",
-                "status_label": "正常" if has_data else "未检测",
-                "last_success": "",
-                "consecutive_failures": 0,
-                "fetch_error_count": 0,
-                "avg_latency": 0.0,
-                "health_notes": "",
-                "icon": "🟢" if has_data else "⚪",
-                "badge_class": "badge-green" if has_data else "badge-gray",
-            },
-        ]
+        seen: dict[str, tuple[str, str]] = {}  # source -> (description, data_kind)
+        for entry in registry.values():
+            src = entry.get("metadata", {}).get("source", "")
+            if not src or src == "demo":
+                continue
+            if src not in seen:
+                seen[src] = _SOURCE_INFO.get(src, ("外部数据源", "unknown"))
+        if not seen:
+            return []
+        result = []
+        for src, (desc, kind) in seen.items():
+            result.append(
+                {
+                    "source_name": src,
+                    "description": desc,
+                    "data_kind": kind,
+                    "health_status": "healthy",
+                    "status_label": "正常",
+                    "last_success": "",
+                    "last_attempt": "",
+                    "consecutive_failures": 0,
+                    "fetch_error_count": 0,
+                    "avg_latency": 0.0,
+                    "health_notes": "",
+                    "icon": "🟢",
+                    "badge_class": "badge-green",
+                }
+            )
+        return result
 
     # ------------------------------------------------------------------
     # Dataset inventory
@@ -333,6 +337,16 @@ class DataQualityService:
 # ------------------------------------------------------------------
 # Display helpers
 # ------------------------------------------------------------------
+
+# Known data source labels: source -> (description, data_kind).
+# Unknown sources fall back to ("外部数据源", "unknown").
+_SOURCE_INFO: dict[str, tuple[str, str]] = {
+    "tencent": ("腾讯财经 API — 日线行情", "daily_ohlcv"),
+    "sina": ("新浪财经 API — 日线行情", "daily_ohlcv"),
+    "akshare": ("AKShare 开放数据接口", "multi"),
+    "eastmoney": ("东方财富 API", "multi"),
+    "quant_trading_db": ("QuantTrading 旧库导出", "multi"),
+}
 
 
 def _health_label(status: str) -> str:
