@@ -233,33 +233,28 @@ class KillSwitchPipeline(BasePipeline):
         """Detect current market regime from price data.
 
         Accepts either a single-series DataFrame (index/baseline) or a
-        ``{symbol: DataFrame}`` dict. For dicts, a real benchmark index
-        series is required — the daily price data carries no index series,
-        so regime stays UNKNOWN (honest) instead of misclassifying a single
-        stock or the flat full-market frame as the market.
+        ``{symbol: DataFrame}`` dict. For dicts, the same equal-weighted
+        synthetic index that DailyPipeline uses (``_build_index_df``) is
+        built — so KillSwitch and the decision package read the same
+        market signal instead of one seeing BEAR and the other UNKNOWN.
         """
         prices = self._get_price_data(context)
         if prices is None:
             return None
         if isinstance(prices, dict):
-            df = self._pick_regime_series(prices)
-            if df is None:
+            try:
+                # Deferred import: daily_pipeline imports monitoring
+                # modules at module level, so importing it here (runtime)
+                # avoids an import cycle.
+                from qp.pipeline.daily_pipeline import _build_index_df
+
+                index_df = _build_index_df(prices)
+            except Exception:
+                index_df = None
+            if index_df is None or index_df.is_empty():
                 return None
-            prices = df
+            prices = index_df
         return self._regime_engine.classify(prices)
-
-    @staticmethod
-    def _pick_regime_series(price_dict: dict[str, Any]) -> Any:
-        """Pick a benchmark index series from a {symbol: DataFrame} dict.
-
-        Only real index codes qualify; individual stocks are NOT used as
-        a market proxy (that would fabricate a regime). Returns None when
-        no index series is present.
-        """
-        for code in ("sh000001", "sz399001", "sz399006", "sh000300"):
-            if code in price_dict:
-                return price_dict[code]
-        return None
 
     @staticmethod
     def _get_price_data(context: Any) -> Any:
@@ -751,8 +746,15 @@ class KillSwitchPipeline(BasePipeline):
                 parts.append(f"信号分布漂移 PSI={report.psi_value:.2f}（阈值 0.25）")
             if regime_str == "UNKNOWN":
                 parts.append("市场环境未知")
-            elif report.regime:
-                parts.append(f"市场环境={regime_str}")
+            else:
+                _regime_labels = {
+                    "TREND_UP": "上涨趋势",
+                    "TREND_DOWN": "下跌趋势",
+                    "RANGING": "震荡市",
+                    "LIQUIDITY_CRUNCH": "流动性危机",
+                    "STYLE_REVERSAL": "风格切换",
+                }
+                parts.append(f"市场环境: {_regime_labels.get(regime_str, regime_str)}")
             parts.append("维持现有持仓，新开仓不受限")
             return "；".join(parts)
 
