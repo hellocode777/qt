@@ -610,26 +610,44 @@ qp decide --review
 
 ### 11.1 启动与停止
 
+Scheduler 是 **systemd 用户服务**（`~/.config/systemd/user/qp-scheduler.service`），
+随用户登录自动启动，无需 root。安装/修复用幂等脚本（**推荐**）：
+
+```bash
+# 一键安装/修复（幂等）：删除系统级副本 → 装用户级 → 启动 → 验证单实例
+bash deploy/install-systemd.sh
+
+# 干跑：只报告状态，不改动
+bash deploy/install-systemd.sh --check
+```
+
+> ⚠️ 历史教训（2026-08-18）：service 曾同时存在于 `/etc/systemd/system/`（系统级）
+> 和 `~/.config/systemd/user/`（用户级），重启后两个 scheduler 同时运行，
+> 导致 18:30 email_report 每天发两封邮件。现在**只允许用户级一份**，
+> install-systemd.sh 会删除系统级副本并验证进程数恰为 1。
+
+手动管理（无需 sudo）：
+
 ```bash
 # 启动
-sudo systemctl start qp-scheduler
+systemctl --user start qp-scheduler
 
 # 开机自启
-sudo systemctl enable qp-scheduler
+systemctl --user enable qp-scheduler
 
 # 停止
-sudo systemctl stop qp-scheduler
+systemctl --user stop qp-scheduler
 
 # 重启（代码更新后）
-sudo systemctl daemon-reload
-sudo systemctl restart qp-scheduler
+systemctl --user daemon-reload
+systemctl --user restart qp-scheduler
 
 # 查看状态
-systemctl status qp-scheduler
+systemctl --user status qp-scheduler
 
 # Scheduler 自身日志
 tail -f logs/scheduler.log
-journalctl -u qp-scheduler -f
+journalctl --user -u qp-scheduler -f
 
 # 各 Job 独立日志（按日期分目录）
 tail -f logs/$(date +%F)/monitor_check.log
@@ -953,9 +971,11 @@ journalctl --user -u qp-web -f
 
 | 命令 | 说明 |
 |------|------|
-| `systemctl start qp-scheduler` | 启动调度器 |
-| `systemctl status qp-scheduler` | 查看服务状态 |
-| `journalctl -u qp-scheduler -f` | 实时日志 |
+| `bash deploy/install-systemd.sh` | 一键安装/修复（幂等，推荐） |
+| `bash deploy/install-systemd.sh --check` | 干跑检查状态 |
+| `systemctl --user start qp-scheduler` | 启动调度器 |
+| `systemctl --user status qp-scheduler` | 查看服务状态 |
+| `journalctl --user -u qp-scheduler -f` | 实时日志 |
 
 ---
 
@@ -964,7 +984,8 @@ journalctl --user -u qp-web -f
 ### 自动化（推荐：systemd 常驻）
 
 ```
-sudo systemctl start qp-scheduler   # 启动（已配置开机自启）
+# 一键部署（幂等，删除系统级副本 + 装用户级 + 验证单实例）
+bash deploy/install-systemd.sh
 
   09:07 → monitor_check    KillSwitchPipeline 全扫描
   09:17 → retrain_notify   重训信号检查
