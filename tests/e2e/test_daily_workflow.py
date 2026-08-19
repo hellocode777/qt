@@ -43,8 +43,10 @@ class TestKillSwitchPipelineE2E:
         result = pipeline.run(ctx)
 
         report = result.metadata.get("report")  # type: ignore[union-attr]
-        # With no real data, all triggers should be silent
-        assert report.action == MonitorAction.OK
+        # With no context inputs, checks read persisted signal history, so
+        # action is OK (no drift) or WATCH (PSI drift) — never a fabricated
+        # STOP/PAUSE verdict from default zeros.
+        assert report.action in (MonitorAction.OK, MonitorAction.WATCH)
 
     def test_all_checks_run(self) -> None:
         """Verify all 5 check steps run without crash."""
@@ -58,9 +60,12 @@ class TestKillSwitchPipelineE2E:
         regime = pipeline._check_regime(ctx)
         assert regime is None  # No price data
 
-        psi, alerts = pipeline._check_drift(ctx)
-        assert psi == 0.0
-        assert alerts == []
+        psi, available, alerts = pipeline._check_drift(ctx)
+        # PSI is now computed from persisted signal history, so its value
+        # depends on real data; assert the contract, not a fabricated 0.0.
+        assert isinstance(psi, float)
+        assert isinstance(available, bool)
+        assert isinstance(alerts, list)
 
         stage = pipeline._check_model_decay(ctx)
         assert stage is not None

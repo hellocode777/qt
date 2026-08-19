@@ -39,7 +39,9 @@ _HEALTH_LOG_SCHEMA: dict[str, type] = {
     "date": str,
     "timestamp": str,
     "psi_value": float,
+    "psi_available": bool,
     "rolling_ic": float,
+    "rolling_ic_available": bool,
     "regime": str,
     "kill_switch_level": str,
     "kill_switch_triggered": bool,
@@ -73,7 +75,9 @@ class HealthRecord:
     date: str = ""
     timestamp: str = ""
     psi_value: float = 0.0
+    psi_available: bool = False
     rolling_ic: float = 0.0
+    rolling_ic_available: bool = False
     regime: str = "UNKNOWN"
     kill_switch_level: str = "NORMAL"
     kill_switch_triggered: bool = False
@@ -88,7 +92,9 @@ class HealthRecord:
             "date": self.date,
             "timestamp": self.timestamp,
             "psi_value": self.psi_value,
+            "psi_available": self.psi_available,
             "rolling_ic": self.rolling_ic,
+            "rolling_ic_available": self.rolling_ic_available,
             "regime": self.regime,
             "kill_switch_level": self.kill_switch_level,
             "kill_switch_triggered": self.kill_switch_triggered,
@@ -134,7 +140,9 @@ class SystemHealthLogger:
             date=str(kwargs.get("date", "")),
             timestamp=kwargs.get("timestamp", datetime.now(UTC).isoformat()),
             psi_value=float(kwargs.get("psi_value", 0.0)),
+            psi_available=bool(kwargs.get("psi_available", False)),
             rolling_ic=float(kwargs.get("rolling_ic", 0.0)),
+            rolling_ic_available=bool(kwargs.get("rolling_ic_available", False)),
             regime=str(kwargs.get("regime", "UNKNOWN")),
             kill_switch_level=str(kwargs.get("kill_switch_level", "NORMAL")),
             kill_switch_triggered=bool(kwargs.get("kill_switch_triggered", False)),
@@ -151,14 +159,16 @@ class SystemHealthLogger:
         self,
         report: Any,  # MonitorReport
         date_str: str = "",
-        rolling_ic: float = 0.0,
+        rolling_ic: float | None = None,
     ) -> HealthRecord:
         """Log from a MonitorReport (KillSwitchPipeline output).
 
         Args:
             report: MonitorReport dataclass instance.
             date_str: Trading date (YYYY-MM-DD).
-            rolling_ic: Current rolling IC if available.
+            rolling_ic: Optional override for the rolling IC. When ``None``
+                (default) the report's own ``rolling_ic`` is used — the
+                parameter must never silently mask a computed value.
 
         Returns:
             The created HealthRecord.
@@ -170,7 +180,9 @@ class SystemHealthLogger:
         return self.log(
             date=date_str or datetime.now(UTC).strftime("%Y-%m-%d"),
             psi_value=getattr(report, "psi_value", 0.0),
-            rolling_ic=rolling_ic,
+            psi_available=getattr(report, "psi_available", False),
+            rolling_ic=(getattr(report, "rolling_ic", 0.0) if rolling_ic is None else rolling_ic),
+            rolling_ic_available=getattr(report, "rolling_ic_available", False),
             regime=report.regime.regime.value if report.regime else "UNKNOWN",
             kill_switch_level=_get_ks_level(report),
             kill_switch_triggered=getattr(report, "kill_switch_triggered", False),
@@ -220,7 +232,8 @@ class SystemHealthLogger:
             return None
 
         row = df.head(1).to_dicts()[0]
-        return HealthRecord(**{k: row.get(k, "") for k in HealthRecord.__dataclass_fields__})
+        fields = HealthRecord.__dataclass_fields__
+        return HealthRecord(**{k: row.get(k, fields[k].default) for k in fields})
 
     def query_regime_changes(self, days: int = 90) -> pl.DataFrame:
         """Find regime transition dates in recent history.
@@ -269,6 +282,18 @@ class SystemHealthLogger:
 
         if self._filepath.exists():
             existing = pl.read_parquet(self._filepath)
+            # Backfill columns added after this file was first written so
+            # old files (without psi_available/rolling_ic_available) can
+            # still be concatenated.
+            _pl_types = {str: pl.String, bool: pl.Boolean, float: pl.Float64, int: pl.Int64}
+            _defaults = {str: "", bool: False, float: 0.0, int: 0}
+            for col, pytype in _HEALTH_LOG_SCHEMA.items():
+                if col not in existing.columns:
+                    existing = existing.with_columns(
+                        pl.lit(_defaults[pytype], dtype=_pl_types[pytype]).alias(col)
+                    )
+            # Column order must match the canonical schema for vertical concat
+            existing = existing.select(list(_HEALTH_LOG_SCHEMA.keys()))
             # Dedup: replace row with same date
             existing = existing.filter(pl.col("date") != record.date)
             combined = pl.concat([existing, new_row], how="vertical")

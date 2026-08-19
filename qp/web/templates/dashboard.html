@@ -280,22 +280,22 @@
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; margin-top: 5px;">
         <div>
           <span class="c-muted">滚动 IC: </span>
-          {% if health %}
+          {% if health and health.rolling_ic_available %}
           <span class="font-mono {% if health.rolling_ic > 0.02 %}c-green{% elif health.rolling_ic > 0 %}c-yellow{% else %}c-red{% endif %}">
-            {{ "%.4f" | format(health.rolling_ic | default(0)) }}
+            {{ "%.4f" | format(health.rolling_ic) }}
           </span>
           {% else %}
-          <span class="c-muted">N/A</span>
+          <span class="c-muted">N/A (未计算)</span>
           {% endif %}
         </div>
         <div>
           <span class="c-muted">PSI 分布漂移: </span>
-          {% if health %}
+          {% if health and health.psi_available %}
           <span class="font-mono {% if health.psi_value < 0.1 %}c-green{% elif health.psi_value < 0.25 %}c-yellow{% else %}c-red{% endif %}">
-            {{ "%.3f" | format(health.psi_value | default(0)) }}
+            {{ "%.3f" | format(health.psi_value) }}
           </span>
           {% else %}
-          <span class="c-muted">N/A</span>
+          <span class="c-muted">未启用</span>
           {% endif %}
         </div>
         <div>

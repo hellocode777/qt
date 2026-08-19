@@ -154,6 +154,66 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             return PipelineContext(pipeline_name=name, parameters=params, runtime=app.context)
         return PipelineContext(pipeline_name=name, parameters=params)
 
+    def _build_model_decay_detector():
+        """Create ModelDecayDetector using the first registered strategy's
+        backtest IC as training reference (fallback 0.035)."""
+        from qp.monitoring.model_decay import ModelDecayDetector
+
+        training_ic = 0.035
+        try:
+            from qp.strategy.registry import StrategyRegistry
+
+            reg = StrategyRegistry()
+            for sid in reg.list_strategies():
+                ic = reg.get_meta(sid).backtest_ic
+                if ic > 0:
+                    training_ic = float(ic)
+                    break
+        except Exception:
+            pass
+        return ModelDecayDetector(training_ic_mean=training_ic)
+
+    def _build_strategy_monitor():
+        """Build a StrategyMonitor seeded from persisted signal history.
+
+        Returns None when no signal history exists — strategy health
+        will simply be absent from the report instead of fabricated.
+        """
+        from pathlib import Path
+
+        import polars as pl
+
+        from qp.monitoring.strategy_monitor import StrategyMonitor
+
+        path = Path("data/monitoring/online_signal_history.parquet")
+        if not path.exists():
+            return None
+        df = pl.read_parquet(path)
+        if df.is_empty():
+            return None
+        monitor = StrategyMonitor("aggregate")
+        counts = df.group_by(["strategy_id", "date"]).len().sort("date")
+        for row in counts.iter_rows(named=True):
+            monitor.record_signal(str(row["date"]), n_signals=int(row["len"]))
+        return monitor
+
+    def _load_monitor_price_data():
+        """Load per-symbol price dict for online rolling-IC monitoring.
+
+        OnlineSignalMonitor.rolling_ic expects ``{symbol: DataFrame}``,
+        NOT the flat frame — passing the flat frame silently disabled the
+        realized-IC check (no ``.get(symbol)`` on a DataFrame).
+        """
+        from qp.pipeline.daily_pipeline import _load_price_data
+
+        try:
+            prices_dict, _flat = _load_price_data()
+            if prices_dict:
+                return prices_dict
+        except Exception:
+            pass
+        return {}
+
     # ── Watchdog: touch ping file for external monitoring (#12 fix) ──
     def watchdog_ping(job_name: str) -> None:
         from datetime import UTC, datetime
@@ -219,15 +279,9 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             # Load price data so regime detection and online rolling-IC
             # monitoring receive real market data (previously the context
             # carried no price_data, so checks silently used defaults).
-            price_data: Any = {}
-            try:
-                from qp.pipeline.daily_pipeline import _load_price_data
-
-                _, flat_prices = _load_price_data()
-                if flat_prices is not None and not flat_prices.is_empty():
-                    price_data = flat_prices
-            except Exception:
-                price_data = {}
+            # NOTE: rolling_ic needs the {symbol: DataFrame} dict, NOT the
+            # flat frame — flat frames made the IC check never run.
+            price_data = _load_monitor_price_data()
 
             # Load recent factor daily IC series so the KillSwitchPipeline's
             # factor-health sub-check actually runs (previously
@@ -250,8 +304,12 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 "scheduled_monitor",
                 price_data=price_data,
                 factor_daily_ics=ic_by_factor,
+                strategy_monitor=_build_strategy_monitor(),
             )
-            pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
+            pipeline = KillSwitchPipeline(
+                knowledge_archive=KnowledgeArchive(),
+                model_decay_detector=_build_model_decay_detector(),
+            )
             result = pipeline.run(ctx)
 
             if result.status.value != "success":
@@ -391,8 +449,32 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 MonitorAction,
             )
 
-            ctx = _make_ctx("pre_close_check")
-            pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
+            # Same real inputs as the morning check — this job previously
+            # ran with an empty context (no price_data, no detector, no
+            # monitor), so its report was all defaults.
+            price_data = _load_monitor_price_data()
+            try:
+                from qp.monitoring.factor_health_logger import FactorHealthLogger
+
+                fh_logger = FactorHealthLogger()
+                ic_by_factor: dict[str, list[float]] = {}
+                for fname, sdf in fh_logger.load_all_ic_series().items():
+                    ics = sdf["ic"].tail(60).to_list()
+                    if len(ics) >= 10:
+                        ic_by_factor[fname] = ics
+            except Exception:
+                ic_by_factor = {}
+
+            ctx = _make_ctx(
+                "pre_close_check",
+                price_data=price_data,
+                factor_daily_ics=ic_by_factor,
+                strategy_monitor=_build_strategy_monitor(),
+            )
+            pipeline = KillSwitchPipeline(
+                knowledge_archive=KnowledgeArchive(),
+                model_decay_detector=_build_model_decay_detector(),
+            )
             result = pipeline.run(ctx)
 
             if result.status.value != "success":

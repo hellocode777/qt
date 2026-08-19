@@ -76,6 +76,7 @@ class MonitorReport:
     strategy_health: StrategyHealth | None = None
     factor_health: FactorHealthReport | None = None
     psi_value: float = 0.0
+    psi_available: bool = False
     rolling_ic: float = 0.0
     rolling_ic_available: bool = False
     strategy_name: str = ""
@@ -141,28 +142,39 @@ class KillSwitchPipeline(BasePipeline):
             # Step 1: Market Regime
             report.regime = self._check_regime(context)
 
-            # Step 2: Drift detection
-            psi, drift_alerts = self._check_drift(context)
+            # Step 2: Drift detection — real PSI from signal-score
+            # distributions (or caller-supplied value).
+            psi, psi_available, drift_alerts = self._check_drift(context)
             report.psi_value = psi
+            report.psi_available = psi_available
 
-            # Step 3: Model decay
-            report.model_decay_stage = self._check_model_decay(context)
-
-            # Step 3.5: Factor health (per-factor IC + decay)
-            report.factor_health = self._check_factor_health(context)
-
-            # Step 3.6: Online signal health — realized rolling IC from
-            # accumulated daily signal history (real value, not a 0.0 stub)
+            # Step 2.5: Online signal health — realized rolling IC from
+            # accumulated daily signal history (real value, not a 0.0 stub).
+            # Computed BEFORE model decay so decay uses the real IC.
             report.rolling_ic, report.rolling_ic_available = self._check_online_signal_health(
                 context
             )
             report.strategy_name = self._last_monitored_strategy or ""
 
+            # Step 3: Model decay (uses realized IC when available;
+            # when IC is unavailable the stage stays HEALTHY = "not
+            # measured", never a fabricated DECAYING/STALE verdict).
+            report.model_decay_stage = self._check_model_decay(
+                context, report.rolling_ic if report.rolling_ic_available else None
+            )
+
+            # Step 3.5: Factor health (per-factor IC + decay)
+            report.factor_health = self._check_factor_health(context)
+
             # Step 4: Strategy health
             report.strategy_health = self._check_strategy_health(context)
 
             # Step 5: Kill Switch
-            ks_result = self._check_kill_switch(context)
+            ks_result = self._check_kill_switch(
+                context,
+                psi=report.psi_value,
+                rolling_ic=report.rolling_ic,
+            )
             report.kill_switch_triggered = ks_result.get("triggered", False)
             report.kill_switch_triggers = ks_result.get("triggers", [])
             report._ks_result = ks_result  # type: ignore[attr-defined]
@@ -218,11 +230,36 @@ class KillSwitchPipeline(BasePipeline):
     # ------------------------------------------------------------------
 
     def _check_regime(self, context: Any) -> RegimeResult | None:
-        """Detect current market regime from price data."""
+        """Detect current market regime from price data.
+
+        Accepts either a single-series DataFrame (index/baseline) or a
+        ``{symbol: DataFrame}`` dict. For dicts, a real benchmark index
+        series is required — the daily price data carries no index series,
+        so regime stays UNKNOWN (honest) instead of misclassifying a single
+        stock or the flat full-market frame as the market.
+        """
         prices = self._get_price_data(context)
         if prices is None:
             return None
+        if isinstance(prices, dict):
+            df = self._pick_regime_series(prices)
+            if df is None:
+                return None
+            prices = df
         return self._regime_engine.classify(prices)
+
+    @staticmethod
+    def _pick_regime_series(price_dict: dict[str, Any]) -> Any:
+        """Pick a benchmark index series from a {symbol: DataFrame} dict.
+
+        Only real index codes qualify; individual stocks are NOT used as
+        a market proxy (that would fabricate a regime). Returns None when
+        no index series is present.
+        """
+        for code in ("sh000001", "sz399001", "sz399006", "sh000300"):
+            if code in price_dict:
+                return price_dict[code]
+        return None
 
     @staticmethod
     def _get_price_data(context: Any) -> Any:
@@ -240,32 +277,100 @@ class KillSwitchPipeline(BasePipeline):
             prices = params.get("price_data")
         return prices
 
-    def _check_drift(self, context: Any) -> tuple[float, list[str]]:
+    def _check_drift(self, context: Any) -> tuple[float, bool, list[str]]:
         """Check for feature/prediction distribution drift.
 
-        PSI compares recent window vs reference window (#5 fix).
-        Reference must be explicitly set — defaults to training period.
+        PSI compares the recent window vs reference window. The caller
+        may supply an explicit ``psi_value`` (computed upstream); otherwise
+        PSI is computed from the persisted online signal-score history
+        (recent 20 signal days vs preceding 20 days as reference).
 
-        Reference window context (from context attributes):
-          - psi_reference_window: description of reference period
-            e.g. "training_2024_Q1" or "last_90_days"
+        Returns:
+            (psi, available, alerts). ``available=False`` means no PSI
+            could be computed — the 0.0 is a data gap, not "no drift".
         """
         alerts: list[str] = []
 
-        psi = getattr(context, "psi_value", 0.0)
-        ref_window = getattr(context, "psi_reference_window", "training_period")
+        supplied = getattr(context, "psi_value", None)
+        if isinstance(supplied, (int, float)):
+            psi = float(supplied)
+            available = True
+            ref_window = getattr(context, "psi_reference_window", "training_period")
+        else:
+            psi, available = self._compute_signal_psi()
+            ref_window = "signal_history"
 
-        if psi >= 0.25:
+        if available and psi >= 0.25:
             alerts.append(f"PSI {psi:.3f} ≥ 0.25 vs {ref_window} — significant feature drift")
 
-        return psi, alerts
+        return psi, available, alerts
 
-    def _check_model_decay(self, context: Any) -> DecayStage:
-        """Check for model performance decay."""
+    def _compute_signal_psi(self) -> tuple[float, bool]:
+        """Compute PSI between recent and reference signal-score distributions.
+
+        Uses the persisted online signal history: the most recent 20 signal
+        days are the "actual" (production) distribution, the preceding 20
+        days are the "expected" (reference) distribution. Computed per
+        strategy; the worst (largest) PSI wins. Returns (psi, available);
+        ``available=False`` when no strategy has at least 4 signal days.
+        """
+        try:
+            from pathlib import Path
+
+            import numpy as np
+            import polars as pl
+
+            from qp.monitoring.drift import DriftMonitor
+
+            signal_path = Path("data/monitoring/online_signal_history.parquet")
+            if not signal_path.exists():
+                return 0.0, False
+
+            df = pl.read_parquet(signal_path)
+            if df is None or "raw_score" not in df.columns:
+                return 0.0, False
+
+            best = 0.0
+            any_computed = False
+            for sid in df["strategy_id"].unique().to_list():
+                sdf = df.filter(pl.col("strategy_id") == sid)
+                dates = sdf.select("date").unique().sort("date")["date"].to_list()
+                if len(dates) < 4:
+                    continue
+                actual_dates = dates[-20:]
+                ref_dates = dates[-40:-20] if len(dates) >= 40 else dates[: len(dates) - 20]
+                if len(actual_dates) < 2 or len(ref_dates) < 2:
+                    continue
+                actual = sdf.filter(pl.col("date").is_in(actual_dates))["raw_score"].to_numpy()
+                expected = sdf.filter(pl.col("date").is_in(ref_dates))["raw_score"].to_numpy()
+                if len(actual) < 2 or len(expected) < 2:
+                    continue
+                any_computed = True
+                psi = DriftMonitor.compute_psi(expected, actual)
+                best = max(best, psi)
+            return best, any_computed
+        except Exception:
+            return 0.0, False
+
+    def _check_model_decay(
+        self,
+        context: Any,
+        rolling_ic: float | None = None,
+    ) -> DecayStage:
+        """Check for model performance decay.
+
+        Args:
+            context: Pipeline context (kept for future use / compatibility).
+            rolling_ic: Realized rolling IC from online signal health.
+                ``None`` (or an unset context value) means IC is unavailable
+                — the stage stays HEALTHY ("not measured"), never a
+                fabricated DECAYING/STALE verdict.
+        """
         if self._model_decay is None:
             return DecayStage.HEALTHY
 
-        rolling_ic = getattr(context, "rolling_ic", None)
+        if rolling_ic is None:
+            rolling_ic = getattr(context, "rolling_ic", None)
         if rolling_ic is None:
             return DecayStage.HEALTHY
 
@@ -273,8 +378,15 @@ class KillSwitchPipeline(BasePipeline):
         return status.stage
 
     def _check_strategy_health(self, context: Any) -> StrategyHealth | None:
-        """Check strategy health metrics."""
+        """Check strategy health metrics.
+
+        Reads the monitor from context attribute or ``parameters`` (both
+        construction styles are used by scheduler/CLI).
+        """
         monitor = getattr(context, "strategy_monitor", None)
+        if monitor is None:
+            params = getattr(context, "parameters", {}) or {}
+            monitor = params.get("strategy_monitor")
         if monitor is None:
             return None
         return monitor.health_check()
@@ -349,7 +461,12 @@ class KillSwitchPipeline(BasePipeline):
         except Exception:
             return 0.0, False
 
-    def _check_kill_switch(self, context: Any) -> dict[str, Any]:
+    def _check_kill_switch(
+        self,
+        context: Any,
+        psi: float = 0.0,
+        rolling_ic: float = 0.0,
+    ) -> dict[str, Any]:
         """Evaluate all Kill Switch triggers including P0 safety triggers."""
         from qp.monitoring.kill_switch import (
             AbnormalTurnoverTrigger,
@@ -391,8 +508,8 @@ class KillSwitchPipeline(BasePipeline):
             "current_drawdown": getattr(context, "current_drawdown", 0.0),
             "monthly_return": getattr(context, "monthly_return", 0.0),
             "rolling_60d_drawdown": getattr(context, "rolling_60d_drawdown", 0.0),
-            "psi": getattr(context, "psi_value", 0.0),
-            "rolling_ic": getattr(context, "rolling_ic", 0.0),
+            "psi": psi,
+            "rolling_ic": rolling_ic,
             "training_ic_mean": training_ic,
             # P0 safety metrics
             "weekly_drawdown": getattr(context, "weekly_drawdown", 0.0),
