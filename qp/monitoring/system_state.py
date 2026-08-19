@@ -252,6 +252,11 @@ class SystemStateManager:
 
         # Only transition if state actually changed
         if target == current.to_state:
+            # Same state: still refresh the reason/details so the WebUI
+            # shows the latest monitoring verdict instead of a stale
+            # first-transition text (e.g. a new PSI value under WARNING).
+            if current.reason != reason or current.details != details:
+                self.transition(target, reason=reason, source=source, details=details)
             return None
 
         return self.transition(target, reason=reason, source=source, details=details)

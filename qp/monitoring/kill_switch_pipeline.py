@@ -710,19 +710,20 @@ class KillSwitchPipeline(BasePipeline):
         After each KillSwitchPipeline run, transition the SystemState
         based on the determined action. Downstream pipelines (DailyPipeline)
         read this state before executing.
+
+        The ``reason`` shown on the WebUI is a human-readable sentence;
+        machine-readable fields (action/regime/psi/triggers) go into
+        ``details`` so logs stay complete without confusing the display.
         """
         try:
             from qp.monitoring.system_state import SystemStateManager
 
             mgr = SystemStateManager()
             regime_str = report.regime.regime.value if report.regime else "UNKNOWN"
-            reason = (
-                f"KillSwitchPipeline: action={report.action.value} "
-                f"regime={regime_str} psi={report.psi_value:.3f}"
-            )
-            details = ""
+            reason = self._human_reason(report, regime_str)
+            details = f"action={report.action.value} regime={regime_str} psi={report.psi_value:.3f}"
             if report.kill_switch_triggers:
-                details = "triggers: " + ", ".join(report.kill_switch_triggers[:3])
+                details += " | triggers: " + ", ".join(report.kill_switch_triggers[:3])
 
             mgr.auto_transition(
                 monitor_action=report.action.value,
@@ -732,6 +733,36 @@ class KillSwitchPipeline(BasePipeline):
             )
         except Exception:
             pass  # Best-effort — state machine failure should not block pipeline
+
+    @staticmethod
+    def _human_reason(report: MonitorReport, regime_str: str) -> str:
+        """Build a human-readable transition reason.
+
+        Reads like a sentence for the WebUI instead of a machine log line.
+        """
+        action = report.action
+
+        if action == MonitorAction.OK:
+            return "监控正常，未发现风险事件"
+
+        if action == MonitorAction.WATCH:
+            parts = ["监控警告"]
+            if report.psi_available and report.psi_value >= 0.25:
+                parts.append(f"信号分布漂移 PSI={report.psi_value:.2f}（阈值 0.25）")
+            if regime_str == "UNKNOWN":
+                parts.append("市场环境未知")
+            elif report.regime:
+                parts.append(f"市场环境={regime_str}")
+            parts.append("维持现有持仓，新开仓不受限")
+            return "；".join(parts)
+
+        if action == MonitorAction.PAUSE_BUY:
+            return "风险事件触发：暂停新开仓"
+        if action == MonitorAction.REDUCE:
+            return "风险事件触发：建议降低仓位"
+        if action == MonitorAction.STOP:
+            return "紧急熔断：停止交易"
+        return f"监控状态: {action.value}"
 
     def _emit_retrain_signal(self, report: MonitorReport) -> None:
         """Emit retrain/weight-adjustment signal based on monitoring state.
