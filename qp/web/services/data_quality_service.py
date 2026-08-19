@@ -224,17 +224,34 @@ class DataQualityService:
     def _inferred_source_health(self) -> list[dict[str, Any]]:
         """Infer source health from the dataset registry.
 
-        Builds the source list from each registry entry's ``metadata.source``
-        field instead of a hardcoded sina+tencent pair. A source is shown
-        only if it produced at least one registered dataset; demo entries
-        (``source == "demo"``) are excluded.
+        Builds the source list from each dataset's current (newest-version)
+        ``metadata.source`` field instead of a hardcoded sina+tencent pair.
+        Stale dataset versions do not count — e.g. ``daily_price_main``
+        migrated from ``quant_trading_db`` to ``akshare``, so only akshare
+        is shown. Demo entries (``source == "demo"``) are excluded.
         """
         registry = self._read_registry()
-        seen: dict[str, tuple[str, str]] = {}  # source -> (description, data_kind)
+        # Per dataset name, keep the source of the newest version.
+        # "latest" beats any dated version; dated versions compare by ISO string.
+        newest_source: dict[str, str] = {}
+        newest_version: dict[str, str] = {}
         for entry in registry.values():
+            name = entry.get("name", "")
+            version = entry.get("version", "")
             src = entry.get("metadata", {}).get("source", "")
-            if not src or src == "demo":
+            if not name or not src or src == "demo":
                 continue
+            if name not in newest_version:
+                newest_source[name] = src
+                newest_version[name] = version
+            else:
+                old = newest_version[name]
+                if version == "latest" or (old != "latest" and version > old):
+                    newest_source[name] = src
+                    newest_version[name] = version
+
+        seen: dict[str, tuple[str, str]] = {}  # source -> (description, data_kind)
+        for src in newest_source.values():
             if src not in seen:
                 seen[src] = _SOURCE_INFO.get(src, ("外部数据源", "unknown"))
         if not seen:
