@@ -22,7 +22,7 @@ from qp.shared.types import PipelineStatus
 
 
 class CapitalFlowPipeline(BasePipeline):
-    """Fetch daily capital flow via AkShare → publish parquet."""
+    """Fetch daily capital flow via Sina MoneyFlow API → publish parquet."""
 
     @property
     def name(self) -> str:
@@ -97,7 +97,7 @@ class CapitalFlowPipeline(BasePipeline):
                     metadata={
                         "rows": raw_pl.height,
                         "symbols": result.metrics["output_symbols"],
-                        "source": "akshare",
+                        "source": "sina",
                     },
                 )
             else:

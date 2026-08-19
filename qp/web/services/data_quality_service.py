@@ -359,7 +359,7 @@ class DataQualityService:
 # Unknown sources fall back to ("外部数据源", "unknown").
 _SOURCE_INFO: dict[str, tuple[str, str]] = {
     "tencent": ("腾讯财经 API — 日线行情", "daily_ohlcv"),
-    "sina": ("新浪财经 API — 日线行情", "daily_ohlcv"),
+    "sina": ("新浪财经 API — 资金流", "capital_flow"),
     "akshare": ("AKShare 开放数据接口", "multi"),
     "eastmoney": ("东方财富 API", "multi"),
     "quant_trading_db": ("QuantTrading 旧库导出", "multi"),
