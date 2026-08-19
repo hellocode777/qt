@@ -200,11 +200,15 @@
       </div>
       <div class="stat-tile">
         <div class="stat-label">滚动 IC</div>
-        <div class="stat-value font-mono">{{ "%.4f" | format(latest_health.rolling_ic) }}</div>
+        <div class="stat-value font-mono">
+          {% if latest_health.rolling_ic_available %}{{ "%.4f" | format(latest_health.rolling_ic) }}{% else %}<span class="c-muted">N/A (未计算)</span>{% endif %}
+        </div>
       </div>
       <div class="stat-tile">
         <div class="stat-label">PSI</div>
-        <div class="stat-value font-mono">{{ "%.3f" | format(latest_health.psi_value) }}</div>
+        <div class="stat-value font-mono">
+          {% if latest_health.psi_available %}{{ "%.3f" | format(latest_health.psi_value) }}{% else %}<span class="c-muted">未启用</span>{% endif %}
+        </div>
       </div>
     </div>
     <div class="stat-row" style="margin-top: 12px;">
@@ -265,8 +269,8 @@
             {{ row.health_score_pct }}
           </td>
           <td><span class="badge {{ row.kill_level_badge }}" style="font-size: 11px;">{{ row.kill_level_label }}</span></td>
-          <td class="font-mono c-muted" style="font-size: 12px;">{{ "%.4f" | format(row.rolling_ic) }}</td>
-          <td class="font-mono c-muted" style="font-size: 12px;">{{ "%.3f" | format(row.psi_value) }}</td>
+          <td class="font-mono c-muted" style="font-size: 12px;">{% if row.rolling_ic_available %}{{ "%.4f" | format(row.rolling_ic) }}{% else %}—{% endif %}</td>
+          <td class="font-mono c-muted" style="font-size: 12px;">{% if row.psi_available %}{{ "%.3f" | format(row.psi_value) }}{% else %}—{% endif %}</td>
           <td style="font-size: 12px;">{{ row.regime }}</td>
           <td class="c-amber" style="font-size: 12px;">{{ row.action | upper }}</td>
           <td class="font-mono {% if row.n_alerts > 0 %}c-yellow{% else %}c-muted{% endif %}" style="font-size: 12px;">{{ row.n_alerts }}</td>
