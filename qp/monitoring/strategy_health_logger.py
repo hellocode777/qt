@@ -172,6 +172,35 @@ class StrategyHealthLogger:
                 result[sid] = self._row_to_health(row)
         return result
 
+    def load_latest_with_date(self) -> dict[str, tuple[str, StrategyHealth]]:
+        """Load the latest health record per strategy plus its record date.
+
+        Returns:
+            {strategy_id: (record_date, StrategyHealth)}. The date lets
+            callers tell current records apart from stale ones.
+        """
+        df = self._load_health_df()
+        if df.is_empty():
+            return {}
+
+        result: dict[str, tuple[str, StrategyHealth]] = {}
+        for sid in df["strategy_id"].unique().to_list():
+            latest = df.filter(pl.col("strategy_id") == sid).sort("date", descending=True)
+            if not latest.is_empty():
+                row = latest.row(0, named=True)
+                result[sid] = (str(row.get("date", "")), self._row_to_health(row))
+        return result
+
+    def load_health_history(self, strategy_id: str, limit: int = 30) -> list[StrategyHealth]:
+        """Load historical health records for a strategy (oldest first)."""
+        df = self._load_health_df()
+        if df.is_empty():
+            return []
+        filtered = df.filter(pl.col("strategy_id") == strategy_id).sort("date")
+        if filtered.is_empty():
+            return []
+        return [self._row_to_health(r) for r in filtered.tail(limit).iter_rows(named=True)]
+
     # ------------------------------------------------------------------
     # Internal: history loading
     # ------------------------------------------------------------------

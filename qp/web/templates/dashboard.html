@@ -389,13 +389,20 @@
         {{ s.recommendation_label }}
         {% if s.n_alerts > 0 %}<span style="color: var(--orange);"> &#9888;{{ s.n_alerts }}</span>{% endif %}
       </div>
+      {% if s.data_date %}
+      <div style="font-size: 11px; color: var(--c-muted); margin-top: 3px;">
+        数据截至: {{ s.data_date }}
+      </div>
+      {% endif %}
       {% if decision %}
       {% for val in decision.validation %}
       {% if val.strategy_id == s.strategy_id %}
       <div style="font-size: 11px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border);">
-        验证: <span style="color: {% if val.passed %}var(--green){% else %}var(--red){% endif %}; font-weight: 600;">
-          {{ val.score }}/100 {% if val.passed %}✅{% else %}❌{% endif %}
-        </span>
+        {% if val.passed %}
+        验证: 实验阶段已验证 ✅
+        {% else %}
+        验证: <span style="color: var(--red); font-weight: 600;">{{ val.score }}/100 ❌</span>
+        {% endif %}
       </div>
       {% endif %}
       {% endfor %}

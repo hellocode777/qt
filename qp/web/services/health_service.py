@@ -100,27 +100,32 @@ class HealthService:
 
         Returns:
             List of strategy health dicts sorted by score (worst first).
+            Each entry carries the record date (``data_date``) so stale
+            records are distinguishable from current ones, and the trend
+            is computed from actual history (not always "unknown").
         """
         try:
             from qp.monitoring.strategy_health_logger import StrategyHealthLogger
 
             logger_obj = StrategyHealthLogger()
-            latest = logger_obj.load_all_latest()
+            latest = logger_obj.load_latest_with_date()
         except Exception as e:
             logger.warning("Failed to load strategy health: {}", e)
             return []
 
         results: list[dict[str, Any]] = []
-        for _sid, health in latest.items():
+        for sid, (data_date, health) in latest.items():
             from qp.monitoring.strategy_health_report import StrategyHealthReport
 
-            report = StrategyHealthReport.from_health(health)
+            history = logger_obj.load_health_history(sid)
+            report = StrategyHealthReport.from_health(health, history=history)
             d = report.to_dict()
             d["health_score_pct"] = int(health.health_score)
             d["health_badge"] = _health_score_badge_class(health.health_score)
             d["health_label"] = _health_score_label(health.health_score)
             d["health_level_display"] = health.health_level.value.upper()
             d["n_alerts"] = len(health.alerts)
+            d["data_date"] = data_date
             results.append(d)
 
         results.sort(key=lambda x: x["health_score"])
