@@ -45,6 +45,13 @@
     <div style="font-size: 18px; font-weight: 700;">{{ portfolio_summary.rating }}</div>
     <div style="font-size: 11px; color: var(--c-muted);">{{ portfolio_summary.n_days }} 天数据</div>
   </div>
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="font-size: 12px; color: var(--c-muted);">超额 Alpha (vs 上证)</div>
+    <div style="font-size: 18px; font-weight: 700; color: {% if '+' in portfolio_summary.alpha %}var(--green){% else %}var(--red){% endif %};">
+      {{ portfolio_summary.alpha }}
+    </div>
+    <div style="font-size: 11px; color: var(--c-muted);">基准 {{ portfolio_summary.benchmark_ret }}</div>
+  </div>
 </div>
 
 <!-- NAV Mini Chart -->

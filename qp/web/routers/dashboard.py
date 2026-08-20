@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import polars as pl
 from fastapi import APIRouter, Form, Request
 from loguru import logger
 
@@ -88,7 +89,16 @@ async def dashboard(request: Request) -> Any:
             nav_dates = [d["date"] for d in nav_dicts]
             nav_values = [d["total_nav"] for d in nav_dicts]
             if nav_df.height >= 5:
-                metrics = PortfolioMetrics.from_nav(nav_df)
+                # Build benchmark series from nav_history.benchmark_value
+                # (上证指数收盘). Only pass a benchmark when at least one
+                # non-null value exists — otherwise from_nav skips alpha.
+                bench_df = None
+                if nav_df["benchmark_value"].null_count() < nav_df.height:
+                    bench_df = nav_df.select(
+                        pl.col("date").alias("date"),
+                        pl.col("benchmark_value").alias("total_nav"),
+                    ).drop_nulls()
+                metrics = PortfolioMetrics.from_nav(nav_df, benchmark_df=bench_df)
                 portfolio_summary = {
                     "has_data": True,
                     "total_nav": nav_values[-1] if nav_values else 0,
@@ -98,6 +108,16 @@ async def dashboard(request: Request) -> Any:
                     "ann_ret": f"{metrics.annualized_return_pct:+.1f}%",
                     "n_days": metrics.n_days,
                     "rating": metrics.rating(),
+                    "alpha": (
+                        f"{metrics.alpha_pct:+.1f}%"
+                        if metrics.benchmark_total_return_pct is not None
+                        else "N/A"
+                    ),
+                    "benchmark_ret": (
+                        f"{metrics.benchmark_total_return_pct:+.1f}%"
+                        if metrics.benchmark_total_return_pct is not None
+                        else "N/A"
+                    ),
                 }
     except Exception:
         pass

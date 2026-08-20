@@ -1265,12 +1265,23 @@ class DailyPipeline(BasePipeline):
             try:
                 from qp.portfolio.nav_ledger import NAVLedger
 
+                # Benchmark = 上证指数当日收盘（用于 dashboard alpha / 超额）。
+                # 拉不到（网络失败/非交易日）时写 None，绝不伪造基准值。
+                benchmark_value: float | None = None
+                try:
+                    from qp.data.dataset.index_provider import get_index_close
+
+                    benchmark_value = get_index_close("sh000001", today.isoformat())
+                except Exception as exc:
+                    logger.debug("Benchmark close unavailable: {}", exc)
+
                 nav_ledger = NAVLedger()
                 nav_ledger.record_daily(
                     date=today.isoformat(),
                     total_value=shadow_equity,
                     cash=shadow_cash,
                     n_positions=shadow_n_positions,
+                    benchmark_value=benchmark_value,
                 )
                 result.metrics["nav_history_days"] = nav_ledger.row_count()
             except Exception as exc:

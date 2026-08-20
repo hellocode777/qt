@@ -1,10 +1,14 @@
 # pyright: reportArgumentType=false
-"""Tests for CSI300 index data provider + pipeline integration.
+"""Tests for index data provider (Tencent source).
 
 2026-08-14: multifactor_pipeline._load_index_data() was a hardcoded
 None (quant.db dependency removed) — market filter / regime detection
-silently skipped. Now reads Gold dataset (qp data index) with lazy
-network fallback.
+silently skipped. Now reads Gold dataset (qp data index).
+
+2026-08-20: provider switched to Tencent kline (TDR-001, same as
+TencentAdapter) — AkShare was a network fallback that violates the
+"腾讯 kline 唯一行情源" rule. Supports sh000300 (CSI300) and
+sh000001 (上证指数) with a symbol parameter.
 """
 
 import polars as pl
@@ -13,34 +17,145 @@ import pytest
 from qp.data.dataset import index_provider
 
 
+def _fake_tencent_rows() -> list[list]:
+    """Rows in Tencent kline format: [date, open, close, high, low, volume]."""
+    return [
+        ["2026-01-05", "4000.0", "4015.0", "4010.0", "3980.0", "1000000000.0"],
+        ["2026-01-06", "4020.0", "4030.0", "4040.0", "4000.0", "1200000000.0"],
+    ]
+
+
+def _fake_get_from_params(rows: list[list] | None):
+    """Build a fake requests.get that derives the symbol from the param."""
+
+    def fake_get(url, params, timeout):
+        symbol = params["param"].split(",")[0]
+        return _FakeResp(rows, symbol=symbol)
+
+    return fake_get
+
+
 def test_fetch_index_data_writes_parquet(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(index_provider, "INDEX_DATASET_PATH", tmp_path / "index_csi300.parquet")
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
 
-    import pandas as pd
+    def fake_get(url, params, timeout):
+        assert params["param"].startswith("sh000300,day,")
+        # TDR-001: fqkline/get+qfq is BANNED — param must NOT carry a qfq suffix.
+        assert not params["param"].endswith(",qfq")
+        return _FakeResp(_fake_tencent_rows(), symbol="sh000300")
 
-    fake = pd.DataFrame(
-        {
-            "date": pd.to_datetime(["2026-01-05", "2026-01-06"]),
-            "open": [4000.0, 4020.0],
-            "high": [4010.0, 4040.0],
-            "low": [3980.0, 4000.0],
-            "close": [4015.0, 4030.0],
-            "volume": [1.0e9, 1.2e9],
-        }
-    )
-
-    def fake_fetch(symbol: str):
-        assert symbol == "sh000300"
-        return fake
-
-    monkeypatch.setattr("akshare.stock_zh_index_daily", fake_fetch)
-    out = index_provider.fetch_index_data(force=True)
+    monkeypatch.setattr(index_provider.requests, "get", fake_get)
+    out = index_provider.fetch_index_data(force=True, symbol="sh000300")
     assert out == tmp_path / "index_csi300.parquet"
     df = pl.read_parquet(out)
     assert df.height == 2
     assert df["trade_date"].dtype == pl.Date
     assert df["close"].to_list() == [4015.0, 4030.0]
+
+
+def test_fetch_index_data_skips_when_exists(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+    path = tmp_path / "index_csi300.parquet"
+    _index_df().write_parquet(path)
+
+    calls: list[str] = []
+
+    def fake_get(url, params, timeout):
+        calls.append(params["param"])
+        return _FakeResp(_fake_tencent_rows(), symbol="sh000300")
+
+    monkeypatch.setattr(index_provider.requests, "get", fake_get)
+    out = index_provider.fetch_index_data(force=False, symbol="sh000300")
+    assert out == path
+    assert calls == []  # 已存在不重新拉
+
+
+def test_fetch_index_data_raises_on_empty(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+
+    def fake_get(url, params, timeout):
+        return _FakeResp(None, symbol="sh000300")
+
+    monkeypatch.setattr(index_provider.requests, "get", fake_get)
+    with pytest.raises(RuntimeError, match="空数据"):
+        index_provider.fetch_index_data(force=True, symbol="sh000300")
+
+
+def test_fetch_index_sh000001_uses_own_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+
+    def fake_get(url, params, timeout):
+        assert params["param"].startswith("sh000001,day,")
+        return _FakeResp(_fake_tencent_rows(), symbol="sh000001")
+
+    monkeypatch.setattr(index_provider.requests, "get", fake_get)
+    out = index_provider.fetch_index_data(force=True, symbol="sh000001")
+    assert out == tmp_path / "index_sh000001.parquet"
+
+
+def test_load_index_data_returns_none_when_missing(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+    assert index_provider.load_index_data("sh000300") is None
+
+
+def test_load_index_data_reads_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+    path = tmp_path / "index_csi300.parquet"
+    _index_df().write_parquet(path)
+    df = index_provider.load_index_data("sh000300")
+    assert df is not None
+    assert df.height == 2
+    assert df["close"].to_list() == [4015.0, 4030.0]
+
+
+def test_get_index_close(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+    path = tmp_path / "index_sh000001.parquet"
+    _index_df().write_parquet(path)
+    assert index_provider.get_index_close("sh000001", "2026-01-05") == 4015.0
+    assert index_provider.get_index_close("sh000001", "2026-01-09") is None
+
+
+def test_pipeline_load_index_data_with_local_file(tmp_path, monkeypatch) -> None:
+    """pipeline._load_index_data reads the Gold dataset (no network)."""
+    from qp.pipeline.multifactor_pipeline import MultiFactorPipeline
+
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "data" / "dataset" / "index_csi300.parquet"
+    path.parent.mkdir(parents=True)
+    _index_df().write_parquet(path)
+
+    pipe = MultiFactorPipeline.__new__(MultiFactorPipeline)
+    df = pipe._load_index_data()
+    assert df is not None
+    assert df["close"].to_list() == [4015.0, 4030.0]
+
+
+class _FakeResp:
+    """Minimal stand-in for requests.Response with .json().
+
+    The index symbol is parsed from the request param string so the fake
+    can serve both sh000300 and sh000001 without hardcoding.
+    """
+
+    def __init__(self, rows: list[list] | None, symbol: str = "sh000300") -> None:
+        self._rows = rows
+        self._symbol = symbol
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self):
+        if self._rows is None:
+            return {"data": {self._symbol: {"day": None}}}
+        return {"data": {self._symbol: {"day": self._rows}}}
 
 
 def _index_df() -> pl.DataFrame:
@@ -57,62 +172,3 @@ def _index_df() -> pl.DataFrame:
             "volume": [1.0e9, 1.2e9],
         }
     )
-
-
-def test_fetch_index_data_skips_when_exists(tmp_path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    path = tmp_path / "index_csi300.parquet"
-    monkeypatch.setattr(index_provider, "INDEX_DATASET_PATH", path)
-    _index_df().write_parquet(path)
-
-    calls: list[str] = []
-
-    def fake_fetch(symbol: str):
-        calls.append(symbol)
-        return None
-
-    monkeypatch.setattr("akshare.stock_zh_index_daily", fake_fetch)
-    out = index_provider.fetch_index_data(force=False)
-    assert out == path
-    assert calls == []  # 已存在不重新拉
-
-
-def test_fetch_index_data_raises_on_empty(tmp_path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(index_provider, "INDEX_DATASET_PATH", tmp_path / "index_csi300.parquet")
-    monkeypatch.setattr("akshare.stock_zh_index_daily", lambda symbol: None)
-
-    with pytest.raises(RuntimeError, match="空数据"):
-        index_provider.fetch_index_data(force=True)
-
-
-def test_load_index_data_returns_none_when_missing(tmp_path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(index_provider, "INDEX_DATASET_PATH", tmp_path / "index_csi300.parquet")
-    assert index_provider.load_index_data() is None
-
-
-def test_load_index_data_reads_file(tmp_path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    path = tmp_path / "index_csi300.parquet"
-    monkeypatch.setattr(index_provider, "INDEX_DATASET_PATH", path)
-    _index_df().write_parquet(path)
-    df = index_provider.load_index_data()
-    assert df is not None
-    assert df.height == 2
-    assert df["close"].to_list() == [4015.0, 4030.0]
-
-
-def test_pipeline_load_index_data_with_local_file(tmp_path, monkeypatch) -> None:
-    """pipeline._load_index_data reads the Gold dataset (no network)."""
-    from qp.pipeline.multifactor_pipeline import MultiFactorPipeline
-
-    monkeypatch.chdir(tmp_path)
-    path = tmp_path / "data" / "dataset" / "index_csi300.parquet"
-    path.parent.mkdir(parents=True)
-    _index_df().write_parquet(path)
-
-    pipe = MultiFactorPipeline.__new__(MultiFactorPipeline)
-    df = pipe._load_index_data()
-    assert df is not None
-    assert df["close"].to_list() == [4015.0, 4030.0]
