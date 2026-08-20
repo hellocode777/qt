@@ -195,6 +195,9 @@
             <span class="c-muted" style="font-size: 12px;">{{ "%.1f" | format(src.avg_latency) }}s</span>
             {% endif %}
             <span class="badge {{ src.badge_class }}" style="font-size: 11px;">{{ src.status_label }}</span>
+            {% if src.health_notes %}
+            <span class="c-muted" style="font-size: 11px;" title="说明">{{ src.health_notes }}</span>
+            {% endif %}
             {% if src.consecutive_failures > 0 %}
             <span class="badge badge-red" style="font-size: 10px;" title="连续失败次数">✕{{ src.consecutive_failures }}</span>
             {% endif %}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -229,12 +229,18 @@ class DataQualityService:
         Stale dataset versions do not count — e.g. ``daily_price_main``
         migrated from ``quant_trading_db`` to ``akshare``, so only akshare
         is shown. Demo entries (``source == "demo"``) are excluded.
+
+        Status is NOT a live health probe — it is inferred from registry
+        freshness. A source whose newest dataset was registered recently is
+        marked healthy; older registrations are marked degraded with the
+        data date shown, never a fabricated "normal".
         """
         registry = self._read_registry()
-        # Per dataset name, keep the source of the newest version.
+        # Per dataset name, keep the source + registered_at of the newest version.
         # "latest" beats any dated version; dated versions compare by ISO string.
         newest_source: dict[str, str] = {}
         newest_version: dict[str, str] = {}
+        newest_registered: dict[str, str] = {}
         for entry in registry.values():
             name = entry.get("name", "")
             version = entry.get("version", "")
@@ -244,35 +250,40 @@ class DataQualityService:
             if name not in newest_version:
                 newest_source[name] = src
                 newest_version[name] = version
+                newest_registered[name] = entry.get("registered_at", "")
             else:
                 old = newest_version[name]
                 if version == "latest" or (old != "latest" and version > old):
                     newest_source[name] = src
                     newest_version[name] = version
+                    newest_registered[name] = entry.get("registered_at", "")
 
-        seen: dict[str, tuple[str, str]] = {}  # source -> (description, data_kind)
-        for src in newest_source.values():
+        # source -> (description, data_kind, last_registered_at)
+        seen: dict[str, tuple[str, str, str]] = {}
+        for name, src in newest_source.items():
             if src not in seen:
-                seen[src] = _SOURCE_INFO.get(src, ("外部数据源", "unknown"))
+                desc, kind = _SOURCE_INFO.get(src, ("外部数据源", "unknown"))
+                seen[src] = (desc, kind, newest_registered.get(name, ""))
         if not seen:
             return []
         result = []
-        for src, (desc, kind) in seen.items():
+        for src, (desc, kind, last_registered) in seen.items():
+            status, notes = _infer_source_status(last_registered, kind)
             result.append(
                 {
                     "source_name": src,
                     "description": desc,
                     "data_kind": kind,
-                    "health_status": "healthy",
-                    "status_label": "正常",
-                    "last_success": "",
+                    "health_status": status,
+                    "status_label": _health_label(status),
+                    "last_success": _format_time(last_registered),
                     "last_attempt": "",
                     "consecutive_failures": 0,
                     "fetch_error_count": 0,
                     "avg_latency": 0.0,
-                    "health_notes": "",
-                    "icon": "🟢",
-                    "badge_class": "badge-green",
+                    "health_notes": notes,
+                    "icon": _health_icon(status),
+                    "badge_class": _health_badge(status),
                 }
             )
         return result
@@ -364,6 +375,39 @@ _SOURCE_INFO: dict[str, tuple[str, str]] = {
     "eastmoney": ("东方财富 API", "multi"),
     "quant_trading_db": ("QuantTrading 旧库导出", "multi"),
 }
+
+# Freshness threshold (days) per data_kind. A dataset registered more than
+# this many days ago means the source is not being updated → degraded, not
+# a fabricated "normal". daily data goes stale fast; batch data has slack.
+_FRESHNESS_DAYS: dict[str, int] = {
+    "daily_ohlcv": 3,
+    "capital_flow": 3,
+    "multi": 30,
+}
+_DEFAULT_FRESHNESS_DAYS = 30
+
+
+def _infer_source_status(last_registered: str, data_kind: str) -> tuple[str, str]:
+    """Infer source status from the newest dataset's registration time.
+
+    Returns (status, notes). Status is one of healthy/degraded/unknown.
+    No registered_at → unknown (nothing measured, never "normal").
+    """
+    if not last_registered:
+        return "unknown", "未检测到注册时间"
+    try:
+        dt = datetime.fromisoformat(last_registered.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return "unknown", f"注册时间无法解析: {last_registered}"
+
+    age_days = (datetime.now(UTC) - dt).total_seconds() / 86400
+    threshold = _FRESHNESS_DAYS.get(data_kind, _DEFAULT_FRESHNESS_DAYS)
+    if age_days <= threshold:
+        return "healthy", f"数据截至 {dt.strftime('%Y-%m-%d')}"
+    return (
+        "degraded",
+        f"数据截至 {dt.strftime('%Y-%m-%d')}，{int(age_days)} 天未更新（阈值 {threshold} 天）",
+    )
 
 
 def _health_label(status: str) -> str:
