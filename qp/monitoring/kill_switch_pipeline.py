@@ -25,6 +25,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from loguru import logger
+
 from qp.monitoring.alerts import AlertManager, AlertSeverity
 from qp.monitoring.factor_health_pipeline import (
     FactorHealthPipeline,
@@ -634,8 +636,11 @@ class KillSwitchPipeline(BasePipeline):
 
             health_logger = SystemHealthLogger()
             health_logger.log_from_report(report)
-        except Exception:
-            pass  # Health logging is best-effort, never blocks the pipeline
+        except Exception as exc:
+            # Best-effort, never blocks the pipeline — but a silent failure
+            # hides stale dashboard data (e.g. schema mismatch after code
+            # deploy without restart). Log it so it's visible in scheduler.log.
+            logger.warning("Health log write failed (dashboard will show stale data): {}", exc)
 
     def _archive_to_knowledge(self, report: MonitorReport) -> None:
         """Auto-archive significant events to KnowledgeArchive (#14 fix).

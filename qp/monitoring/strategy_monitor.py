@@ -317,3 +317,33 @@ class StrategyMonitor:
     def signal_history(self) -> list[SignalRecord]:
         """Return raw signal history."""
         return list(self._signal_history)
+
+
+def build_strategy_monitor_from_signal_history(
+    path: str = "data/monitoring/online_signal_history.parquet",
+) -> StrategyMonitor | None:
+    """Build a StrategyMonitor seeded from persisted signal history.
+
+    Reads the accumulated per-strategy daily signal snapshots and records
+    per-day signal counts into an aggregate monitor. Returns None when no
+    signal history exists — strategy health will then be absent from the
+    report instead of fabricated.
+
+    Used by both the scheduler (daily jobs) and the CLI monitor command so
+    the strategy-health score reflects real measurements.
+    """
+    from pathlib import Path
+
+    import polars as pl
+
+    p = Path(path)
+    if not p.exists():
+        return None
+    df = pl.read_parquet(p)
+    if df.is_empty():
+        return None
+    monitor = StrategyMonitor("aggregate")
+    counts = df.group_by(["strategy_id", "date"]).len().sort("date")
+    for row in counts.iter_rows(named=True):
+        monitor.record_signal(str(row["date"]), n_signals=int(row["len"]))
+    return monitor

@@ -18,13 +18,16 @@ def cmd_monitor_check() -> int:
 
     # Load price data so regime detection and online rolling-IC
     # monitoring receive real market data (mirrors scheduler.monitor_check).
+    # NOTE: rolling_ic needs the {symbol: DataFrame} dict, NOT the flat
+    # frame — passing the flat frame silently disables the realized-IC
+    # check (no .get(symbol) on a DataFrame).
     price_data: Any = {}
     try:
         from qp.pipeline.daily_pipeline import _load_price_data
 
-        _, flat_prices = _load_price_data()
-        if flat_prices is not None and not flat_prices.is_empty():
-            price_data = flat_prices
+        prices_dict, _flat = _load_price_data()
+        if prices_dict:
+            price_data = prices_dict
     except Exception:
         pass
 
@@ -42,9 +45,22 @@ def cmd_monitor_check() -> int:
     except Exception:
         pass
 
+    # Seed strategy monitor from persisted signal history so the
+    # strategy-health score is a real measurement, not a 100 default.
+    strategy_monitor: Any = None
+    try:
+        from qp.monitoring.strategy_monitor import (
+            build_strategy_monitor_from_signal_history,
+        )
+
+        strategy_monitor = build_strategy_monitor_from_signal_history()
+    except Exception:
+        pass
+
     ctx = PipelineContext(pipeline_name="cli_monitor_check")
     ctx.parameters["price_data"] = price_data
     ctx.parameters["factor_daily_ics"] = ic_by_factor
+    ctx.parameters["strategy_monitor"] = strategy_monitor
     pipeline = KillSwitchPipeline(knowledge_archive=KnowledgeArchive())
     result = pipeline.run(ctx)
 

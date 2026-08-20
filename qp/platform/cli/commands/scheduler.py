@@ -179,23 +179,11 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         Returns None when no signal history exists — strategy health
         will simply be absent from the report instead of fabricated.
         """
-        from pathlib import Path
+        from qp.monitoring.strategy_monitor import (
+            build_strategy_monitor_from_signal_history,
+        )
 
-        import polars as pl
-
-        from qp.monitoring.strategy_monitor import StrategyMonitor
-
-        path = Path("data/monitoring/online_signal_history.parquet")
-        if not path.exists():
-            return None
-        df = pl.read_parquet(path)
-        if df.is_empty():
-            return None
-        monitor = StrategyMonitor("aggregate")
-        counts = df.group_by(["strategy_id", "date"]).len().sort("date")
-        for row in counts.iter_rows(named=True):
-            monitor.record_signal(str(row["date"]), n_signals=int(row["len"]))
-        return monitor
+        return build_strategy_monitor_from_signal_history()
 
     def _load_monitor_price_data():
         """Load per-symbol price dict for online rolling-IC monitoring.
