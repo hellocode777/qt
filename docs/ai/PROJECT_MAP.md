@@ -30,8 +30,8 @@
 | 10 | `qp/knowledge/` | 长期记忆：post-mortem、实验摘要、失败分析 |
 
 **关键边界**：
-- `data/` 对外只暴露 Data Products（Dataset）；research/strategy 等消费方不碰 AkShare 等原始源
-- `research/` 禁止直接调 `ak.stock_zh_a_hist(...)`（数据源封装在 data 层）
+- `data/` 对外只暴露 Data Products（Dataset）；research/strategy 等消费方不碰腾讯/AkShare 等原始源
+- `research/` 禁止直接调腾讯 kline 或 `ak.stock_zh_a_hist(...)`（数据源封装在 data 层，TDR-001）
 - 跨层捷径禁止（ADR-009）；没有 utils/helpers/common（shared/ 只放 protocols/types/constants/exceptions）
 
 ## 辅助目录（非 12 层主体）
@@ -90,7 +90,7 @@
 ## 数据流（总览，详见 DATA_FLOW.md）
 
 ```
-AkShare (数据源)
+腾讯 kline（唯一行情源，TDR-001；复权因子用 AkShare qfq-factor）
   → data/raw（原始，不可变，只追加）
   → data/bronze → data/silver（清洗/标准化）
   → data/dataset/*.parquet（Gold Data Product：daily_price_latest 等）

@@ -54,9 +54,11 @@ Raw → Bronze（清洗）→ Silver（校验）→ Gold（Dataset）
 ### 新策略（三原则）
 
 1. **全库只存不复权原始价**（Raw prices only）
-   - 腾讯 `kline/kline`（无复权参数，`day` 字段）— 长历史主源
-   - 新浪 `getKLineData` — 近期增量 + 交叉验证源
-   - akshare `stock_zh_a_hist(adjust="")` — 备用源
+   - 腾讯 `kline/kline`（无复权参数，`day` 字段）— **唯一数据源**（2026-08-14 起）
+   - 新浪 `getKLineData` / akshare `stock_zh_a_hist(adjust="")` — **已废弃**，
+     多源复权状态不一致曾污染价格表；`--source=sina` 必须 FAILED，绝不 fallback
+   - 指数数据（上证 sh000001 / 沪深300 sh000300）：同走腾讯 `kline/kline`
+     （`qp/data/dataset/index_provider.py`，2026-08-20 起不再用 AkShare 拉指数）
 
 2. **复权因子独立成表**（adj_factor.parquet）
    - 数据源：akshare `stock_zh_a_daily(adjust="qfq-factor")` → `[symbol, ex_date, qfq_factor]`
@@ -74,6 +76,7 @@ Raw → Bronze（清洗）→ Silver（校验）→ Gold（Dataset）
 |------|------|------|
 | 腾讯 `fqkline/get` + `qfq` | 负价格坏数据 bug（600438 实证） | 腾讯 `kline/kline`（无复权参数）|
 | akshare `adjust="qfq"/"hfq"` 写入价格表 | 复权价混入原始价表 | `adjust=""` + 因子表 |
+| 新浪 `getKLineData` / akshare 指数拉取（作行情源）| 多源复权状态不一致（2026-08-14 事故）| 腾讯 `kline/kline` 唯一源（含指数）|
 
 > 任何新代码不得引用 fqkline/qfqday/hfqday 字段。已有引用见 git history。
 

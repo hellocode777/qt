@@ -6,7 +6,7 @@
 ## 数据生命周期（Raw → Bronze → Silver → Gold → 下游）
 
 ```
-AkShare（数据源，封装在 qp/data/adapter/）
+腾讯 kline（唯一行情源，封装在 qp/data/adapter/tencent_adapter.py）
   │  qp data fetch / qp ingest / qp fundamental
   ▼
 data/raw/        原始数据（不可变、只追加、版本化）      [ADR-014]
@@ -54,7 +54,8 @@ qp/knowledge/    长期记忆（失败归档/决策审计）
 
 | 源 | 方式 | 注意 |
 |---|---|---|
-| AkShare | `qp/data/adapter/`（akshare 只在 data 层） | research/strategy 禁止直调 |
+| 腾讯 kline（唯一行情源） | `qp/data/adapter/tencent_adapter.py` | research/strategy 禁止直调；不复权原始价 |
+| AkShare（仅复权因子） | `qp/data/adapter/akshare_adapter.py`（qfq-factor） | 不拉行情；research/strategy 禁止直调 |
 | QuantTrading DB | `qp/data/adapter/quant_trading_db_adapter.py` | 直接读 `~/workspace/QuantTrading/data/quant.db`（SQLite） |
 
 ## 关键口径（回答数据问题时的"证据锚点"）
