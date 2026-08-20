@@ -32,13 +32,29 @@ HOOK_NAME="[post-commit]"
 
 # ---------------------------------------------------------------------------
 # 1. Path filter — which commits trigger a redeploy
+#
+# The scheduler is a single in-process APScheduler (BackgroundScheduler,
+# qp/platform/scheduler/scheduler.py). Its jobs import qp.pipeline,
+# qp.monitoring, qp.data, qp.decision etc. directly, so ANY change under
+# qp/** (except qp/web/**, which runs as a separate --reload process) can
+# affect the running scheduler and requires a restart.
+#
+# Exclusion-based (safer than a whitelist): trigger on any qp/** change
+# outside qp/web/**, plus deploy scripts. Skip docs/tests/data-only files.
 # ---------------------------------------------------------------------------
 FILES="$(git show --name-only --format= HEAD 2>/dev/null || true)"
 
 NEEDS_DEPLOY=0
 while IFS= read -r f; do
     case "$f" in
-        qp/monitoring/*|qp/platform/cli/commands/scheduler.py|deploy/systemd/*|deploy/install-systemd.sh|deploy/git-post-commit.sh)
+        qp/*)
+            # qp/web runs under its own uvicorn --reload process → no restart.
+            case "$f" in
+                qp/web/*) ;;
+                *) NEEDS_DEPLOY=1 ;;
+            esac
+            ;;
+        deploy/systemd/*|deploy/install-systemd.sh|deploy/git-post-commit.sh)
             NEEDS_DEPLOY=1
             ;;
     esac
