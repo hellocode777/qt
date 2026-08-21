@@ -197,16 +197,27 @@ class PaperTradingTracker:
             if prev.positions:
                 broker.restore_positions(prev.positions, prev.avg_costs)
 
-        # Build price/ADV maps
+        # Build price/ADV maps.
+        # CRITICAL (2026-08-21): daily_price_latest.parquet is NOT sorted by
+        # (symbol, trade_date) — iterating the whole frame and letting the
+        # last row per symbol win produced random historical prices (e.g.
+        # 2016 closes) as fill prices. Filter to the target trade_date first,
+        # then fall back to the latest available date <= trade_date so
+        # suspended stocks still get their last known price.
+        prices_td = prices.filter(pl.col("trade_date").cast(pl.Utf8) <= str(trade_date)[:10])
         price_map: dict[str, float] = {}
         adv_map: dict[str, float] = {}
-        for row in prices.iter_rows(named=True):
-            sym = str(row["symbol"])
-            px = float(row.get("close", 0.0))
-            vol = float(row.get("volume", 0.0))
-            price_map[sym] = px
-            if vol > 0 and px > 0:
-                adv_map[sym] = px * vol
+        if not prices_td.is_empty():
+            prices_td = (
+                prices_td.sort(["symbol", "trade_date"]).group_by("symbol").agg(pl.all().last())
+            )
+            for row in prices_td.iter_rows(named=True):
+                sym = str(row["symbol"])
+                px = float(row.get("close", 0.0))
+                vol = float(row.get("volume", 0.0))
+                price_map[sym] = px
+                if vol > 0 and px > 0:
+                    adv_map[sym] = px * vol
 
         broker.set_prices(price_map, adv_map, trade_date)
 
