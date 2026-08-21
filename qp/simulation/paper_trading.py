@@ -363,9 +363,7 @@ class PaperTradingTracker:
         cum = np.cumprod(1 + returns)
         running_max = np.maximum.accumulate(cum)
         max_dd = (
-            float(np.abs(((cum - running_max) / running_max).min()) * 100)
-            if len(cum) > 0
-            else 0.0
+            float(np.abs(((cum - running_max) / running_max).min()) * 100) if len(cum) > 0 else 0.0
         )
 
         avg_signals = float(np.mean([r.n_signals for r in run.daily_records]))
