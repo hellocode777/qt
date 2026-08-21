@@ -48,6 +48,7 @@ data/dataset/*_metadata.json
 data/knowledge/
 data/monitoring/watchdog/
 data/factor_store/
+data/paper_trading/
 *.log
 logs/
 
