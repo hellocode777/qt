@@ -521,7 +521,11 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
-    # ── Job 4.5: paper trading daily advance (18:05 on weekdays) ──
+    # ── Job 4.5: paper trading daily advance (18:32 on weekdays) ──
+    # 18:32: AFTER daily_pipeline (18:00) finishes fetching today's prices
+    # (~18:22-18:26), so the run advances to the CURRENT trading day
+    # instead of yesterday's. Kept before Hermes cron daily-reminder (18:35)
+    # so the report always shows the freshly advanced day.
     def job_paper_trading() -> None:
         """Advance all active paper trading runs by one trading day.
 
@@ -604,7 +608,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         Job(
             name="paper_trading",
             task=job_paper_trading,
-            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="5"),
+            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="32"),
         )
     )
 

@@ -590,7 +590,7 @@ uv run qp paper status simple_rank_v1.0
          │                  └─ data/decisions/dp-2026-07-25-xxx.json
          │                     data/decisions/trade_decision_audit.parquet (T2)
          │
-18:05  paper_trading      模拟盘推进：执行当日交易，满 30 天自动评估
+18:32  paper_trading      模拟盘推进：执行当日交易，满 30 天自动评估
          │
 18:30  email_report       发送今日 DecisionPackage 邮件
          │
@@ -667,7 +667,7 @@ tail -f logs/$(date +%F)/email_report.log
 | 09:17 | `retrain_notify` | 检查重训练信号，发邮件提醒 | `data/monitoring/watchdog/retrain_notify.ping` |
 | 16:53 | `pre_close_check` | KillSwitchPipeline 收盘前二次确认（STOP → 跳过当日 daily_pipeline） | `data/monitoring/watchdog/pre_close_check.ping` |
 | 18:00 | `daily_pipeline` | DailyPipeline: 数据→因子→特征→策略→风控→DecisionPackage + 因子健康增量更新 | `data/monitoring/watchdog/daily_pipeline.ping` |
-| 18:05 | `paper_trading` | 模拟盘推进：执行当日交易，30 天到期自动评估 PASS/FAIL | `data/monitoring/watchdog/paper_trading.ping` |
+| 18:32 | `paper_trading` | 模拟盘推进：执行当日交易（等 daily_pipeline 拉价完成后），30 天到期自动评估 PASS/FAIL | `data/monitoring/watchdog/paper_trading.ping` |
 | 18:30 | `email_report` | 发送今日 DecisionPackage 邮件 | `data/monitoring/watchdog/email_report.ping` |
 
 ### 11.3 监控 Scheduler 本身
@@ -991,7 +991,7 @@ bash deploy/install-systemd.sh
   09:17 → retrain_notify   重训信号检查
   16:53 → pre_close_check  收盘前二次确认
   18:00 → daily_pipeline   产出 DecisionPackage（含因子健康增量更新）
-  18:05 → paper_trading    模拟盘推进
+  18:32 → paper_trading    模拟盘推进
   18:30 → email_report     邮件日报
 
   → factor_health / factor_ic_series  每日自动更新
