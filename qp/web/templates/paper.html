@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>模拟交易 Paper Trading</h1>
+    <div class="meta">
+      30 天策略验证 · 晋级 SHADOW_PRODUCTION 前的门禁关卡
+    </div>
+  </div>
+</div>
+
+{% if not has_data %}
+<div class="empty-state">
+  <div class="icon">&#128184;</div>
+  <h2>暂无模拟交易运行</h2>
+  <p>运行 <code>qp paper start &lt;strategy_id&gt;</code> 启动 30 天模拟交易</p>
+</div>
+{% else %}
+
+{% for run in runs %}
+
+<!-- Run card -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+    <span>
+      <strong>{{ run.strategy_id }}</strong>
+      <span class="c-muted" style="font-size: 12px;">#{{ run.run_id }}</span>
+    </span>
+    <span>
+      {% if run.status == 'passed' %}
+      <span class="badge badge-green">✅ 通过</span>
+      {% elif run.status == 'failed' %}
+      <span class="badge badge-red">❌ 未通过</span>
+      {% else %}
+      <span class="badge badge-blue">⏳ 进行中</span>
+      {% endif %}
+    </span>
+  </div>
+
+  <div class="card-body">
+    <!-- Summary metrics -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+      <div style="text-align: center;">
+        <div style="font-size: 12px; color: var(--c-muted);">进度</div>
+        <div style="font-size: 22px; font-weight: 700;">{{ run.elapsed_days }}/30</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 12px; color: var(--c-muted);">初始资金</div>
+        <div style="font-size: 20px; font-weight: 700;">¥{{ "%.0f"|format(run.capital) }}</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 12px; color: var(--c-muted);">当前权益</div>
+        <div style="font-size: 20px; font-weight: 700;">¥{{ "%.0f"|format(run.current_equity) }}</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 12px; color: var(--c-muted);">累计收益</div>
+        <div style="font-size: 20px; font-weight: 700; color: {% if run.total_return_pct >= 0 %}var(--green){% else %}var(--red){% endif %};">{{ run.total_return_fmt }}</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 12px; color: var(--c-muted);">起始日期</div>
+        <div style="font-size: 14px; font-weight: 600; margin-top: 6px;">{{ run.start_date }}</div>
+      </div>
+    </div>
+
+    <!-- Evaluation gates -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+      {% for key, gate in run.gate_status.items() %}
+      <div style="text-align: center; padding: 10px; border: 1px solid var(--border); border-radius: 8px;">
+        <div style="font-size: 12px; color: var(--c-muted);">{{ gate.label }}</div>
+        <div style="font-size: 18px; font-weight: 700; margin: 4px 0;">
+          {% if gate.value is none %}N/A{% elif key == 'sharpe' %}{{ "%.2f"|format(gate.value) }}{% elif key == 'max_drawdown' %}{{ "%.1f"|format(gate.value) }}%{% else %}{{ "%.1f"|format(gate.value) }}{% endif %}
+        </div>
+        <div>
+          {% if gate.value is none %}
+          <span class="badge badge-gray" title="尚无每日记录，指标未计算">未计算</span>
+          {% elif gate.passed %}
+          <span class="badge badge-green">达标</span>
+          {% else %}
+          <span class="badge badge-red">未达标</span>
+          {% endif %}
+          {% if not gate.final and gate.value is not none %}<span class="badge badge-gray" title="30 天未满，当前为实时快照">进行中</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Equity curve -->
+    <div style="position: relative; height: 260px; margin-bottom: 16px;">
+      <canvas id="paper-chart-{{ run.run_id }}"></canvas>
+    </div>
+
+    <!-- Completed result -->
+    {% if run.result %}
+    <div style="margin-bottom: 16px; padding: 12px; background: {% if run.result.passed %}var(--green-bg){% else %}var(--red-bg){% endif %}; border-radius: 8px;">
+      <strong>{{ run.result.recommendation }}</strong>
+      <span class="c-muted" style="font-size: 12px; margin-left: 8px;">
+        最终: 收益 {{ "%.1f"|format(run.result.total_return_pct) }}% · Sharpe {{ "%.2f"|format(run.result.sharpe) }} · MaxDD {{ "%.1f"|format(run.result.max_drawdown) }}%
+      </span>
+    </div>
+    {% endif %}
+
+    <!-- Daily records -->
+    {% if run.daily_records %}
+    <details style="margin-top: 4px;">
+      <summary style="cursor: pointer; font-size: 13px; color: var(--blue);">📋 每日记录（{{ run.daily_records|length }} 天）</summary>
+      <div style="margin-top: 10px; overflow-x: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>权益</th>
+              <th>现金</th>
+              <th>持仓</th>
+              <th>信号</th>
+              <th>成交</th>
+              <th>当日收益</th>
+              <th>成本</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in run.daily_records|reverse %}
+            <tr>
+              <td>{{ r.date }}</td>
+              <td>¥{{ "%.0f"|format(r.equity) }}</td>
+              <td>¥{{ "%.0f"|format(r.cash) }}</td>
+              <td>{{ r.n_positions }}</td>
+              <td>{{ r.n_signals }}</td>
+              <td>{{ r.n_trades }}</td>
+              <td style="color: {% if r.daily_return_pct >= 0 %}var(--green){% else %}var(--red){% endif %};">{{ "%+.2f"|format(r.daily_return_pct) }}%</td>
+              <td>¥{{ "%.2f"|format(r.total_cost) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Equity data for this run -->
+<script type="application/json" id="paper-data-{{ run.run_id }}">{{ run.equity_data | safe }}</script>
+
+{% endfor %}
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize one equity curve per run (QPCharts.EquityCurve)
+function initPaperCharts() {
+  try {
+    document.querySelectorAll('canvas[id^="paper-chart-"]').forEach(function (canvas) {
+      if (canvas._qpDrawn) return;
+      var dataEl = document.getElementById('paper-data-' + canvas.id.replace('paper-chart-', ''));
+      if (!dataEl) return;
+      var rawData;
+      try { rawData = JSON.parse(dataEl.textContent || '[]'); } catch (e) { return; }
+      if (!rawData || rawData.length === 0) return;
+      var dates = rawData.map(function (d) { return d.date; });
+      var equity = rawData.map(function (d) { return d.equity; });
+      QPCharts.EquityCurve(canvas.id, { dates: dates, portfolio: equity });
+    });
+  } catch (e) {
+    console.error('initPaperCharts:', e);
+  }
+}
+document.addEventListener('DOMContentLoaded', initPaperCharts);
+document.addEventListener('htmx:afterSettle', initPaperCharts);
+</script>
+{% endblock %}

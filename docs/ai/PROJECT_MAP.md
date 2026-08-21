@@ -83,7 +83,8 @@
 | 资金 | 纸面（独立） | 假钱 10 万（独立） | 真实账户现金（ADR-032） |
 | 审核 | 无 | 无 | 有状态机 + 驳回 |
 | 存储 | `data/paper_trading/` | `data/simulation/` | `data/positions/`（含 account.json） |
-| 代码 | `qp/strategy/paper_trading.py` | `qp/simulation/shadow_ledger.py` | `qp/decision/position_ledger.py` |
+| 代码 | `qp/simulation/paper_trading.py` | `qp/simulation/shadow_ledger.py` | `qp/decision/position_ledger.py` |
+| WebUI | `/paper`（模拟交易页，权益曲线+门槛状态） | `/simulation`（影子盘页） | `/portfolio`（组合页） |
 
 ⚠️ 现金账本（ADR-032）只属于 Portfolio；Shadow/Paper 各有独立假钱，互不干扰。
 

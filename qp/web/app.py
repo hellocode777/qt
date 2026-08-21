@@ -60,6 +60,7 @@ def _register_routers(app: FastAPI) -> None:
     from qp.web.routers.experiments import router as experiments_router
     from qp.web.routers.health import router as health_router
     from qp.web.routers.models import router as models_router
+    from qp.web.routers.paper import router as paper_router
     from qp.web.routers.portfolio import router as portfolio_router
     from qp.web.routers.proposals import router as proposals_router
     from qp.web.routers.simulation import router as simulation_router
@@ -71,6 +72,7 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(experiments_router)
     app.include_router(health_router)
     app.include_router(models_router)
+    app.include_router(paper_router)
     app.include_router(portfolio_router)
     app.include_router(proposals_router)
     app.include_router(simulation_router)

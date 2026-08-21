@@ -359,11 +359,11 @@ class PaperTradingTracker:
         sharpe = float(np.sqrt(252) * returns.mean() / returns.std()) if returns.std() > 0 else 0.0
         ann_vol = float(returns.std() * np.sqrt(252) * 100)
 
-        # Max drawdown
+        # Max drawdown — relative to running peak (per-point drawdown / peak)
         cum = np.cumprod(1 + returns)
         running_max = np.maximum.accumulate(cum)
         max_dd = (
-            float(np.abs((cum - running_max).min() / running_max.min()) * 100)
+            float(np.abs(((cum - running_max) / running_max).min()) * 100)
             if len(cum) > 0
             else 0.0
         )
