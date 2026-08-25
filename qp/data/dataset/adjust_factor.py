@@ -101,17 +101,19 @@ def qfq_price(
     """
     r = raw.with_columns(pl.col(date_col).cast(pl.Utf8).alias("_d"))
     f = _factor_asof(fac)
-    # as-of join: take the factor row with the largest ex_date <= _d
-    joined = (
-        r.join(f, on="symbol", how="left")
-        .filter(pl.col("ex_date") <= pl.col("_d"))
-        .sort(["_d", "symbol", "ex_date"])
-        .group_by(["_d", "symbol"], maintain_order=True)
-        .agg(pl.col("qfq_factor").last().alias("qfq_factor"))
+    # as-of join (backward): take the factor row with the largest ex_date <= _d.
+    # 2026-08-25: rewritten with join_asof — the previous
+    # join→filter→sort→group_by exploded memory on 7.6-year full-market data
+    # (OOM SIGKILL -9). join_asof is linear per symbol and constant-memory.
+    joined = r.sort(["symbol", "_d"]).join_asof(
+        f.sort(["symbol", "ex_date"]),
+        left_on="_d",
+        right_on="ex_date",
+        by="symbol",
+        strategy="backward",
     )
-    out = r.join(joined, on=["_d", "symbol"], how="left")
-    out = out.with_columns((pl.col(close_col) / pl.col("qfq_factor")).alias("close_qfq")).drop(
-        ["_d"]
+    out = joined.with_columns((pl.col(close_col) / pl.col("qfq_factor")).alias("close_qfq")).drop(
+        "_d"
     )
     return out
 
