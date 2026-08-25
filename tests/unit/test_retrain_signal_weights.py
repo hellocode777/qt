@@ -51,15 +51,11 @@ def _sig(
 
 class TestLoadWeightScales:
     def test_empty_history_returns_one(self, signal_dir: str) -> None:
-        assert load_weight_scales(
-            strategy_ids=["mom"], base_dir=signal_dir
-        ) == {"mom": 1.0}
+        assert load_weight_scales(strategy_ids=["mom"], base_dir=signal_dir) == {"mom": 1.0}
 
     def test_no_signal_strategy_defaults_one(self, signal_dir: str) -> None:
         _log_signals(signal_dir, [_sig("mom", "NONE")])
-        scales = load_weight_scales(
-            strategy_ids=["mom", "other"], base_dir=signal_dir
-        )
+        scales = load_weight_scales(strategy_ids=["mom", "other"], base_dir=signal_dir)
         assert scales["other"] == 1.0
 
     def test_reduce_weight_info_scales_to_half(self, signal_dir: str) -> None:
