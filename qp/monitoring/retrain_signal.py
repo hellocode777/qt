@@ -23,7 +23,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -332,3 +332,102 @@ def evaluate_retrain_need(
         action=RetrainAction.NONE,
         message="No retrain signal — all metrics within thresholds.",
     )
+
+
+# ------------------------------------------------------------------
+# Weight scaling consumption (auto-deweighting)
+# ------------------------------------------------------------------
+
+# Action × severity → weight scale for the strategy in the daily ensemble.
+# The scale multiplies the strategy's equal-weight share; a scale of 1.0
+# means no adjustment.  Semantics:
+#   RETIRE            → strategy withdrawn entirely (0.0)
+#   REDUCE_WEIGHT     → confirmed IC decay; cut hard (0.1–0.5 by severity)
+#   SCHEDULE_RETRAIN  → drift detected, retrain requested; mild trim only
+#   MONITOR           → watching; near-unchanged
+#   NONE / no signal  → unchanged
+_WEIGHT_SCALE_BY_ACTION_SEVERITY: dict[tuple[str, str], float] = {
+    (RetrainAction.RETIRE.value, "CRITICAL"): 0.0,
+    (RetrainAction.RETIRE.value, "WARNING"): 0.0,
+    (RetrainAction.RETIRE.value, "INFO"): 0.0,
+    (RetrainAction.REDUCE_WEIGHT.value, "CRITICAL"): 0.1,
+    (RetrainAction.REDUCE_WEIGHT.value, "WARNING"): 0.3,
+    (RetrainAction.REDUCE_WEIGHT.value, "INFO"): 0.5,
+    (RetrainAction.SCHEDULE_RETRAIN.value, "WARNING"): 0.85,
+    (RetrainAction.SCHEDULE_RETRAIN.value, "INFO"): 0.85,
+    (RetrainAction.MONITOR.value, "WARNING"): 0.95,
+    (RetrainAction.MONITOR.value, "INFO"): 0.95,
+}
+
+_ACTION_LOOKBACK_DAYS = 10
+
+
+def load_weight_scales(
+    strategy_ids: list[str] | None = None,
+    days: int = _ACTION_LOOKBACK_DAYS,
+    base_dir: str = DEFAULT_RETRAIN_DIR,
+) -> dict[str, float]:
+    """Load the latest retrain signal per strategy and map it to a weight scale.
+
+    Consumes the signals emitted by KillSwitchPipeline / evaluate_retrain_need
+    (data/monitoring/retrain_signals.parquet).  For each strategy the MOST
+    RECENT signal within the lookback window determines the scale:
+
+        RETIRE                  → 0.0   (withdraw entirely)
+        REDUCE_WEIGHT CRITICAL  → 0.1   (confirmed decay, severe)
+        REDUCE_WEIGHT WARNING   → 0.3   (IC ratio < 30%)
+        REDUCE_WEIGHT INFO      → 0.5   (IC ratio < 50%)
+        SCHEDULE_RETRAIN        → 0.85  (drift; mild trim only)
+        MONITOR                 → 0.95  (watching)
+        NONE / no signal        → 1.0   (unchanged)
+
+    Args:
+        strategy_ids: Restrict output to these strategies (default: all seen).
+        days: Lookback window in days for signal freshness.  Signals older
+            than this are ignored (stale signals must not keep a strategy
+            permanently deweighted).
+        base_dir: Directory holding retrain_signals.parquet.
+
+    Returns:
+        {strategy_id: weight_scale} with scale ∈ [0.0, 1.0].  Strategies
+        with no recent signal default to 1.0 (no change).
+    """
+    logger = RetrainSignalLogger(base_dir=base_dir)
+    history = logger.load_history(days=days * 10)
+
+    if history.is_empty():
+        return dict.fromkeys(strategy_ids, 1.0) if strategy_ids else {}
+
+    # Real date-window filter (load_history only truncates rows, it does
+    # NOT filter by date).  Signals older than `days` must not keep a
+    # strategy permanently deweighted.
+    cutoff = (datetime.now(CN_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    # Most recent signal per strategy within the window (signals are
+    # appended in time order, so the last occurrence of a strategy id
+    # inside the window is the latest).
+    latest: dict[str, dict[str, Any]] = {}
+    for row in history.iter_rows(named=True):
+        sig_date = str(row.get("date", ""))
+        if sig_date and sig_date < cutoff:
+            continue
+        sid = str(row.get("strategy_name", ""))
+        if not sid:
+            continue
+        if strategy_ids is not None and sid not in strategy_ids:
+            continue
+        latest[sid] = row
+
+    scales: dict[str, float] = {}
+    for sid, row in latest.items():
+        action = str(row.get("action", "NONE"))
+        severity = str(row.get("severity", "INFO"))
+        scale = _WEIGHT_SCALE_BY_ACTION_SEVERITY.get((action, severity), 1.0)
+        scales[sid] = round(scale, 4)
+
+    # Fill strategies without a recent signal with 1.0
+    if strategy_ids:
+        for sid in strategy_ids:
+            scales.setdefault(sid, 1.0)
+
+    return scales

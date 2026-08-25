@@ -685,7 +685,38 @@ class DailyPipeline(BasePipeline):
             # ================================================================
             # Step 9: Multi-strategy signal fusion via EnsembleEngine
             # ================================================================
+            strategy_exposure_scale = 1.0
             if signals_map:
+                # Auto-deweighting: consume retrain signals (IC decay / PSI
+                # drift / model staleness) emitted by KillSwitchPipeline.
+                # A degraded strategy gets a reduced share in the ensemble
+                # AND a reduced capital allocation in Step 12 — the
+                # REDUCE_WEIGHT feedback loop (L11-1.7).  Signals older
+                # than the lookback window are ignored (no permanent
+                # deweighting from stale alarms).
+                from qp.monitoring.retrain_signal import load_weight_scales
+
+                weight_scales = load_weight_scales(strategy_ids=list(signals_map.keys()))
+                degraded = {sid: s for sid, s in weight_scales.items() if s < 1.0}
+                if degraded:
+                    logger.warning(
+                        "⚠️ Auto-deweight: {}",
+                        {sid: f"{s:.0%}" for sid, s in degraded.items()},
+                    )
+                    result.metadata["deweighted_strategies"] = "; ".join(
+                        f"{sid}={s:.2f}" for sid, s in degraded.items()
+                    )
+
+                n = max(len(signals_map), 1)
+                raw_weights = {sid: (1.0 / n) * weight_scales.get(sid, 1.0) for sid in signals_map}
+                wsum = sum(raw_weights.values()) or 1.0
+                fixed_weights = {k: v / wsum for k, v in raw_weights.items()}
+
+                # Conservative portfolio-level exposure: any degraded strategy
+                # scales down the total capital deployed today.
+                strategy_exposure_scale = min(weight_scales.get(sid, 1.0) for sid in signals_map)
+                result.metrics["strategy_exposure_scale"] = round(strategy_exposure_scale, 4)
+
                 ensemble = EnsembleEngine(
                     universe_policy=UniversePolicy.FILL_ZERO,
                     weight_engine=WeightEngine(method=WeightMethod.EQUAL),
@@ -694,6 +725,7 @@ class DailyPipeline(BasePipeline):
                     signals_map,
                     date_str=today.isoformat(),
                     score_col="raw_score",
+                    fixed_weights=fixed_weights,
                 )
                 combined_signals = batch.to_polars()
                 result.metrics["ensemble_strategies"] = len(signals_map)
@@ -853,8 +885,10 @@ class DailyPipeline(BasePipeline):
                 candidates_pd = candidates_pl.to_pandas()
 
                 # 按 regime 建议敞口缩放分配资本（如 sideways_down → 30%）。
+                # 再乘策略健康系数（Step 9 auto-deweight）：IC 衰减被降权的
+                # 策略 → 自动减少投入资金，而不是等人工干预。
                 # 不缩放时 equal_weight 对 5 只候选会给 20%/只，超过风控 8% 上限。
-                alloc_capital = total_capital * suggested_position_pct
+                alloc_capital = total_capital * suggested_position_pct * strategy_exposure_scale
                 alloc_config = CapitalAllocatorConfig(
                     method=alloc_method,
                     cash_buffer=0.05,
@@ -870,7 +904,8 @@ class DailyPipeline(BasePipeline):
                 tp = alloc_result.target_portfolio
                 result.metadata["allocator_used"] = str(alloc_result.allocator_used)
                 result.metadata["alloc_capital"] = (
-                    f"{alloc_capital:.0f} (regime exposure {suggested_position_pct:.0%})"
+                    f"{alloc_capital:.0f} (regime exposure {suggested_position_pct:.0%} "
+                    f"× strategy health {strategy_exposure_scale:.0%})"
                 )
                 result.metrics["n_positions_out"] = tp.n_equities if tp else 0
                 result.metrics["cash_reserve"] = round(tp.cash_reserve, 4) if tp else 0.0
