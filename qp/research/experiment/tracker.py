@@ -103,6 +103,11 @@ class ExperimentTracker(BaseExperimentTracker):
             final_equity=metrics.get("final_equity", 0.0),
             n_days=int(metrics.get("n_days", 0)),
             feature_importance=config.get("feature_importance", {}),
+            # Purged CV OOS validation results (2026-08-25)
+            custom={
+                "cv_oos_ic_mean": metrics.get("cv_oos_ic_mean", 0.0),
+                "cv_n_folds": metrics.get("cv_n_folds", 0),
+            },
         )
 
         # Build lineage

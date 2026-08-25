@@ -2074,6 +2074,12 @@ class MultiFactorPipeline(BasePipeline):
                 "model_params": dict(weights),
                 "train_start": start_date,
                 "train_end": end_date,
+                # Real Purged CV configuration used by the experiment gate
+                # (2026-08-25: config.cv_folds default 5 was never consumed;
+                # persist the actual values so runs are auditable).
+                "cv_folds": int(result.metrics.get("cv_n_folds", 0) or 3),
+                "purge_days": 10,
+                "embargo_days": 5,
                 "tags": ["multifactor", f"top{top_n}", f"rebalance{rebalance_freq}d"],
             },
             metrics={
@@ -2086,6 +2092,9 @@ class MultiFactorPipeline(BasePipeline):
                 "excess_return_pct": float(result.metrics.get("excess_return_pct", 0.0)),
                 "annual_return_pct": round(annual_ret, 2),
                 "annual_volatility_pct": round(annual_vol, 2),
+                # Purged CV OOS validation results (2026-08-25)
+                "cv_oos_ic_mean": float(result.metrics.get("cv_oos_ic_mean", 0.0)),
+                "cv_n_folds": int(result.metrics.get("cv_n_folds", 0)),
                 "n_days": n_trading_days,
                 "n_trades": int(result.metrics.get("n_trades", 0)),
                 "turnover_pct": float(result.metrics.get("turnover_pct", 0.0)),
