@@ -132,7 +132,10 @@ def _load_fundamental_data() -> dict[str, pl.DataFrame]:
         for sym in df["symbol"].unique().to_list():
             sub = df.filter(pl.col("symbol") == sym).sort("report_date")
             if not sub.is_empty():
-                result[str(sym)] = sub.with_columns(pl.col("report_date").alias("publish_date"))
+                # PIT fix (2026-08-25): fundamentals_latest.parquet already
+                # carries the REAL publish_date — do NOT alias report_date
+                # over it (that leaked unpublished financials into exit logic).
+                result[str(sym)] = sub
 
     return result
 
@@ -1107,6 +1110,7 @@ class DailyPipeline(BasePipeline):
                             logger.debug("Sector exit check skipped: {}", exc)
 
                     # ── 第三类：Fundamental deterioration (仅调仓日) ──
+                    # PIT: 只使用 as_of_date 前已公布的财报（publish_date <= today）
                     if is_rebalance_day and active_positions and fundamental_data:
                         from qp.portfolio.exit_signals import FundamentalExitDetector
 
@@ -1114,6 +1118,7 @@ class DailyPipeline(BasePipeline):
                         fund_exits = fund_detector.check(
                             active_positions=active_positions,
                             fundamental_data=fundamental_data,
+                            as_of_date=today.isoformat(),
                         )
                         for fe in fund_exits:
                             for r in fe.reasons:

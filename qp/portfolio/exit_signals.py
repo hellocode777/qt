@@ -69,13 +69,18 @@ class FundamentalExitDetector:
         self,
         active_positions: list,
         fundamental_data: dict[str, pl.DataFrame],
+        as_of_date: str | None = None,
     ) -> list[RiskExitSignal]:
         """Check active positions for fundamental deterioration.
 
         Args:
             active_positions: List of Position objects.
             fundamental_data: {symbol: DataFrame} with columns:
-                report_date, ROE, revenue_growth, net_profit_growth, debt_ratio.
+                report_date, publish_date, ROE, revenue_growth,
+                net_profit_growth, debt_ratio.
+            as_of_date: YYYY-MM-DD.  When provided, only financials whose
+                publish_date <= as_of_date are considered (PIT — prevents
+                using unpublished quarterly reports).
 
         Returns:
             RiskExitSignal list (LOW priority, advisory).
@@ -89,6 +94,16 @@ class FundamentalExitDetector:
             fund = fundamental_data.get(pos.symbol)
             if fund is None or fund.is_empty():
                 continue
+
+            # PIT: only use financials already published by as_of_date.
+            if as_of_date is not None and "publish_date" in fund.columns:
+                from datetime import datetime as _dt
+
+                cutoff = _dt.fromisoformat(as_of_date)
+                fund = fund.filter(pl.col("publish_date") <= cutoff)
+                if fund.is_empty():
+                    # No published report yet — cannot judge deterioration.
+                    continue
 
             reasons = self._check_symbol(pos.symbol, fund)
             if reasons:

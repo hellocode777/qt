@@ -342,6 +342,20 @@ class MultiFactorPipeline(BasePipeline):
 
         # Use evaluation module for full IC analysis with threshold checks
         price_flat = _flatten_price_data(price_data)
+        # PIT/复权修复 (2026-08-25): raw close 直接 shift 算 forward return
+        # 在除权日会产生假收益 → IC/分层检验失真。用 adj_factor 转 qfq 价后
+        # 计算（close_qfq = close_raw / factor_asof，除权安全）。
+        try:
+            from qp.data.dataset.adjust_factor import load_adj_factor, qfq_price
+
+            fac = load_adj_factor()
+            price_flat = (
+                qfq_price(price_flat, fac, date_col="trade_date")
+                .with_columns(pl.col("close_qfq").alias("close"))
+                .drop("close_qfq")
+            )
+        except Exception:
+            logger.warning("adj_factor 不可用 — IC/分层用 raw close（除权日可能有假收益）")
         ic_record = evaluate_factor_ic(
             scores,
             price_flat,
@@ -481,7 +495,76 @@ class MultiFactorPipeline(BasePipeline):
         # middle quantile inversion doesn't prevent top-bottom separation.
         layered_pass = layered.direction_correct and layered.spread_t_stat >= 2.0
         ic_pass = ic_record.all_pass
-        gate_passed = layered_pass and ic_pass
+
+        # ── Purged CV OOS IC check (2026-08-25) ──
+        # Overfit guard: weights may be tuned on the full sample
+        # (_optimize_weights_from_ic), so the full-sample IC self-validates.
+        # Walk-forward Purged CV folds verify the score works OUT-OF-SAMPLE:
+        # each fold's test block was never used to fit anything.  Mean OOS IC
+        # must clear the same 0.02 bar as the full-sample IC.
+        cv_result: dict[str, Any] = {"passed": False, "oos_ic_mean": 0.0, "n_folds": 0}
+        try:
+            from qp.research.evaluation.rank_ic import compute_rank_ic
+            from qp.research.split.purged_cv import PurgedKFold
+
+            # (date, symbol, score, fwd_ret) merged table — price_flat is qfq
+            px_cv = price_flat.sort(["symbol", "trade_date"])
+            px_cv = px_cv.with_columns(
+                (pl.col("close").shift(-5).over("symbol") / pl.col("close") - 1).alias("fwd_ret")
+            ).drop_nulls(subset=["fwd_ret"])
+            px_cv = px_cv.with_columns(pl.col("trade_date").cast(pl.Utf8))
+            score_cv = scores.with_columns(pl.col("trade_date").cast(pl.Utf8))
+            merged_cv = score_cv.join(
+                px_cv.select(["trade_date", "symbol", "fwd_ret"]),
+                on=["trade_date", "symbol"],
+                how="inner",
+            ).drop_nulls(subset=["fwd_ret"])
+
+            if merged_cv.height >= 200:
+                dates_all = np.array(sorted(merged_cv["trade_date"].unique().to_list()))
+                # min_train_days=60: this is a pure VALIDATION use (weights are
+                # frozen — train folds fit nothing), so we want as many test
+                # blocks as possible.  ML default 500 would always yield 0
+                # folds on a 12-month window → the guard silently never fires.
+                cv = PurgedKFold(n_splits=3, purge_days=10, embargo_days=5, min_train_days=60)
+                fold_ics: list[float] = []
+                for fold in cv.split(dates_all):
+                    test_dates = set(dates_all[fold.test_indices])
+                    test_df = merged_cv.filter(pl.col("trade_date").is_in(list(test_dates)))
+                    if test_df.height < 100:
+                        continue
+                    fold_ics.append(
+                        compute_rank_ic(
+                            test_df["score"].to_numpy(),
+                            test_df["fwd_ret"].to_numpy(),
+                        )
+                    )
+                if fold_ics:
+                    cv_oos_ic = float(np.mean(fold_ics))
+                    cv_result = {
+                        "passed": abs(cv_oos_ic) >= 0.02,
+                        "oos_ic_mean": round(cv_oos_ic, 4),
+                        "n_folds": len(fold_ics),
+                        "fold_ics": [round(x, 4) for x in fold_ics],
+                    }
+                    logger.info(
+                        "   🧪 Purged CV OOS IC: {}{:+.4f} ({} folds)",
+                        "✅" if cv_result["passed"] else "❌",
+                        cv_oos_ic,
+                        len(fold_ics),
+                    )
+        except Exception as _cv_exc:
+            logger.warning("   Purged CV 检查跳过: {}", _cv_exc)
+
+        # 数据不足（<200 行 / 无 fold）时不拦截——标记为未验证而非失败。
+        cv_pass = cv_result["passed"] or cv_result["n_folds"] == 0
+        result.metrics["cv_oos_ic_mean"] = cv_result.get("oos_ic_mean", 0.0)
+        result.metrics["cv_n_folds"] = cv_result.get("n_folds", 0)
+        result.metadata["cv_oos_ic"] = (
+            f"{cv_result.get('oos_ic_mean', 0.0):+.4f} ({cv_result.get('n_folds', 0)} folds)"
+        )
+
+        gate_passed = layered_pass and ic_pass and cv_pass
 
         if not gate_passed and not skip_gate:
             # Build detailed failure report
@@ -492,6 +575,10 @@ class MultiFactorPipeline(BasePipeline):
                 failures.append(f"IC_IR={ic_record.ic_ir:.2f} < 0.3 (阈值)")
             if not ic_record.ic_t_stat_pass:
                 failures.append(f"IC t-stat={ic_record.ic_t_stat:.2f} < 2.0 (阈值)")
+            if not cv_pass and cv_result["n_folds"] > 0:
+                failures.append(
+                    f"Purged CV OOS IC={cv_result.get('oos_ic_mean', 0.0):+.4f} < 0.02 (阈值)"
+                )
             if not layered.is_monotonic:
                 if not layered.direction_correct:
                     failures.append(
@@ -1571,6 +1658,41 @@ class MultiFactorPipeline(BasePipeline):
 
             broker.set_prices(price_map, adv_map, d_str)
 
+            # ── t+1 execution fix (2026-08-25) ──
+            # Signals are computed from data up to day d's close; filling
+            # orders at day d's close is a look-ahead.  Orders submitted
+            # today are instead executed at NEXT trading day's close.
+            _next_price_map: dict[str, float] = {}
+            _next_adv_map: dict[str, float] = {}
+            _next_date_str = ""
+            if trading_day_idx + 1 < len(all_dates):
+                nxt = all_dates[trading_day_idx + 1]
+                nxt_rows = all_prices.filter(pl.col("trade_date") == nxt)
+                for row in nxt_rows.iter_rows(named=True):
+                    sym = str(row["symbol"])
+                    px = float(row["close"])
+                    vol = float(row.get("volume", 0.0) or 0.0)
+                    _next_price_map[sym] = px
+                    if vol > 0 and px > 0:
+                        _next_adv_map[sym] = px * vol
+                _next_date_str = str(nxt)
+
+            def _exec_at_next(
+                _np: dict[str, float] = _next_price_map,
+                _na: dict[str, float] = _next_adv_map,
+                _nd: str = _next_date_str,
+            ) -> None:
+                """Switch broker fill prices to next trading day (t+1)."""
+                if _np:
+                    broker.set_prices(_np, _na, _nd)
+
+            def _restore_today(
+                _pm: dict[str, float] = price_map,
+                _am: dict[str, float] = adv_map,
+                _ds: str = d_str,
+            ) -> None:
+                broker.set_prices(_pm, _am, _ds)
+
             # ═══ V2.1 Risk Exit (每日检查) ═══
             positions_df = broker.get_positions()
             # Filter zero-share stale entries (broker keeps them after full sell)
@@ -1671,14 +1793,17 @@ class MultiFactorPipeline(BasePipeline):
                                 )
                                 n_sells_submitted += 1
 
-                # Execute sells immediately
+                # Execute sells at NEXT trading day's close (t+1)
                 sell_trades: list[Any] = []
-                if n_sells_submitted > 0:
+                if n_sells_submitted > 0 and _next_price_map:
+                    _exec_at_next()
                     sell_trades = broker.execute_pending()
+                    _restore_today()
                     total_trades += len(sell_trades)
                     for st in sell_trades:
                         if st.side == "SELL":
                             total_sell_value += float(st.price) * st.shares
+                # Last day: no next trading day → sells are void (not filled)
 
                 # Clamp negative cash
                 cash_now = broker.get_cash()
@@ -1714,7 +1839,8 @@ class MultiFactorPipeline(BasePipeline):
                     per_stock = current_equity / max(target_total, 1)
 
                     for sym in buy_symbols:
-                        px = price_map.get(sym, 0.0)
+                        # qty based on the t+1 fill price (not today's close)
+                        px = _next_price_map.get(sym, 0.0) if _next_price_map else 0.0
                         if px > 0:
                             qty = int(per_stock / px // 100 * 100)
                             if qty > 0:
@@ -1727,9 +1853,14 @@ class MultiFactorPipeline(BasePipeline):
                                     }
                                 )
 
-            # Execute pending orders (fills, cost deduction, position updates)
-            executed = broker.execute_pending()
-            total_trades += len(executed)
+            # Execute pending orders at NEXT trading day's close (t+1).
+            # Last day: no next trading day → pending orders are void.
+            if _next_price_map:
+                _exec_at_next()
+                executed = broker.execute_pending()
+                total_trades += len(executed)
+            else:
+                executed = []
 
             # Re-mark after execution so newly bought positions have market_value
             broker.set_prices(price_map, adv_map, d_str)
