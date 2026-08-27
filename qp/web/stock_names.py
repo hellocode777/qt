@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from qp.shared.json_io import json_load
 from qp.shared.paths import STOCK_NAMES
 
 _STOCK_NAMES_PATH = Path(STOCK_NAMES)
@@ -27,8 +28,7 @@ def _load_names() -> dict[str, str]:
     if _names_cache is not None:
         return _names_cache
     try:
-        with open(_STOCK_NAMES_PATH, encoding="utf-8") as f:
-            loaded: dict[str, str] = json.load(f)
+        loaded: dict[str, str] = json_load(_STOCK_NAMES_PATH)
         _names_cache = loaded
     except (FileNotFoundError, json.JSONDecodeError):
         _names_cache = {}

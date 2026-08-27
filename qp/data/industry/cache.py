@@ -13,6 +13,8 @@ from typing import Any
 
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
+
 DEFAULT_CACHE_TTL_DAYS = 90
 DEFAULT_CACHE_PATH = Path("data/industry_cache.json")
 
@@ -50,8 +52,7 @@ class IndustryCache:
             return None
 
         try:
-            with open(self._path, encoding="utf-8") as f:
-                data: Any = json.load(f)
+            data: Any = json_load(self._path)
             if isinstance(data, dict) and len(data) > 50:
                 logger.info("加载行业缓存: {} 只股票 ({} 天前)", len(data), age_days)
                 return data
@@ -71,8 +72,7 @@ class IndustryCache:
             industry_map: {symbol: industry_name} mapping.
         """
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(industry_map, f, ensure_ascii=False, indent=2)
+        json_save(self._path, industry_map)
         logger.info("行业映射已缓存: {} 只股票 → {}", len(industry_map), self._path)
 
     def invalidate(self) -> None:

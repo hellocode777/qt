@@ -19,6 +19,8 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
+
 # Fundamental fields needed for valuation computation
 _VALUATION_INPUTS = ["EPS", "NAV", "cashflow_per_share"]
 
@@ -239,16 +241,14 @@ class ValuationDataProduct:
         if age > _CACHE_TTL_DAYS:
             return None
         try:
-            with open(path, encoding="utf-8") as f:
-                return json.load(f)
+            return json_load(path)
         except (json.JSONDecodeError, OSError):
             return None
 
     def _save_cache(self, symbol: str, rows: list[dict[str, Any]]) -> None:
         path = self._cache_path(symbol)
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(rows, f, ensure_ascii=False, default=str)
+            json_save(path, rows)
         except OSError as e:
             logger.debug("{} 估值缓存保存失败: {}", symbol, e)
 

@@ -10,7 +10,6 @@ See research_layer.md artifact/ section.
 
 from __future__ import annotations
 
-import json
 import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,6 +17,7 @@ from typing import Any
 
 import polars as pl
 
+from qp.shared.json_io import json_load, json_save
 from qp.shared.paths import ARTIFACTS_DIR
 
 DEFAULT_ARTIFACT_DIR = ARTIFACTS_DIR
@@ -102,8 +102,7 @@ class ArtifactManager:
             "hyperparams": hyperparams or {},
             "metrics": metrics or {},
         }
-        with open(model_dir / "meta.json", "w") as f:
-            json.dump(meta, f, indent=2, ensure_ascii=False, default=str)
+        json_save(model_dir / "meta.json", meta)
 
         # Save feature importance
         if importance:
@@ -112,8 +111,7 @@ class ArtifactManager:
                 "created_at": datetime.now(UTC).isoformat(),
                 "importance": importance,
             }
-            with open(model_dir / "importance.json", "w") as f:
-                json.dump(importance_data, f, indent=2, ensure_ascii=False)
+            json_save(model_dir / "importance.json", importance_data)
 
         return str(model_dir)
 
@@ -122,16 +120,14 @@ class ArtifactManager:
         meta_path = self._models_dir / model_id / "meta.json"
         if not meta_path.exists():
             return None
-        with open(meta_path) as f:
-            return json.load(f)
+        return json_load(meta_path)
 
     def load_importance(self, model_id: str) -> dict[str, float] | None:
         """Load feature importance from a saved model."""
         imp_path = self._models_dir / model_id / "importance.json"
         if not imp_path.exists():
             return None
-        with open(imp_path) as f:
-            data = json.load(f)
+        data = json_load(imp_path)
         return data.get("importance", {})
 
     def list_models(self) -> list[dict[str, Any]]:
@@ -145,8 +141,7 @@ class ArtifactManager:
                 continue
             meta_path = model_dir / "meta.json"
             if meta_path.exists():
-                with open(meta_path) as f:
-                    meta = json.load(f)
+                meta = json_load(meta_path)
                 meta["path"] = str(model_dir)
                 models.append(meta)
 
@@ -200,8 +195,7 @@ class ArtifactManager:
                 else "N/A"
             ),
         }
-        with open(snap_dir / "meta.json", "w") as f:
-            json.dump(meta, f, indent=2, ensure_ascii=False, default=str)
+        json_save(snap_dir / "meta.json", meta)
 
         return str(snap_dir)
 
@@ -220,8 +214,7 @@ class ArtifactManager:
         meta_path = snap_dir / "meta.json"
         meta = {}
         if meta_path.exists():
-            with open(meta_path) as f:
-                meta = json.load(f)
+            meta = json_load(meta_path)
 
         return df, meta
 
@@ -236,8 +229,7 @@ class ArtifactManager:
                 continue
             meta_path = snap_dir / "meta.json"
             if meta_path.exists():
-                with open(meta_path) as f:
-                    meta = json.load(f)
+                meta = json_load(meta_path)
                 meta["path"] = str(snap_dir)
                 snapshots.append(meta)
 
@@ -262,8 +254,7 @@ class ArtifactManager:
         exp_dir.mkdir(parents=True, exist_ok=True)
 
         record["archived_at"] = datetime.now(UTC).isoformat()
-        with open(exp_dir / "record.json", "w") as f:
-            json.dump(record, f, indent=2, ensure_ascii=False, default=str)
+        json_save(exp_dir / "record.json", record)
 
         return str(exp_dir)
 
@@ -272,8 +263,7 @@ class ArtifactManager:
         record_path = self._experiments_dir / experiment_id / "record.json"
         if not record_path.exists():
             return None
-        with open(record_path) as f:
-            return json.load(f)
+        return json_load(record_path)
 
     # ------------------------------------------------------------------
     # Cleanup policies

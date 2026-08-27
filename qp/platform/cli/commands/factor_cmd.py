@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from qp.shared.json_io import json_load
 from qp.shared.paths import DAILY_PRICE_LATEST, DATASET_DIR, FACTOR_REGISTRY
 
 if TYPE_CHECKING:
@@ -521,11 +522,9 @@ def cmd_factor_register(force: bool = False) -> int:
 
 def _count_registered(path: str | Path) -> int:
     """Read n_factors from an existing registry JSON without full load."""
-    import json
 
     try:
-        with open(path, encoding="utf-8") as f:
-            payload = json.load(f)
+        payload = json_load(path)
         return int(payload.get("n_factors", 0))
     except Exception:
         return 0

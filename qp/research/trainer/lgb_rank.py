@@ -8,13 +8,13 @@ See rule.md §7.9 and ADR-013.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import lightgbm as lgb
 import pandas as pd
 
 from qp.shared.constants import DEFAULT_SEED
+from qp.shared.json_io import json_load, json_save
 from qp.shared.protocols.base_model import BaseModel
 
 # Default hyperparameters from rule.md §7.9.4
@@ -254,8 +254,7 @@ class LightGBMRankModel(BaseModel):
             "best_iteration": self._best_iteration,
             "monotone_constraints": mono_serialized,
         }
-        with open(path + ".meta.json", "w") as f:
-            json.dump(meta, f, indent=2)
+        json_save(path + ".meta.json", meta)
 
     def load_model(self, path: str) -> None:
         """Load model and optional metadata sidecar."""
@@ -264,8 +263,7 @@ class LightGBMRankModel(BaseModel):
         # Load metadata if available
         meta_path = path + ".meta.json"
         try:
-            with open(meta_path) as f:
-                meta = json.load(f)
+            meta = json_load(meta_path)
             self._params = meta.get("params", self._params)
             self._feature_names = meta.get("feature_names", [])
             self._best_iteration = meta.get("best_iteration", 0)

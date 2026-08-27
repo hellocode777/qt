@@ -14,6 +14,7 @@ import polars as pl
 from loguru import logger
 
 from qp.research.experiment.tracker import ExperimentTracker
+from qp.shared.json_io import json_load, json_save
 from qp.shared.paths import EXPERIMENTS_DIR
 
 
@@ -156,8 +157,7 @@ class ExperimentService:
         # Return cached result if available
         if cache_path.exists():
             try:
-                with open(cache_path) as f:
-                    return json.load(f)
+                return json_load(cache_path)
             except Exception:
                 pass
 
@@ -166,8 +166,7 @@ class ExperimentService:
         if not json_path.exists():
             return {"error": "Experiment JSON not found"}
 
-        with open(json_path) as f:
-            exp_data = json.load(f)
+        exp_data = json_load(json_path)
 
         cfg = exp_data.get("config", {})
         features = cfg.get("features", [])
@@ -241,8 +240,7 @@ class ExperimentService:
         # Cache result
         exp_dir.mkdir(parents=True, exist_ok=True)
         try:
-            with open(cache_path, "w") as f:
-                json.dump(result, f, ensure_ascii=False, default=str)
+            json_save(cache_path, result)
         except Exception:
             pass
 

@@ -13,6 +13,7 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.shared.json_io import json_load
 from qp.shared.paths import DAILY_PRICE_LATEST, STOCK_NAMES
 
 _DAILY_PRICE_PATH = Path(DAILY_PRICE_LATEST)
@@ -185,8 +186,7 @@ class StockService:
         if self._names is not None:
             return self._names
         try:
-            with open(_STOCK_NAMES_PATH, encoding="utf-8") as f:
-                loaded: dict[str, str] = json.load(f)
+            loaded: dict[str, str] = json_load(_STOCK_NAMES_PATH)
             self._names = loaded
         except (FileNotFoundError, json.JSONDecodeError):
             logger.warning("stock_names.json not found or invalid")

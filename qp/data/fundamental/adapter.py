@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
 from qp.shared.protocols.base_data_source import BaseDataSource
 
 # ------------------------------------------------------------------
@@ -242,8 +243,7 @@ class FundamentalAdapter(BaseDataSource):
             return None
 
         try:
-            with open(path, encoding="utf-8") as f:
-                data: list[dict[str, Any]] = json.load(f)
+            data: list[dict[str, Any]] = json_load(path)
             if not data:
                 return None
             df = pd.DataFrame(data)
@@ -266,7 +266,6 @@ class FundamentalAdapter(BaseDataSource):
             for col in records.columns:
                 if pd.api.types.is_datetime64_any_dtype(records[col]):
                     records[col] = records[col].dt.strftime("%Y-%m-%d")
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(records.to_dict("records"), f, ensure_ascii=False, default=str)
+            json_save(path, records.to_dict("records"))
         except OSError as e:
             logger.debug("{} 基本面缓存保存失败: {}", symbol, e)

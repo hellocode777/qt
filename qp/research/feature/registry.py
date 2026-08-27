@@ -22,6 +22,7 @@ from typing import Any
 
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
 from qp.shared.protocols.base_feature import BaseFeature
 
 
@@ -253,10 +254,8 @@ class FeatureRegistry:
             path: Output JSON path (e.g. data/factor_registry.json).
             direction_overrides: Optional direction overrides (see to_payload).
         """
-        import json
 
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.to_payload(direction_overrides), f, ensure_ascii=False, indent=2)
+        json_save(path, self.to_payload(direction_overrides))
         logger.info("Saved {} features to {}", len(self._features), path)
 
     @classmethod
@@ -273,12 +272,10 @@ class FeatureRegistry:
         Returns:
             FeatureRegistry instance.
         """
-        import json
         from types import SimpleNamespace
 
         registry = cls()
-        with open(path, encoding="utf-8") as f:
-            payload = json.load(f)
+        payload = json_load(path)
 
         for name, data in payload.get("factors", {}).items():
             placeholder = SimpleNamespace(

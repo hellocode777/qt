@@ -20,6 +20,7 @@ from qp.research.experiment.models import (
     ExperimentRecord,
     LineageGraph,
 )
+from qp.shared.json_io import json_load, json_save
 from qp.shared.paths import EXPERIMENTS_DIR
 from qp.shared.protocols.base_experiment_tracker import BaseExperimentTracker
 from qp.shared.types import ExperimentStatus
@@ -224,8 +225,7 @@ class ExperimentTracker(BaseExperimentTracker):
     def _save_record(self, record: ExperimentRecord) -> None:
         os.makedirs(self._base_dir, exist_ok=True)
         filepath = self._filepath(record.config.experiment_id)
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(record.to_dict(), f, indent=2, ensure_ascii=False, default=str)
+        json_save(filepath, record.to_dict())
 
     def _load_index(self) -> None:
         if not os.path.isdir(self._base_dir):
@@ -235,8 +235,7 @@ class ExperimentTracker(BaseExperimentTracker):
                 continue
             filepath = os.path.join(self._base_dir, filename)
             try:
-                with open(filepath, encoding="utf-8") as f:
-                    data = json.load(f)
+                data = json_load(filepath)
                 record = self._deserialize(data)
                 if record:
                     self._index[record.config.experiment_id] = record

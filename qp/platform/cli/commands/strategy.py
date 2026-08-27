@@ -6,6 +6,7 @@ strategies to frozen ApprovedStrategy snapshots that Daily Pipeline consumes.
 
 from __future__ import annotations
 
+from qp.shared.json_io import json_load
 from qp.shared.paths import EXPERIMENTS_DIR
 
 
@@ -28,7 +29,6 @@ def cmd_strategy_approve(
     and backtest metrics in its StrategyMeta (unless --from-experiment
     is used, in which case those are loaded from the experiment record).
     """
-    import json
     from pathlib import Path
 
     from qp.shared.types import StrategyLifecycle
@@ -44,8 +44,7 @@ def cmd_strategy_approve(
             print(f"   {exp_path}")
             return 1
 
-        with open(exp_path, encoding="utf-8") as f:
-            exp_data = json.load(f)
+        exp_data = json_load(exp_path)
 
         exp_cfg = exp_data.get("config", {})
         exp_met = exp_data.get("metrics", {})

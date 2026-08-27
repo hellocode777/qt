@@ -27,6 +27,8 @@ from typing import ClassVar
 
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
+
 # Cache TTL for IPO date data (changes very rarely)
 _CACHE_TTL_DAYS = 90
 _DEFAULT_CACHE_PATH = Path("data/listing_dates_cache.json")
@@ -305,8 +307,7 @@ class ListingDateRegistry:
             logger.debug("IPO 日期缓存过期 ({} 天)", age)
             return None
         try:
-            with open(path, encoding="utf-8") as f:
-                data: dict[str, str] = json.load(f)
+            data: dict[str, str] = json_load(path)
             return {code: date_t.fromisoformat(d) for code, d in data.items()}
         except (json.JSONDecodeError, OSError, ValueError):
             return None
@@ -317,8 +318,7 @@ class ListingDateRegistry:
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             serialized = {code: d.isoformat() for code, d in data.items()}
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(serialized, f, ensure_ascii=False, indent=2)
+            json_save(path, serialized)
         except OSError as e:
             logger.warning("IPO 日期缓存保存失败: {}", e)
 

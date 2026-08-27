@@ -34,6 +34,7 @@ from typing import ClassVar
 
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
 from qp.shared.time import today_cn
 
 # Cache: 30 days for delisted stock list (changes infrequently)
@@ -337,8 +338,7 @@ class DelistedHandler:
             logger.debug("退市股票缓存过期 ({} 天)", age)
             return None
         try:
-            with open(path, encoding="utf-8") as f:
-                return json.load(f)
+            return json_load(path)
         except (json.JSONDecodeError, OSError):
             return None
 
@@ -347,7 +347,6 @@ class DelistedHandler:
         path = _DEFAULT_CACHE_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            json_save(path, data)
         except OSError as e:
             logger.warning("退市股票缓存保存失败: {}", e)

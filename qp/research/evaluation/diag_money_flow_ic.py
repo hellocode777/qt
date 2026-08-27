@@ -41,6 +41,7 @@ from qp.research.feature.money_flow_real import (
     REAL_MONEY_FLOW_FACTORS,
     compute_real_money_flow_factors,
 )
+from qp.shared.json_io import json_load
 from qp.shared.time import today_cn
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -86,8 +87,7 @@ def load_capital_flow(min_stocks: int) -> pl.DataFrame:
         frames: list[pl.DataFrame] = []
         for f in files:
             try:
-                with open(f) as fh:
-                    rows = json.load(fh)
+                rows = json_load(f)
             except Exception as e:
                 print(f"[warn] skip {Path(f).name}: {e}", file=sys.stderr)
                 continue

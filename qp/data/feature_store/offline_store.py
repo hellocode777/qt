@@ -20,13 +20,13 @@ Usage::
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
 from qp.shared.time import utc_iso
 
 _DEFAULT_STORE_DIR = Path("data/feature_store_data")
@@ -247,8 +247,7 @@ class OfflineStore:
 
         meta_path = group_dir / "_metadata.json"
         if meta_path.exists():
-            with open(meta_path, encoding="utf-8") as f:
-                return json.load(f)
+            return json_load(meta_path)
 
         # Fallback: scan data
         try:
@@ -296,8 +295,7 @@ class OfflineStore:
         }
 
         meta_path = group_dir / "_metadata.json"
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, indent=2, default=str)
+        json_save(meta_path, meta)
 
     def __repr__(self) -> str:
         groups = self.list_groups()

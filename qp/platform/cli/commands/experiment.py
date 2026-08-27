@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 
+from qp.shared.json_io import json_load
 from qp.shared.paths import EXPERIMENTS_DIR, OPTUNA_DIR
 from qp.shared.time import today_cn
 
@@ -412,8 +413,7 @@ def cmd_experiment_run() -> int:
             print(f"实验记录不存在: {exp_json}", file=sys.stderr)
             return 1
 
-        with open(exp_json, encoding="utf-8") as _fh:
-            exp_data = _json.load(_fh)
+        exp_data = json_load(exp_json)
 
         exp_cfg: dict[str, object] = exp_data.get("config", {})  # type: ignore[assignment]
         snapshot_file = _Path(EXPERIMENTS_DIR) / resume_id / "price_data.parquet"

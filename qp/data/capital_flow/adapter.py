@@ -17,6 +17,7 @@ import pandas as pd
 import requests
 from loguru import logger
 
+from qp.shared.json_io import json_load, json_save
 from qp.shared.protocols.base_data_source import BaseDataSource
 
 _DEFAULT_CACHE_DIR = Path("data/capital_flow_cache")
@@ -315,8 +316,7 @@ class CapitalFlowAdapter(BaseDataSource):
         if age > _CACHE_TTL_DAYS:
             return None
         try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
+            data = json_load(path)
             if not data:
                 return None
             return pd.DataFrame(data)
@@ -328,8 +328,7 @@ class CapitalFlowAdapter(BaseDataSource):
         try:
             raw_json: str = df.to_json(orient="records", force_ascii=False)  # type: ignore[assignment]
             records = json.loads(raw_json)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(records, f, ensure_ascii=False, default=str)
+            json_save(path, records)
         except OSError as e:
             logger.debug("{} 资金流缓存保存失败: {}", symbol, e)
 
@@ -427,8 +426,7 @@ class NorthboundAdapter(BaseDataSource):
         if age > _CACHE_TTL_DAYS:
             return None
         try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
+            data = json_load(path)
             if not data:
                 return None
             return pd.DataFrame(data)
@@ -440,7 +438,6 @@ class NorthboundAdapter(BaseDataSource):
         try:
             raw_json: str = df.to_json(orient="records", force_ascii=False)  # type: ignore[assignment]
             records = json.loads(raw_json)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(records, f, ensure_ascii=False, default=str)
+            json_save(path, records)
         except OSError as e:
             logger.debug("{} 北向缓存保存失败: {}", symbol, e)
