@@ -27,8 +27,9 @@ from typing import Any
 import polars as pl
 
 from qp.monitoring.factor_health import FactorHealthStatus
+from qp.shared.paths import MONITORING_DIR
 
-DEFAULT_FACTOR_HEALTH_DIR = "data/monitoring"
+DEFAULT_FACTOR_HEALTH_DIR = MONITORING_DIR
 FACTOR_HEALTH_FILE = "factor_health.parquet"
 FACTOR_IC_SERIES_FILE = "factor_ic_series.parquet"
 
@@ -77,7 +78,7 @@ class FactorHealthLogger:
         latest = logger.load_all_latest()
     """
 
-    def __init__(self, base_dir: str = DEFAULT_FACTOR_HEALTH_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_FACTOR_HEALTH_DIR) -> None:
         self._base = Path(base_dir)
         self._filepath = self._base / FACTOR_HEALTH_FILE
 

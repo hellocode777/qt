@@ -25,8 +25,8 @@ from loguru import logger
 
 from qp.decision.models import DecisionReport
 from qp.decision.state_machine import DecisionStatus, StatusTransition
+from qp.shared.paths import DECISIONS_DIR
 
-DECISIONS_DIR = Path("data/decisions")
 INDEX_PATH = DECISIONS_DIR / "index.json"
 
 

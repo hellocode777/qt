@@ -46,6 +46,7 @@ from qp.research.factor_processor import factor_pipeline
 from qp.research.feature.compute import (
     compute_all_factors,
 )
+from qp.shared.paths import FACTOR_RAW_CACHE, FACTOR_VALUES_DAILY
 from qp.shared.protocols.base_strategy import BaseStrategy
 
 # ------------------------------------------------------------------
@@ -58,7 +59,7 @@ from qp.shared.protocols.base_strategy import BaseStrategy
 # across experiments with different weights/parameters.
 # ------------------------------------------------------------------
 
-_CACHE_PATH = "data/experiments/_factor_raw_cache.parquet"
+_CACHE_PATH = FACTOR_RAW_CACHE
 
 
 def _load_raw_factors_from_cache(
@@ -1439,7 +1440,7 @@ def _compute_today_from_parquet(
 
     import polars as pl
 
-    parquet_path = Path("data/dataset/factor_values_daily.parquet")
+    parquet_path = Path(FACTOR_VALUES_DAILY)
     if not parquet_path.exists():
         return pl.DataFrame()
 

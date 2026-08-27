@@ -20,16 +20,15 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import polars as pl
 from loguru import logger
 
 from qp.shared.exceptions import InsufficientCashError
+from qp.shared.paths import POSITIONS_DIR
 from qp.shared.types import PositionState
 
-POSITIONS_DIR = Path("data/positions")
 POSITIONS_PARQUET = POSITIONS_DIR / "positions.parquet"
 POSITIONS_INDEX = POSITIONS_DIR / "index.json"
 ACCOUNT_FILE = POSITIONS_DIR / "account.json"

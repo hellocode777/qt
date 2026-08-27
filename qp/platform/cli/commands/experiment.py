@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 
+from qp.shared.paths import EXPERIMENTS_DIR, OPTUNA_DIR
 from qp.shared.time import today_cn
 
 
@@ -406,7 +407,7 @@ def cmd_experiment_run() -> int:
         import json as _json
         from pathlib import Path as _Path
 
-        exp_json = _Path("data/experiments") / f"{resume_id}.json"
+        exp_json = _Path(EXPERIMENTS_DIR) / f"{resume_id}.json"
         if not exp_json.exists():
             print(f"实验记录不存在: {exp_json}", file=sys.stderr)
             return 1
@@ -415,7 +416,7 @@ def cmd_experiment_run() -> int:
             exp_data = _json.load(_fh)
 
         exp_cfg: dict[str, object] = exp_data.get("config", {})  # type: ignore[assignment]
-        snapshot_file = _Path("data/experiments") / resume_id / "price_data.parquet"
+        snapshot_file = _Path(EXPERIMENTS_DIR) / resume_id / "price_data.parquet"
         if not snapshot_file.exists():
             print(f"实验快照不存在: {snapshot_file}", file=sys.stderr)
             print("该实验可能是在快照功能上线前运行的，无法复现。", file=sys.stderr)
@@ -706,7 +707,7 @@ def cmd_experiment_clean() -> int:
     """Clean old experiment JSON files, keeping the most recent N."""
     from pathlib import Path
 
-    exp_dir = Path("data/experiments")
+    exp_dir = Path(EXPERIMENTS_DIR)
     if not exp_dir.exists():
         print("无实验目录 / No experiment directory")
         return 1
@@ -917,7 +918,7 @@ def cmd_experiment_optuna() -> int:
     import json
     from pathlib import Path
 
-    out_dir = Path("data/optuna")
+    out_dir = Path(OPTUNA_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{result.study_name}.json"
     out_path.write_text(

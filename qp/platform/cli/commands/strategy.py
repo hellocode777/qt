@@ -6,6 +6,8 @@ strategies to frozen ApprovedStrategy snapshots that Daily Pipeline consumes.
 
 from __future__ import annotations
 
+from qp.shared.paths import EXPERIMENTS_DIR
+
 
 def cmd_strategy_approve(
     strategy_id: str,
@@ -36,7 +38,7 @@ def cmd_strategy_approve(
 
     # ── Load weights & metrics from experiment if specified ──
     if from_experiment:
-        exp_path = Path("data/experiments") / f"{from_experiment}.json"
+        exp_path = Path(EXPERIMENTS_DIR) / f"{from_experiment}.json"
         if not exp_path.exists():
             print(f"❌ 实验 '{from_experiment}' 不存在 / Experiment not found")
             print(f"   {exp_path}")

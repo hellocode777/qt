@@ -20,12 +20,13 @@ from typing import TYPE_CHECKING
 
 import requests
 
+from qp.shared.paths import DATASET_DIR
 from qp.shared.time import today_cn
 
 if TYPE_CHECKING:
     import polars as pl
 
-INDEX_DIR = Path("data/dataset")
+INDEX_DIR = Path(DATASET_DIR)
 INDEX_SYMBOLS = {
     "sh000001": "index_sh000001.parquet",
     "sh000300": "index_csi300.parquet",

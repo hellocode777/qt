@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from qp.shared.paths import DAILY_PRICE_PREFIX
 from qp.shared.time import today_cn
 
 if TYPE_CHECKING:
@@ -97,7 +98,7 @@ def cmd_decide(
     print()
 
     try:
-        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
+        prices = pl.read_parquet(f"{DAILY_PRICE_PREFIX}{today.isoformat()}.parquet")
     except FileNotFoundError:
         print("❌ 未找到数据文件。请先运行 qp run daily")
         print("   No data found. Run 'qp run daily' first.")

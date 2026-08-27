@@ -36,6 +36,7 @@ from qp.portfolio.cost_model import CostModel, MarketImpactModel
 from qp.portfolio.risk_manager import PortfolioRiskManager
 from qp.portfolio.single_portfolio import Order
 from qp.research.pipeline import FeaturePipeline
+from qp.shared.paths import DAILY_PRICE_LATEST, DATASET_DIR, MOMENTUM_20D, VOLATILITY_20D
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
@@ -54,7 +55,7 @@ def _load_price_data() -> tuple[dict[str, pl.DataFrame], pl.DataFrame]:
         price_data_by_symbol: {code: DataFrame[date, open, high, low, close, volume]}
         flat_prices_df: Full Polars DataFrame for risk/backtest.
     """
-    path = "data/dataset/daily_price_latest.parquet"
+    path = DAILY_PRICE_LATEST
 
     if not os.path.exists(path):
         return {}, pl.DataFrame()
@@ -115,7 +116,7 @@ def _load_fundamental_data() -> dict[str, pl.DataFrame]:
     """
     from pathlib import Path as _Path
 
-    path = _Path("data/dataset") / "fundamentals_latest.parquet"
+    path = _Path(DATASET_DIR) / "fundamentals_latest.parquet"
 
     if not path.exists():
         return {}
@@ -329,8 +330,8 @@ class DailyPipeline(BasePipeline):
 
             if not price_data:
                 result.metadata["warning"] = "No price data available — skipping strategies"
-                result.artifacts.append("data/dataset/momentum_20d.parquet")
-                result.artifacts.append("data/dataset/volatility_20d.parquet")
+                result.artifacts.append(str(MOMENTUM_20D))
+                result.artifacts.append(str(VOLATILITY_20D))
                 return result
 
             # Build index proxy for regime detection
@@ -1335,8 +1336,8 @@ class DailyPipeline(BasePipeline):
             # ================================================================
             # Artifacts
             # ================================================================
-            result.artifacts.append("data/dataset/momentum_20d.parquet")
-            result.artifacts.append("data/dataset/volatility_20d.parquet")
+            result.artifacts.append(str(MOMENTUM_20D))
+            result.artifacts.append(str(VOLATILITY_20D))
             result.artifacts.append(str(json_path))
             result.artifacts.append(str(md_path))
 

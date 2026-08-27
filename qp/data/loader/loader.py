@@ -10,6 +10,8 @@ from pathlib import Path
 
 import polars as pl
 
+from qp.shared.paths import DATASET_DIR
+
 
 class DatasetLoader:
     """Loads trusted Data Products from storage.
@@ -18,7 +20,7 @@ class DatasetLoader:
     Will be replaced by full Registry-based lookup in Phase 2.
     """
 
-    def __init__(self, base_dir: str | Path = "data/dataset") -> None:
+    def __init__(self, base_dir: str | Path = DATASET_DIR) -> None:
         self._base_dir = Path(base_dir)
 
     def load(self, name: str, version: str | None = None) -> pl.DataFrame:
@@ -52,5 +54,5 @@ def load_dataset(name: str, version: str | None = None) -> pl.DataFrame:
     Usage:
         ds = load_dataset("daily_price", version="2026-07-20")
     """
-    loader = DatasetLoader(base_dir="data/dataset")
+    loader = DatasetLoader(base_dir=DATASET_DIR)
     return loader.load(name, version)

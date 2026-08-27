@@ -19,7 +19,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+from qp.shared.paths import ONLINE_SIGNAL_HISTORY
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -320,7 +323,7 @@ class StrategyMonitor:
 
 
 def build_strategy_monitor_from_signal_history(
-    path: str = "data/monitoring/online_signal_history.parquet",
+    path: str | Path = ONLINE_SIGNAL_HISTORY,
 ) -> StrategyMonitor | None:
     """Build a StrategyMonitor seeded from persisted signal history.
 

@@ -19,11 +19,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from qp.shared.paths import KNOWLEDGE_DIR
+
 
 class FactorReportGenerator:
     """Auto-generate factor research reports in markdown format."""
 
-    def __init__(self, output_dir: str = "data/knowledge") -> None:
+    def __init__(self, output_dir: str | Path = KNOWLEDGE_DIR) -> None:
         self._output_dir = Path(output_dir)
         self._output_dir.mkdir(parents=True, exist_ok=True)
 

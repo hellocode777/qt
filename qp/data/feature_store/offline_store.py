@@ -13,7 +13,7 @@ Usage::
 
     from qp.data.feature_store import OfflineStore
 
-    store = OfflineStore("data/features")
+    store = OfflineStore(FEATURES_DIR)
     store.write(df, factor_group="momentum")
     df = store.load("2024-01-01", "2024-12-31", factor_groups=["momentum"])
 """

@@ -21,6 +21,8 @@
 # ─────────────────────────────────────────────────────────────
 import polars as pl
 
+from qp.shared.paths import DAILY_PRICE_LATEST, FACTOR_RAW_FULL
+
 WEIGHTS = {
     "Amplitude_5D": -0.25,
     "Volatility_20D": 0.22,
@@ -31,7 +33,7 @@ WEIGHTS = {
 Q_LABELS = ["Q1", "Q2", "Q3", "Q4", "Q5"]
 
 print("读取价格, 计算崩溃特征...")
-pdf = pl.read_parquet("data/dataset/daily_price_latest.parquet")
+pdf = pl.read_parquet(DAILY_PRICE_LATEST)
 p = pdf.select(["trade_date", "symbol", "close"]).sort(["symbol", "trade_date"])
 p = p.with_columns((pl.col("close") / pl.col("close").shift(1).over("symbol") - 1.0).alias("ret1"))
 # 过去 20 日窗口内的崩溃特征 (用 rolling 聚合, 注意防泄漏: 因子在 T 日用 T-1 及之前)
@@ -68,7 +70,7 @@ p = p.drop_nulls(subset=["fwd_20", "crash_type", "ret20_s"])
 print(f"价格特征: {p.height} 行")
 
 # 合并 5 因子
-fdf = pl.read_parquet("data/experiments/_factor_raw_full_5factors_2015_2026.parquet")
+fdf = pl.read_parquet(FACTOR_RAW_FULL)
 df = (
     p.select(["trade_date", "symbol", "crash_type", "ret20_s", "fwd_20"])
     .join(fdf, on=["trade_date", "symbol"], how="inner")

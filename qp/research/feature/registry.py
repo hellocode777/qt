@@ -17,6 +17,7 @@ DP-002 §4.6 E6: Factor Layer Catalog auto-generation.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -245,7 +246,7 @@ class FeatureRegistry:
             "factors": factors,
         }
 
-    def save(self, path: str, direction_overrides: dict[str, int] | None = None) -> None:
+    def save(self, path: str | Path, direction_overrides: dict[str, int] | None = None) -> None:
         """Persist the registry to JSON.
 
         Args:
@@ -259,7 +260,7 @@ class FeatureRegistry:
         logger.info("Saved {} features to {}", len(self._features), path)
 
     @classmethod
-    def load_from_json(cls, path: str) -> FeatureRegistry:
+    def load_from_json(cls, path: str | Path) -> FeatureRegistry:
         """Reconstruct a registry from a persisted JSON file.
 
         Features are restored as lightweight placeholder instances carrying

@@ -25,6 +25,8 @@ from typing import Any
 
 import polars as pl
 
+from qp.shared.paths import DAILY_PRICE_LATEST, FACTOR_RAW_CACHE
+
 DEFAULT_WEIGHTS: dict[str, float] = {
     "Amplitude_5D": -0.25,
     "Volatility_20D": 0.22,
@@ -33,8 +35,8 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "Volume_Trend_10D": -0.14,
 }
 
-_FACTOR_CACHE = Path("data/experiments/_factor_raw_cache.parquet")
-_PRICE_PATH = Path("data/dataset/daily_price_latest.parquet")
+_FACTOR_CACHE = Path(FACTOR_RAW_CACHE)
+_PRICE_PATH = Path(DAILY_PRICE_LATEST)
 
 
 def _load_joined(

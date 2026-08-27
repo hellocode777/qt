@@ -51,7 +51,7 @@ Quick start::
     features = engine.compute(raw_df)
 
     # 3. Store for later use
-    offline = OfflineStore("data/features")
+    offline = OfflineStore(FEATURES_DIR)
     offline.write(features, factor_group="momentum")
 
     # 4. Serve in real-time

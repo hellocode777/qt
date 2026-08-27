@@ -24,7 +24,9 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
-SIM_DIR = Path("data/simulation")
+from qp.shared.paths import DAILY_PRICE_LATEST, SIMULATION_DIR
+
+SIM_DIR = Path(SIMULATION_DIR)
 SHADOW_POSITIONS = SIM_DIR / "shadow_positions.parquet"
 SHADOW_DAILY = SIM_DIR / "shadow_daily.parquet"
 SHADOW_INDEX = SIM_DIR / "shadow_index.json"
@@ -351,7 +353,7 @@ class ShadowLedger:
     @staticmethod
     def _load_prices(date_str: str) -> dict[str, float]:
         """Load latest close prices for mark-to-market."""
-        price_path = Path("data/dataset/daily_price_latest.parquet")
+        price_path = Path(DAILY_PRICE_LATEST)
         if not price_path.exists():
             return {}
         try:

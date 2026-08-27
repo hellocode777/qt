@@ -11,6 +11,7 @@ import polars as pl
 from loguru import logger
 
 from qp.monitoring.system_state import SystemStateManager
+from qp.shared.paths import SYSTEM_HEALTH_LOG
 
 
 class HealthService:
@@ -67,7 +68,7 @@ class HealthService:
     def latest_health(self) -> dict[str, Any] | None:
         """Get the most recent system health log entry."""
         try:
-            df = pl.read_parquet("data/monitoring/system_health_log.parquet")
+            df = pl.read_parquet(SYSTEM_HEALTH_LOG)
             if df.is_empty():
                 return None
 
@@ -81,7 +82,7 @@ class HealthService:
     def health_history(self, limit: int = 30) -> list[dict[str, Any]]:
         """Get recent health log entries."""
         try:
-            df = pl.read_parquet("data/monitoring/system_health_log.parquet")
+            df = pl.read_parquet(SYSTEM_HEALTH_LOG)
             if df.is_empty():
                 return []
 

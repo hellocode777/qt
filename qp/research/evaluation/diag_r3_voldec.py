@@ -21,6 +21,8 @@
 # ─────────────────────────────────────────────────────────────
 import polars as pl
 
+from qp.shared.paths import DAILY_PRICE_LATEST, FACTOR_RAW_FULL
+
 WEIGHTS = {
     "Amplitude_5D": -0.25,
     "Volatility_20D": 0.22,
@@ -31,7 +33,7 @@ WEIGHTS = {
 Q_LABELS = ["Q1", "Q2", "Q3", "Q4", "Q5"]
 
 print("读取价格, 重算波动分解...")
-pdf = pl.read_parquet("data/dataset/daily_price_latest.parquet")
+pdf = pl.read_parquet(DAILY_PRICE_LATEST)
 p = pdf.select(["trade_date", "symbol", "close"]).sort(["symbol", "trade_date"])
 p = p.with_columns(pl.col("close").log().diff().over("symbol").alias("lr"))
 p = p.with_columns(
@@ -58,7 +60,7 @@ p = p.with_columns(
 ).drop_nulls(subset=["fwd_20", "DownsideVol_s", "UpsideVol_s"])
 
 # 合并 5 因子 (从 data/experiments/_factor_raw_full_5factors_2015_2026.parquet)
-fdf = pl.read_parquet("data/experiments/_factor_raw_full_5factors_2015_2026.parquet")
+fdf = pl.read_parquet(FACTOR_RAW_FULL)
 df = p.select(["trade_date", "symbol", "DownsideVol_s", "UpsideVol_s", "fwd_20"]).join(
     fdf, on=["trade_date", "symbol"], how="inner"
 )

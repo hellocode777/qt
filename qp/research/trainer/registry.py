@@ -13,11 +13,13 @@ import hashlib
 import os
 import shutil
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+from qp.shared.paths import MODELS_DIR
 from qp.shared.types import StrategyLifecycle
 
-DEFAULT_MODEL_DIR = "data/models"
+DEFAULT_MODEL_DIR = MODELS_DIR
 
 
 class ModelMetadata:
@@ -100,7 +102,7 @@ class ModelRegistry:
         latest = registry.get_latest("momentum_rank_v1.0")
     """
 
-    def __init__(self, base_dir: str = DEFAULT_MODEL_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_MODEL_DIR) -> None:
         self._base_dir = base_dir
         self._models: dict[str, ModelMetadata] = {}
         os.makedirs(base_dir, exist_ok=True)
@@ -244,7 +246,7 @@ class ModelRegistry:
         return len(self._models)
 
     @property
-    def base_dir(self) -> str:
+    def base_dir(self) -> str | Path:
         return self._base_dir
 
 
@@ -272,7 +274,7 @@ def hash_model(file_path: str) -> str:
 def copy_to_registry(
     source_path: str,
     model_id: str,
-    base_dir: str = DEFAULT_MODEL_DIR,
+    base_dir: str | Path = DEFAULT_MODEL_DIR,
 ) -> str:
     """Copy a model file to the registry directory.
 

@@ -10,6 +10,7 @@ from datetime import date
 
 import polars as pl
 
+from qp.shared.paths import MOMENTUM_20D
 from qp.shared.protocols.base_strategy import BaseStrategy
 
 
@@ -49,7 +50,7 @@ class SimpleRankStrategy(BaseStrategy):
             DataFrame with [symbol, raw_score, rank, action].
         """
         try:
-            df = pl.read_parquet("data/dataset/momentum_20d.parquet")
+            df = pl.read_parquet(MOMENTUM_20D)
         except FileNotFoundError:
             return pl.DataFrame()
 

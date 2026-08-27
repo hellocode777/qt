@@ -15,6 +15,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from qp.shared.paths import DAILY_PRICE_LATEST, DATASET_DIR, FACTOR_REGISTRY
+
 if TYPE_CHECKING:
     import polars as pl
 
@@ -190,11 +192,11 @@ def _load_full_price() -> pl.DataFrame | None:
     """
     import polars as pl
 
-    latest = Path("data/dataset/daily_price_latest.parquet")
+    latest = Path(DAILY_PRICE_LATEST)
     if latest.exists():
         return pl.read_parquet(latest)
 
-    price_files = sorted(Path("data/dataset").glob("daily_price_*.parquet"))
+    price_files = sorted(Path(DATASET_DIR).glob("daily_price_*.parquet"))
     if not price_files:
         return None
     return pl.read_parquet(str(price_files[-1]))
@@ -484,7 +486,7 @@ def cmd_factor_register(force: bool = False) -> int:
     from qp.research.feature.compute import ALL_FACTOR_DIRECTIONS
     from qp.research.feature.registry import FeatureRegistry
 
-    registry_path = "data/factor_registry.json"
+    registry_path = FACTOR_REGISTRY
     if os.path.exists(registry_path) and not force:
         print(f"因子注册表已存在: {registry_path}（共 {_count_registered(registry_path)} 个因子）")
         print("如需重新注册: qp factor register --force")
@@ -517,7 +519,7 @@ def cmd_factor_register(force: bool = False) -> int:
     return 0
 
 
-def _count_registered(path: str) -> int:
+def _count_registered(path: str | Path) -> int:
     """Read n_factors from an existing registry JSON without full load."""
     import json
 
@@ -533,7 +535,7 @@ def cmd_factor_catalog() -> int:
     """Show factor catalog grouped by category."""
     import os
 
-    registry_path = "data/factor_registry.json"
+    registry_path = FACTOR_REGISTRY
     if os.path.exists(registry_path):
         from qp.research.feature.registry import FeatureRegistry
 
@@ -601,7 +603,7 @@ def cmd_factor_compute(
     target_date: str = "",
     full_history: bool = False,
     factor_subset: str = "",
-    output_dir: str = "data/dataset",
+    output_dir: str | Path = DATASET_DIR,
 ) -> int:
     """Run daily factor computation → factor_values_daily.parquet.
 

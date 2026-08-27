@@ -7,6 +7,7 @@ from typing import Protocol
 from qp.platform.storage.duckdb import DuckDBStorage
 from qp.platform.storage.parquet import ParquetStorage
 from qp.platform.storage.sqlite import SQLiteStorage
+from qp.shared.paths import PARQUET_DIR, QP_DUCKDB, QP_SQLITE
 
 
 class StorageBackend(Protocol):
@@ -39,9 +40,9 @@ class StorageFactory:
             return self._instance
 
         if self._backend_name == "duckdb":
-            self._instance = DuckDBStorage(self._kwargs.get("duckdb_path", "data/qp.duckdb"))
+            self._instance = DuckDBStorage(self._kwargs.get("duckdb_path", QP_DUCKDB))
         elif self._backend_name == "sqlite":
-            self._instance = SQLiteStorage(self._kwargs.get("sqlite_path", "data/qp.sqlite"))
+            self._instance = SQLiteStorage(self._kwargs.get("sqlite_path", QP_SQLITE))
         else:
             raise ValueError(f"Unknown storage backend: {self._backend_name}")
 
@@ -50,4 +51,4 @@ class StorageFactory:
 
     def get_parquet(self) -> ParquetStorage:
         """Get a Parquet storage helper."""
-        return ParquetStorage(self._kwargs.get("parquet_dir", "data/parquet"))
+        return ParquetStorage(self._kwargs.get("parquet_dir", PARQUET_DIR))

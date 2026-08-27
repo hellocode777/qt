@@ -30,9 +30,10 @@ from typing import Any
 
 import polars as pl
 
+from qp.shared.paths import MONITORING_DIR
 from qp.shared.time import CN_TZ
 
-DEFAULT_RETRAIN_DIR = "data/monitoring"
+DEFAULT_RETRAIN_DIR = MONITORING_DIR
 RETRAIN_LOG_FILE = "retrain_signals.parquet"
 
 # Project convention (scheduler/config): timestamps use Asia/Shanghai.
@@ -151,7 +152,7 @@ class RetrainSignalLogger:
         logger.log(signal)
     """
 
-    def __init__(self, base_dir: str = DEFAULT_RETRAIN_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_RETRAIN_DIR) -> None:
         self._base = Path(base_dir)
         self._filepath = self._base / RETRAIN_LOG_FILE
 
@@ -366,7 +367,7 @@ _ACTION_LOOKBACK_DAYS = 10
 def load_weight_scales(
     strategy_ids: list[str] | None = None,
     days: int = _ACTION_LOOKBACK_DAYS,
-    base_dir: str = DEFAULT_RETRAIN_DIR,
+    base_dir: str | Path = DEFAULT_RETRAIN_DIR,
 ) -> dict[str, float]:
     """Load the latest retrain signal per strategy and map it to a weight scale.
 

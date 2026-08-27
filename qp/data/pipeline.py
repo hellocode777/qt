@@ -21,6 +21,7 @@ from qp.data.dataset.registry import DatasetRegistry
 from qp.data.timestamp import annotate_timestamps_pl
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
+from qp.shared.paths import DATASET_DIR, REPORTS_DIR
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
@@ -129,7 +130,7 @@ class DataPipeline(BasePipeline):
             clean = engine.clean(raw_pl)
             result.metrics["cleaned_rows"] = clean.height
 
-            output_dir = Path("data/dataset")
+            output_dir = Path(DATASET_DIR)
             output_dir.mkdir(parents=True, exist_ok=True)
             output_path = output_dir / "daily_price_latest.parquet"
 
@@ -165,7 +166,7 @@ class DataPipeline(BasePipeline):
             # Load previous registry for drift detection
             prev_meta = None
             try:
-                reg = DatasetRegistry(base_dir="data/dataset")
+                reg = DatasetRegistry(base_dir=DATASET_DIR)
                 prev = reg.resolve("daily_price", require_exists=False)
                 if prev:
                     prev_meta = prev.get("metadata", {})
@@ -240,7 +241,7 @@ class DataPipeline(BasePipeline):
                     actual_start = str(dates.head(1).item())
                     actual_end = str(dates.tail(1).item())
 
-            registry = DatasetRegistry(base_dir="data/dataset")
+            registry = DatasetRegistry(base_dir=DATASET_DIR)
             registry.register(
                 name="daily_price",
                 version="latest",
@@ -262,7 +263,7 @@ class DataPipeline(BasePipeline):
             # ── Data Quality Report ──
             import json as _json
 
-            report_dir = Path("data/reports")
+            report_dir = Path(REPORTS_DIR)
             report_dir.mkdir(parents=True, exist_ok=True)
             report_path = report_dir / f"data_quality_{today_cn().isoformat()}.json"
             report = {

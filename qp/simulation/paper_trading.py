@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
+from qp.shared.paths import PAPER_TRADING_DIR
 from qp.shared.time import today_cn
 from qp.shared.types import StrategyLifecycle
 
@@ -108,7 +109,7 @@ class PaperTradingTracker:
     """Tracks a strategy through 30-day paper trading with auto-evaluation.
 
     Usage:
-        tracker = PaperTradingTracker(data_dir="data/paper_trading")
+        tracker = PaperTradingTracker(data_dir=PAPER_TRADING_DIR)
         run = tracker.start("simple_rank_v1.0", capital=100_000)
 
         # Each trading day:
@@ -121,7 +122,7 @@ class PaperTradingTracker:
             registry.set_lifecycle("simple_rank_v1.0", StrategyLifecycle.SHADOW_PRODUCTION)
     """
 
-    def __init__(self, data_dir: str = "data/paper_trading") -> None:
+    def __init__(self, data_dir: str | Path = PAPER_TRADING_DIR) -> None:
         self._data_dir = Path(data_dir)
         self._data_dir.mkdir(parents=True, exist_ok=True)
 

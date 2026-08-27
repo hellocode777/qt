@@ -28,7 +28,7 @@ class ResearchDataset:
     with temporal ordering guarantees.  No future information leakage.
 
     Usage:
-        ds = ResearchDataset("data/dataset/daily_price_main.parquet")
+        ds = ResearchDataset(DAILY_PRICE_MAIN)
         train, test = ds.split_train_test(test_ratio=0.2)
         # Or with validation:
         train, val, test = ds.split_train_val_test(val_ratio=0.1, test_ratio=0.1)

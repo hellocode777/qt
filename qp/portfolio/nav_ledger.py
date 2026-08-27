@@ -24,7 +24,9 @@ from pathlib import Path
 import polars as pl
 from loguru import logger
 
-NAV_DIR = Path("data/portfolio")
+from qp.shared.paths import PORTFOLIO_DIR
+
+NAV_DIR = Path(PORTFOLIO_DIR)
 NAV_PARQUET = NAV_DIR / "nav_history.parquet"
 
 

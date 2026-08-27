@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from qp.shared.paths import DATASET_DIR
 from qp.shared.types import DataTier
 
 
@@ -103,7 +104,7 @@ class BuildConfig:
     """
 
     tier: DataTier = DataTier.GOLD
-    output_dir: str = "data/dataset"
+    output_dir: str = str(DATASET_DIR)
     require_contract: bool = True
     fail_on_validation_error: bool = True
     persist_metadata: bool = True

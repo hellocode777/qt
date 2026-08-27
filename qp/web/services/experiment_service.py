@@ -14,6 +14,7 @@ import polars as pl
 from loguru import logger
 
 from qp.research.experiment.tracker import ExperimentTracker
+from qp.shared.paths import EXPERIMENTS_DIR
 
 
 class ExperimentService:
@@ -31,7 +32,7 @@ class ExperimentService:
     # Paths
     # ------------------------------------------------------------------
 
-    _experiments_root = Path("data/experiments")
+    _experiments_root = Path(EXPERIMENTS_DIR)
 
     def __init__(self) -> None:
         self._tracker = ExperimentTracker()

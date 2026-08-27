@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from qp.shared.paths import DATASET_DIR
+
 
 def cmd_monitor_check() -> int:
     """Run full KillSwitchPipeline — regime + drift + decay + kill switch + health."""
@@ -146,7 +148,7 @@ def cmd_monitor_regime() -> int:
     print("=== QP 市场状态检测 / Market Regime Detection ===")
     print()
 
-    data_dir = Path("data/dataset")
+    data_dir = Path(DATASET_DIR)
     parquet_files = sorted(data_dir.glob("daily_price_*.parquet"))
     if not parquet_files:
         print("❌ 未找到数据文件 / No data found. 请先运行 qp run daily")

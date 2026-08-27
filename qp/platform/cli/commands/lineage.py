@@ -6,6 +6,8 @@ graph (Rule 7: Full Data Lineage) from the existing registries.
 
 from __future__ import annotations
 
+from qp.shared.paths import FACTOR_REGISTRY
+
 
 def cmd_lineage_snapshot() -> int:
     """Build the lineage graph from existing registries and persist it."""
@@ -31,7 +33,7 @@ def cmd_lineage_snapshot() -> int:
     try:
         from qp.research.feature.registry import FeatureRegistry as ResearchFeatureRegistry
 
-        feature_registry = ResearchFeatureRegistry.load_from_json("data/factor_registry.json")
+        feature_registry = ResearchFeatureRegistry.load_from_json(FACTOR_REGISTRY)
         counts["features"] = lineage.sync_from_feature_registry(feature_registry)
         print(f"  ✅ 特征 / Features:    {counts['features']}")
     except FileNotFoundError:

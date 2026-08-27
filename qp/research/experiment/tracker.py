@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from qp.research.experiment.models import (
@@ -19,10 +20,11 @@ from qp.research.experiment.models import (
     ExperimentRecord,
     LineageGraph,
 )
+from qp.shared.paths import EXPERIMENTS_DIR
 from qp.shared.protocols.base_experiment_tracker import BaseExperimentTracker
 from qp.shared.types import ExperimentStatus
 
-DEFAULT_EXPERIMENT_DIR = "data/experiments"
+DEFAULT_EXPERIMENT_DIR = EXPERIMENTS_DIR
 
 
 class ExperimentTracker(BaseExperimentTracker):
@@ -41,7 +43,7 @@ class ExperimentTracker(BaseExperimentTracker):
         record = tracker.get("exp_001")
     """
 
-    def __init__(self, base_dir: str = DEFAULT_EXPERIMENT_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_EXPERIMENT_DIR) -> None:
         self._base_dir = base_dir
         self._index: dict[str, ExperimentRecord] = {}
         self._load_index()

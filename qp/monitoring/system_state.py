@@ -31,7 +31,9 @@ from typing import Any
 
 import polars as pl
 
-DEFAULT_STATE_DIR = "data/monitoring"
+from qp.shared.paths import MONITORING_DIR
+
+DEFAULT_STATE_DIR = MONITORING_DIR
 STATE_FILE = "system_state.parquet"
 STATE_LOG_FILE = "system_state_log.parquet"
 
@@ -111,7 +113,7 @@ class SystemStateManager:
     Thread-safe: writes are atomic (write new file, rename).
     """
 
-    def __init__(self, base_dir: str = DEFAULT_STATE_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_STATE_DIR) -> None:
         self._base = Path(base_dir)
         self._base.mkdir(parents=True, exist_ok=True)
         self._state_file = self._base / STATE_FILE

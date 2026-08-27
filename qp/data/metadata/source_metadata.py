@@ -16,6 +16,8 @@ from typing import Any
 
 from loguru import logger
 
+from qp.shared.paths import SOURCES_JSON
+
 
 @dataclass
 class SourceMetadata:
@@ -128,7 +130,7 @@ class SourceMetadataStore:
         print(store.get("akshare").health_status)  # 'healthy'
     """
 
-    def __init__(self, store_path: str | Path = "data/metadata/sources.json") -> None:
+    def __init__(self, store_path: str | Path = SOURCES_JSON) -> None:
         self._store_path = Path(store_path)
         self._entries: dict[str, SourceMetadata] = {}
         self._load_from_disk()

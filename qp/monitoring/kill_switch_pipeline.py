@@ -36,6 +36,7 @@ from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
 from qp.monitoring.regime import MarketRegimeEngine, RegimeResult
 from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
 from qp.platform.pipeline.result import PipelineResult
+from qp.shared.paths import ONLINE_SIGNAL_HISTORY
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus
 
@@ -318,7 +319,7 @@ class KillSwitchPipeline(BasePipeline):
 
             from qp.monitoring.drift import DriftMonitor
 
-            signal_path = Path("data/monitoring/online_signal_history.parquet")
+            signal_path = Path(ONLINE_SIGNAL_HISTORY)
             if not signal_path.exists():
                 return 0.0, False
 

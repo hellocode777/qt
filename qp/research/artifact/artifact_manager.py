@@ -18,7 +18,9 @@ from typing import Any
 
 import polars as pl
 
-DEFAULT_ARTIFACT_DIR = "data/artifacts"
+from qp.shared.paths import ARTIFACTS_DIR
+
+DEFAULT_ARTIFACT_DIR = ARTIFACTS_DIR
 
 
 class ArtifactManager:
@@ -46,7 +48,7 @@ class ArtifactManager:
         mgr.cleanup_old_models(keep_latest=5)
     """
 
-    def __init__(self, base_dir: str = DEFAULT_ARTIFACT_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_ARTIFACT_DIR) -> None:
         self._base_dir = Path(base_dir)
         self._models_dir = self._base_dir / "models"
         self._factors_dir = self._base_dir / "factors"

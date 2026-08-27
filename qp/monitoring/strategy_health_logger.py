@@ -18,7 +18,6 @@ Usage:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import polars as pl
@@ -29,8 +28,8 @@ from qp.monitoring.strategy_monitor import (
     StrategyHealth,
     StrategyMonitor,
 )
+from qp.shared.paths import MONITORING_DIR
 
-MONITORING_DIR = Path("data/monitoring")
 HEALTH_PARQUET = MONITORING_DIR / "strategy_health.parquet"
 
 

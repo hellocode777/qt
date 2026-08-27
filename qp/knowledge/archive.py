@@ -25,6 +25,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from qp.shared.paths import KNOWLEDGE_DIR
+
 # ------------------------------------------------------------------
 # Categories
 # ------------------------------------------------------------------
@@ -277,7 +279,7 @@ class KnowledgeArchive:
     Provides search, filtering, and template generation.
 
     Usage:
-        archive = KnowledgeArchive(base_dir="data/knowledge")
+        archive = KnowledgeArchive(base_dir=KNOWLEDGE_DIR)
         archive.create_experiment_summary(
             title="Momentum factor in 2024 bear market",
             background="...",
@@ -289,7 +291,7 @@ class KnowledgeArchive:
         entries = archive.search(tags=["momentum"])
     """
 
-    def __init__(self, base_dir: str = "data/knowledge") -> None:
+    def __init__(self, base_dir: str | Path = KNOWLEDGE_DIR) -> None:
         self._base = Path(base_dir)
         self._ensure_directories()
 

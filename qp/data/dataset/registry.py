@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from qp.shared.paths import DATASET_DIR
+
 
 class DatasetRegistry:
     """Registry of available Data Products (Datasets).
@@ -28,7 +30,7 @@ class DatasetRegistry:
         restored = DatasetRegistry.load("backup.json")
     """
 
-    def __init__(self, base_dir: str | Path = "data/dataset") -> None:
+    def __init__(self, base_dir: str | Path = DATASET_DIR) -> None:
         self._base_dir = Path(base_dir)
         self._base_dir.mkdir(parents=True, exist_ok=True)
         self._entries: dict[str, dict[str, Any]] = {}
@@ -213,7 +215,7 @@ class DatasetRegistry:
             raise FileNotFoundError(f"Registry file not found: {path}")
 
         data = json.loads(path.read_text(encoding="utf-8"))
-        registry = cls(base_dir=data.get("base_dir", "data/dataset"))
+        registry = cls(base_dir=data.get("base_dir", DATASET_DIR))
         registry._entries = data.get("entries", {})
         return registry
 
@@ -240,7 +242,7 @@ def _resolve_file_path(entry: dict[str, object], base_dir: str | Path) -> Path:
 
     Handles the case where the stored path already includes the
     ``base_dir`` prefix (e.g. ``data/dataset/daily_price_latest.parquet``
-    stored with ``base_dir="data/dataset"``).
+    stored with ``base_dir=DATASET_DIR``).
     """
     from pathlib import Path as _P
 

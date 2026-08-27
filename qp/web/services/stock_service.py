@@ -13,8 +13,10 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
-_DAILY_PRICE_PATH = Path("data/dataset/daily_price_latest.parquet")
-_STOCK_NAMES_PATH = Path("data/stock_names.json")
+from qp.shared.paths import DAILY_PRICE_LATEST, STOCK_NAMES
+
+_DAILY_PRICE_PATH = Path(DAILY_PRICE_LATEST)
+_STOCK_NAMES_PATH = Path(STOCK_NAMES)
 
 
 class StockService:

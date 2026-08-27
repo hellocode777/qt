@@ -7,6 +7,7 @@ import signal
 import time
 from typing import TYPE_CHECKING
 
+from qp.shared.paths import DECISIONS_DIR, PAPER_TRADING_DIR
 from qp.shared.time import today_cn
 
 if TYPE_CHECKING:
@@ -588,7 +589,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
 
             latest_date = str(flat_prices["trade_date"].max())
             tracker = PaperTradingTracker()
-            state_dir = Path("data/paper_trading")
+            state_dir = Path(PAPER_TRADING_DIR)
 
             runs = []
             for state_file in state_dir.glob("*_paper.json"):
@@ -669,7 +670,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 return
 
             # Find today's DecisionPackage
-            decisions_dir = Path("data/decisions")
+            decisions_dir = Path(DECISIONS_DIR)
             today_str = datetime.now(UTC).strftime("%Y-%m-%d")
 
             # Try JSON first, then markdown

@@ -36,8 +36,9 @@ from typing import Any
 import polars as pl
 
 from qp.knowledge.archive import KnowledgeArchive, KnowledgeCategory
+from qp.shared.paths import KNOWLEDGE_DIR
 
-DEFAULT_FAILURE_DIR = "data/knowledge"
+DEFAULT_FAILURE_DIR = KNOWLEDGE_DIR
 FAILURE_LOG_FILE = "failure_archive.parquet"
 
 
@@ -152,7 +153,7 @@ class FailureArchiveLogger:
         )
     """
 
-    def __init__(self, base_dir: str = DEFAULT_FAILURE_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_FAILURE_DIR) -> None:
         self._base = Path(base_dir)
         self._filepath = self._base / FAILURE_LOG_FILE
         self._archive = KnowledgeArchive(base_dir=str(self._base))

@@ -16,6 +16,7 @@ from qp.data.dataset.registry import DatasetRegistry
 from qp.data.fundamental.adapter import FundamentalAdapter
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
+from qp.shared.paths import DATASET_DIR
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
@@ -72,7 +73,7 @@ class FundamentalPipeline(BasePipeline):
                 raw_pl = raw_pl.with_columns(pl.col("report_date").cast(pl.Date))
 
             # Save
-            output_dir = Path("data/dataset")
+            output_dir = Path(DATASET_DIR)
             output_dir.mkdir(parents=True, exist_ok=True)
             version = today_cn().isoformat()
             output_path = output_dir / "fundamentals_latest.parquet"
@@ -85,7 +86,7 @@ class FundamentalPipeline(BasePipeline):
             result.artifacts.append(str(output_path))
 
             # Register
-            registry = DatasetRegistry(base_dir="data/dataset")
+            registry = DatasetRegistry(base_dir=DATASET_DIR)
             registry.register(
                 name="fundamentals",
                 version=version,

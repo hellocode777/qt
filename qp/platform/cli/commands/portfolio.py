@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from qp.shared.paths import DAILY_PRICE_PREFIX
 from qp.shared.time import today_cn
 
 # ------------------------------------------------------------------
@@ -59,7 +60,7 @@ def cmd_portfolio_report() -> int:
 
     # Load data
     try:
-        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
+        prices = pl.read_parquet(f"{DAILY_PRICE_PREFIX}{today.isoformat()}.parquet")
     except FileNotFoundError:
         print("❌ 错误: 未找到数据文件，请先运行 'qp run daily'")
         print("   Error: No data found. Run 'qp run daily' first.")
@@ -221,7 +222,7 @@ def cmd_portfolio_risk() -> int:
     today = today_cn()
 
     try:
-        prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")
+        prices = pl.read_parquet(f"{DAILY_PRICE_PREFIX}{today.isoformat()}.parquet")
     except FileNotFoundError:
         print("❌ 错误: 未找到数据文件，请先运行 'qp run daily'")
         print("   Error: No data found. Run 'qp run daily' first.")

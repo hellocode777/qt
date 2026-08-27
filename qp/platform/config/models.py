@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from qp.shared.exceptions import FrozenConfigError
+from qp.shared.paths import DATASET_DIR, PARQUET_DIR, QP_DUCKDB, QP_SQLITE, RAW_DIR
 
 # ── Freezable Base ──────────────────────────────────
 
@@ -73,11 +74,11 @@ class StorageConfig(FreezableBaseModel):
     """Storage backend configuration."""
 
     backend: str = "duckdb"  # duckdb | sqlite
-    duckdb_path: str = "data/qp.duckdb"
-    sqlite_path: str = "data/qp.sqlite"
-    parquet_dir: str = "data/parquet"
-    raw_dir: str = "data/raw"
-    dataset_dir: str = "data/dataset"
+    duckdb_path: str = str(QP_DUCKDB)
+    sqlite_path: str = str(QP_SQLITE)
+    parquet_dir: str = str(PARQUET_DIR)
+    raw_dir: str = str(RAW_DIR)
+    dataset_dir: str = str(DATASET_DIR)
 
 
 # ── Logging ────────────────────────────────────────

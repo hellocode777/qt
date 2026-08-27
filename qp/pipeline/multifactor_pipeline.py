@@ -51,6 +51,7 @@ from qp.research.feature.compute import (
     PRICE_VOLUME_FACTORS,
     compute_all_factors,
 )
+from qp.shared.paths import DATASET_DIR, EXPERIMENTS_DIR, FUNDAMENTALS_LATEST
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import now_cn, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
@@ -701,7 +702,7 @@ class MultiFactorPipeline(BasePipeline):
             # Persist GateResult JSON
             from pathlib import Path
 
-            gate_dir = Path("data/experiments")
+            gate_dir = Path(EXPERIMENTS_DIR)
             gate_dir.mkdir(parents=True, exist_ok=True)
             gate_file = gate_dir / f"{strategy_name}_{now_cn().strftime('%Y%m%d_%H%M%S')}_gate.json"
             import json as _json
@@ -831,7 +832,7 @@ class MultiFactorPipeline(BasePipeline):
         experiment_id = f"multifactor_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
         # ── Data Snapshot: pin filtered price data for reproducibility ──
-        snapshot_dir = _Path("data/experiments") / experiment_id
+        snapshot_dir = _Path(EXPERIMENTS_DIR) / experiment_id
         try:
             snapshot_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1254,7 +1255,7 @@ class MultiFactorPipeline(BasePipeline):
         publish_date, ROE, gross_margin, ...)} — empty dict if the
         file is missing (quality filter skipped gracefully).
         """
-        path = Path("data/dataset/fundamentals_latest.parquet")
+        path = Path(FUNDAMENTALS_LATEST)
         if not path.exists():
             logger.info(
                 "基本面 parquet 不存在 ({}) — 质量过滤跳过。先运行 `qp ingest fundamental`",
@@ -1326,7 +1327,7 @@ class MultiFactorPipeline(BasePipeline):
         """
         from qp.data.valuation.product import compute_valuation
 
-        path = Path("data/dataset/fundamentals_latest.parquet")
+        path = Path(FUNDAMENTALS_LATEST)
         if not path.exists():
             return {}
 
@@ -1448,7 +1449,7 @@ class MultiFactorPipeline(BasePipeline):
 
         # Resolve Gold path: try DatasetRegistry first, fallback to glob latest parquet
         gold_path = ""
-        registry = DatasetRegistry(base_dir="data/dataset")
+        registry = DatasetRegistry(base_dir=DATASET_DIR)
         try:
             entry = registry.resolve(dataset, require_exists=True)
             gold_path = entry["path"]

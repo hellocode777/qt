@@ -32,7 +32,9 @@ from typing import Any
 
 import polars as pl
 
-DEFAULT_AUDIT_DIR = "data/decisions"
+from qp.shared.paths import DECISIONS_DIR
+
+DEFAULT_AUDIT_DIR = DECISIONS_DIR
 AUDIT_LOG_FILE = "trade_decision_audit.parquet"
 
 
@@ -153,7 +155,7 @@ class DecisionAuditLogger:
         logger.record_portfolio_snapshot(signals_df, date_str="2026-07-25")
     """
 
-    def __init__(self, base_dir: str = DEFAULT_AUDIT_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_AUDIT_DIR) -> None:
         self._base = Path(base_dir)
         self._filepath = self._base / AUDIT_LOG_FILE
 

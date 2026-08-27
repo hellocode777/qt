@@ -16,6 +16,7 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.shared.paths import DATASET_DIR, REPORTS_DIR, SOURCES_JSON
 from qp.shared.time import today_cn
 
 
@@ -30,8 +31,8 @@ class DataQualityService:
 
     def __init__(self) -> None:
         self._registry_path = Path("data/dataset/registry.json")
-        self._dataset_dir = Path("data/dataset")
-        self._sources_path = Path("data/metadata/sources.json")
+        self._dataset_dir = Path(DATASET_DIR)
+        self._sources_path = Path(SOURCES_JSON)
 
     # ------------------------------------------------------------------
     # Today's Data Summary
@@ -110,7 +111,7 @@ class DataQualityService:
 
         # 3. Quality report (for validation checks)
         qr: Any = None
-        report_path = Path("data/reports") / f"data_quality_{today_str}.json"
+        report_path = Path(REPORTS_DIR) / f"data_quality_{today_str}.json"
         if report_path.exists():
             with contextlib.suppress(Exception):
                 qr = json.loads(report_path.read_text(encoding="utf-8"))

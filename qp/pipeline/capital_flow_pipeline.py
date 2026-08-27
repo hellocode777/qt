@@ -17,6 +17,7 @@ from qp.data.capital_flow.adapter import CapitalFlowAdapter, NorthboundAdapter
 from qp.data.dataset.registry import DatasetRegistry
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
+from qp.shared.paths import DATASET_DIR
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
@@ -76,7 +77,7 @@ class CapitalFlowPipeline(BasePipeline):
                 result.errors.append("CapitalFlowAdapter returned 0 rows")
                 return result
 
-            output_dir = Path("data/dataset")
+            output_dir = Path(DATASET_DIR)
             output_dir.mkdir(parents=True, exist_ok=True)
             version = today_cn().isoformat()
 
@@ -90,7 +91,7 @@ class CapitalFlowPipeline(BasePipeline):
                 )
                 result.artifacts.append(str(output_path))
 
-                registry = DatasetRegistry(base_dir="data/dataset")
+                registry = DatasetRegistry(base_dir=DATASET_DIR)
                 registry.register(
                     name="capital_flow",
                     version=version,

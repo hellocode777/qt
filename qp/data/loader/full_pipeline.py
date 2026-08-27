@@ -31,15 +31,16 @@ from qp.data.dataset.registry import DatasetRegistry
 from qp.data.timestamp import annotate_timestamps_pl
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
+from qp.shared.paths import DATASET_DIR, RAW_DIR
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
 
 # Tier directories
-DIR_RAW = Path("data/raw")
+DIR_RAW = Path(RAW_DIR)
 DIR_BRONZE = Path("data/bronze")
 DIR_SILVER = Path("data/silver")
-DIR_GOLD = Path("data/dataset")
+DIR_GOLD = Path(DATASET_DIR)
 
 
 def _normalize_volume_unit(df: pl.DataFrame, logger: Any) -> pl.DataFrame:

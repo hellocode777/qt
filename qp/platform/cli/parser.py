@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import click
 
+from qp.shared.paths import DATASET_DIR
+
 # ==================================================================
 # CLI group
 # ==================================================================
@@ -803,7 +805,7 @@ def factor_register(force: bool) -> None:
     default="",
     help="Comma-separated factor names (default: all 19)",
 )
-@click.option("--output-dir", type=str, default="data/dataset", help="Output directory")
+@click.option("--output-dir", type=str, default=DATASET_DIR, help="Output directory")
 def factor_compute(
     target_date: str, full_history: bool, factor_subset: str, output_dir: str
 ) -> None:

@@ -13,7 +13,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-_STOCK_NAMES_PATH = Path("data/stock_names.json")
+from qp.shared.paths import STOCK_NAMES
+
+_STOCK_NAMES_PATH = Path(STOCK_NAMES)
 
 # Lazy-loaded cache
 _names_cache: dict[str, str] | None = None

@@ -9,7 +9,7 @@ from pathlib import Path
 class SQLiteStorage:
     """SQLite database backend for lightweight storage needs."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
         self._conn: sqlite3.Connection | None = None
 

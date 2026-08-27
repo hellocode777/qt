@@ -35,7 +35,7 @@ Usage::
     )
 
     # 4. Bridge to OfflineStore
-    store = OfflineStore("data/features")
+    store = OfflineStore(FEATURES_DIR)
     df = engine.query_store(
         store, "SELECT symbol, trade_date, momentum_20, rsi_14 FROM features"
     )

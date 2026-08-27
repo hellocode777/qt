@@ -16,6 +16,8 @@
 # ─────────────────────────────────────────────────────────────
 import polars as pl
 
+from qp.shared.paths import DAILY_PRICE_LATEST, FACTOR_RAW_FULL
+
 WEIGHTS = {
     "Amplitude_5D": -0.25,
     "Volatility_20D": 0.22,
@@ -26,8 +28,8 @@ WEIGHTS = {
 FACTORS = list(WEIGHTS.keys())
 Q_LABELS = ["Q1", "Q2", "Q3", "Q4", "Q5"]
 
-fdf = pl.read_parquet("data/experiments/_factor_raw_full_5factors_2015_2026.parquet")
-pdf = pl.read_parquet("data/dataset/daily_price_latest.parquet")
+fdf = pl.read_parquet(FACTOR_RAW_FULL)
+pdf = pl.read_parquet(DAILY_PRICE_LATEST)
 price = pdf.select(["trade_date", "symbol", "close"]).sort(["symbol", "trade_date"])
 price = price.with_columns(
     (pl.col("close").shift(-20).over("symbol") / pl.col("close") - 1.0).alias("fwd_20")

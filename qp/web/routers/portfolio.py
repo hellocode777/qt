@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from loguru import logger
 
+from qp.shared.paths import DAILY_PRICE_LATEST
 from qp.web.routers._templates import templates
 from qp.web.services.decision_service import DecisionService
 
@@ -48,7 +49,7 @@ async def portfolio(request: Request) -> Any:
     try:
         import polars as pl
 
-        px = pl.read_parquet("data/dataset/daily_price_latest.parquet")
+        px = pl.read_parquet(DAILY_PRICE_LATEST)
         if not px.is_empty():
             latest_date = px["trade_date"].max()
             px_latest = (

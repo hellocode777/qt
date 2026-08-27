@@ -10,7 +10,7 @@ import duckdb
 class DuckDBStorage:
     """DuckDB analytical database backend (TDR-002)."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
         self._conn: duckdb.DuckDBPyConnection | None = None
 

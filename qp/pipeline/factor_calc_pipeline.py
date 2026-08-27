@@ -31,11 +31,12 @@ from qp.data.loader.loader import load_dataset
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.research.factor_calculator import FactorCalculator
+from qp.shared.paths import DATASET_DIR
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus
 
 # Default output location
-_DEFAULT_OUTPUT_DIR = Path("data/dataset")
+_DEFAULT_OUTPUT_DIR = Path(DATASET_DIR)
 _DEFAULT_OUTPUT_FILE = "factor_values_daily.parquet"
 _DATASET_NAME = "factor_values_daily"
 

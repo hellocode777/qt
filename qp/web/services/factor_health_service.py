@@ -11,6 +11,7 @@ from typing import Any
 from loguru import logger
 
 from qp.monitoring.factor_health_logger import FactorHealthLogger
+from qp.shared.paths import FACTOR_LIBRARY_DIR
 
 
 def _lifecycle_meta(stage: str) -> dict:
@@ -740,7 +741,7 @@ class FactorHealthService:
                 )
 
         # Persist
-        path = Path("data/factor_library") / f"baseline_{version}.json"
+        path = Path(FACTOR_LIBRARY_DIR) / f"baseline_{version}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2))
         logger.info(
@@ -758,7 +759,7 @@ class FactorHealthService:
         import json
         from pathlib import Path
 
-        path = Path("data/factor_library") / f"baseline_{version}.json"
+        path = Path(FACTOR_LIBRARY_DIR) / f"baseline_{version}.json"
         if not path.exists():
             return None
         return json.loads(path.read_text())

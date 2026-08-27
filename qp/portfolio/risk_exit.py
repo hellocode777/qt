@@ -35,6 +35,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from qp.shared.paths import BLACKLIST
+
 # ------------------------------------------------------------------
 # Priority & Reason enums (V2.1 §5)
 # ------------------------------------------------------------------
@@ -107,7 +109,7 @@ class RiskExitConfig:
     max_suspension_days: int = 30  # 长期停牌阈值
     liquidity_min_avg_volume: int = 100_000  # 日均成交量最低阈值 (股)
     liquidity_lookback_days: int = 20  # 流动性回看天数
-    blacklist_path: str = "data/blacklist.json"  # 黑名单文件路径
+    blacklist_path: str | Path = BLACKLIST  # 黑名单文件路径
 
 
 # ------------------------------------------------------------------
@@ -347,7 +349,7 @@ class RiskExitManager:
             ["000001", "600519"]  或  {"symbols": ["000001"], "reason": "..."}
         """
         try:
-            path = Path("data/blacklist.json")
+            path = Path(BLACKLIST)
             if not path.exists():
                 # Create empty blacklist template
                 path.parent.mkdir(parents=True, exist_ok=True)

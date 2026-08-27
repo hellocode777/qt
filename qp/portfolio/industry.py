@@ -10,6 +10,8 @@ from __future__ import annotations
 import json as _json
 from pathlib import Path as _Path
 
+from qp.shared.paths import STOCK_INDUSTRY
+
 # Hardcoded fallback for the 18 original default stocks
 # Sourced from public Shenwan industry classification (2024 edition)
 _FALLBACK_MAP: dict[str, tuple[str, str]] = {
@@ -40,7 +42,7 @@ _FALLBACK_MAP: dict[str, tuple[str, str]] = {
     "601318": ("Financials", "Insurance"),
 }
 
-_INDUSTRY_PATH = _Path("data/stock_industry.json")
+_INDUSTRY_PATH = _Path(STOCK_INDUSTRY)
 
 
 class IndustryMapper:

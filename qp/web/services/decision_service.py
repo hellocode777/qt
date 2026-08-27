@@ -14,8 +14,7 @@ from loguru import logger
 
 from qp.decision.decision_package import DecisionPackage
 from qp.decision.state_machine import DecisionStateError
-
-DECISIONS_DIR = Path("data/decisions")
+from qp.shared.paths import DECISIONS_DIR
 
 
 class DecisionService:
@@ -278,7 +277,7 @@ class DecisionService:
 
         from pathlib import Path
 
-        path = Path("data/decisions") / f"{package_id}.json"
+        path = Path(DECISIONS_DIR) / f"{package_id}.json"
         if not path.exists():
             return None
 

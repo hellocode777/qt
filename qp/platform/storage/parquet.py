@@ -10,7 +10,7 @@ import polars as pl
 class ParquetStorage:
     """Helper for reading and writing Parquet files."""
 
-    def __init__(self, base_dir: str) -> None:
+    def __init__(self, base_dir: str | Path) -> None:
         self._base_dir = Path(base_dir)
         self._base_dir.mkdir(parents=True, exist_ok=True)
 

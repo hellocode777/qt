@@ -27,6 +27,7 @@ from qp.monitoring.factor_health import (
 )
 from qp.monitoring.factor_health_logger import FactorHealthLogger
 from qp.platform.pipeline.result import PipelineResult
+from qp.shared.paths import FACTOR_VALUES_DAILY
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus
 
@@ -243,7 +244,7 @@ class FactorHealthPipeline(BasePipeline):
             if factor_values is None:
                 from pathlib import Path
 
-                p = Path("data/dataset/factor_values_daily.parquet")
+                p = Path(FACTOR_VALUES_DAILY)
                 if not p.exists():
                     result.status = PipelineStatus.PARTIAL
                     result.errors.append("factor_values_daily.parquet not found")

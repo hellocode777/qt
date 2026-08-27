@@ -32,7 +32,9 @@ from typing import Any
 
 import polars as pl
 
-DEFAULT_HEALTH_LOG_DIR = "data/monitoring"
+from qp.shared.paths import MONITORING_DIR
+
+DEFAULT_HEALTH_LOG_DIR = MONITORING_DIR
 HEALTH_LOG_FILE = "system_health_log.parquet"
 
 _HEALTH_LOG_SCHEMA: dict[str, type] = {
@@ -119,7 +121,7 @@ class SystemHealthLogger:
         recent = logger.get_latest()
     """
 
-    def __init__(self, base_dir: str = DEFAULT_HEALTH_LOG_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_HEALTH_LOG_DIR) -> None:
         self._base = Path(base_dir)
         self._filepath = self._base / HEALTH_LOG_FILE
 

@@ -35,8 +35,9 @@ from typing import Any
 import polars as pl
 
 from qp.knowledge.failure_archive_logger import FailureArchiveLogger, FailureType
+from qp.shared.paths import KNOWLEDGE_DIR
 
-DEFAULT_RULES_DIR = "data/knowledge"
+DEFAULT_RULES_DIR = KNOWLEDGE_DIR
 
 
 @dataclass
@@ -131,7 +132,7 @@ class FailureClusterAnalyzer:
     _HIGH_VOLATILITY = 0.04
     _EXTREME_MOMENTUM = 0.30  # 30% monthly
 
-    def __init__(self, base_dir: str = DEFAULT_RULES_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_RULES_DIR) -> None:
         self._base = Path(base_dir)
         self._archive = FailureArchiveLogger(base_dir=str(self._base))
         self._rules_file = self._base / "blacklist_rules.json"

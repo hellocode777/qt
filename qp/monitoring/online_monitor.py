@@ -28,8 +28,10 @@ from typing import Any
 import numpy as np
 import polars as pl
 
+from qp.shared.paths import ONLINE_SIGNAL_HISTORY
+
 # Persistence path
-_ONLINE_SIGNAL_PARQUET = Path("data/monitoring/online_signal_history.parquet")
+_ONLINE_SIGNAL_PARQUET = Path(ONLINE_SIGNAL_HISTORY)
 _ONLINE_HEALTH_PARQUET = Path("data/monitoring/online_health_history.parquet")
 
 # Thresholds (rule.md §10.3, ADR-031 §Online Monitoring)

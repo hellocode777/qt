@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from qp.shared.paths import DATASET_DIR, MOMENTUM_20D
+
 
 def cmd_validate() -> int:
     """Run validation gate checks on the current strategy.
@@ -58,9 +60,9 @@ def cmd_validate() -> int:
     # Load data — use the most recent daily price snapshot on disk
     from pathlib import Path
 
-    price_files = sorted(Path("data/dataset").glob("daily_price_*.parquet"))
+    price_files = sorted(Path(DATASET_DIR).glob("daily_price_*.parquet"))
     try:
-        feature_df = pl.read_parquet("data/dataset/momentum_20d.parquet")
+        feature_df = pl.read_parquet(MOMENTUM_20D)
         if not price_files:
             raise FileNotFoundError("no data/dataset/daily_price_*.parquet found")
         price_df = pl.read_parquet(str(price_files[-1]))
