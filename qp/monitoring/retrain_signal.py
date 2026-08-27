@@ -31,7 +31,7 @@ from typing import Any
 import polars as pl
 
 from qp.shared.paths import MONITORING_DIR
-from qp.shared.time import CN_TZ
+from qp.shared.time import CN_TZ, fmt_date
 
 DEFAULT_RETRAIN_DIR = MONITORING_DIR
 RETRAIN_LOG_FILE = "retrain_signals.parquet"
@@ -225,7 +225,7 @@ def evaluate_retrain_need(
         RetrainSignal with recommended action.
     """
     ic_ratio = abs(rolling_ic) / training_ic if training_ic > 0 else 0.0
-    date_str = datetime.now(CN_TZ).strftime("%Y-%m-%d")
+    date_str = fmt_date(datetime.now(CN_TZ))
 
     # Tier 1: Critical — model is dead
     if model_decay_stage == "STALE":
@@ -403,7 +403,7 @@ def load_weight_scales(
     # Real date-window filter (load_history only truncates rows, it does
     # NOT filter by date).  Signals older than `days` must not keep a
     # strategy permanently deweighted.
-    cutoff = (datetime.now(CN_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = fmt_date(datetime.now(CN_TZ) - timedelta(days=days))
 
     # Most recent signal per strategy within the window (signals are
     # appended in time order, so the last occurrence of a strategy id

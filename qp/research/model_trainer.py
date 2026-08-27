@@ -24,6 +24,8 @@ import numpy as np
 import polars as pl
 from loguru import logger
 
+from qp.shared.time import fmt_compact
+
 # 10 因子（与 momentum_vol_full 对齐）
 FEATURES = [
     "Momentum_3M",
@@ -547,7 +549,7 @@ class WalkForwardScorer:
         try:
             from qp.research.trainer.registry import ModelRegistry
 
-            model_id = f"lgb_lambdarank_v{datetime.now(UTC).strftime('%Y%m%d')}"
+            model_id = f"lgb_lambdarank_v{fmt_compact(datetime.now(UTC))}"
 
             registry = ModelRegistry()
             meta = registry.register(

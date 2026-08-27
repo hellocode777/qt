@@ -23,6 +23,7 @@ import requests
 
 from qp.data.adapter.code_list import CORE_SYMBOLS
 from qp.shared.protocols.base_data_source import BaseDataSource
+from qp.shared.time import fmt_date
 
 
 class TencentAdapter(BaseDataSource):
@@ -60,8 +61,8 @@ class TencentAdapter(BaseDataSource):
         """
         symbols: list[str] = kwargs.get("symbols") or self.DEFAULT_SYMBOLS
 
-        start_str = start_date.strftime("%Y-%m-%d")
-        end_str = end_date.strftime("%Y-%m-%d")
+        start_str = fmt_date(start_date)
+        end_str = fmt_date(end_date)
 
         s_dt = datetime(start_date.year, start_date.month, start_date.day)
         e_dt = datetime(end_date.year, end_date.month, end_date.day)
@@ -230,9 +231,9 @@ class TencentAdapter(BaseDataSource):
         while cur < end:
             nxt = cur + timedelta(days=900)
             if nxt >= end:
-                segments.append((cur.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")))
+                segments.append((fmt_date(cur), fmt_date(end)))
             else:
                 nxt_end = nxt - timedelta(days=1)
-                segments.append((cur.strftime("%Y-%m-%d"), nxt_end.strftime("%Y-%m-%d")))
+                segments.append((fmt_date(cur), fmt_date(nxt_end)))
             cur = nxt
         return segments

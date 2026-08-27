@@ -42,7 +42,7 @@ from qp.research.feature.money_flow_real import (
     compute_real_money_flow_factors,
 )
 from qp.shared.json_io import json_load
-from qp.shared.time import today_cn
+from qp.shared.time import fmt_compact, today_cn
 
 ROOT = Path(__file__).resolve().parents[3]
 CF_PARQUET = ROOT / "data" / "dataset" / "capital_flow_latest.parquet"
@@ -256,7 +256,7 @@ def main() -> None:
         print()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / f"money_flow_ic_{today_cn().strftime('%Y%m%d')}.json"
+    out_path = OUT_DIR / f"money_flow_ic_{fmt_compact(today_cn())}.json"
 
     # Defensive: walk the report and coerce any non-JSON-native scalars.
     def _clean(o: object) -> object:

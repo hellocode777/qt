@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from qp.knowledge.archive import KnowledgeArchive, KnowledgeCategory, KnowledgeEntry
+from qp.shared.time import fmt_date
 
 DEFAULT_REGIME_NOTES_DIR = "data/knowledge/market_regime_notes"
 
@@ -207,7 +208,7 @@ class RegimeNoteLogger:
             regime_label=regime_label or regime,
             confidence=f"{confidence:.0%}",
             labeled_by=labeled_by,
-            label_date=datetime.now(UTC).strftime("%Y-%m-%d"),
+            label_date=fmt_date(datetime.now(UTC)),
         )
 
         return self._archive.create_entry(
@@ -248,7 +249,7 @@ class RegimeNoteLogger:
         """
         return self.record_event(
             title=title,
-            event_date=datetime.now(UTC).strftime("%Y-%m-%d"),
+            event_date=fmt_date(datetime.now(UTC)),
             regime=regime_result.regime.value,
             severity=4 if getattr(regime_result, "is_crisis", False) else 2,
             strategy_name=strategy_name,

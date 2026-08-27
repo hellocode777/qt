@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from qp.shared.paths import KNOWLEDGE_DIR
+from qp.shared.time import fmt_ts
 
 # ------------------------------------------------------------------
 # Categories
@@ -330,7 +331,7 @@ class KnowledgeArchive:
         from datetime import datetime
 
         # Generate ID: timestamp + slugified title
-        ts = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        ts = fmt_ts(datetime.now(UTC), sep="-")
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:50]
         entry_id = f"{ts}-{slug}"
 

@@ -8,7 +8,7 @@ import time
 from typing import TYPE_CHECKING
 
 from qp.shared.paths import DECISIONS_DIR, PAPER_TRADING_DIR
-from qp.shared.time import today_cn
+from qp.shared.time import fmt_date, today_cn
 
 if TYPE_CHECKING:
     from qp.platform.runtime.application import Application
@@ -671,7 +671,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
 
             # Find today's DecisionPackage
             decisions_dir = Path(DECISIONS_DIR)
-            today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+            today_str = fmt_date(datetime.now(UTC))
 
             # Try JSON first, then markdown
             json_files = sorted(decisions_dir.glob(f"dp-{today_str}-*.json"), reverse=True)

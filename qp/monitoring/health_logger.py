@@ -33,6 +33,7 @@ from typing import Any
 import polars as pl
 
 from qp.shared.paths import MONITORING_DIR
+from qp.shared.time import fmt_date
 
 DEFAULT_HEALTH_LOG_DIR = MONITORING_DIR
 HEALTH_LOG_FILE = "system_health_log.parquet"
@@ -180,7 +181,7 @@ class SystemHealthLogger:
             alerts_text = alerts_text[:197] + "..."
 
         return self.log(
-            date=date_str or datetime.now(UTC).strftime("%Y-%m-%d"),
+            date=date_str or fmt_date(datetime.now(UTC)),
             psi_value=getattr(report, "psi_value", 0.0),
             psi_available=getattr(report, "psi_available", False),
             rolling_ic=(getattr(report, "rolling_ic", 0.0) if rolling_ic is None else rolling_ic),

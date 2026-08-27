@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from qp.shared.time import fmt_display
 from qp.web.stock_names import get_stock_name
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -28,7 +29,7 @@ def _beijing_time(iso_str: str) -> str:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         # Strip tzinfo so we can add 8 h without tz-aware arithmetic
         bj = dt.replace(tzinfo=None) + BEIJING_TZ
-        return bj.strftime("%Y-%m-%d %H:%M")
+        return fmt_display(bj)
     except (ValueError, TypeError):
         return iso_str[:16] if len(iso_str) >= 16 else iso_str
 

@@ -27,7 +27,7 @@ import polars as pl
 from qp.shared.constants import TRADING_DAYS_PER_YEAR
 from qp.shared.paths import DATASET_DIR
 from qp.shared.protocols.base_pipeline import BasePipeline
-from qp.shared.time import today_cn
+from qp.shared.time import fmt_compact, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
 
 # ------------------------------------------------------------------
@@ -637,7 +637,7 @@ class MonthlyRetrainPipeline(BasePipeline):
         from qp.research.trainer.lgb_rank import DEFAULT_LGB_PARAMS, LightGBMRankModel
         from qp.research.trainer.registry import ModelRegistry
 
-        model_id = f"lgb_lambdarank_v{datetime.now(UTC).strftime('%Y%m%d')}"
+        model_id = f"lgb_lambdarank_v{fmt_compact(datetime.now(UTC))}"
 
         model = LightGBMRankModel()
 

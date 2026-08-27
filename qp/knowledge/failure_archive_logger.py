@@ -37,6 +37,7 @@ import polars as pl
 
 from qp.knowledge.archive import KnowledgeArchive, KnowledgeCategory
 from qp.shared.paths import KNOWLEDGE_DIR
+from qp.shared.time import fmt_date
 
 DEFAULT_FAILURE_DIR = KNOWLEDGE_DIR
 FAILURE_LOG_FILE = "failure_archive.parquet"
@@ -197,7 +198,7 @@ class FailureArchiveLogger:
             FailureRecord.
         """
         record = FailureRecord(
-            date=date or datetime.now(UTC).strftime("%Y-%m-%d"),
+            date=date or fmt_date(datetime.now(UTC)),
             timestamp=datetime.now(UTC).isoformat(),
             symbol=symbol,
             failure_type=FailureType.STOP_LOSS,
@@ -241,7 +242,7 @@ class FailureArchiveLogger:
             FailureRecord.
         """
         record = FailureRecord(
-            date=date or datetime.now(UTC).strftime("%Y-%m-%d"),
+            date=date or fmt_date(datetime.now(UTC)),
             timestamp=datetime.now(UTC).isoformat(),
             symbol="",  # Portfolio-level
             failure_type=FailureType.KILL_SWITCH,
@@ -285,7 +286,7 @@ class FailureArchiveLogger:
             FailureRecord.
         """
         record = FailureRecord(
-            date=date or datetime.now(UTC).strftime("%Y-%m-%d"),
+            date=date or fmt_date(datetime.now(UTC)),
             timestamp=datetime.now(UTC).isoformat(),
             symbol=symbol,
             failure_type=FailureType.BLACK_SWAN,

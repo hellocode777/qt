@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from qp.shared.json_io import json_load
 from qp.shared.paths import DAILY_PRICE_LATEST, DATASET_DIR, FACTOR_REGISTRY
+from qp.shared.time import fmt_date
 
 if TYPE_CHECKING:
     import polars as pl
@@ -373,7 +374,7 @@ def cmd_factor_validate(
 
             monitor = FactorHealthMonitor()
             health_logger = FactorHealthLogger()
-            today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+            today_str = fmt_date(datetime.now(UTC))
 
             status = monitor.check_factor(factor_name, ic_result.daily_ics)
             health_logger.log(status, date_str=today_str)
@@ -421,7 +422,7 @@ def cmd_factor_update_health() -> int:
 
         monitor = FactorHealthMonitor()
         health_logger = FactorHealthLogger()
-        today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+        today_str = fmt_date(datetime.now(UTC))
 
         ok_count = 0
         skip_count = 0

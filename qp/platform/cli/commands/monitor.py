@@ -12,11 +12,10 @@ def cmd_monitor_check() -> int:
     from qp.knowledge.archive import KnowledgeArchive
     from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline, MonitorAction
     from qp.platform.pipeline.context import PipelineContext
-    from qp.shared.time import now_cn
+    from qp.shared.time import fmt_sec, now_cn
 
     print("=== QP 监控检查 / Monitor Check ===")
-    print(f"  时间 / Time: {now_cn().strftime('%Y-%m-%d %H:%M:%S')}")
-
+    print(f"  时间 / Time: {fmt_sec(now_cn())}")
     # Load price data so regime detection and online rolling-IC
     # monitoring receive real market data (mirrors scheduler.monitor_check).
     # NOTE: rolling_ic needs the {symbol: DataFrame} dict, NOT the flat

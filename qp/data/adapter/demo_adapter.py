@@ -14,6 +14,7 @@ import polars as pl
 
 from qp.shared.constants import DEFAULT_SEED
 from qp.shared.protocols.base_data_source import BaseDataSource
+from qp.shared.time import fmt_date
 
 
 class DemoAdapter(BaseDataSource):
@@ -92,7 +93,7 @@ class DemoAdapter(BaseDataSource):
 
                 rows.append(
                     {
-                        "日期": d.strftime("%Y-%m-%d"),
+                        "日期": fmt_date(d),
                         "股票代码": symbol,
                         "开盘": round(open_price, 2),
                         "收盘": round(price, 2),

@@ -17,7 +17,7 @@ import polars as pl
 from loguru import logger
 
 from qp.shared.paths import DATASET_DIR, REPORTS_DIR, SOURCES_JSON
-from qp.shared.time import today_cn
+from qp.shared.time import fmt_date, today_cn
 
 
 class DataQualityService:
@@ -406,10 +406,10 @@ def _infer_source_status(last_registered: str, data_kind: str) -> tuple[str, str
     age_days = (datetime.now(UTC) - dt).total_seconds() / 86400
     threshold = _FRESHNESS_DAYS.get(data_kind, _DEFAULT_FRESHNESS_DAYS)
     if age_days <= threshold:
-        return "healthy", f"数据截至 {dt.strftime('%Y-%m-%d')}"
+        return "healthy", f"数据截至 {fmt_date(dt)}"
     return (
         "degraded",
-        f"数据截至 {dt.strftime('%Y-%m-%d')}，{int(age_days)} 天未更新（阈值 {threshold} 天）",
+        f"数据截至 {fmt_date(dt)}，{int(age_days)} 天未更新（阈值 {threshold} 天）",
     )
 
 

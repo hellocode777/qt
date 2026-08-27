@@ -39,6 +39,7 @@ from qp.research.trainer.lgb_rank import (
     DEFAULT_LGB_PARAMS,
     CrossSectionalStandardizer,
 )
+from qp.shared.time import fmt_ts
 
 # ── 搜索空间（TDR-005: TPE 比网格搜索高效 10x+）─────────────────────────
 # num_leaves / learning_rate 来自 TDR-005 示例；其余与 DEFAULT_LGB_PARAMS 对齐
@@ -325,4 +326,4 @@ class OptunaSearch:
 
     @staticmethod
     def _make_study_name() -> str:
-        return f"lgb_optuna_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
+        return f"lgb_optuna_{fmt_ts(datetime.now(UTC), sep='_')}"

@@ -24,7 +24,7 @@ from datetime import date
 import pandas as pd
 
 from qp.shared.protocols.base_data_source import BaseDataSource
-from qp.shared.time import today_cn
+from qp.shared.time import fmt_compact, today_cn
 
 
 class AKShareAdapter(BaseDataSource):
@@ -64,8 +64,8 @@ class AKShareAdapter(BaseDataSource):
                 df = ak.stock_zh_a_hist(
                     symbol=symbol,
                     period="daily",
-                    start_date=start_date.strftime("%Y%m%d"),
-                    end_date=end_date.strftime("%Y%m%d"),
+                    start_date=fmt_compact(start_date),
+                    end_date=fmt_compact(end_date),
                     adjust="",  # 不复权原始价 (CRITICAL — do not change to qfq/hfq)
                 )
                 if not df.empty:
@@ -105,8 +105,8 @@ class AKShareAdapter(BaseDataSource):
             try:
                 df = ak.stock_zh_a_daily(
                     symbol=sym_key,
-                    start_date=(start_date or date(1990, 1, 1)).strftime("%Y%m%d"),
-                    end_date=(end_date or today_cn()).strftime("%Y%m%d"),
+                    start_date=fmt_compact(start_date or date(1990, 1, 1)),
+                    end_date=fmt_compact(end_date or today_cn()),
                     adjust="qfq-factor",
                 )
                 if df is None or df.empty:

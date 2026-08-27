@@ -53,7 +53,7 @@ from qp.research.feature.compute import (
 )
 from qp.shared.paths import DATASET_DIR, EXPERIMENTS_DIR, FUNDAMENTALS_LATEST
 from qp.shared.protocols.base_pipeline import BasePipeline
-from qp.shared.time import now_cn, today_cn
+from qp.shared.time import fmt_date, fmt_display, fmt_ts, now_cn, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
 from qp.strategy.multifactor import generate_rebalance_signals
 
@@ -197,7 +197,7 @@ class MultiFactorPipeline(BasePipeline):
 
             # 训练最少 252 天 + 25 天 gap ≈ 1.5 年
             ml_start = _dt.fromisoformat(start_date_str) - _td(days=600)
-            fetch_start = ml_start.strftime("%Y-%m-%d")
+            fetch_start = fmt_date(ml_start)
             logger.info("   🤖 ML 模式: 数据加载从 {} 起 (训练窗口)", fetch_start)
 
         # ── Stage 1: Fetch data ──
@@ -704,7 +704,7 @@ class MultiFactorPipeline(BasePipeline):
 
             gate_dir = Path(EXPERIMENTS_DIR)
             gate_dir.mkdir(parents=True, exist_ok=True)
-            gate_file = gate_dir / f"{strategy_name}_{now_cn().strftime('%Y%m%d_%H%M%S')}_gate.json"
+            gate_file = gate_dir / f"{strategy_name}_{fmt_ts(now_cn(), sep='_')}_gate.json"
             import json as _json
 
             gate_file.write_text(
@@ -829,7 +829,7 @@ class MultiFactorPipeline(BasePipeline):
         # Generate ID early so we can snapshot data before recording
         from pathlib import Path as _Path
 
-        experiment_id = f"multifactor_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
+        experiment_id = f"multifactor_{fmt_ts(datetime.now(UTC), sep='_')}"
 
         # ── Data Snapshot: pin filtered price data for reproducibility ──
         snapshot_dir = _Path(EXPERIMENTS_DIR) / experiment_id
@@ -2046,7 +2046,7 @@ class MultiFactorPipeline(BasePipeline):
 
         tracker = ExperimentTracker()
         if experiment_id is None:
-            experiment_id = f"multifactor_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
+            experiment_id = f"multifactor_{fmt_ts(datetime.now(UTC), sep='_')}"
 
         # Compute annualized metrics from backtest results
         total_ret = float(result.metrics.get("total_return_pct", 0.0))
@@ -2481,7 +2481,7 @@ def _persist_factor_health(
 
         monitor = FactorHealthMonitor()
         health_logger = FactorHealthLogger()
-        today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+        today_str = fmt_date(datetime.now(UTC))
         logged = 0
 
         for entry in results:
@@ -2842,7 +2842,7 @@ def _archive_research_debt(
     # ── Build content ──
     failure_lines = "\n".join(f"- ❌ {f}" for f in failures)
     content = f"""## Context
-**Date**: {now_cn().strftime("%Y-%m-%d %H:%M")}
+**Date**: {fmt_display(now_cn())}
 **Period**: {start} → {end}
 **Strategy**: {strategy_name}
 

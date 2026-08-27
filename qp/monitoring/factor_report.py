@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from qp.shared.paths import KNOWLEDGE_DIR
+from qp.shared.time import fmt_display_utc, fmt_ts
 
 
 class FactorReportGenerator:
@@ -54,7 +55,7 @@ class FactorReportGenerator:
         family_name = svc.FAMILY_MAP.get(factor_name, "其他 Other")
 
         lines: list[str] = []
-        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        now = fmt_display_utc(datetime.now(UTC))
 
         # Header
         lines.append(f"# Factor Research Report: {factor_name}")
@@ -200,7 +201,7 @@ class FactorReportGenerator:
             return None
 
         lines: list[str] = []
-        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        now = fmt_display_utc(datetime.now(UTC))
 
         lines.append("# Factor Health Overview Report")
         lines.append(f"**Generated**: {now}")
@@ -300,7 +301,7 @@ class FactorReportGenerator:
         Returns:
             Path to saved report file.
         """
-        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        timestamp = fmt_ts(datetime.now(UTC), sep="_")
         filename = f"factor_report_{name}_{timestamp}.md"
         path = self._output_dir / filename
         path.write_text(report)

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, cast
 from loguru import logger
 
 from qp.shared.protocols.base_strategy import BaseStrategy
+from qp.shared.time import fmt_compact
 from qp.shared.types import RebalanceSchedule, StrategyLifecycle
 from qp.strategy.approved import cast_dict
 
@@ -571,7 +572,7 @@ class StrategyRegistry:
             from datetime import datetime
             from zoneinfo import ZoneInfo
 
-            version = "v" + datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+            version = "v" + fmt_compact(datetime.now(ZoneInfo("Asia/Shanghai")))
 
         approved = ApprovedStrategy.from_strategy_meta(
             strategy_id=strategy_id,

@@ -29,6 +29,7 @@ from qp.monitoring.factor_health_logger import FactorHealthLogger
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.paths import FACTOR_VALUES_DAILY
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import fmt_date
 from qp.shared.types import PipelineStatus
 
 
@@ -274,7 +275,7 @@ class FactorHealthPipeline(BasePipeline):
                 result.errors.append("No factor columns in factor_values")
                 return result
 
-            date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+            date_str = fmt_date(datetime.now(UTC))
             updated = 0
             skipped: list[str] = []
 

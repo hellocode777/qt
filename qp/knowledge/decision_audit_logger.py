@@ -33,6 +33,7 @@ from typing import Any
 import polars as pl
 
 from qp.shared.paths import DECISIONS_DIR
+from qp.shared.time import fmt_date
 
 DEFAULT_AUDIT_DIR = DECISIONS_DIR
 AUDIT_LOG_FILE = "trade_decision_audit.parquet"
@@ -198,7 +199,7 @@ class DecisionAuditLogger:
             The created DecisionRecord.
         """
         record = DecisionRecord(
-            date=date or datetime.now(UTC).strftime("%Y-%m-%d"),
+            date=date or fmt_date(datetime.now(UTC)),
             timestamp=datetime.now(UTC).isoformat(),
             symbol=symbol,
             action=action,
@@ -237,7 +238,7 @@ class DecisionAuditLogger:
         if signals.is_empty():
             return 0
 
-        date_val = date_str or datetime.now(UTC).strftime("%Y-%m-%d")
+        date_val = date_str or fmt_date(datetime.now(UTC))
         records: list[DecisionRecord] = []
 
         for row in signals.iter_rows(named=True):

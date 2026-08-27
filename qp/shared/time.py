@@ -27,6 +27,12 @@ __all__ = [
     "CN_TZ",
     "cn_iso",
     "display_cn",
+    "fmt_compact",
+    "fmt_date",
+    "fmt_display",
+    "fmt_display_utc",
+    "fmt_sec",
+    "fmt_ts",
     "now_cn",
     "now_utc",
     "today_cn",
@@ -62,3 +68,37 @@ def cn_iso() -> str:
 def display_cn(iso_str: str) -> str:
     """ISO 8601 时间字符串 → 'YYYY-MM-DD HH:MM:SS' 北京时间显示。"""
     return datetime.fromisoformat(iso_str).astimezone(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+
+# ── 格式函数（统一 strftime 格式，见 docs/tracking C-3）──────────────
+# 约定：dt 省略时默认北京当前时间；日期/时间对象可直接传入。
+
+
+def fmt_date(dt: datetime | date | None = None) -> str:
+    """'YYYY-MM-DD'（日期显示/文件名）。"""
+    return (dt or now_cn()).strftime("%Y-%m-%d")
+
+
+def fmt_compact(dt: datetime | date | None = None) -> str:
+    """'YYYYMMDD' 紧凑日期（目录/版本）。"""
+    return (dt or now_cn()).strftime("%Y%m%d")
+
+
+def fmt_ts(dt: datetime | date | None = None, sep: str = "_") -> str:
+    """'YYYYMMDD{sep}HHMMSS' 时间戳（文件名）。"""
+    return (dt or now_cn()).strftime(f"%Y%m%d{sep}%H%M%S")
+
+
+def fmt_display(dt: datetime | date | None = None) -> str:
+    """'YYYY-MM-DD HH:MM' 分钟级显示。"""
+    return (dt or now_cn()).strftime("%Y-%m-%d %H:%M")
+
+
+def fmt_sec(dt: datetime | date | None = None) -> str:
+    """'YYYY-MM-DD HH:MM:SS' 秒级显示。"""
+    return (dt or now_cn()).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def fmt_display_utc(dt: datetime | None = None) -> str:
+    """'YYYY-MM-DD HH:MM UTC' UTC 显示。"""
+    return (dt or now_utc()).strftime("%Y-%m-%d %H:%M UTC")

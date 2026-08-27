@@ -21,6 +21,8 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.shared.time import fmt_ts
+
 # ------------------------------------------------------------------
 # Data model
 # ------------------------------------------------------------------
@@ -31,7 +33,7 @@ def generate_run_id() -> str:
 
     Format: etl-YYYYMMDD-HHMMSS
     """
-    return f"etl-{datetime.now(tz=UTC).strftime('%Y%m%d-%H%M%S')}"
+    return f"etl-{fmt_ts(datetime.now(tz=UTC), sep='-')}"
 
 
 # ------------------------------------------------------------------

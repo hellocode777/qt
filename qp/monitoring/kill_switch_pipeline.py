@@ -38,6 +38,7 @@ from qp.monitoring.strategy_monitor import HealthLevel, StrategyHealth
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.paths import ONLINE_SIGNAL_HISTORY
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import fmt_ts
 from qp.shared.types import PipelineStatus
 
 
@@ -133,7 +134,7 @@ class KillSwitchPipeline(BasePipeline):
             PipelineResult with MonitorReport as artifact.
         """
 
-        run_id = getattr(context, "run_id", "ks-" + datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
+        run_id = getattr(context, "run_id", "ks-" + fmt_ts(datetime.now(UTC), sep="-"))
         logger = getattr(context, "logger", None)
 
         report = MonitorReport(

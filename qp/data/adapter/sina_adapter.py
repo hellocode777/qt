@@ -16,6 +16,7 @@ import requests
 
 from qp.data.adapter.code_list import CORE_SYMBOLS
 from qp.shared.protocols.base_data_source import BaseDataSource
+from qp.shared.time import fmt_date
 
 try:
     from loguru import logger
@@ -60,8 +61,8 @@ class SinaAdapter(BaseDataSource):
         """
         symbols: list[str] = kwargs.get("symbols") or self.DEFAULT_SYMBOLS  # type: ignore[assignment]
 
-        start_str = start_date.strftime("%Y-%m-%d")
-        end_str = end_date.strftime("%Y-%m-%d")
+        start_str = fmt_date(start_date)
+        end_str = fmt_date(end_date)
 
         all_rows: list[dict] = []
         total = len(symbols)
