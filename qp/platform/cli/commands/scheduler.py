@@ -11,6 +11,23 @@ if TYPE_CHECKING:
     from qp.platform.runtime.application import Application
 
 
+def _next_rebalance_date(date_str: str) -> str:
+    """Next monthly rebalance date.
+
+    Matches daily_pipeline is_rebalance_day = today.day <= 5: rebalance runs
+    on the 1st-5th of each month; otherwise the next rebalance is next
+    month's 1st.
+    """
+    from datetime import date
+
+    d = date.fromisoformat(date_str)
+    if d.day <= 5:
+        return date_str
+    if d.month == 12:
+        return f"{d.year + 1}-01-01"
+    return f"{d.year}-{d.month + 1:02d}-01"
+
+
 def format_decision_email(data: dict, date_str: str) -> str:
     """Format a DecisionPackage JSON into a readable email body."""
     lines: list[str] = []
@@ -26,6 +43,20 @@ def format_decision_email(data: dict, date_str: str) -> str:
         lines.append(f"  状态: {regime.get('regime', 'N/A')}")
         if regime.get("suggested_exposure"):
             lines.append(f"  建议敞口: {regime['suggested_exposure']:.0%}")
+
+    # Rebalance info — 月度调仓（每月1-5号），非调仓日买入 0 只属正常
+    try:
+        from datetime import date as _date
+
+        if _date.fromisoformat(date_str).day <= 5:
+            rebal_txt = f"今日为调仓日（{date_str}）"
+        else:
+            rebal_txt = f"下次调仓日: {_next_rebalance_date(date_str)}"
+        lines.append("")
+        lines.append("【调仓】")
+        lines.append(f"  {rebal_txt} — 月度调仓（每月1-5号），非调仓日买入 0 只属正常")
+    except ValueError:
+        pass
 
     # Strategy signals
     signals = data.get("strategy_signals", {})
