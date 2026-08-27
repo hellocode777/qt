@@ -96,4 +96,4 @@ class TestLoadWeightScales:
     def test_real_default_dir_writes_to_disk(self) -> None:
         # Guard: the production default dir must remain the one
         # KillSwitchPipeline writes to.
-        assert DEFAULT_RETRAIN_DIR == "data/monitoring"
+        assert str(DEFAULT_RETRAIN_DIR) == "data/monitoring"
