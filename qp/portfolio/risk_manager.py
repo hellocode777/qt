@@ -143,6 +143,7 @@ class PortfolioRiskManager(BasePortfolioRiskManager):
         signals: pl.DataFrame,
         prices: pl.DataFrame,
         current_positions: pl.DataFrame | None = None,
+        weight_scale: float = 1.0,
     ) -> tuple[pl.DataFrame, RiskReport]:
         """Apply risk limits with price data for correlation analysis.
 
@@ -150,6 +151,11 @@ class PortfolioRiskManager(BasePortfolioRiskManager):
             signals: Strategy signals with [symbol, feature_value/rank].
             prices: Price DataFrame with [trade_date, symbol, close].
             current_positions: Current holdings (optional).
+            weight_scale: Effective capital ratio allocated to this signal set
+                (regime suggested exposure × strategy health). The audit
+                evaluates the portfolio at equal-weight × weight_scale so the
+                assumption matches the allocator's actual execution (e.g.
+                sideways_down 30% exposure → 1/5 × 0.3 = 6% < 8% cap).
 
         Returns:
             (filtered_signals, RiskReport).
@@ -172,9 +178,9 @@ class PortfolioRiskManager(BasePortfolioRiskManager):
                 f"{n_signals - max_positions} dropped"
             )
 
-        # Calculate equal weight for remaining
+        # Calculate equal weight for remaining (scaled by effective capital ratio)
         remaining = [s for s in symbols if s not in dropped]
-        eq_wt = 1.0 / max(len(remaining), 1)
+        eq_wt = 1.0 / max(len(remaining), 1) * weight_scale
         if eq_wt > self._max_single_position:
             violations.append(
                 f"Position cap: equal weight {eq_wt:.1%} > "
@@ -216,7 +222,7 @@ class PortfolioRiskManager(BasePortfolioRiskManager):
         # Final remaining
         final_symbols = [s for s in symbols if s not in dropped]
         n_final = len(final_symbols)
-        final_eq_wt = 1.0 / max(n_final, 1)
+        final_eq_wt = 1.0 / max(n_final, 1) * weight_scale
 
         position_weights = dict.fromkeys(final_symbols, final_eq_wt)
 

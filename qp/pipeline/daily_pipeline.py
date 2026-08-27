@@ -745,8 +745,13 @@ class DailyPipeline(BasePipeline):
             risk_report = None
             if not combined_signals.is_empty() and not prices.is_empty():
                 risk_manager = PortfolioRiskManager()
+                # 审计口径与执行对齐：allocator 用 alloc_capital =
+                # total_capital × regime敞口 × 策略健康 做 1/N 分配，
+                # 审计也按同样缩放后的权重判断单仓/行业上限，
+                # 避免 1/5=20% > 8% 的假阳性（实际 sideways_down 时每只 ~6%）。
+                risk_scale = suggested_position_pct * strategy_exposure_scale
                 filtered_signals, risk_report = risk_manager.apply_risk_limits_with_prices(
-                    combined_signals, prices
+                    combined_signals, prices, weight_scale=risk_scale
                 )
                 result.metrics["risk_candidates_in"] = risk_report.candidates_in
                 result.metrics["risk_candidates_out"] = risk_report.candidates_out
