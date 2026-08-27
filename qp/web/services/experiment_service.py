@@ -239,10 +239,8 @@ class ExperimentService:
 
         # Cache result
         exp_dir.mkdir(parents=True, exist_ok=True)
-        try:
+        with contextlib.suppress(Exception):
             json_save(cache_path, result)
-        except Exception:
-            pass
 
         return result
 
