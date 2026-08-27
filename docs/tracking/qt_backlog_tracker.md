@@ -99,6 +99,34 @@
 
 ---
 
+## 统一接口候选（2026-08-27 扫描，仅记录未实施）
+
+> 背景：时间接口已统一（`qp/shared/time.py`，commit fb8d00b）。以下 4 处为同类"散落多点、值得收编"的横切关注点。
+
+### C-1 路径常量 ⭐ 推荐先做
+- 现状：`data/` 字符串硬编码 **153 处 / 87 文件**（data/dataset、data/experiments、data/decisions、data/paper_trading、data/monitoring、data/knowledge 等）
+- 方案：`qp/shared/paths.py` 统一常量 → 改目录位置只动一处
+- 成本：中（机械替换为主）
+
+### C-2 JSON 读写封装
+- 现状：`json.dump` 58 处 + `json.load` 60 处 / 50 文件
+- 方案：`json_save()/json_load()`（统一 ensure_ascii=False + indent=2 + 自动建目录）
+- 成本：低-中
+
+### C-3 strftime 格式收编
+- 现状：56 处 / **10 种格式**（%Y-%m-%d 29、%Y%m%d 10、%Y%m%d_%H%M%S 5...）
+- 方案：并入 `qp/shared/time.py`（format_cn / format_ts_file 等）
+- 成本：低，价值低-中（格式各有用途）
+
+### C-4 print() 残留甄别
+- 现状：print( 调用 1048 处 / 59 文件（大部分是 CLI 命令合法输出，核心库层违规）
+- 方案：甄别"该 print"（CLI 展示）vs"该 logger"（核心库），rule.md No print 硬规则
+- 成本：中高（甄别成本大）
+
+**已统一无需动**：seed（DEFAULT_SEED 引用 17 处）、mkdir（exist_ok=True 78 处）、env（仅 9 处）
+
+---
+
 ## 关联
 
 - 架构导航: `docs/ai/PROJECT_MAP.md`
