@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from qp.shared.time import today_cn
+
 if TYPE_CHECKING:
     from qp.decision.decision_package import DecisionPackage
 
@@ -28,7 +30,6 @@ def cmd_decide(
       --show ID  Display a specific DecisionPackage
     Legacy (without DecisionPackage): strategy_id + --capital
     """
-    from datetime import date
 
     import polars as pl
 
@@ -40,7 +41,7 @@ def cmd_decide(
     from qp.strategy.registry import StrategyRegistry
     from qp.strategy.simple_rank import SimpleRankStrategy
 
-    today = date.today()
+    today = today_cn()
     total_capital = capital if capital > 0 else 100_000.0
     show_history = history
     show_id = show

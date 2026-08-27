@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from qp.shared.time import today_cn
+
 
 def cmd_paper_start(strategy_id: str = "momentum_vol_full", capital: float = 100_000) -> int:
     """Start a 30-day paper trading run."""
-    from datetime import date
 
     from qp.simulation.paper_trading import PaperTradingTracker
     from qp.strategy.registry import StrategyRegistry
@@ -13,7 +14,7 @@ def cmd_paper_start(strategy_id: str = "momentum_vol_full", capital: float = 100
     print("═══ QP 模拟交易 / Paper Trading ═══")
     print()
     print(f"  策略 / Strategy:  {strategy_id}")
-    print(f"  起始日期 / Start: {date.today().isoformat()}")
+    print(f"  起始日期 / Start: {today_cn().isoformat()}")
     print(f"  初始资金 / Capital: ¥{capital:,.0f}")
 
     # Verify strategy exists in the registry (no auto-registration —

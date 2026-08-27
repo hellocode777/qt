@@ -19,9 +19,9 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
 
+from qp.shared.time import utc_iso
 from qp.strategy.models.alpha_signal import AlphaSignal
 
 
@@ -52,7 +52,7 @@ class StrategyResult:
     n_stocks_evaluated: int = 0
     n_stocks_selected: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
-    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
+    generated_at: str = field(default_factory=lambda: utc_iso())
     success: bool = True
     error_message: str = ""
 

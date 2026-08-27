@@ -32,6 +32,7 @@ from qp.data.timestamp import annotate_timestamps_pl
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
 
 # Tier directories
@@ -82,10 +83,10 @@ class FullDataPipeline(BasePipeline):
 
         params = context.parameters
         start_date: str = params.get("start_date", "2015-01-01")
-        end_date: str = params.get("end_date", date.today().isoformat())
+        end_date: str = params.get("end_date", today_cn().isoformat())
         batch_size: int = int(params.get("batch_size", 500))
 
-        version = date.today().isoformat()
+        version = today_cn().isoformat()
 
         result = PipelineResult(
             status=PipelineStatus.SUCCESS,

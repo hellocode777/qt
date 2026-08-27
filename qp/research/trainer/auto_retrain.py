@@ -26,6 +26,7 @@ import polars as pl
 
 from qp.shared.constants import TRADING_DAYS_PER_YEAR
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
 
 # ------------------------------------------------------------------
@@ -118,7 +119,7 @@ class MonthlyRetrainPipeline(BasePipeline):
 
         params = getattr(context, "parameters", {}) or {}
         strategy_id = params.get("strategy_id", "simple_rank_v1.0")
-        train_end_str = params.get("train_end", date.today().isoformat())
+        train_end_str = params.get("train_end", today_cn().isoformat())
         feature_names = params.get("features", ["momentum_20d", "volatility_20d"])
         dry_run = params.get("dry_run", False)
         logger = getattr(context, "logger", None)

@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import json
 import statistics
-from datetime import date
 from pathlib import Path
 
 import polars as pl
@@ -42,6 +41,7 @@ from qp.research.evaluation.diag_money_flow_ic import (
     compute_factor_wide,
     load_capital_flow,
 )
+from qp.shared.time import today_cn
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT_DIR = ROOT / "data" / "experiments"
@@ -248,7 +248,7 @@ def main() -> None:
     merged = mf.join(composite, on=["trade_date", "symbol"], how="inner").drop_nulls()
 
     print(f"\n=== Incremental IC: {FACTOR} vs momentum_vol_full composite ===")
-    report: dict = {"date": str(date.today()), "weights": weights, "windows": {}}
+    report: dict = {"date": str(today_cn()), "weights": weights, "windows": {}}
 
     for lo, hi in WINDOWS:
         sub = merged.filter(pl.col("trade_date").is_between(pl.lit(lo), pl.lit(hi)))
@@ -277,7 +277,7 @@ def main() -> None:
     report["full_sample"] = full
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / f"mf_incremental_ic_{date.today().strftime('%Y%m%d')}.json"
+    out_path = OUT_DIR / f"mf_incremental_ic_{today_cn().strftime('%Y%m%d')}.json"
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(f"\n[out] {out_path}")
 

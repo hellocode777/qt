@@ -18,7 +18,7 @@ Usage:
         smoother=SignalSmoother(method=SmoothMethod.EMA, halflife=5),
     )
     gen = SignalGenerator(config)
-    signals = gen.generate(features_df, as_of_date=date.today())
+    signals = gen.generate(features_df, as_of_date=today_cn())
     # → Polars DataFrame [symbol, raw_score, rank, confidence]
 """
 
@@ -80,7 +80,7 @@ class SignalGenerator:
 
     Usage:
         gen = SignalGenerator(GeneratorConfig(model_name="lgb_rank_v3"))
-        scores = gen.generate(features_df, as_of_date=date.today())
+        scores = gen.generate(features_df, as_of_date=today_cn())
     """
 
     config: GeneratorConfig = field(default_factory=GeneratorConfig)

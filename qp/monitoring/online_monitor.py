@@ -93,7 +93,7 @@ class OnlineSignalMonitor:
         monitor = OnlineSignalMonitor()
         result = monitor.check(
             strategy_id="momentum_vol_full",
-            today=date.today(),
+            today=today_cn(),
             signals_df=signals,   # [symbol, raw_score, rank]
             price_data=price_data,  # {symbol: DataFrame}
         )

@@ -22,6 +22,7 @@ from qp.data.timestamp import annotate_timestamps_pl
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
 
 
@@ -34,7 +35,7 @@ class DataPipeline(BasePipeline):
 
     def run(self, context: PipelineContext) -> PipelineResult:
         start_date_str = context.parameters.get("start_date", "2015-01-01")
-        end_date_str = context.parameters.get("end_date", date.today().isoformat())
+        end_date_str = context.parameters.get("end_date", today_cn().isoformat())
         start_date = date.fromisoformat(start_date_str)
         end_date = date.fromisoformat(end_date_str)
 
@@ -263,7 +264,7 @@ class DataPipeline(BasePipeline):
 
             report_dir = Path("data/reports")
             report_dir.mkdir(parents=True, exist_ok=True)
-            report_path = report_dir / f"data_quality_{date.today().isoformat()}.json"
+            report_path = report_dir / f"data_quality_{today_cn().isoformat()}.json"
             report = {
                 "dataset": "daily_price",
                 "status": "PASS",
@@ -362,7 +363,7 @@ def _validate_data_gate(
 
     # ── 5. No future dates ──
     if "trade_date" in df.columns:
-        today = date.today()
+        today = today_cn()
         future = df.filter(pl.col("trade_date").cast(pl.Utf8) > today.isoformat())
         if future.height > 0:
             errors.append(f"{future.height} rows with future trade_date")

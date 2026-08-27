@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
+from qp.shared.time import today_cn
 from qp.shared.types import StrategyLifecycle
 
 # ------------------------------------------------------------------
@@ -147,7 +148,7 @@ class PaperTradingTracker:
         import uuid
 
         if start_date is None:
-            start_date = date.today().isoformat()
+            start_date = today_cn().isoformat()
 
         run = PaperTradingRun(
             run_id=f"pt-{uuid.uuid4().hex[:8]}",

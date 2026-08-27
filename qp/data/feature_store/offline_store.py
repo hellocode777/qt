@@ -21,12 +21,13 @@ Usage::
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 from loguru import logger
+
+from qp.shared.time import utc_iso
 
 _DEFAULT_STORE_DIR = Path("data/feature_store_data")
 
@@ -291,7 +292,7 @@ class OfflineStore:
             "columns": [c for c in df.columns if c not in ("year",)],
             "min_date": str(df["trade_date"].min()) if "trade_date" in df.columns else None,
             "max_date": str(df["trade_date"].max()) if "trade_date" in df.columns else None,
-            "last_updated": datetime.now().isoformat(),
+            "last_updated": utc_iso(),
         }
 
         meta_path = group_dir / "_metadata.json"

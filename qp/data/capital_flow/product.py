@@ -85,7 +85,7 @@ class CapitalFlowProduct:
 
         raw = self._flow_adapter.fetch_raw(
             start_date=__import__("datetime").date(2000, 1, 1),
-            end_date=__import__("datetime").date.today(),
+            end_date=__import__("datetime").today_cn(),
             symbols=symbols,
         )
 
@@ -110,7 +110,7 @@ class CapitalFlowProduct:
         """
         raw = self._northbound_adapter.fetch_raw(
             start_date=__import__("datetime").date(2000, 1, 1),
-            end_date=__import__("datetime").date.today(),
+            end_date=__import__("datetime").today_cn(),
             symbols=symbols,
         )
 

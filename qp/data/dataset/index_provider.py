@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 
 import requests
 
+from qp.shared.time import today_cn
+
 if TYPE_CHECKING:
     import polars as pl
 
@@ -85,7 +87,7 @@ def _fetch_tencent_index(symbol: str, days: int = 260) -> pl.DataFrame | None:
     import polars as pl
     from loguru import logger
 
-    end = date.today()
+    end = today_cn()
     start = end - timedelta(days=days)
 
     params = {

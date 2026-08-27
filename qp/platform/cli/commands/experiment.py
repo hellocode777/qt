@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from qp.shared.time import today_cn
+
 
 def cmd_experiment_compare() -> int:
     """Compare recent experiments side-by-side."""
@@ -773,8 +775,6 @@ def cmd_experiment_optuna() -> int:
         )
         return 1
 
-    from datetime import date as _date
-
     from qp.pipeline.multifactor_pipeline import MultiFactorPipeline
     from qp.research.feature.compute import PRICE_VOLUME_FACTORS, compute_all_factors
     from qp.research.model_trainer import FEATURES, WalkForwardScorer
@@ -783,7 +783,7 @@ def cmd_experiment_optuna() -> int:
     args = sys.argv[3:]
     trials = 30
     start = "2019-01-01"
-    end = _date.today().isoformat()
+    end = today_cn().isoformat()
     symbols: list[str] = []
     dataset = "daily_price_latest"
     snapshot = ""

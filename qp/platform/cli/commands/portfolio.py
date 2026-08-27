@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from qp.shared.time import today_cn
+
 # ------------------------------------------------------------------
 # 中英文行业映射
 # ------------------------------------------------------------------
@@ -33,7 +35,6 @@ def sector_zh(en_name: str) -> str:
 
 def cmd_portfolio_report() -> int:
     """Print portfolio-level KPI dashboard (bilingual)."""
-    from datetime import date
 
     import polars as pl
 
@@ -54,7 +55,7 @@ def cmd_portfolio_report() -> int:
     print("=" * 60)
     print()
 
-    today = date.today()
+    today = today_cn()
 
     # Load data
     try:
@@ -212,13 +213,12 @@ def cmd_portfolio_report() -> int:
 
 def cmd_portfolio_risk() -> int:
     """Run risk analysis on current holdings (bilingual)."""
-    from datetime import date
 
     import polars as pl
 
     from qp.portfolio import CorrelationAnalyzer, IndustryMapper, PortfolioRiskManager
 
-    today = date.today()
+    today = today_cn()
 
     try:
         prices = pl.read_parquet("data/dataset/daily_price_" + today.isoformat() + ".parquet")

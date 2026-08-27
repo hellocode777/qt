@@ -15,7 +15,7 @@ Usage:
         "lookback": 60,
         "variant": "residual",
     })
-    signals = strategy.generate_signals(date.today())
+    signals = strategy.generate_signals(today_cn())
     # → Polars DataFrame [symbol, raw_score, rank]
 """
 

@@ -17,6 +17,7 @@ from qp.data.fundamental.adapter import FundamentalAdapter
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
 
 
@@ -53,7 +54,7 @@ class FundamentalPipeline(BasePipeline):
             adapter = FundamentalAdapter()
             raw = adapter.fetch_raw(
                 date(2000, 1, 1),
-                date.today(),
+                today_cn(),
                 symbols=symbol_list,
             )
             result.metrics["raw_rows"] = len(raw)
@@ -73,7 +74,7 @@ class FundamentalPipeline(BasePipeline):
             # Save
             output_dir = Path("data/dataset")
             output_dir.mkdir(parents=True, exist_ok=True)
-            version = date.today().isoformat()
+            version = today_cn().isoformat()
             output_path = output_dir / "fundamentals_latest.parquet"
 
             raw_pl.write_parquet(str(output_path))

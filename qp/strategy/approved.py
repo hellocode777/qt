@@ -21,10 +21,11 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
+
+from qp.shared.time import CN_TZ
 
 # Project convention (scheduler/config): timestamps use Asia/Shanghai.
-CN_TZ = ZoneInfo("Asia/Shanghai")
+# CN_TZ imported from qp.shared.time (single source of truth).
 
 
 def build_validation_report(meta: Any) -> dict[str, Any]:

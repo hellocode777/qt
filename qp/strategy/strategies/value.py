@@ -15,7 +15,7 @@ Usage:
         "metrics": {"PE_TTM": 0.4, "PB": 0.3, "Dividend_Yield": 0.3},
         "top_n": 30,
     })
-    signals = strategy.generate_signals(date.today())
+    signals = strategy.generate_signals(today_cn())
     # → Polars DataFrame [symbol, raw_score, rank]
 """
 

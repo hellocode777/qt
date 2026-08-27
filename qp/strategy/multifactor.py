@@ -1184,7 +1184,7 @@ class MultiFactorStrategy(BaseStrategy):
             weights={"Momentum_3M": -0.10, "Volatility_20D": 0.08, ...},
             top_n=10,
         )
-        signals = strategy.generate_signals(as_of_date=date.today())
+        signals = strategy.generate_signals(as_of_date=today_cn())
         # → polars DataFrame [symbol, raw_score, rank]
     """
 

@@ -21,6 +21,7 @@ from loguru import logger
 from qp.data.builder.config import BuildConfig, DatasetMetadata
 from qp.data.builder.result import BuildResult
 from qp.data.dataset.registry import DatasetRegistry
+from qp.shared.time import today_cn
 
 
 class DatasetBuilder:
@@ -162,7 +163,7 @@ class DatasetBuilder:
 
         # ── Step 4: Assign version ──
         if not metadata.version:
-            metadata.version = date.today().isoformat()
+            metadata.version = today_cn().isoformat()
 
         # ── Step 5: Persist ──
         output_dir = Path(self.config.output_dir)

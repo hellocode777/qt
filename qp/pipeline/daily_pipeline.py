@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import polars as pl
@@ -37,6 +37,7 @@ from qp.portfolio.risk_manager import PortfolioRiskManager
 from qp.portfolio.single_portfolio import Order
 from qp.research.pipeline import FeaturePipeline
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
 from qp.strategy.ensemble.ensemble_engine import EnsembleEngine, UniversePolicy
 from qp.strategy.ensemble.weighting import WeightEngine, WeightMethod
@@ -142,9 +143,8 @@ def _load_fundamental_data() -> dict[str, pl.DataFrame]:
 
 def _build_lineage_snapshot(price_data: dict[str, pl.DataFrame]) -> LineageSnapshot:
     """Build lineage snapshot from current dataset and feature versions."""
-    from datetime import date as _date
 
-    today = _date.today().isoformat()
+    today = today_cn().isoformat()
     dataset_name = "daily_price_main"
     dataset_rows = 0
     dataset_symbols = len(price_data)
@@ -209,7 +209,7 @@ class DailyPipeline(BasePipeline):
             total_capital = context.parameters.get("capital", 100_000)
             top_n = context.parameters.get("top_n", 10)
             alloc_method = context.parameters.get("allocator", "equal_weight")
-            today = date.today()
+            today = today_cn()
             run_id_short = context.run_id[:8] if context.run_id else "unknown"
             # V2.1: 调仓日 = 每月前5个自然日（近似每月第一个交易周）
             # --force-rebalance 可强制当调仓日处理（建仓/手动重平衡用）

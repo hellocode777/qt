@@ -14,6 +14,7 @@ import polars as pl
 from loguru import logger
 
 from qp.data.fundamental.adapter import FundamentalAdapter
+from qp.shared.time import today_cn
 
 # Fields available from the fundamental data product
 FUNDAMENTAL_FIELDS: list[str] = [
@@ -105,7 +106,7 @@ class FundamentalDataProduct:
 
         raw_df = self._adapter.fetch_raw(
             start_date=date(2000, 1, 1),
-            end_date=date.today(),
+            end_date=today_cn(),
             symbols=symbols,
         )
 

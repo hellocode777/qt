@@ -19,8 +19,9 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
+
+from qp.shared.time import utc_iso
 
 
 @dataclass
@@ -78,7 +79,7 @@ class PortfolioSnapshot:
 
     # Meta
     positions: int = 0
-    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
+    generated_at: str = field(default_factory=lambda: utc_iso())
     metadata: dict[str, Any] = field(default_factory=dict)
 
     # ------------------------------------------------------------------

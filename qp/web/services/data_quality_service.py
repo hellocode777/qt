@@ -16,6 +16,8 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.shared.time import today_cn
+
 
 class DataQualityService:
     """Read-only service for data quality and freshness metrics.
@@ -41,7 +43,7 @@ class DataQualityService:
         Returns:
             Dict with today's datasets, stock counts, row counts, freshness.
         """
-        today_str = date.today().isoformat()
+        today_str = today_cn().isoformat()
 
         # 1. Read registry for today's entries
         registry_entries = self._read_registry()
@@ -124,7 +126,7 @@ class DataQualityService:
         if daily_end_date:
             try:
                 end_dt = datetime.strptime(daily_end_date, "%Y-%m-%d").date()
-                trading_days_old = self._trading_days_old(end_dt, date.today())
+                trading_days_old = self._trading_days_old(end_dt, today_cn())
                 if trading_days_old == 0:
                     freshness_status = "fresh"
                     freshness_label = f"今日已更新 ({daily_end_date})"

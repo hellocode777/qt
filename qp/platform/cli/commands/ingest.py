@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from qp.shared.time import today_cn
+
 
 def cmd_pipeline_list() -> int:
     """List registered pipelines."""
@@ -106,7 +108,7 @@ def cmd_ingest() -> int:
 
 def cmd_run() -> int:
     """Run the daily end-to-end pipeline."""
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     from qp.pipeline.daily_pipeline import DailyPipeline
     from qp.platform.pipeline.context import PipelineContext
@@ -120,7 +122,7 @@ def cmd_run() -> int:
     force_rebalance = "--force-rebalance" in sys.argv
     # Default: fetch last 5 days (Sina, fast with progress).
     # Full backfill via `qp ingest 2015-01-01`.
-    recent_start = (date.today() - timedelta(days=5)).isoformat()
+    recent_start = (today_cn() - timedelta(days=5)).isoformat()
     context = PipelineContext(
         pipeline_name="daily",
         parameters={

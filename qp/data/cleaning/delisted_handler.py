@@ -34,6 +34,8 @@ from typing import ClassVar
 
 from loguru import logger
 
+from qp.shared.time import today_cn
+
 # Cache: 30 days for delisted stock list (changes infrequently)
 _CACHE_TTL_DAYS = 30
 _DEFAULT_CACHE_PATH = Path("data/delisted_cache.json")
@@ -175,7 +177,7 @@ class DelistedHandler:
         threshold = stale_days if stale_days is not None else self._stale_days
         try:
             last = date.fromisoformat(latest_date[:10])
-            days_since = (date.today() - last).days
+            days_since = (today_cn() - last).days
             return days_since <= threshold
         except (ValueError, TypeError):
             return True
@@ -197,7 +199,7 @@ class DelistedHandler:
         threshold = stale_days if stale_days is not None else self._stale_days
         from datetime import date
 
-        today = date.today()
+        today = today_cn()
         inactive: list[str] = []
 
         for code, latest_str in code_date_map.items():

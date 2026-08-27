@@ -32,7 +32,6 @@ import argparse
 import glob
 import json
 import sys
-from datetime import date
 from pathlib import Path
 
 import polars as pl
@@ -42,6 +41,7 @@ from qp.research.feature.money_flow_real import (
     REAL_MONEY_FLOW_FACTORS,
     compute_real_money_flow_factors,
 )
+from qp.shared.time import today_cn
 
 ROOT = Path(__file__).resolve().parents[3]
 CF_PARQUET = ROOT / "data" / "dataset" / "capital_flow_latest.parquet"
@@ -174,14 +174,14 @@ def main() -> None:
     price = _build_adj_price(cf)
     del cf  # free the 9.4M-row raw frame; only `wide` + `price` stay resident
 
-    print(f"\n=== Money Flow Factor IC Diagnostics ({date.today()}) ===")
+    print(f"\n=== Money Flow Factor IC Diagnostics ({today_cn()}) ===")
     print(
         f"stocks: {wide.select(pl.col('symbol').n_unique()).item()} | "
         f"rows: {wide.height} | horizons: {horizons}\n"
     )
 
     report: dict = {
-        "date": str(date.today()),
+        "date": str(today_cn()),
         "min_stocks_per_day": args.min_stocks,
         "horizons": horizons,
         "factors": {},
@@ -256,7 +256,7 @@ def main() -> None:
         print()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / f"money_flow_ic_{date.today().strftime('%Y%m%d')}.json"
+    out_path = OUT_DIR / f"money_flow_ic_{today_cn().strftime('%Y%m%d')}.json"
 
     # Defensive: walk the report and coerce any non-JSON-native scalars.
     def _clean(o: object) -> object:

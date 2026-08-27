@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
+from qp.shared.time import today_cn
 from qp.shared.types import RebalanceSchedule
 
 
@@ -83,7 +84,7 @@ class StrategyRunner:
         ))
 
         runner = StrategyRunner(registry)
-        result = runner.run(date.today())
+        result = runner.run(today_cn())
         # → RunnerResult with signals dict and skip/error lists
     """
 
@@ -121,7 +122,7 @@ class StrategyRunner:
         import time
 
         if run_date is None:
-            run_date = date.today()
+            run_date = today_cn()
 
         date_str = run_date.isoformat()
         t0 = time.time()

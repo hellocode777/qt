@@ -32,7 +32,7 @@ Usage via CLI:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -52,6 +52,7 @@ from qp.research.feature.compute import (
     compute_all_factors,
 )
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import now_cn, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
 from qp.strategy.multifactor import generate_rebalance_signals
 
@@ -113,7 +114,7 @@ class MultiFactorPipeline(BasePipeline):
 
         symbols: list[str] = params.get("symbols", [])  # empty = all stocks in dataset
         start_date_str: str = params.get("start_date", "2024-01-01")
-        end_date_str: str = params.get("end_date", date.today().isoformat())
+        end_date_str: str = params.get("end_date", today_cn().isoformat())
         top_n: int = int(params.get("top_n", 10))
         rebalance_freq: int = int(params.get("rebalance_freq", 20))
         sell_buffer: int = int(params.get("sell_buffer_rank", 5))
@@ -702,9 +703,7 @@ class MultiFactorPipeline(BasePipeline):
 
             gate_dir = Path("data/experiments")
             gate_dir.mkdir(parents=True, exist_ok=True)
-            gate_file = (
-                gate_dir / f"{strategy_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_gate.json"
-            )
+            gate_file = gate_dir / f"{strategy_name}_{now_cn().strftime('%Y%m%d_%H%M%S')}_gate.json"
             import json as _json
 
             gate_file.write_text(
@@ -933,7 +932,7 @@ class MultiFactorPipeline(BasePipeline):
                     backtest_max_dd=float(bt.get("max_dd_pct", 0)),
                     backtest_excess_return=float(excess),
                     owner="experiment",
-                    strategy_version=datetime.now().strftime("v%Y%m%d"),
+                    strategy_version=now_cn().strftime("v%Y%m%d"),
                 )
 
                 # Update metadata if strategy exists, otherwise just save
@@ -2842,7 +2841,7 @@ def _archive_research_debt(
     # ── Build content ──
     failure_lines = "\n".join(f"- ❌ {f}" for f in failures)
     content = f"""## Context
-**Date**: {datetime.now().strftime("%Y-%m-%d %H:%M")}
+**Date**: {now_cn().strftime("%Y-%m-%d %H:%M")}
 **Period**: {start} → {end}
 **Strategy**: {strategy_name}
 

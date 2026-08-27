@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import sys
 
+from qp.shared.time import today_cn
+
 
 def cmd_retrain() -> int:
     """Run monthly model retrain pipeline."""
-    from datetime import date
 
     from qp.platform.pipeline.context import PipelineContext
     from qp.research.trainer.auto_retrain import MonthlyRetrainPipeline
@@ -32,7 +33,7 @@ def cmd_retrain() -> int:
         pipeline_name="monthly_retrain",
         parameters={
             "strategy_id": strategy_id,
-            "train_end": date.today().isoformat(),
+            "train_end": today_cn().isoformat(),
             "dry_run": dry_run,
         },
     )

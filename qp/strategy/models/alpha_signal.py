@@ -11,8 +11,9 @@ Every strategy in the engine ultimately produces one thing:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
+
+from qp.shared.time import utc_iso
 
 
 @dataclass
@@ -40,7 +41,7 @@ class AlphaSignal:
     raw_components: dict[str, float] = field(default_factory=dict)
     confidence: float = 1.0
     strategy_id: str = ""
-    generated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
+    generated_at: str = field(default_factory=lambda: utc_iso())
 
     # ------------------------------------------------------------------
     # Validation

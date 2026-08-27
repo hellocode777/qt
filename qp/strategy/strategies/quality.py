@@ -21,7 +21,7 @@ Usage:
         "metrics": {"ROE": 0.35, "gross_margin": 0.25, "debt_ratio": -0.20, ...},
         "top_n": 30,
     })
-    signals = strategy.generate_signals(date.today())
+    signals = strategy.generate_signals(today_cn())
     # → Polars DataFrame [symbol, raw_score, rank]
 """
 

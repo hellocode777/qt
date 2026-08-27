@@ -27,16 +27,17 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import polars as pl
+
+from qp.shared.time import CN_TZ
 
 DEFAULT_RETRAIN_DIR = "data/monitoring"
 RETRAIN_LOG_FILE = "retrain_signals.parquet"
 
 # Project convention (scheduler/config): timestamps use Asia/Shanghai.
 # UTC-only stamps made signal times look 8 hours off for the operator.
-CN_TZ = ZoneInfo("Asia/Shanghai")
+# CN_TZ imported from qp.shared.time (single source of truth).
 
 
 class RetrainAction(StrEnum):

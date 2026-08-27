@@ -26,11 +26,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 
-# 北京时间 (UTC+8) — 所有面向用户的通道显示用本地时间
-BEIJING_TZ = timezone(timedelta(hours=8))
+from qp.shared.time import display_cn
 
 
 class AlertSeverity(StrEnum):
@@ -64,11 +63,7 @@ class Alert:
     @property
     def display_time(self) -> str:
         """Beijing time (UTC+8) display string for human-facing channels."""
-        return (
-            datetime.fromisoformat(self.timestamp)
-            .astimezone(BEIJING_TZ)
-            .strftime("%Y-%m-%d %H:%M:%S")
-        )
+        return display_cn(self.timestamp)
 
     def format_short(self) -> str:
         """Short one-line format."""

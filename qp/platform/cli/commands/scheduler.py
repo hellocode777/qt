@@ -7,6 +7,8 @@ import signal
 import time
 from typing import TYPE_CHECKING
 
+from qp.shared.time import today_cn
+
 if TYPE_CHECKING:
     from qp.platform.runtime.application import Application
 
@@ -261,13 +263,13 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
 
         from loguru import logger as _loguru
 
-        today_str = _date.today().isoformat()
+        today_str = today_cn().isoformat()
         jobs_dir = Path("logs")
         day_dir = jobs_dir / today_str
         day_dir.mkdir(parents=True, exist_ok=True)
 
         # Clean up directories older than 7 days
-        cutoff = _date.today() - _td(days=7)
+        cutoff = today_cn() - _td(days=7)
         for d in jobs_dir.iterdir():
             if d.is_dir() and d.name != today_str:
                 try:
@@ -532,12 +534,12 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
     # ── Job 4: daily decision pipeline (17:57 on weekdays) ──
     def job_daily_pipeline() -> None:
         with job_log_sink("daily_pipeline"):
-            from datetime import date, timedelta
+            from datetime import timedelta
 
             from qp.pipeline.daily_pipeline import DailyPipeline
 
             # Fetch recent data — incremental merge with existing history
-            recent_start = (date.today() - timedelta(days=5)).isoformat()
+            recent_start = (today_cn() - timedelta(days=5)).isoformat()
             ctx = _make_ctx("scheduled_daily", start_date=recent_start)
             pipeline = DailyPipeline()
             result = pipeline.run(ctx)

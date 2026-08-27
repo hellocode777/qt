@@ -23,7 +23,6 @@ Usage:
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 
 import polars as pl
@@ -33,6 +32,7 @@ from qp.research.evaluation.diag_money_flow_ic import (
     compute_factor_wide,
     load_capital_flow,
 )
+from qp.shared.time import today_cn
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT_DIR = ROOT / "data" / "experiments"
@@ -118,7 +118,7 @@ def main() -> None:
         pl.col(FACTOR).alias("score"),
     ).drop_nulls()
 
-    report: dict = {"date": str(date.today()), "factor": FACTOR, "windows": {}, "size": {}}
+    report: dict = {"date": str(today_cn()), "factor": FACTOR, "windows": {}, "size": {}}
 
     # R3: walk-forward
     print(f"=== {FACTOR} walk-forward (4 windows) ===")
@@ -168,7 +168,7 @@ def main() -> None:
         report["size"][bucket] = {"ic_h5": ic, "quintiles_h5": q}
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / f"mf_netflow20_diag_{date.today().strftime('%Y%m%d')}.json"
+    out_path = OUT_DIR / f"mf_netflow20_diag_{today_cn().strftime('%Y%m%d')}.json"
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(f"\n[out] {out_path}")
 

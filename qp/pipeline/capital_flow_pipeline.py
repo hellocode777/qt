@@ -18,6 +18,7 @@ from qp.data.dataset.registry import DatasetRegistry
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.shared.protocols.base_pipeline import BasePipeline
+from qp.shared.time import today_cn
 from qp.shared.types import PipelineStatus
 
 
@@ -55,7 +56,7 @@ class CapitalFlowPipeline(BasePipeline):
             adapter = CapitalFlowAdapter()
             raw = adapter.fetch_raw(
                 date(2000, 1, 1),
-                date.today(),
+                today_cn(),
                 symbols=symbol_list,
             )
             result.metrics["raw_rows"] = len(raw)
@@ -65,7 +66,7 @@ class CapitalFlowPipeline(BasePipeline):
                 nb_adapter = NorthboundAdapter()
                 nb_raw = nb_adapter.fetch_raw(
                     date(2000, 1, 1),
-                    date.today(),
+                    today_cn(),
                     symbols=symbol_list,
                 )
                 result.metrics["northbound_rows"] = len(nb_raw)
@@ -77,7 +78,7 @@ class CapitalFlowPipeline(BasePipeline):
 
             output_dir = Path("data/dataset")
             output_dir.mkdir(parents=True, exist_ok=True)
-            version = date.today().isoformat()
+            version = today_cn().isoformat()
 
             if len(raw) > 0:
                 raw_pl = pl.from_pandas(raw)
