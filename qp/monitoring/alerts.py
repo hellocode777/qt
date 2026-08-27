@@ -189,7 +189,7 @@ class TelegramAlert(AlertChannel):
         text = (
             f"{emoji} *{alert.severity.value.upper()}*: {alert.title}\n"
             f"{alert.message}\n"
-            f"_{alert.source} | {alert.timestamp[:19]}_"
+            f"_{alert.source} | {alert.display_time}_"
         )
 
         try:
@@ -279,7 +279,7 @@ class DingTalkAlert(AlertChannel):
         text = (
             f"## {emoji} {alert.severity.value.upper()}: {alert.title}\n\n"
             f"{alert.message}\n\n"
-            f"_{alert.source} | {alert.timestamp[:19]}_"
+            f"_{alert.source} | {alert.display_time}_"
         )
 
         try:
@@ -360,7 +360,7 @@ class WeComAlert(AlertChannel):
         text = (
             f"## {emoji} {alert.severity.value.upper()}: {alert.title}\n"
             f"{alert.message}\n"
-            f"> {alert.source} | {alert.timestamp[:19]}"
+            f"> {alert.source} | {alert.display_time}"
         )
 
         try:

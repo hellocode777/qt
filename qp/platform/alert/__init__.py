@@ -26,8 +26,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from enum import StrEnum
+
+# 北京时间 (UTC+8) — 所有面向用户的通道显示用本地时间
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 class AlertSeverity(StrEnum):
@@ -58,6 +61,15 @@ class Alert:
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     metadata: dict[str, str] = field(default_factory=dict)
 
+    @property
+    def display_time(self) -> str:
+        """Beijing time (UTC+8) display string for human-facing channels."""
+        return (
+            datetime.fromisoformat(self.timestamp)
+            .astimezone(BEIJING_TZ)
+            .strftime("%Y-%m-%d %H:%M:%S")
+        )
+
     def format_short(self) -> str:
         """Short one-line format."""
         return f"[{self.severity.value.upper()}] {self.title}: {self.message}"
@@ -66,7 +78,7 @@ class Alert:
         """Multi-line detailed format with metadata."""
         lines = [
             f"=== {self.severity.value.upper()} ALERT ===",
-            f"Time: {self.timestamp}",
+            f"Time: {self.display_time} (北京时间)",
             f"Source: {self.source}",
             f"Title: {self.title}",
             f"Message: {self.message}",
