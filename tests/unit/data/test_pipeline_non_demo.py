@@ -67,7 +67,9 @@ class TestNonDemoHappyPath:
         assert entry["metadata"]["status"] == "READY"
 
         # Quality report written
-        report = tmp_path / "data" / "reports" / f"data_quality_{date.today().isoformat()}.json"
+        from qp.shared.time import today_cn
+
+        report = tmp_path / "data" / "reports" / f"data_quality_{today_cn().isoformat()}.json"
         assert report.exists()
 
     def test_merge_with_existing_dedupes(self, tmp_path, monkeypatch) -> None:

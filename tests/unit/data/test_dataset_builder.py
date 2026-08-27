@@ -286,11 +286,11 @@ class TestDatasetBuilder:
         meta = _make_valid_metadata()
         meta.version = ""  # empty → auto-assigned
 
-        from datetime import date
+        from qp.shared.time import today_cn
 
         result = builder.build(df, meta)
         assert result.success
-        assert result.version == date.today().isoformat()
+        assert result.version == today_cn().isoformat()
 
     def test_derive_coverage(self):
         builder = DatasetBuilder()
