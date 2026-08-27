@@ -118,10 +118,11 @@
 - 方案：并入 `qp/shared/time.py`（format_cn / format_ts_file 等）
 - 成本：低，价值低-中（格式各有用途）
 
-### C-4 print() 残留甄别
-- 现状：print( 调用 1048 处 / 59 文件（大部分是 CLI 命令合法输出，核心库层违规）
-- 方案：甄别"该 print"（CLI 展示）vs"该 logger"（核心库），rule.md No print 硬规则
-- 成本：中高（甄别成本大）
+### C-4 print() 残留甄别 ✅ 已完成（2026-08-27，0 处违规）
+- 现状：print( 调用 1048 处 / 59 文件
+- **甄别结论**：896 处 CLI 命令（用户输出，合理）+ 116 处 research 诊断（工具输出，合理）+ 36 处核心库 = **30 处 docstring 示例 + 4 处豁免注释（alerts 兜底/tencent 进度条）+ 2 处 __main__ smoke test → 实际违规 0 处**
+- rule.md No print 硬规则已被 P0 清理执行到位，核心库无违规
+- 处置：无需代码改动；新增 print 时保持规则（CLI/诊断/豁免注释外一律 logger）
 
 **已统一无需动**：seed（DEFAULT_SEED 引用 17 处）、mkdir（exist_ok=True 78 处）、env（仅 9 处）
 
