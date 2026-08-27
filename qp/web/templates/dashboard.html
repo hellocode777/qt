@@ -563,6 +563,17 @@
   </button>
 
   <div x-show="open" x-cloak>
+    <!-- Verdict banner -->
+    {% if decision.risk_audit.passed %}
+    <div class="warning-banner" style="border-left-color: var(--green); background: #e8f5e9; color: var(--green);">
+      <strong>&#9989; 风控通过</strong> — 候选 {{ decision.risk_audit.candidates_in }} 只全部保留，无违规。
+    </div>
+    {% else %}
+    <div class="warning-banner" style="border-left-color: var(--red); background: #ffebee; color: var(--red);">
+      <strong>&#9888; 风控未通过</strong> — {{ decision.risk_audit.entries | length }} 项违规，{{ decision.risk_audit.dropped_symbols | length }} 只被剔除。请复核行业集中度与仓位。
+    </div>
+    {% endif %}
+
     <!-- Stats -->
     <div class="stat-row" style="margin-bottom: 16px;">
       <div class="stat-tile">
@@ -592,20 +603,29 @@
       <div style="display: flex; flex-direction: column; gap: 6px;">
         {% for entry in decision.risk_audit.entries %}
         <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px;
-                    {% if entry.violation_type == 'correlation' %}
-                    background: #fff3e0; border-left: 3px solid #e65100;
+                    {% if entry.severity == 'danger' %}
+                    background: #ffebee; border-left: 3px solid var(--red);
                     {% else %}
                     background: #fff8e1; border-left: 3px solid #f57f17;
                     {% endif %}
                     border-radius: 0 6px 6px 0; font-size: 13px;">
-          <span class="badge {% if entry.violation_type == 'correlation' %}badge-orange{% else %}badge-yellow{% endif %}" style="font-size: 10px; flex-shrink: 0;">
-            {{ entry.violation_type }}
+          <span class="badge {% if entry.severity == 'danger' %}badge-red{% else %}badge-orange{% endif %}" style="font-size: 10px; flex-shrink: 0;">
+            {{ entry.category_label }}
           </span>
           <span style="flex: 1;">{{ entry.detail }}</span>
           {% if entry.symbol %}
           <span class="c-muted" style="font-size: 11px; flex-shrink: 0;">{{ entry.symbol | stock_name }} <code>{{ entry.symbol }}</code></span>
           {% endif %}
-          {% if entry.threshold or entry.actual %}
+          {% if entry.actual_pct is not none and entry.threshold_pct is not none %}
+          <span class="font-mono" style="font-size: 11px; flex-shrink: 0; {% if entry.over_pct and entry.over_pct > 0 %}color: var(--red); font-weight: 600;{% else %}color: var(--green);{% endif %}">
+            实际 {{ "%.1f" | format(entry.actual_pct) }}% vs 上限 {{ "%.0f" | format(entry.threshold_pct) }}%
+            {% if entry.over_pct and entry.over_pct > 0 %} (超 {{ "%.1f" | format(entry.over_pct) }}%){% endif %}
+          </span>
+          <div class="progress-bar" style="width: 120px; flex-shrink: 0;">
+            <div class="progress-fill {{ 'red' if entry.over_pct and entry.over_pct > 0 else 'green' }}"
+                 style="width: {{ [entry.actual_pct, 100] | min }}%;"></div>
+          </div>
+          {% elif entry.threshold or entry.actual %}
           <span class="font-mono c-muted" style="font-size: 11px; flex-shrink: 0;">
             {% if entry.threshold %}{{ entry.threshold }}{% endif %}
             {% if entry.threshold and entry.actual %} / {% endif %}
@@ -621,18 +641,56 @@
     </div>
     {% endif %}
 
+    <!-- Candidate Stocks (which symbols drive the violations) -->
+    {% if decision.risk_audit.candidate_stocks %}
+    <div class="card" style="margin-bottom: 16px;">
+      <div class="card-header" style="font-size: 13px;">候选股票 Candidate Stocks</div>
+      <div class="card-body" style="padding: 8px;">
+        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+          <thead>
+            <tr style="text-align: left; color: var(--muted, #888);">
+              <th style="padding: 4px 8px;">股票</th>
+              <th style="padding: 4px 8px;">行业</th>
+              <th style="padding: 4px 8px;">权重</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in decision.risk_audit.candidate_stocks %}
+            <tr style="border-top: 1px solid var(--border, #eee);">
+              <td style="padding: 4px 8px;">{{ s.symbol | stock_name }} <code class="c-muted">{{ s.symbol }}</code></td>
+              <td style="padding: 4px 8px;">{{ s.sector }}</td>
+              <td style="padding: 4px 8px;" class="font-mono">{{ s.weight_pct }}%</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% elif decision.risk_audit.dropped_symbols %}
+    <div style="margin-bottom: 16px;" class="c-muted" style="font-size: 12px;">候选股票明细未保存（历史决策），仅显示被剔除股票。</div>
+    {% endif %}
+
     <!-- Sector Exposure -->
     {% if decision.risk_audit.sector_exposure %}
     <div class="card" style="margin-bottom: 16px;">
-      <div class="card-header" style="font-size: 13px;">行业敞口 Sector Exposure</div>
+      <div class="card-header" style="font-size: 13px;">行业敞口 Sector Exposure <span class="c-muted" style="font-size: 11px;">(单行业上限 25%)</span></div>
       <div class="card-body">
-        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
           {% for sector in decision.risk_audit.sector_exposure %}
-          <div style="padding: 8px 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px;">
-            <span style="font-size: 13px;">{{ sector.sector }}</span>
-            <span class="font-mono" style="margin-left: 8px; font-weight: 600; {% if sector.weight_pct > 25 %}color: var(--orange);{% endif %}">
-              {{ sector.weight_pct }}%
-            </span>
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px;">
+              <span>{{ sector.sector }}</span>
+              <span class="font-mono {% if sector.over_limit %}c-red" style="font-weight: 600;"{% else %}c-muted"{% endif %}>
+                {{ sector.weight_pct }}%
+                {% if sector.over_limit %}&#9888; 超限 {{ sector.over_pct }}%{% endif %}
+              </span>
+            </div>
+            <div class="progress-bar" style="height: 14px; position: relative;">
+              <div class="progress-fill {% if sector.over_limit %}red{% else %}green{% endif %}"
+                   style="width: {{ [sector.weight_pct, 100] | min }}%;"></div>
+              <!-- 25% threshold marker -->
+              <div style="position: absolute; top: -3px; bottom: -3px; left: 25%; width: 2px; background: #333; opacity: 0.6;"></div>
+            </div>
           </div>
           {% endfor %}
         </div>

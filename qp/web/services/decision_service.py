@@ -7,6 +7,7 @@ Returns plain dicts — never exposes domain objects to templates.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,127 @@ from loguru import logger
 from qp.decision.decision_package import DecisionPackage
 from qp.decision.state_machine import DecisionStateError
 from qp.shared.paths import DECISIONS_DIR
+
+# ── Risk audit detail parsing ──
+# detail 是英文文本（如 "Position cap: equal weight 20.0% > 8% at 5 positions"），
+# WebUI 展示前解析成结构化字段，避免用户从文本里自己数百分比。
+_RISK_CATEGORY_PATTERNS: list[tuple[str, str, str]] = [
+    # (匹配关键词, category, 中文标签)
+    ("Position count", "position_count", "持仓数量"),
+    ("Position cap", "position_cap", "单仓上限"),
+    ("Sector cap", "sector_cap", "行业集中"),
+    ("Correlation", "correlation", "相关性"),
+]
+
+
+def _parse_risk_entry(entry: Any) -> dict[str, Any]:
+    """Parse a RiskAuditEntry into a template-ready dict with structured numbers.
+
+    Extracts actual/threshold percentages from the free-text detail when the
+    entry doesn't already carry them. Numbers that cannot be parsed stay None —
+    templates render them as N/A rather than fake zeros.
+    """
+    detail = entry.detail or ""
+    vtype = entry.violation_type or "risk_limit"
+
+    # Structured violation_type wins; else sniff the free-text detail.
+    if vtype == "correlation":
+        category, label = "correlation", "相关性"
+    else:
+        category, label = vtype, vtype
+        for keyword, cat, lab in _RISK_CATEGORY_PATTERNS:
+            if keyword in detail:
+                category, label = cat, lab
+                break
+
+    # Prefer structured fields (correlation entries carry them)
+    actual_pct: float | None = None
+    threshold_pct: float | None = None
+    if entry.actual:
+        try:
+            actual_pct = (
+                float(entry.actual) * 100
+                if "%" not in str(entry.actual)
+                else float(str(entry.actual).rstrip("%"))
+            )
+        except ValueError:
+            actual_pct = None
+    if entry.threshold:
+        try:
+            threshold_pct = (
+                float(entry.threshold) * 100
+                if "%" not in str(entry.threshold)
+                else float(str(entry.threshold).rstrip("%"))
+            )
+        except ValueError:
+            threshold_pct = None
+
+    # Fallback: parse percentages from free-text detail.
+    # "Correlation: N pair(s) > X%" — the % is the threshold; the pair count is
+    # NOT a percentage, so leave actual as None (honest N/A, not a fake number).
+    pcts = re.findall(r"(\d+(?:\.\d+)?)%", detail)
+    if category == "correlation" and "pair(s)" in detail:
+        if threshold_pct is None and pcts:
+            threshold_pct = float(pcts[0])
+    else:
+        if actual_pct is None and pcts:
+            actual_pct = float(pcts[0])
+        if threshold_pct is None and len(pcts) > 1:
+            threshold_pct = float(pcts[1])
+
+    over_pct = (
+        round(actual_pct - threshold_pct, 1)
+        if actual_pct is not None and threshold_pct is not None
+        else None
+    )
+
+    return {
+        "symbol": entry.symbol,
+        "violation_type": entry.violation_type,
+        "category": category,
+        "category_label": label,
+        "detail": detail,
+        "threshold": entry.threshold,
+        "actual": entry.actual,
+        "threshold_pct": threshold_pct,
+        "actual_pct": actual_pct,
+        "over_pct": over_pct,
+        "action": entry.action,
+        # display helpers
+        "severity": "danger" if entry.action == "dropped" else "warning",
+    }
+
+
+def _build_candidate_stocks(risk_audit: Any) -> list[dict[str, Any]]:
+    """Build per-stock rows for the risk audit panel.
+
+    Uses the candidate→weight map saved at decision time plus the industry
+    mapper so the UI can show WHICH stocks drive sector/position violations.
+    Returns [] when the stored package predates candidate_weights (no data —
+    UI renders "无数据" instead of fabricating rows).
+    """
+    weights = dict(getattr(risk_audit, "candidate_weights", {}) or {})
+    if not weights:
+        return []
+
+    try:
+        from qp.portfolio.industry import IndustryMapper
+
+        mapper = IndustryMapper()
+    except Exception:
+        mapper = None
+
+    rows: list[dict[str, Any]] = []
+    for sym, w in sorted(weights.items(), key=lambda x: -x[1]):
+        sector = mapper.get_sector(str(sym)) if mapper is not None else ""
+        rows.append(
+            {
+                "symbol": str(sym),
+                "weight_pct": round(float(w) * 100, 1),
+                "sector": sector,
+            }
+        )
+    return rows
 
 
 class DecisionService:
@@ -320,17 +442,7 @@ class DecisionService:
                 sells.append(item)
 
         # Flatten risk audit entries
-        risk_entries = [
-            {
-                "symbol": e.symbol,
-                "violation_type": e.violation_type,
-                "detail": e.detail,
-                "threshold": e.threshold,
-                "actual": e.actual,
-                "action": e.action,
-            }
-            for e in pkg.risk_audit.entries
-        ]
+        risk_entries = [_parse_risk_entry(e) for e in pkg.risk_audit.entries]
 
         # Build strategy signals list for display
         strategy_signals = [
@@ -408,12 +520,18 @@ class DecisionService:
                 "entries": risk_entries,
                 "dropped_symbols": pkg.risk_audit.dropped_symbols,
                 "sector_exposure": [
-                    {"sector": k, "weight_pct": round(v * 100, 1)}
+                    {
+                        "sector": k,
+                        "weight_pct": round(v * 100, 1),
+                        "over_pct": round(v * 100 - 25.0, 1),
+                        "over_limit": v * 100 > 25.0,
+                    }
                     for k, v in sorted(
                         pkg.risk_audit.sector_exposure.items(),
                         key=lambda x: -x[1],
                     )
                 ],
+                "candidate_stocks": _build_candidate_stocks(pkg.risk_audit),
                 "summary": pkg.risk_audit.summary(),
             },
             # Cost

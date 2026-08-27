@@ -793,6 +793,7 @@ class DailyPipeline(BasePipeline):
                     dropped_symbols=risk_report.dropped_symbols,
                     sector_exposure=risk_report.sector_exposure,
                     passed=risk_report.passed,
+                    candidate_weights=dict(risk_report.position_weights or {}),
                 )
             else:
                 filtered_signals = combined_signals

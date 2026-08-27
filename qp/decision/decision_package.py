@@ -94,6 +94,9 @@ class RiskAudit:
     dropped_symbols: list[str] = field(default_factory=list)
     sector_exposure: dict[str, float] = field(default_factory=dict)
     passed: bool = True
+    # Candidate → weight map (post-risk, final allocation weights).
+    # Lets the WebUI show WHICH stocks drive sector/position violations.
+    candidate_weights: dict[str, float] = field(default_factory=dict)
 
     def summary(self) -> str:
         if not self.entries:
@@ -314,6 +317,7 @@ class DecisionPackage:
                 "dropped_symbols": self.risk_audit.dropped_symbols,
                 "sector_exposure": self.risk_audit.sector_exposure,
                 "passed": self.risk_audit.passed,
+                "candidate_weights": self.risk_audit.candidate_weights,
             },
             "estimated_cost_pct": self.estimated_cost_pct,
             "validation": self.validation,
@@ -419,6 +423,10 @@ class DecisionPackage:
                 str(k): float(v) for k, v in risk_data.get("sector_exposure", {}).items()
             },
             passed=risk_data.get("passed", True),
+            candidate_weights={
+                str(k): float(v)
+                for k, v in risk_data.get("candidate_weights", {}).items()
+            },
         )
 
         hr_data = data.get("human_review", {})
