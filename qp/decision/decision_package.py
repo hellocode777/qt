@@ -424,8 +424,7 @@ class DecisionPackage:
             },
             passed=risk_data.get("passed", True),
             candidate_weights={
-                str(k): float(v)
-                for k, v in risk_data.get("candidate_weights", {}).items()
+                str(k): float(v) for k, v in risk_data.get("candidate_weights", {}).items()
             },
         )
 
