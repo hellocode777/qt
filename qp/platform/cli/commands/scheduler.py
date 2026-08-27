@@ -46,10 +46,12 @@ def format_decision_email(data: dict, date_str: str) -> str:
         lines.append("")
         lines.append("【风控审计】")
         passed = risk.get("passed", True)
-        lines.append(f"  通过: {'✅' if passed else '❌'}")
-        violations = risk.get("violations", [])
+        lines.append(f"  {'✅ 通过' if passed else '❌ 未通过'}")
+        violations = risk.get("entries") or risk.get("violations", [])
         for v in violations[:5]:
-            lines.append(f"  ⚠ {v}")
+            detail = v.get("detail") if isinstance(v, dict) else str(v)
+            if detail:
+                lines.append(f"  ⚠ {detail}")
 
     # Decision report — trade recommendations
     report = data.get("report", {})
@@ -93,7 +95,7 @@ def format_decision_email(data: dict, date_str: str) -> str:
     cost = data.get("estimated_cost_pct", 0.0)
     if cost:
         lines.append("")
-        lines.append(f"【预估成本】{cost:.2%}")
+        lines.append(f"【预估成本】{cost:.2f}%")
 
     # Lineage
     lineage = data.get("lineage", {})
