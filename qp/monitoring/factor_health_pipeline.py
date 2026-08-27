@@ -27,10 +27,45 @@ from qp.monitoring.factor_health import (
 )
 from qp.monitoring.factor_health_logger import FactorHealthLogger
 from qp.platform.pipeline.result import PipelineResult
-from qp.shared.paths import FACTOR_VALUES_DAILY
+from qp.shared.paths import FACTOR_VALUES_DAILY, FUNDAMENTALS_LATEST
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import fmt_date
 from qp.shared.types import PipelineStatus
+
+# ── Fundamental factors tracked by the health monitor ──
+# Valuation ratios are derived per share (EPS/NAV/cashflow) × close, PIT-aligned.
+FUNDAMENTAL_HEALTH_FACTORS: list[str] = [
+    "PE_TTM",
+    "PB",
+    "PCF_OCF",
+    "ROE",
+    "gross_margin",
+    "revenue_growth",
+    "net_margin",
+    "debt_ratio",
+    "net_profit_growth",
+]
+
+# Valuation factor → fundamental per-share field it is derived from
+_VALUATION_BY_FIELD: dict[str, str] = {
+    "PE_TTM": "EPS",
+    "PB": "NAV",
+    "PCF_OCF": "cashflow_per_share",
+}
+
+# Quality factors read directly from the latest visible report
+_QUALITY_FACTORS: list[str] = [
+    "ROE",
+    "gross_margin",
+    "revenue_growth",
+    "net_margin",
+    "debt_ratio",
+    "net_profit_growth",
+]
+
+# Lookback window for fundamental score frames (trading days).
+# 420 ≈ 1.6 years — enough for IC_252d and matches the historical update.
+_FUND_LOOKBACK_DAYS = 420
 
 
 @dataclass
@@ -204,6 +239,7 @@ class FactorHealthPipeline(BasePipeline):
         price_df: pl.DataFrame | None = None,
         forward_days: int = 5,
         min_stocks_per_day: int = 10,
+        include_fundamental: bool = True,
     ) -> PipelineResult:
         """Incrementally refresh factor health using the latest factor values.
 
@@ -275,17 +311,36 @@ class FactorHealthPipeline(BasePipeline):
                 result.errors.append("No factor columns in factor_values")
                 return result
 
+            # ── 2b. Fundamental factor score frames (PIT-aligned) ──
+            # Valuation/quality factors live in fundamentals_latest.parquet, not in
+            # factor_values_daily.parquet — build score frames here so the daily
+            # incremental path also covers them (previously only the one-off
+            # 2026-08-05 full check wrote them; nothing after that).
+            fund_scores: dict[str, pl.DataFrame] = {}
+            if include_fundamental:
+                try:
+                    fund_scores = self._build_fundamental_score_frames(px)
+                except Exception as exc:
+                    result.errors.append(f"fundamental score frames: {exc}")
+                # merge into factor list (dedup, keep order)
+                for fname in fund_scores:
+                    if fname not in factor_cols:
+                        factor_cols.append(fname)
+
             date_str = fmt_date(datetime.now(UTC))
             updated = 0
             skipped: list[str] = []
 
             # ── 3. Per-factor IC + health ──
             for fname in factor_cols:
-                score_df = fv.select(
-                    pl.col("trade_date").cast(pl.Utf8).alias("trade_date"),
-                    pl.col("symbol").cast(pl.Utf8).alias("symbol"),
-                    pl.col(fname).alias("score"),
-                ).drop_nulls(subset=["score"])
+                if fname in fund_scores:
+                    score_df = fund_scores[fname]
+                else:
+                    score_df = fv.select(
+                        pl.col("trade_date").cast(pl.Utf8).alias("trade_date"),
+                        pl.col("symbol").cast(pl.Utf8).alias("symbol"),
+                        pl.col(fname).alias("score"),
+                    ).drop_nulls(subset=["score"])
 
                 if score_df.is_empty():
                     skipped.append(fname)
@@ -340,6 +395,112 @@ class FactorHealthPipeline(BasePipeline):
         except Exception as e:
             result.status = PipelineStatus.FAILED
             result.errors.append(str(e))
+
+        return result
+
+    def _build_fundamental_score_frames(
+        self,
+        price_df: pl.DataFrame,
+        lookback_days: int = _FUND_LOOKBACK_DAYS,
+    ) -> dict[str, pl.DataFrame]:
+        """Build PIT-aligned score frames for fundamental factors.
+
+        Fundamental factors (PE_TTM/PB/PCF_OCF/ROE/...) are NOT stored in
+        factor_values_daily.parquet — they live in fundamentals_latest.parquet.
+        This builds ``{factor_name: DataFrame[trade_date, symbol, score]}`` for
+        the trailing ``lookback_days`` trading days, PIT-aligned on
+        ``publish_date <= trade_date``:
+
+          - Valuation factors (PE_TTM/PB/PCF_OCF): derived as close / per-share
+            value from the latest visible report (same logic as
+            qp.data.valuation.product.compute_valuation, but vectorized).
+          - Quality factors (ROE/gross_margin/...): raw latest visible value.
+
+        Returns:
+            Empty dict when fundamentals are missing. Keys are factor names.
+        """
+        from pathlib import Path
+
+        fund_path = Path(FUNDAMENTALS_LATEST)
+        if not fund_path.exists():
+            return {}
+
+        try:
+            fund = pl.read_parquet(fund_path)
+        except Exception:
+            return {}
+
+        if fund.is_empty() or "symbol" not in fund.columns:
+            return {}
+
+        if "publish_date" not in fund.columns:
+            return {}
+
+        # ── Normalize dates to YYYY-MM-DD strings (publish_date may be datetime) ──
+        fund = fund.with_columns(
+            pl.col("publish_date").cast(pl.Utf8).str.slice(0, 10).alias("pub_date")
+        )
+        fund = fund.filter(pl.col("pub_date").is_not_null())
+
+        # ── Restrict to recent trading dates (cheap + stable window) ──
+        px = price_df.with_columns(pl.col("trade_date").cast(pl.Utf8).str.slice(0, 10).alias("td"))
+        dates = sorted(px["td"].unique().to_list())
+        if len(dates) > lookback_days:
+            window_start = dates[-lookback_days]
+            px = px.filter(pl.col("td") >= window_start)
+            fund = fund.filter(pl.col("pub_date") <= dates[-1])
+
+        px = px.select(["td", "symbol", "close"]).sort(["symbol", "td"])
+
+        # ── PIT join: latest report with publish_date <= trade_date ──
+        # Vectorized asof join — much faster than per-symbol compute_valuation.
+        fund = fund.select(
+            [
+                "symbol",
+                "pub_date",
+                *_VALUATION_BY_FIELD.values(),
+                *_QUALITY_FACTORS,
+            ]
+        ).sort(["symbol", "pub_date"])
+        # Drop duplicate (symbol, pub_date) rows: keep the last (latest report_date)
+        # NOTE: unique() does NOT preserve order — re-sort is REQUIRED for join_asof.
+        fund = fund.unique(subset=["symbol", "pub_date"], keep="last").sort(["symbol", "pub_date"])
+
+        merged = px.join_asof(
+            fund,
+            left_on="td",
+            right_on="pub_date",
+            by="symbol",
+            strategy="backward",
+        )
+
+        result: dict[str, pl.DataFrame] = {}
+
+        # ── Valuation factors: close / per-share value ──
+        for fname, fund_field in _VALUATION_BY_FIELD.items():
+            if fund_field not in merged.columns:
+                continue
+            df = merged.filter(
+                pl.col(fund_field).is_not_null() & (pl.col(fund_field) > 0)
+            ).with_columns((pl.col("close") / pl.col(fund_field)).alias("score"))
+            result[fname] = df.select(
+                pl.col("td").alias("trade_date"),
+                pl.col("symbol"),
+                pl.col("score"),
+            )
+
+        # ── Quality factors: latest visible report value ──
+        for fname in _QUALITY_FACTORS:
+            if fname not in merged.columns:
+                continue
+            df = merged.filter(pl.col(fname).is_not_null()).with_columns(
+                pl.col(fname).alias("score")
+            )
+            result[fname] = df.select(
+                pl.col("td").alias("trade_date"),
+                pl.col("symbol"),
+                pl.col("score"),
+            )
 
         return result
 
