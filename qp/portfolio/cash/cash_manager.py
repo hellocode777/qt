@@ -127,7 +127,15 @@ class CashManager:
                 triggers.append(f"风控告警: {len(violations)} 项违规, 现金提升")
 
         # ── Clamp ──
-        cash_ratio = max(self._policy.min_cash, min(self._policy.max_cash, cash_ratio))
+        # 正常/防御模式: 现金上限受 max_cash 约束。
+        # scarcity 模式: 候选不足时 target_equity = N × standard_weight 是明确的
+        # 防御意图（如 3 只 × 8% = 24% 仓位 → 76% 现金）。此时若仍被 max_cash
+        # (默认 50%) 截断，会把"该留 76% 现金"变成"只留 50%"，削弱防御效果。
+        # 因此 scarcity 模式允许现金突破 max_cash，只受 100% 上限约束。
+        if cash_mode == "scarcity":
+            cash_ratio = max(self._policy.min_cash, min(1.0, cash_ratio))
+        else:
+            cash_ratio = max(self._policy.min_cash, min(self._policy.max_cash, cash_ratio))
 
         return CashDecision(
             final_cash_ratio=round(cash_ratio, 4),

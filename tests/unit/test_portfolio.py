@@ -2106,6 +2106,22 @@ class TestCashManager:
         assert decision.is_defensive
         assert decision.equity_exposure < 0.7
 
+    def test_scarcity_target_equity_not_clamped_by_max_cash(self) -> None:
+        """scarcity 目标仓位不被 max_cash 截断（regression guard）。
+
+        3 候选 × standard_position_weight(8%) = 24% 目标仓位 → 76% 现金。
+        若被 max_cash=50% 截断会变成 50% 仓位，削弱防御意图。
+        """
+        from qp.portfolio.cash.cash_manager import CashManager
+        from qp.portfolio.cash.reserve_policy import ReservePolicy
+
+        policy = ReservePolicy()  # max_cash = 0.50, standard_position_weight = 0.08
+        cm = CashManager(policy)
+        decision = cm.evaluate(n_candidates=3, current_market_vol=0.15, vol_percentile=0.45)
+        assert decision.cash_mode == "scarcity"
+        assert decision.equity_exposure == pytest.approx(3 * policy.standard_position_weight)
+        assert decision.final_cash_ratio > policy.max_cash  # 突破 max_cash 上限
+
     def test_volatility_defense(self) -> None:
         from qp.portfolio.cash.cash_manager import CashManager
 

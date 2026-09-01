@@ -1232,6 +1232,7 @@ class DailyPipeline(BasePipeline):
                         total_capital=alloc_capital,
                         strategy_id="multi_strategy_ensemble",
                         market_regime=regime_label,
+                        portfolio_capital=total_capital,
                     )
                 except Exception as exc:
                     logger.warning("DecisionEngine failed: {}", exc)
@@ -1299,7 +1300,7 @@ class DailyPipeline(BasePipeline):
                 result.metrics["shadow_equity"] = round(shadow_equity, 2)
                 result.metadata["shadow_pnl"] = str(shadow_result.get("unrealized_pnl", 0))
                 logger.info(
-                    "Shadow: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
+                    "Shadow: equity=¥{:.0f} unrealized_pnl=¥{:.0f} positions={}",
                     shadow_equity,
                     shadow_result.get("unrealized_pnl", 0),
                     shadow_n_positions,

@@ -215,7 +215,7 @@ class ShadowLedger:
         self._save_daily(snapshot)
 
         logger.info(
-            "Shadow daily {}: equity=¥{:.0f} pnl=¥{:.0f} positions={}",
+            "Shadow daily {}: equity=¥{:.0f} daily_pnl=¥{:.0f} positions={}",
             date_str,
             snapshot["total_equity"],
             daily_pnl,

@@ -60,6 +60,7 @@ class DecisionEngine:
         total_capital: float = 100_000,
         strategy_id: str = "default",
         market_regime: str = "",
+        portfolio_capital: float | None = None,
     ) -> DecisionReport:
         """Generate trade recommendations from strategy signals.
 
@@ -68,7 +69,14 @@ class DecisionEngine:
             prices: Daily price data with [symbol, close].
             risk_report: Risk analysis output (optional, for warnings and context).
             current_positions: symbol → current weight mapping (optional).
-            total_capital: Total portfolio capital in CNY.
+            total_capital: Portfolio capital allocated to this decision (CNY).
+                In daily_pipeline this is ``alloc_capital`` (total × regime
+                exposure × strategy health), so ``target_weight_pct`` is
+                relative to the deployable capital, NOT the full account.
+            portfolio_capital: Full account capital (CNY). Defaults to
+                ``total_capital`` for standalone callers. Used to express
+                single-position warnings as % of total assets (matches the
+                8% cap semantics).
             strategy_id: Source strategy identifier.
             market_regime: Current market regime description.
 
@@ -79,6 +87,12 @@ class DecisionEngine:
 
         current_positions = current_positions or {}
         recommendations: list[TradeRecommendation] = []
+
+        # 敞口资本占总资产比例：用于把相对 alloc_capital 的权重换算成总资产口径，
+        # 使「接近 8% 单仓上限」警告与真实占比一致（bear 市 30% 敞口下 1/3=33%
+        # 相对敞口资本 → 实际占总资产 10%，不应触发 8% 上限假警告）。
+        portfolio_capital = portfolio_capital if portfolio_capital is not None else total_capital
+        alloc_capital_ratio = total_capital / portfolio_capital if portfolio_capital > 0 else 1.0
 
         if signals.is_empty():
             return DecisionReport(
@@ -153,8 +167,14 @@ class DecisionEngine:
 
             # Risk warnings
             warnings: list[str] = []
-            if target_wt >= 7.5:
-                warnings.append(f"单仓占比 {target_wt:.1f}% 接近 8% 上限")
+            # target_wt 是相对「可用敞口资本」的权重（alloc_capital = total × regime × health）。
+            # 8% 单仓上限按总资产口径判断，因此这里用 target_amount/total_capital 换算真实占比，
+            # 避免 bear 市 30% 敞口时 1/3=33% 的假警告（实际占总资产 10%）。
+            pct_of_total = (
+                target_wt / 100 * alloc_capital_ratio if alloc_capital_ratio else target_wt
+            )
+            if pct_of_total >= 7.5:
+                warnings.append(f"单仓占比 {pct_of_total:.1f}% (占总资产) 接近 8% 上限")
             if quantity < 100:
                 warnings.append(f"建议股数 {quantity} 不足1手(100股)")
             if est_cost / trade_value > 0.005 if trade_value > 0 else False:
@@ -306,6 +326,9 @@ class DecisionEngine:
             lines.extend(
                 [
                     "## Buy Recommendations",
+                    "",
+                    "> 说明: Weight = 目标权重，相对「可用敞口资本」(总资产 × 市场状态敞口 × 策略健康)，"
+                    "非总资产比例。空头/震荡市敞口 < 100% 时，各股占总资产比例会低于 Weight 所示。",
                     "",
                     "| # | Symbol | Weight | Shares | Price | Cost | Confidence | Reason |",
                     "|---|--------|--------|--------|-------|------|------------|--------|",

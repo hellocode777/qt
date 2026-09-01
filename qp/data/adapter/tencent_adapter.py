@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 import requests
+from loguru import logger
 
 from qp.data.adapter.code_list import CORE_SYMBOLS
 from qp.shared.protocols.base_data_source import BaseDataSource
@@ -70,6 +71,12 @@ class TencentAdapter(BaseDataSource):
         n_total = len(symbols)
         all_rows: list[dict] = []
         n_failed = 0
+        logger.info(
+            "Tencent fetch start: {} symbols, {} → {} (source=tencent)",
+            n_total,
+            fmt_date(start_date),
+            fmt_date(end_date),
+        )
         for i, code in enumerate(symbols):
             if i > 0:
                 time.sleep(0.3)  # avoid rate limiting (WAF blocks below ~0.2s)
@@ -104,12 +111,20 @@ class TencentAdapter(BaseDataSource):
                 )
 
         if not all_rows:
+            logger.warning("Tencent fetch done: 0 rows, {} symbols failed", n_failed)
             return pd.DataFrame()
 
         df = pd.DataFrame(all_rows)
         # Filter to exact date range
         mask = (df["日期"] >= start_str) & (df["日期"] <= end_str)
-        return df.loc[mask].reset_index(drop=True)  # type: ignore[return-value]
+        df = df.loc[mask].reset_index(drop=True)  # type: ignore[return-value]
+        logger.info(
+            "Tencent fetch done: {} rows (raw {}), {} symbols failed",
+            df.shape[0],
+            len(all_rows),
+            n_failed,
+        )
+        return df
 
     def validate_schema(self, df: pd.DataFrame) -> bool:
         """Check that the DataFrame contains expected columns."""
