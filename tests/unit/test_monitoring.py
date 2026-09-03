@@ -2322,11 +2322,11 @@ class TestFundamentalExitDetector:
             symbol = "600519"
             is_active = True
 
-        # ROE declining from 25% to 15% → 40% decline
+        # ROE declining YoY from 25% to 15% → 40% decline (percent-scaled data)
         fund = pl.DataFrame(
             {
-                "report_date": ["2026-06-30", "2026-03-31"],
-                "ROE": [0.15, 0.25],
+                "report_date": ["2025-06-30", "2026-06-30"],
+                "ROE": [25.0, 15.0],
             }
         )
 
@@ -2374,9 +2374,9 @@ class TestFundamentalExitDetector:
 
         fund = pl.DataFrame(
             {
-                "report_date": ["2026-06-30", "2026-03-31"],
-                "ROE": [0.10, 0.10],
-                "revenue_growth": [-0.15, 0.05],
+                "report_date": ["2025-06-30", "2026-06-30"],
+                "ROE": [10.0, 10.0],
+                "revenue_growth": [5.0, -15.0],  # -15% < -10% threshold
             }
         )
 
@@ -2399,9 +2399,9 @@ class TestFundamentalExitDetector:
 
         fund = pl.DataFrame(
             {
-                "report_date": ["2026-06-30", "2026-03-31"],
-                "ROE": [0.10, 0.10],
-                "net_profit_growth": [-0.25, 0.08],
+                "report_date": ["2025-06-30", "2026-06-30"],
+                "ROE": [10.0, 10.0],
+                "net_profit_growth": [8.0, -25.0],  # -25% < -20% threshold
             }
         )
 
@@ -2424,8 +2424,8 @@ class TestFundamentalExitDetector:
 
         fund = pl.DataFrame(
             {
-                "report_date": ["2026-06-30", "2026-03-31"],
-                "debt_ratio": [0.70, 0.50],  # 40% increase
+                "report_date": ["2025-06-30", "2026-06-30"],
+                "debt_ratio": [50.0, 70.0],  # 40% increase YoY (percent-scaled)
             }
         )
 
@@ -2506,12 +2506,12 @@ class TestFundamentalExitDetector:
             symbol = "000008"
             is_active = True
 
-        # Both ROE decline AND negative revenue growth
+        # Both ROE decline AND negative revenue growth (percent-scaled data)
         fund = pl.DataFrame(
             {
-                "report_date": ["2026-06-30", "2026-03-31"],
-                "ROE": [0.10, 0.20],
-                "revenue_growth": [-0.12, 0.05],
+                "report_date": ["2025-06-30", "2026-06-30"],
+                "ROE": [20.0, 10.0],  # 50% decline YoY
+                "revenue_growth": [5.0, -12.0],  # -12% < -10% threshold
             }
         )
 
