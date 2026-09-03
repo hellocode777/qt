@@ -212,10 +212,35 @@ class DailyPipeline(BasePipeline):
             alloc_method = context.parameters.get("allocator", "equal_weight")
             today = today_cn()
             run_id_short = context.run_id[:8] if context.run_id else "unknown"
-            # V2.1: 调仓日 = 每月前5个自然日（近似每月第一个交易周）
+            # V2.2: 调仓日 = 每月第一个真实交易日（非 day<=5 模糊窗口）
+            # 原 day<=5 会让 1-5 号每天都当调仓日 → 月频策略月初连续调仓
+            # （9/1 建仓 9/2 又重评）。改为精确交易日历：1 号逢周末/
+            # 节假日自动顺延到当月首个交易日（10/1 国庆 → 10/8）。
             # --force-rebalance 可强制当调仓日处理（建仓/手动重平衡用）
             force_rebalance = bool(context.parameters.get("force_rebalance", False))
-            is_rebalance_day = force_rebalance or today.day <= 5
+            try:
+                from qp.data.calendar.calendar import TradingCalendar
+
+                _cal = TradingCalendar()
+                # first_trading_day_of_month 内部触发 akshare 加载并设置
+                # has_real_calendar；调用后才可信。
+                _first_td = _cal.first_trading_day_of_month(today.year, today.month)
+                if _cal.has_real_calendar is True:
+                    is_rebalance_day = force_rebalance or (
+                        _cal.is_first_trading_day_of_month(today)
+                    )
+                    result.metadata["rebalance_rule"] = (
+                        f"first_trading_day_of_month={_first_td.isoformat()}"
+                    )
+                else:
+                    # akshare 日历不可用（网络挂）→ weekend-only 会把节假日
+                    # 误判成交易日（10/1 国庆当工作日）。退回 day<=5 近似。
+                    logger.warning("TradingCalendar 无真实日历（akshare 不可用），退回 day<=5 近似")
+                    is_rebalance_day = force_rebalance or today.day <= 5
+            except Exception as exc:
+                # 日历模块异常 → 退回 day<=5 近似，别让整条 pipeline 挂
+                logger.warning("TradingCalendar 不可用，退回 day<=5 近似: {}", exc)
+                is_rebalance_day = force_rebalance or today.day <= 5
 
             # ================================================================
             # Step 0: System state check (#8 fix)

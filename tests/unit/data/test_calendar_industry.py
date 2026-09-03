@@ -62,6 +62,58 @@ class TestTradingCalendar:
             days = cal.get_trading_days(date(2026, 7, 13), date(2026, 7, 16))
         assert days == [date(2026, 7, 14), date(2026, 7, 15)]
 
+    def test_first_trading_day_of_month_with_real_calendar(self) -> None:
+        """2026-09-01 is a Tuesday trading day → first trading day is 9/1.
+        Rebalance day must be exactly that date; 9/2 must NOT rebalance."""
+        import pandas as pd
+
+        # Sept 2026: 9/1 Tue .. 9/4 Fri (no CN holiday that week)
+        hist = pd.DataFrame(
+            {"trade_date": pd.to_datetime(["2026-09-01", "2026-09-02", "2026-09-03"])}
+        )
+        cal = TradingCalendar()
+        with patch("akshare.tool_trade_date_hist_sina", return_value=hist):
+            assert cal.is_first_trading_day_of_month(date(2026, 9, 1)) is True
+            assert cal.is_first_trading_day_of_month(date(2026, 9, 2)) is False
+
+    def test_first_trading_day_when_first_is_weekend(self) -> None:
+        """2026-11-01 is a Sunday → first trading day is Mon 11/2."""
+        import pandas as pd
+
+        hist = pd.DataFrame({"trade_date": pd.to_datetime(["2026-11-02", "2026-11-03"])})
+        cal = TradingCalendar()
+        with patch("akshare.tool_trade_date_hist_sina", return_value=hist):
+            assert cal.first_trading_day_of_month(2026, 11) == date(2026, 11, 2)
+            assert cal.is_first_trading_day_of_month(date(2026, 11, 2)) is True
+            assert cal.is_first_trading_day_of_month(date(2026, 11, 3)) is False
+
+    def test_first_trading_day_after_long_holiday(self) -> None:
+        """2026-10-01 National Day week (10/1-10/7 off) → first trading day 10/8."""
+        import pandas as pd
+
+        # akshare real calendar: 2026-10 holiday + trading resume 10/8
+        hist = pd.DataFrame({"trade_date": pd.to_datetime(["2026-10-08", "2026-10-09"])})
+        cal = TradingCalendar()
+        with patch("akshare.tool_trade_date_hist_sina", return_value=hist):
+            assert cal.first_trading_day_of_month(2026, 10) == date(2026, 10, 8)
+            assert cal.is_first_trading_day_of_month(date(2026, 10, 1)) is False
+            assert cal.is_first_trading_day_of_month(date(2026, 10, 8)) is True
+
+    def test_has_real_calendar_flag(self) -> None:
+        """Flag must be True after a successful akshare load, False on failure."""
+        import pandas as pd
+
+        cal_ok = TradingCalendar()
+        hist = pd.DataFrame({"trade_date": pd.to_datetime(["2026-09-01"])})
+        with patch("akshare.tool_trade_date_hist_sina", return_value=hist):
+            cal_ok.get_trading_days(date(2026, 9, 1), date(2026, 9, 1))
+        assert cal_ok.has_real_calendar is True
+
+        cal_fail = TradingCalendar()
+        with patch("akshare.tool_trade_date_hist_sina", side_effect=Exception("no net")):
+            cal_fail.get_trading_days(date(2026, 9, 1), date(2026, 9, 1))
+        assert cal_fail.has_real_calendar is False
+
 
 class TestIndustryCache:
     def test_load_missing_returns_none(self) -> None:

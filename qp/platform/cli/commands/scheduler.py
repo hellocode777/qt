@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import signal
 import time
+from datetime import date
 from typing import TYPE_CHECKING
 
 from qp.shared.paths import DECISIONS_DIR, PAPER_TRADING_DIR
@@ -14,21 +15,55 @@ if TYPE_CHECKING:
     from qp.platform.runtime.application import Application
 
 
+def _is_rebalance_day(d: date) -> bool:
+    """True when d is a monthly rebalance day.
+
+    Real A-share calendar when available (skips weekends/holidays); falls
+    back to the legacy day<=5 approximation when akshare is unreachable.
+    """
+    from qp.data.calendar.calendar import TradingCalendar
+
+    cal = TradingCalendar()
+    # Trigger the akshare load FIRST — has_real_calendar is None until then.
+    cal.first_trading_day_of_month(d.year, d.month)
+    if cal.has_real_calendar is True:
+        return cal.is_first_trading_day_of_month(d)
+    return d.day <= 5
+
+
 def _next_rebalance_date(date_str: str) -> str:
     """Next monthly rebalance date.
 
-    Matches daily_pipeline is_rebalance_day = today.day <= 5: rebalance runs
-    on the 1st-5th of each month; otherwise the next rebalance is next
-    month's 1st.
+    Matches daily_pipeline: rebalance day is the FIRST REAL TRADING DAY of
+    the month (skips weekends/holidays). If today IS that day, return today;
+    otherwise return next month's first trading day.
     """
     from datetime import date
 
     d = date.fromisoformat(date_str)
-    if d.day <= 5:
-        return date_str
-    if d.month == 12:
-        return f"{d.year + 1}-01-01"
-    return f"{d.year}-{d.month + 1:02d}-01"
+    try:
+        from qp.data.calendar.calendar import TradingCalendar
+
+        cal = TradingCalendar()
+        # trigger load, then trust real calendar if available
+        cal.first_trading_day_of_month(d.year, d.month)
+        if cal.has_real_calendar is not True:
+            # akshare 不可用 → fallback 近似
+            if d.day <= 5:
+                return date_str
+        elif cal.is_first_trading_day_of_month(d):
+            return date_str
+        # next month's first trading day
+        y = d.year + (1 if d.month == 12 else 0)
+        m = 1 if d.month == 12 else d.month + 1
+        return cal.first_trading_day_of_month(y, m).isoformat()
+    except Exception:
+        # 日历异常 → 退回旧近似（day<=5 表示本月内，否则下月1号）
+        if d.day <= 5:
+            return date_str
+        if d.month == 12:
+            return f"{d.year + 1}-01-01"
+        return f"{d.year}-{d.month + 1:02d}-01"
 
 
 def format_decision_email(data: dict, date_str: str) -> str:
@@ -47,18 +82,18 @@ def format_decision_email(data: dict, date_str: str) -> str:
         if regime.get("suggested_exposure"):
             lines.append(f"  建议敞口: {regime['suggested_exposure']:.0%}")
 
-    # Rebalance info — 月度调仓（每月1-5号），非调仓日买入 0 只属正常
+    # Rebalance info — 月度调仓（每月第一个真实交易日），非调仓日买入 0 只属正常
     try:
         from datetime import date as _date
 
-        if _date.fromisoformat(date_str).day <= 5:
+        if _is_rebalance_day(_date.fromisoformat(date_str)):
             rebal_txt = f"今日为调仓日（{date_str}）"
         else:
             rebal_txt = f"下次调仓日: {_next_rebalance_date(date_str)}"
         lines.append("")
         lines.append("【调仓】")
-        lines.append(f"  {rebal_txt} — 月度调仓（每月1-5号），非调仓日买入 0 只属正常")
-    except ValueError:
+        lines.append(f"  {rebal_txt} — 月度调仓（每月第一个真实交易日），非调仓日买入 0 只属正常")
+    except Exception:
         pass
 
     # Strategy signals
