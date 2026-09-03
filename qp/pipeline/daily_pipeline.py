@@ -1225,10 +1225,38 @@ class DailyPipeline(BasePipeline):
                         if risk_report is not None and alloc_weights
                         else risk_report
                     )
+                    # ── BUY/SELL 互斥 (V2.2) ──
+                    # Exit Engine 判了 SELL 的 symbol 不得再进 BUY 池：
+                    # 同一天对同一票先全卖再买回 = 白付摩擦成本 + 决策自相矛盾
+                    # （9/2 实锤：600207/600930 同包 BUY 100 + SELL 300/400）。
+                    # 同时把当前持仓市值权重传给 engine，使 BUY 只买
+                    # target−current 差额、已达标的不再重复建仓。
+                    sell_syms = {str(r.symbol) for r in sell_recommendations}
+                    if sell_syms:
+                        n_before = len(filtered_signals)
+                        filtered_signals = filtered_signals.filter(
+                            ~pl.col("symbol").is_in(sell_syms)
+                        )
+                        result.metrics["buy_pool_excluded_by_sell"] = n_before - len(
+                            filtered_signals
+                        )
+                        logger.info(
+                            "BUY/SELL 互斥: {} symbols excluded from BUY pool "
+                            "(already flagged SELL)",
+                            n_before - len(filtered_signals),
+                        )
+                    current_positions: dict[str, float] = {}
+                    if active_positions and alloc_capital > 0:
+                        for pos in active_positions:
+                            sym = str(pos.symbol)
+                            mv = float(pos.shares or 0) * current_prices.get(sym, 0.0)
+                            if mv > 0:
+                                current_positions[sym] = mv / alloc_capital
                     decision_report = engine.generate(
                         signals=filtered_signals,
                         prices=latest_prices,
                         risk_report=report_risk,
+                        current_positions=current_positions or None,
                         total_capital=alloc_capital,
                         strategy_id="multi_strategy_ensemble",
                         market_regime=regime_label,

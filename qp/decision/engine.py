@@ -138,9 +138,17 @@ class DecisionEngine:
             target_wt = pos_weights.get(sym, per_stock_weight) * 100
             current_wt = (current_positions.get(sym, 0.0)) * 100
 
-            # Calculate share quantity
-            target_amount = total_capital * target_wt / 100
-            quantity = max(int(target_amount / price // 100 * 100), 0)
+            # Calculate share quantity — only the delta above what we already
+            # hold (target − current), never the full target. Without this,
+            # a symbol already held (e.g. bought on a previous rebalance day)
+            # gets re-bought from scratch → same-day BUY + SELL conflicts.
+            delta_wt = target_wt - current_wt
+            if delta_wt <= 0:
+                # Already at/above target weight → nothing to buy. The exit
+                # engine (not here) decides whether to trim the position.
+                continue
+            delta_amount = total_capital * delta_wt / 100
+            quantity = max(int(delta_amount / price // 100 * 100), 0)
 
             # Estimate costs
             trade_value = price * quantity

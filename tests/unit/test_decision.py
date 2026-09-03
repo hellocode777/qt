@@ -233,6 +233,73 @@ class TestDecisionEngine:
         assert "600519" in output
         assert "Buy Recommendations" in output
 
+    # ──────────────────────────────────────────────────────────────
+    # BUY/SELL 互斥回归 (2026-09-02 实锤：600207/600930 同包 BUY+SELL)
+    # ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _signal_df(symbols: list[str]):
+        import polars as pl
+
+        n = len(symbols)
+        return pl.DataFrame(
+            {
+                "symbol": symbols,
+                "aggregated_score": [1.0 / (i + 1) for i in range(n)],
+                "rank": list(range(1, n + 1)),
+            }
+        )
+
+    def test_buy_quantity_is_delta_not_full_target(self) -> None:
+        """已持仓 >= 目标权重时不再发 BUY；差额买入只算 target-current。"""
+        import polars as pl
+
+        from qp.portfolio.risk_manager import RiskReport
+
+        engine = DecisionEngine()
+        signals = self._signal_df(["600207", "600930"])
+        prices = pl.DataFrame({"symbol": ["600207", "600930"], "close": [4.5, 3.89]})
+        # 模拟 9/2 场景：alloc_capital=8500，3 候选 → 单票 8% 目标权重
+        risk = RiskReport(position_weights={"600207": 0.08, "600930": 0.08})
+        # 持仓市值/alloc_capital：600207 300股×4.5=1350/8500=15.9% > 8% 目标 → 不买
+        # 600930 未持仓 (0) → 差额=8% → 买入
+        current_positions = {"600207": 1350.0 / 8500.0}
+        report = engine.generate(
+            signals=signals,
+            prices=prices,
+            risk_report=risk,
+            total_capital=8500.0,
+            current_positions=current_positions,
+        )
+
+        buys = {r.symbol: r for r in report.buys}
+        assert "600207" not in buys, "已超配持仓不应重复 BUY"
+        assert "600930" in buys
+        # 8% × 8500 = 680 元 / 3.89 → 174 股 → 整手 100
+        assert buys["600930"].quantity_shares == 100
+
+    def test_buy_quantity_zero_without_current_positions_still_works(self) -> None:
+        """回归：不传 current_positions（standalone 调用方）行为不变——满额建仓。"""
+        import polars as pl
+
+        from qp.portfolio.risk_manager import RiskReport
+
+        engine = DecisionEngine()
+        signals = self._signal_df(["002608"])
+        prices = pl.DataFrame({"symbol": ["002608"], "close": [7.19]})
+        risk = RiskReport(position_weights={"002608": 1.0 / 6.0})
+        report = engine.generate(
+            signals=signals,
+            prices=prices,
+            risk_report=risk,
+            total_capital=10000.0,
+        )
+        buys = report.buys
+        assert len(buys) == 1
+        assert buys[0].symbol == "002608"
+        # 全额 16.7% × 10000 = 1667 / 7.19 → 231 → 整手 200（旧行为）
+        assert buys[0].quantity_shares == 200
+
 
 # ==================================================================
 # Decision State Machine tests
