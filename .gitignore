@@ -76,3 +76,6 @@ data/capital_flow_cache/
 
 # 归档数据（大文件，不进 git）
 data/archive/
+
+# SPA 构建产物 (scripts/spa_deploy.sh 生成, 不入库)
+qp/web/static/spa/

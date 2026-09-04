@@ -13,7 +13,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
@@ -23,6 +24,34 @@ if TYPE_CHECKING:
 # Template and static directories (relative to package root)
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
+_SPA_DIR = Path(__file__).parent / "static" / "spa"
+
+
+def _register_spa_routes(app: FastAPI) -> None:
+    """SPA 构建产物 → http://host/proto/*（含 history 路由 fallback）。
+
+    注意: 新版 Starlette StaticFiles 对 not-found 是 raise HTTPException，
+    在 FastAPI 下会被转成 JSON 404、且无法 override —— 故用手动路由 + FileResponse，
+    并做目录穿越防护（resolved 必须位于 _SPA_DIR 内）。
+    """
+
+    async def spa_entry(request: Request) -> Response:
+        raw = request.path_params.get("path", "")
+        if raw:
+            candidate = (_SPA_DIR / raw).resolve()
+            if candidate.is_file() and candidate.is_relative_to(_SPA_DIR.resolve()):
+                return FileResponse(candidate)
+        # SPA history fallback / 未匹配资源 → index.html
+        index = _SPA_DIR / "index.html"
+        return (
+            HTMLResponse(index.read_bytes(), media_type="text/html")
+            if index.exists()
+            else HTMLResponse("", status_code=404)
+        )
+
+    app.get("/proto", include_in_schema=False)(spa_entry)
+    app.get("/proto/", include_in_schema=False)(spa_entry)
+    app.get("/proto/{path:path}", include_in_schema=False)(spa_entry)
 
 
 def create_app() -> FastAPI:
@@ -44,6 +73,11 @@ def create_app() -> FastAPI:
     # Mount static files
     if _STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+    # Mount SPA prototype (构建产物 qp/web/static/spa → http://host/proto/)
+    if _SPA_DIR.exists():
+        _register_spa_routes(app)
+        logger.info("SPA prototype mounted at /proto ({})", _SPA_DIR)
 
     # Register routers
     _register_routers(app)
