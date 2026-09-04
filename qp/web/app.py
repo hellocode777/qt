@@ -82,6 +82,10 @@ def _register_routers(app: FastAPI) -> None:
 
     app.include_router(factors_router)
     app.include_router(strategies_router)
+    # API v1 (只读 JSON 端点，供 SPA 原型/外部工具)
+    from qp.web.routers.api_v1 import router as api_v1_router
+
+    app.include_router(api_v1_router)
 
 
 @asynccontextmanager

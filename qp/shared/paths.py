@@ -47,6 +47,7 @@ VOLATILITY_20D = Path("data/dataset/volatility_20d.parquet")
 FUNDAMENTALS_LATEST = Path("data/dataset/fundamentals_latest.parquet")
 FACTOR_VALUES_DAILY = Path("data/dataset/factor_values_daily.parquet")
 FACTOR_REGISTRY = Path("data/factor_registry.json")
+STRATEGY_REGISTRY = Path("data/strategy_registry.json")
 BLACKLIST = Path("data/blacklist.json")
 STOCK_NAMES = Path("data/stock_names.json")
 STOCK_INDUSTRY = Path("data/stock_industry.json")
@@ -95,6 +96,7 @@ __all__ = [
     "SOURCES_JSON",
     "STOCK_INDUSTRY",
     "STOCK_NAMES",
+    "STRATEGY_REGISTRY",
     "SYSTEM_HEALTH_LOG",
     "VOLATILITY_20D",
 ]
