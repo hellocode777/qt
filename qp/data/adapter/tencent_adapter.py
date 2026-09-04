@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 import requests
 from loguru import logger
+from requests.adapters import HTTPAdapter
 
 from qp.data.adapter.code_list import CORE_SYMBOLS
 from qp.shared.protocols.base_data_source import BaseDataSource
@@ -38,6 +39,25 @@ class TencentAdapter(BaseDataSource):
     """
 
     DEFAULT_SYMBOLS: list[str] = CORE_SYMBOLS
+
+    # Per-request hard timeouts. Read timeout alone does NOT fire when a
+    # connection is half-open (peer accepts but never sends) — see the
+    # 2026-09-04 hang: 78 min / 0 stocks, CPU 0, connections stuck.
+    # Keep-alive + pool reuse + explicit (connect, read) tuple + a global
+    # batch watchdog is the fix.
+    _CONNECT_TIMEOUT: float = 5.0
+    _READ_TIMEOUT: float = 15.0
+    _BATCH_WATCHDOG_SECONDS: float = 1200.0  # 20 min for 3075 symbols
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__()
+        self._session = requests.Session()
+        # Pool reuse: without a Session every request opens a new connection;
+        # under flaky networks that accumulates half-open sockets and the
+        # per-request read timeout never fires (2026-09-04 incident).
+        adapter = HTTPAdapter(pool_connections=8, pool_maxsize=8, max_retries=0)
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
 
     @property
     def dataset_name(self) -> str:
@@ -77,7 +97,16 @@ class TencentAdapter(BaseDataSource):
             fmt_date(start_date),
             fmt_date(end_date),
         )
+        batch_start = time.monotonic()
         for i, code in enumerate(symbols):
+            # Batch watchdog: hard abort when the whole fetch exceeds budget
+            # (e.g. half-open connections where per-request read timeout
+            # never fires — 2026-09-04: 78 min, 0 stocks).
+            if time.monotonic() - batch_start > self._BATCH_WATCHDOG_SECONDS:
+                raise RuntimeError(
+                    f"Tencent fetch watchdog: >{self._BATCH_WATCHDOG_SECONDS:.0f}s "
+                    f"elapsed at {i}/{n_total} stocks — aborting (network hang)"
+                )
             if i > 0:
                 time.sleep(0.3)  # avoid rate limiting (WAF blocks below ~0.2s)
             try:
@@ -183,7 +212,12 @@ class TencentAdapter(BaseDataSource):
             data: dict | None = None
             for attempt in range(3):
                 try:
-                    r = requests.get(url, params={"param": param}, headers=headers, timeout=30)
+                    r = self._session.get(
+                        url,
+                        params={"param": param},
+                        headers=headers,
+                        timeout=(self._CONNECT_TIMEOUT, self._READ_TIMEOUT),
+                    )
                     if r.text and r.text.strip():
                         data = r.json()
                         break
