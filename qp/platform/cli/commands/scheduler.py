@@ -552,10 +552,13 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 )
                 return
 
+            health_txt = (
+                f"{report.strategy_health.health_score:.0f}" if report.strategy_health else "?"
+            )
             print(
                 f"[scheduler] pre_close_check: {action.value} — "
                 f"regime={report.regime.regime.value if report.regime else '?'} "
-                f"health={report.strategy_health.health_score:.0f if report.strategy_health else '?'}"
+                f"health={health_txt}"
             )
             watchdog_ping("pre_close_check")
 
