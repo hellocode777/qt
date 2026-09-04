@@ -79,6 +79,11 @@ DEFAULT_REGIME_FREQUENCIES: dict[str, int] = {
 # Blocked regimes for buy signals (others allow buys)
 BLOCKED_BUY_REGIMES: frozenset[str] = frozenset({"bear", "crisis"})
 
+# A-share panic threshold: whole-market limit-down count that forces crisis.
+# Calibrated on daily_price history: normal days median 5-8 limit-downs;
+# 2026-07 panic days 183/204/226; 2026-08-19 had 143. 100 is a wide margin.
+PANIC_LIMIT_DOWN_COUNT: int = 100
+
 
 # ------------------------------------------------------------------
 # Data models
@@ -95,6 +100,7 @@ class RegimeResult:
     volatility_score: float = 0.0  # 0~1 (higher = more volatile)
     breadth_score: float = 0.0  # 0~1 (higher = more stocks above MA)
     volume_score: float = 0.5  # 0~1
+    n_limit_down: int = 0  # whole-market limit-down count (latest day)
     reason: str = ""
 
     @property
@@ -208,15 +214,20 @@ class MarketRegimeDetector:
         # ── 4. Volume dimension ──
         volume_score, volume_reason = self._compute_volume(index_df)
 
+        # ── 5. Limit-down dimension (A-share panic gauge) ──
+        n_limit_down = self._compute_limit_down_count(price_data)
+        limit_down_reason = f"跌停={n_limit_down}家" if n_limit_down > 0 else ""
+
         # ── Classify regime ──
         regime, confidence = self._classify(
             trend_score,
             vol_score,
             breadth_score,
             volume_score,
+            n_limit_down,
         )
 
-        reasons = [trend_reason, vol_reason, breadth_reason, volume_reason]
+        reasons = [trend_reason, vol_reason, breadth_reason, volume_reason, limit_down_reason]
         non_empty = [r for r in reasons if r]
 
         return RegimeResult(
@@ -226,6 +237,7 @@ class MarketRegimeDetector:
             volatility_score=round(float(vol_score), 3),
             breadth_score=round(float(breadth_score), 3),
             volume_score=round(float(volume_score), 3),
+            n_limit_down=n_limit_down,
             reason=" | ".join(non_empty),
         )
 
@@ -408,6 +420,75 @@ class MarketRegimeDetector:
         level = "放量" if vol_score > 0.7 else "缩量" if vol_score < 0.35 else "正常"
         return vol_score, f"量={level}({vol_score:.2f})"
 
+    @staticmethod
+    def _compute_limit_down_count(
+        price_data: dict[str, pl.DataFrame] | None,
+    ) -> int:
+        """Count whole-market limit-down stocks on the latest trading day.
+
+        Board-aware: main board ±9.8%, ChiNext (300/301) and STAR (688)
+        ±19.5%. Symbols are aligned to the market's latest COMMON trading
+        day — a symbol whose series ends years earlier (delisted /
+        long-suspended) must not count, because its "last two rows" span
+        years and produce fake -60% moves.
+
+        Args:
+            price_data: {symbol: DataFrame[date/trade_date, close, volume]}.
+
+        Returns:
+            Number of limit-down stocks on the latest common trading day,
+            or 0 when data is insufficient.
+        """
+        if price_data is None or len(price_data) < 10:
+            return 0
+
+        # 1. Each symbol's latest day + its daily return
+        day_rets: dict[str, tuple[object, float]] = {}
+        for code, pdf in price_data.items():
+            if pdf is None or pdf.is_empty() or "close" not in pdf.columns:
+                continue
+            if pdf.height < 2:
+                continue
+            date_col = "trade_date" if "trade_date" in pdf.columns else "date"
+            if date_col not in pdf.columns:
+                continue
+            try:
+                pdf_sorted = pdf.sort(date_col).drop_nulls("close")
+                if pdf_sorted.height < 2:
+                    continue
+                last_close = float(pdf_sorted["close"][-1])
+                prev_close = float(pdf_sorted["close"][-2])
+                if prev_close <= 0 or last_close <= 0:
+                    continue
+                day_rets[str(code)] = (
+                    pdf_sorted[date_col][-1],
+                    last_close / prev_close - 1.0,
+                )
+            except (IndexError, KeyError, TypeError, ValueError):
+                continue
+
+        if len(day_rets) < 10:
+            return 0
+
+        # 2. Market's latest common trading day = most common latest date
+        from collections import Counter
+
+        date_counts = Counter(d for d, _ in day_rets.values())
+        if not date_counts:
+            return 0
+        latest_day = date_counts.most_common(1)[0][0]
+
+        # 3. Count limit-downs only among symbols aligned to latest_day
+        n_limit_down = 0
+        for code, (day, ret) in day_rets.items():
+            if day != latest_day:
+                continue
+            threshold = -0.195 if code.startswith(("300", "301", "688")) else -0.098
+            if ret <= threshold:
+                n_limit_down += 1
+
+        return n_limit_down
+
     # ------------------------------------------------------------------
     # Regime classification
     # ------------------------------------------------------------------
@@ -418,14 +499,19 @@ class MarketRegimeDetector:
         volatility: float,
         breadth: float,
         volume: float,
+        n_limit_down: int = 0,
     ) -> tuple[str, float]:
-        """Classify regime from 4 dimension scores.
+        """Classify regime from 4 dimension scores + panic gauge.
 
         Decision logic:
+          - n_limit_down >= PANIC_LIMIT_DOWN_COUNT → crisis (mass limit-down)
           - trend > 0.3 + vol not extreme → bull or sideways_up
           - trend < -0.3 + vol high → crisis or bear
           - otherwise → sideways or neutral
         """
+        if n_limit_down >= PANIC_LIMIT_DOWN_COUNT:
+            return "crisis", min(1.0, 0.5 + n_limit_down / 500.0)
+
         if trend > 0.3:
             if volatility > 0.7 and volume > 0.7:
                 regime = "bull"

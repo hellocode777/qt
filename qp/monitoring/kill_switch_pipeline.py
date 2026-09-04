@@ -245,6 +245,7 @@ class KillSwitchPipeline(BasePipeline):
         prices = self._get_price_data(context)
         if prices is None:
             return None
+        n_limit_down = 0
         if isinstance(prices, dict):
             try:
                 # Deferred import: daily_pipeline imports monitoring
@@ -252,13 +253,18 @@ class KillSwitchPipeline(BasePipeline):
                 # avoids an import cycle.
                 from qp.pipeline.daily_pipeline import _build_index_df
 
+                # Count whole-market limit-downs on the latest day from the
+                # cross-section BEFORE flattening to a synthetic index.
+                n_limit_down = MarketRegimeEngine.compute_limit_down_count(
+                    MarketRegimeEngine._cross_section_latest_returns(prices)
+                )
                 index_df = _build_index_df(prices)
             except Exception:
                 index_df = None
             if index_df is None or index_df.is_empty():
                 return None
             prices = index_df
-        return self._regime_engine.classify(prices)
+        return self._regime_engine.classify(prices, n_limit_down=n_limit_down or None)
 
     @staticmethod
     def _get_price_data(context: Any) -> Any:

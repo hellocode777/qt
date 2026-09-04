@@ -518,7 +518,46 @@ class TestMarketRegime:
 
         engine = MarketRegimeEngine()
         result = engine.classify(prices, limit_up_down_ratio=0.92)
+        # 2026-09 calibration: A-share normal days sit at LUD 0.85+ (median
+        # 0.88 over 2838 days) — mass limit-up is NOT a liquidity crunch in
+        # A-shares. Only mass limit-DOWN (relative or absolute count) flags
+        # LIQUIDITY_CRUNCH now.
+        assert result.regime != Regime.LIQUIDITY_CRUNCH
+
+    def test_regime_panic_from_limit_down_count(self) -> None:
+        """Whole-market limit-down count >= 100 forces LIQUIDITY_CRUNCH."""
+        import numpy as np
+        import polars as pl
+
+        from qp.monitoring.regime import MarketRegimeEngine, Regime
+
+        np.random.seed(42)
+        closes = 100 + np.cumsum(np.random.normal(0, 1, 200))
+        closes = np.maximum(closes, 1.0)
+        prices = pl.DataFrame({"close": closes})
+
+        engine = MarketRegimeEngine()
+        # 2026-07 panic days had 183/204/226 limit-downs; 8/19 had 143
+        result = engine.classify(prices, n_limit_down=143)
         assert result.regime == Regime.LIQUIDITY_CRUNCH
+        assert result.is_crisis is True
+        assert result.n_limit_down == 143
+
+    def test_regime_no_panic_on_normal_limit_down_count(self) -> None:
+        """Normal days (median 5-8 limit-downs) must NOT flag crisis."""
+        import numpy as np
+        import polars as pl
+
+        from qp.monitoring.regime import MarketRegimeEngine, Regime
+
+        np.random.seed(42)
+        closes = 100 + np.cumsum(np.random.normal(0, 1, 200))
+        closes = np.maximum(closes, 1.0)
+        prices = pl.DataFrame({"close": closes})
+
+        engine = MarketRegimeEngine()
+        result = engine.classify(prices, n_limit_down=8)
+        assert result.regime != Regime.LIQUIDITY_CRUNCH
 
     def test_regime_style_reversal(self) -> None:
         """STYLE_REVERSAL should trigger when sector rotation is rapid."""
@@ -606,6 +645,48 @@ class TestRegimeStaticHelpers:
         df = pl.DataFrame({"pct_change": [0.10, -0.098, 0.05, 0.10, -0.098, 0.10]})
         ratio = MarketRegimeEngine.compute_limit_up_down_ratio(df)
         assert ratio == 0.6  # 3 up, 2 down = 3/5
+
+    def test_limit_down_count_board_aware(self) -> None:
+        """20cm boards (300/688) need -19.5% to count as limit-down."""
+        import polars as pl
+
+        from qp.monitoring.regime import MarketRegimeEngine
+
+        df = pl.DataFrame(
+            {
+                "symbol": ["600519", "000001", "300750", "688981"],
+                "return": [-0.098, -0.10, -0.10, -0.19],
+            }
+        )
+        # 600519 -9.8% → down (main board threshold)
+        # 000001 -10.0% → down (main board)
+        # 300750 -10.0% → NOT down (ChiNext needs -19.5%)
+        # 688981 -19.0% → NOT down (STAR needs <= -19.5%)
+        assert MarketRegimeEngine.compute_limit_down_count(df) == 2
+
+    def test_limit_down_count_main_board_drop_20cm_limit(self) -> None:
+        """A -19.9% ChiNext drop IS a limit-down for 300-board stocks."""
+        import polars as pl
+
+        from qp.monitoring.regime import MarketRegimeEngine
+
+        df = pl.DataFrame(
+            {
+                "symbol": ["300750", "301234", "688001"],
+                "return": [-0.195, -0.20, -0.20],
+            }
+        )
+        assert MarketRegimeEngine.compute_limit_down_count(df) == 3
+
+    def test_limit_down_count_insufficient(self) -> None:
+        import polars as pl
+
+        from qp.monitoring.regime import MarketRegimeEngine
+
+        df = pl.DataFrame({"return": pl.Series([], dtype=pl.Float64)})
+        assert MarketRegimeEngine.compute_limit_down_count(df) == 0
+        df2 = pl.DataFrame({"return": [0.01, -0.01]})  # no symbol col
+        assert MarketRegimeEngine.compute_limit_down_count(df2) == 0
 
     def test_sector_rotation_speed_basic(self) -> None:
         import polars as pl

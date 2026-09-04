@@ -63,6 +63,7 @@ class RegimeResult:
         annualized_vol: Current annualized volatility.
         limit_up_down_ratio: Limit-up count / (limit-up + limit-down), 0-1.
         sector_rotation_speed: Cross-sectional std of sector returns (annualized).
+        n_limit_down: Whole-market limit-down count (latest day), A-share panic gauge.
         details: Dict of raw indicator values.
         summary: Human-readable summary.
     """
@@ -75,6 +76,7 @@ class RegimeResult:
     annualized_vol: float = 0.0
     limit_up_down_ratio: float = 0.5  # 0.5 = balanced
     sector_rotation_speed: float = 0.0
+    n_limit_down: int = 0  # whole-market limit-down count (latest day)
     details: dict[str, float] = field(default_factory=dict)
     summary: str = ""
 
@@ -109,6 +111,12 @@ class MarketRegimeEngine:
             # Use mean-reversion strategies
     """
 
+    # A-share panic threshold: number of limit-down stocks (whole market,
+    # board-aware) that flags LIQUIDITY_CRUNCH. Calibrated on daily_price
+    # history: normal days median 5-8 limit-downs; 2026-07 panic days had
+    # 183/204/226; 2026-08-19 had 143. 100 gives wide margin both sides.
+    PANIC_LIMIT_DOWN_COUNT: int = 100
+
     def __init__(
         self,
         adx_trend_threshold: float = 25.0,
@@ -138,6 +146,7 @@ class MarketRegimeEngine:
         prices: pl.DataFrame,
         limit_up_down_ratio: float | None = None,
         sector_rotation_speed: float | None = None,
+        n_limit_down: int | None = None,
     ) -> RegimeResult:
         """Classify current market regime.
 
@@ -150,6 +159,11 @@ class MarketRegimeEngine:
             sector_rotation_speed: Pre-computed sector rotation speed
                 (annualized cross-sectional std of sector returns).
                 Values > 0.50 suggest rapid style rotation.
+            n_limit_down: Pre-computed number of limit-down stocks on the
+                latest trading day (whole market, board-aware thresholds).
+                Values >= PANIC_LIMIT_DOWN_COUNT indicate mass limit-down
+                (liquidity crunch) — A-share specific: normal days have
+                <10 limit-downs; 2026-07 panic days had 180-226.
 
         Returns:
             RegimeResult with classification and indicators.
@@ -186,6 +200,7 @@ class MarketRegimeEngine:
         # 3. Compute liquidity / style indicators
         lud_ratio = limit_up_down_ratio if limit_up_down_ratio is not None else 0.5
         sector_rot = sector_rotation_speed if sector_rotation_speed is not None else 0.0
+        n_ld = n_limit_down if n_limit_down is not None else 0
 
         # 4. Classify
         regime, confidence = self._classify(
@@ -195,6 +210,7 @@ class MarketRegimeEngine:
             vol_percentile,
             lud_ratio,
             sector_rot,
+            n_ld,
         )
 
         details = {
@@ -210,6 +226,7 @@ class MarketRegimeEngine:
             "close": float(closes[-1]),
             "limit_up_down_ratio": lud_ratio,
             "sector_rotation_speed": sector_rot,
+            "n_limit_down": float(n_ld),
         }
 
         # Generate summary
@@ -224,6 +241,7 @@ class MarketRegimeEngine:
             f"方向={direction_name.get(trend_dir, 'N/A')} | "
             f"年化波动={ann_vol:.1%} | "
             f"涨跌停比={lud_ratio:.2f} | "
+            f"跌停={n_ld}家 | "
             f"行业轮动={sector_rot:.2f} | "
             f"置信度={confidence:.0%}"
         )
@@ -237,6 +255,7 @@ class MarketRegimeEngine:
             annualized_vol=ann_vol,
             limit_up_down_ratio=lud_ratio,
             sector_rotation_speed=sector_rot,
+            n_limit_down=n_ld,
             details=details,
             summary=summary,
         )
@@ -367,12 +386,18 @@ class MarketRegimeEngine:
         vol_percentile: float,
         limit_up_down_ratio: float = 0.5,
         sector_rotation_speed: float = 0.0,
+        n_limit_down: int = 0,
     ) -> tuple[Regime, float]:
         """Classify regime from indicators.
 
-        Decision logic (priority order per docs/11_12.md):
-          1. LIQUIDITY_CRUNCH: limit_up_down_ratio < 0.15 (mass limit-down)
-             or limit_up_down_ratio > 0.85 (mass limit-up frenzy)
+        Decision logic (priority order per docs/11_12.md + 2026-09 A-share
+        calibration):
+          1. LIQUIDITY_CRUNCH: n_limit_down >= PANIC_LIMIT_DOWN_COUNT (mass
+             limit-down, A-share specific — primary panic gauge), OR
+             limit_up_down_ratio < 0.15 (mass limit-down relative ratio)
+             NOTE: limit_up_down_ratio > 0.85 (frenzy) branch removed from
+             auto-trigger — A-share normal days sit at 0.85+ (median 0.88),
+             so it fired on 57% of days and carried no signal.
           2. STYLE_REVERSAL: sector_rotation_speed > 0.50 (rapid rotation)
           3. HIGH_VOL: vol_percentile >= 80
           4. LOW_VOL: vol_percentile <= 20
@@ -386,18 +411,18 @@ class MarketRegimeEngine:
             vol_percentile: 0-100 percentile.
             limit_up_down_ratio: 0-1, extreme values = liquidity stress.
             sector_rotation_speed: Annualized std of sector returns.
+            n_limit_down: Whole-market limit-down count.
 
         Returns:
             (Regime, confidence 0-1).
         """
-        # Priority 1: Liquidity crunch — mass limit-down/up cascade
+        # Priority 1: Liquidity crunch — mass limit-down cascade
+        if n_limit_down >= self.PANIC_LIMIT_DOWN_COUNT:
+            conf = min(0.5 + n_limit_down / 500.0, 0.95)
+            return Regime.LIQUIDITY_CRUNCH, max(conf, 0.75)
         if limit_up_down_ratio < 0.15:
             conf = min(1.0 - limit_up_down_ratio / 0.15, 0.95)
             return Regime.LIQUIDITY_CRUNCH, max(conf, 0.7)
-        if limit_up_down_ratio > 0.85:
-            # Mass limit-up — also a liquidity event (can't buy)
-            conf = min((limit_up_down_ratio - 0.85) / 0.15, 0.95)
-            return Regime.LIQUIDITY_CRUNCH, max(conf, 0.6)
 
         # Priority 2: Style reversal — rapid sector rotation
         if sector_rotation_speed > 0.50:
@@ -471,6 +496,124 @@ class MarketRegimeEngine:
             return 0.5
 
         return float(n_up / total)
+
+    @staticmethod
+    def compute_limit_down_count(
+        daily_returns: pl.DataFrame,
+        symbol_col: str = "symbol",
+        ret_col: str = "return",
+    ) -> int:
+        """Count whole-market limit-down stocks for one trading day.
+
+        Board-aware thresholds: main board ±10% (>= 9.8% move), ChiNext
+        (300/301) and STAR (688) ±20% (>= 19.5% move). This mirrors actual
+        A-share price limits — a flat 9.8% cut-off mislabels 20cm boards.
+
+        Args:
+            daily_returns: DataFrame with one row per stock for a single
+                trading day, containing a symbol column and a return column.
+            symbol_col: Symbol column name.
+            ret_col: Return column name (fraction, e.g. -0.098 = -9.8%).
+
+        Returns:
+            Number of limit-down stocks, or 0 if insufficient data.
+        """
+        if daily_returns.is_empty():
+            return 0
+        if ret_col not in daily_returns.columns or symbol_col not in daily_returns.columns:
+            return 0
+
+        import polars as pl  # local import: module keeps polars optional
+
+        returns = daily_returns.select(
+            pl.col(symbol_col).cast(pl.Utf8).alias("_sym"),
+            pl.col(ret_col).cast(pl.Float64).alias("_ret"),
+        ).drop_nulls()
+        if returns.height < 2:
+            return 0
+
+        # Board-aware limit-down threshold: 20cm boards use ±19.5%,
+        # main board (600/601/603/605/000/001/002/003) uses ±9.8%.
+        returns = returns.with_columns(
+            pl.when(
+                pl.col("_sym").str.starts_with("300")
+                | pl.col("_sym").str.starts_with("301")
+                | pl.col("_sym").str.starts_with("688")
+            )
+            .then(-0.195)
+            .otherwise(-0.098)
+            .alias("_limit_down_pct")
+        )
+        return int(returns.filter(pl.col("_ret") <= pl.col("_limit_down_pct")).height)
+
+    @staticmethod
+    def _cross_section_latest_returns(
+        price_data: dict[str, pl.DataFrame],
+    ) -> pl.DataFrame:
+        """Build latest-day cross-sectional returns from {symbol: DataFrame}.
+
+        Each symbol's daily return is its last close vs previous close,
+        aligned to the market's latest COMMON trading day (symbols whose
+        series ends years earlier — delisted / long-suspended — are
+        excluded so stale rows cannot fabricate -60% limit-down moves).
+
+        Args:
+            price_data: {code: DataFrame with 'close' column (and optional
+                'trade_date'/'date'), rows sorted ascending by date}.
+
+        Returns:
+            pl.DataFrame[symbol, return] — one row per symbol aligned to
+            the latest common trading day, or empty.
+        """
+        date_col = (
+            "trade_date"
+            if price_data and "trade_date" in next(iter(price_data.values())).columns
+            else "date"
+        )
+        import polars as pl  # local import: module keeps polars optional
+
+        # 1. Collect each symbol's latest date + daily return
+        day_rets: dict[str, tuple[object, float]] = {}
+        for code, pdf in price_data.items():
+            if pdf is None or pdf.is_empty() or "close" not in pdf.columns:
+                continue
+            if date_col not in pdf.columns or pdf.height < 2:
+                continue
+            try:
+                pdf_sorted = pdf.sort(date_col).drop_nulls("close")
+                if pdf_sorted.height < 2:
+                    continue
+                last_close = float(pdf_sorted["close"][-1])
+                prev_close = float(pdf_sorted["close"][-2])
+                if prev_close <= 0 or last_close <= 0:
+                    continue
+                day_rets[str(code)] = (
+                    pdf_sorted[date_col][-1],
+                    last_close / prev_close - 1.0,
+                )
+            except Exception:
+                continue
+
+        if len(day_rets) < 10:
+            return pl.DataFrame(schema={"symbol": pl.Utf8, "return": pl.Float64})
+
+        # 2. Latest common trading day = most common latest date
+        from collections import Counter
+
+        date_counts = Counter(d for d, _ in day_rets.values())
+        if not date_counts:
+            return pl.DataFrame(schema={"symbol": pl.Utf8, "return": pl.Float64})
+        latest_day = date_counts.most_common(1)[0][0]
+
+        # 3. Keep only symbols aligned to latest_day
+        rows = [
+            {"symbol": code, "return": ret}
+            for code, (day, ret) in day_rets.items()
+            if day == latest_day
+        ]
+        if not rows:
+            return pl.DataFrame(schema={"symbol": pl.Utf8, "return": pl.Float64})
+        return pl.DataFrame(rows)
 
     @staticmethod
     def compute_sector_rotation_speed(

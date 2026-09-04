@@ -402,6 +402,9 @@ class DailyPipeline(BasePipeline):
                     else:
                         result.metrics["regime_vol"] = 0.0
                     result.metadata["regime_reason"] = regime_result.reason
+                    result.metrics["regime_n_limit_down"] = int(
+                        getattr(regime_result, "n_limit_down", 0)
+                    )
 
                     # Adjust top_n by regime
                     regime_positions = {
