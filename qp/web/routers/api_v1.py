@@ -1,11 +1,13 @@
-"""API v1 router — 只读 JSON 端点（供 SPA 原型/外部工具使用）。
+"""API v1 router — SPA 数据端点（读 qp 运行产物）+ 人工复核动作端点。
 
 设计原则（与原型 qp-proto 对齐，数据同源）：
-- 全部只读：读取 qp 运行产物 data/*.json + positions.parquet，不做任何写入。
+- 读取全部只读：读取 qp 运行产物 data/*.json + *.parquet，不做任何写入。
 - 统一入口：路径常量来自 qp.shared.paths；JSON 读取走 qp.shared.json_io。
 - 实验净值/调仓重建复用 app.state.experiment_service（ExperimentService 已缓存逻辑，
   不在此重复实现）；其余实验元数据直接读实验目录 json（与数据文件同构）。
 - 保留 Jinja2 + HTMX 页面共存：本 router 只新增 /api/v1/* JSON 前缀。
+- 人工复核动作（/review /execute /close，POST JSON）：与老 UI HTML 表单同语义，
+  委托 DecisionService 状态机；approve 默认 create_positions=True（按决策包建仓/平仓）。
 
 数据真实性约定（WebUI 铁律）：
 - 返回的数据均来自磁盘产物自身带的时间戳（updated_at / completed_at 等），
@@ -15,6 +17,7 @@
 from __future__ import annotations
 
 import glob
+from functools import lru_cache
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -26,8 +29,13 @@ from qp.shared.paths import (
     DECISIONS_DIR,
     EXPERIMENTS_DIR,
     FACTOR_REGISTRY,
+    KNOWLEDGE_DIR,
     PAPER_TRADING_DIR,
+    PORTFOLIO_DIR,
     POSITIONS_DIR,
+    REPORTS_DIR,
+    SIMULATION_DIR,
+    STOCK_NAMES,
     STRATEGY_REGISTRY,
     WATCHDOG_DIR,
 )
@@ -431,3 +439,282 @@ def system_health(request: Request) -> dict[str, Any]:
         "history": svc.health_history(limit=30),
         "watchdog": _watchdog_pings(),
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# 影子盘 / 组合净值 / 数据质量 / 股票搜索
+# ─────────────────────────────────────────────────────────────
+
+_SHADOW_DAILY_PARQUET = "shadow_daily.parquet"
+_SHADOW_POSITIONS_PARQUET = "shadow_positions.parquet"
+_NAV_HISTORY_PARQUET = "nav_history.parquet"
+
+
+@router.get("/api/v1/simulation")
+def simulation() -> dict[str, Any]:
+    """影子盘（simulation/）：ShadowLedger 摘要 + 日度净值 + 持仓/已平仓交易。
+
+    与模拟盘 paper 的区别：shadow 是候选/实验策略暗跑，paper 是已上策略跟跑。
+    """
+    import polars as pl
+
+    from qp.simulation.shadow_ledger import ShadowLedger
+
+    ledger = ShadowLedger()
+    summary = ledger.summary()
+    positions: list[dict[str, Any]] = []
+    pos_path = SIMULATION_DIR / _SHADOW_POSITIONS_PARQUET
+    if pos_path.exists():
+        df = pl.read_parquet(str(pos_path)).sort("entry_date")
+        positions = df.to_dicts()
+    return {"summary": summary, "positions": positions}
+
+
+@router.get("/api/v1/portfolio")
+def portfolio() -> dict[str, Any]:
+    """组合净值（portfolio/nav_history.parquet）：total_nav vs benchmark + 基础统计。"""
+    import polars as pl
+
+    p = PORTFOLIO_DIR / _NAV_HISTORY_PARQUET
+    if not p.exists():
+        return {"records": [], "count": 0}
+    df = pl.read_parquet(str(p)).sort("date")
+    records = []
+    for r in df.to_dicts():
+        records.append(
+            {
+                "date": str(r.get("date"))[:10],
+                "total_nav": r.get("total_nav"),
+                "cash": r.get("cash"),
+                "positions_value": r.get("positions_value"),
+                "benchmark_value": r.get("benchmark_value"),
+                "n_positions": r.get("n_positions"),
+                "decision_id": r.get("decision_id") or "",
+            }
+        )
+    navs = [r["total_nav"] for r in records if r["total_nav"] is not None]
+    latest = navs[-1] if navs else None
+    first = navs[0] if navs else None
+    return {
+        "records": records,
+        "count": len(records),
+        "stats": {
+            "latest_nav": latest,
+            "total_return_pct": round((latest / first - 1) * 100, 2)
+            if latest is not None and first
+            else None,
+            "n_days": len(records),
+        },
+    }
+
+
+@router.get("/api/v1/data-quality")
+def data_quality() -> dict[str, Any]:
+    """数据质量报告时间线（reports/data_quality_*.json，按日期升序）。"""
+    files = sorted(glob.glob(str(REPORTS_DIR / "data_quality_*.json")))
+    items: list[dict[str, Any]] = []
+    for p in files:
+        try:
+            d = json_load(p)
+        except Exception:
+            continue
+        items.append(
+            {
+                "date": p.rsplit("/", 1)[-1].removeprefix("data_quality_").removesuffix(".json"),
+                "status": d.get("status"),
+                "timestamp": d.get("timestamp"),
+                "checks": d.get("checks"),
+                "rows_after": d.get("rows_after"),
+                "new_rows": d.get("new_rows"),
+                "symbols": d.get("symbols"),
+                "sha256": d.get("sha256"),
+                "pipeline_run_id": d.get("pipeline_run_id"),
+            }
+        )
+    return {"reports": items, "count": len(items)}
+
+
+@lru_cache(maxsize=1)
+def _stock_names_cached() -> dict[str, str]:
+    """stock_names.json 全量缓存（代码 → 名称）。"""
+    return json_load(STOCK_NAMES)
+
+
+@router.get("/api/v1/stocks/search")
+def stock_search(q: str = Query(default="", min_length=1, max_length=20)) -> dict[str, Any]:
+    """A 股名录搜索：代码前缀 或 名称包含（stock_names.json, {n} 只）。"""
+    names = _stock_names_cached()
+    needle = q.strip().lower()
+    if not needle:
+        return {"results": []}
+    out: list[dict[str, str]] = []
+    for code, name in names.items():
+        if code.startswith(needle) or needle in str(name).lower():
+            out.append({"code": code, "name": name})
+        if len(out) >= 20:
+            break
+    return {"results": out, "count": len(out), "needle": q.strip()}
+
+
+# ─────────────────────────────────────────────────────────────
+# 知识库（knowledge/*.md 复盘/失败分析/研究债务）
+# ─────────────────────────────────────────────────────────────
+
+_KNOWLEDGE_MAX_PER_CATEGORY = 40
+
+
+def _md_frontmatter(path) -> dict[str, Any]:
+    """解析 md 前导 frontmatter（--- yaml ---）；无则空 dict。"""
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return {}
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 4)
+    if end == -1:
+        return {}
+    try:
+        import yaml
+
+        d = yaml.safe_load(text[3:end].strip())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+@lru_cache(maxsize=1)
+def _knowledge_index() -> list[dict[str, Any]]:
+    """全量知识 md 索引（含 frontmatter title/tags）。文件 1700+，缓存一次。"""
+    items: list[dict[str, Any]] = []
+    for p in sorted(KNOWLEDGE_DIR.rglob("*.md")):
+        meta = _md_frontmatter(p)
+        rel = str(p.relative_to(KNOWLEDGE_DIR))
+        parts = rel.split("/")
+        items.append(
+            {
+                "category": parts[0] if len(parts) > 1 else "_root",
+                "rel": rel,
+                "name": p.stem,
+                "title": meta.get("title") or p.stem,
+                "created_at": meta.get("created_at"),
+                "tags": meta.get("tags") or [],
+                "size": p.stat().st_size,
+            }
+        )
+    return items
+
+
+@router.get("/api/v1/knowledge")
+def knowledge() -> dict[str, Any]:
+    """知识库索引（按类别聚合，倒序截断；research_debt 量大只取最近）。"""
+    items = _knowledge_index()
+    by_cat: dict[str, list[dict[str, Any]]] = {}
+    for it in items:
+        by_cat.setdefault(it["category"], []).append(it)
+    cats: list[dict[str, Any]] = []
+    for cat in sorted(by_cat, key=lambda c: (c == "_root", c)):
+        arr = by_cat[cat]
+        # 按 created_at 倒序（无时间戳的排最后）
+        arr.sort(key=lambda x: x["created_at"] or "", reverse=True)
+        total = len(arr)
+        shown = arr[:_KNOWLEDGE_MAX_PER_CATEGORY]
+        cats.append(
+            {
+                "category": cat,
+                "total": total,
+                "shown": len(shown),
+                "truncated": total > len(shown),
+                "items": shown,
+            }
+        )
+    return {"categories": cats, "total": len(items)}
+
+
+@router.get("/api/v1/knowledge/content")
+def knowledge_content(path: str = Query(...)) -> dict[str, Any]:
+    """md 原文（剥离 frontmatter）。path 相对 data/knowledge，防目录穿越。"""
+    base = KNOWLEDGE_DIR.resolve()
+    p = (KNOWLEDGE_DIR / path).resolve()
+    if p.suffix != ".md" or not str(p).startswith(str(base)) or not p.exists():
+        return {"error": f"知识文件不存在或非法路径: {path}"}
+    text = p.read_text(encoding="utf-8", errors="ignore")
+    meta = _md_frontmatter(p)
+    if text.startswith("---"):
+        end = text.find("\n---", 4)
+        if end != -1:
+            text = text[end + 4 :].lstrip("\n")
+    return {"rel": path, "meta": meta, "content": text, "size": p.stat().st_size}
+
+
+# ─────────────────────────────────────────────────────────────
+# 决策包人工复核动作（POST JSON — 与老 UI HTML 表单同语义）
+# ─────────────────────────────────────────────────────────────
+
+
+def _get_decision_svc(request: Request):
+    """DecisionService 懒加载（复用 HTML 页 app.state 实例）。"""
+    svc = getattr(request.app.state, "decision_service", None)
+    if svc is None:
+        from qp.web.services.decision_service import DecisionService
+
+        svc = DecisionService()
+        request.app.state.decision_service = svc  # type: ignore[attr-defined]
+    return svc
+
+
+def _action_result(package_id: str, result: dict[str, Any] | None) -> dict[str, Any]:
+    """动作结果统一：失败给原因，成功回读最新状态。"""
+    if result is None:
+        return {"ok": False, "package_id": package_id, "error": "无效状态流转或决策包不存在"}
+    from qp.web.services.decision_service import DecisionService
+
+    svc = DecisionService()
+    return {"ok": True, "package_id": package_id, "detail": svc.get_by_id(package_id)}
+
+
+async def _read_body(request: Request) -> dict[str, Any]:
+    """POST JSON body 读取（无/非法 body → 空 dict）。"""
+    try:
+        d = await request.json()
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+@router.post("/api/v1/decisions/{package_id}/review")
+async def decision_review(request: Request, package_id: str) -> dict[str, Any]:
+    """人工复核: approve / reject / modify。
+
+    ⚠️ approve 默认 create_positions=True：按决策包 SELL 平仓 + BUY 建仓
+    （PositionLedger 写 data/positions + account）。与老 UI 同语义，请前端强确认。
+    """
+    svc = _get_decision_svc(request)
+    body = await _read_body(request)
+    action = (body.get("action") or "approve").lower()
+    notes = body.get("notes") or ""
+    if action == "reject":
+        result = svc.reject(package_id, reviewer="webui-spa", notes=notes)
+    elif action == "modify":
+        result = svc.modify(package_id, reviewer="webui-spa", notes=notes)
+    else:
+        result = svc.approve(package_id, reviewer="webui-spa", notes=notes)
+    return _action_result(package_id, result)
+
+
+@router.post("/api/v1/decisions/{package_id}/execute")
+async def decision_execute(request: Request, package_id: str) -> dict[str, Any]:
+    """标记已执行（APPROVED → PARTIALLY_EXECUTED → MONITORING）。仅状态流转。"""
+    svc = _get_decision_svc(request)
+    body = await _read_body(request)
+    result = svc.mark_executed(package_id, notes=body.get("notes") or "")
+    return _action_result(package_id, result)
+
+
+@router.post("/api/v1/decisions/{package_id}/close")
+async def decision_close(request: Request, package_id: str) -> dict[str, Any]:
+    """关闭决策（MONITORING → CLOSED，终态）。仅状态流转。"""
+    svc = _get_decision_svc(request)
+    body = await _read_body(request)
+    result = svc.close(package_id, notes=body.get("notes") or "")
+    return _action_result(package_id, result)
