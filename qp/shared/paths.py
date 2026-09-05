@@ -56,6 +56,7 @@ QP_SQLITE = Path("data/qp.sqlite")
 SOURCES_JSON = Path("data/metadata/sources.json")
 ONLINE_SIGNAL_HISTORY = Path("data/monitoring/online_signal_history.parquet")
 SYSTEM_HEALTH_LOG = Path("data/monitoring/system_health_log.parquet")
+WATCHDOG_DIR = Path("data/monitoring/watchdog")
 FACTOR_RAW_FULL = Path("data/experiments/_factor_raw_full_5factors_2015_2026.parquet")
 FACTOR_RAW_CACHE = Path("data/experiments/_factor_raw_cache.parquet")
 
@@ -99,4 +100,5 @@ __all__ = [
     "STRATEGY_REGISTRY",
     "SYSTEM_HEALTH_LOG",
     "VOLATILITY_20D",
+    "WATCHDOG_DIR",
 ]

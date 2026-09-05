@@ -29,6 +29,7 @@ from qp.shared.paths import (
     PAPER_TRADING_DIR,
     POSITIONS_DIR,
     STRATEGY_REGISTRY,
+    WATCHDOG_DIR,
 )
 
 router = APIRouter(tags=["api_v1"])
@@ -321,3 +322,112 @@ def experiment_nav(request: Request, experiment_id: str) -> dict[str, Any]:
 def experiment_trades(request: Request, experiment_id: str) -> dict[str, Any]:
     """调仓重建（trade_events.json，无缓存时由 ExperimentService 现算）。"""
     return _get_exp_svc(request).get_trade_reconstruction(experiment_id)
+
+
+# ─────────────────────────────────────────────────────────────
+# 健康监控（因子/策略/系统状态/watchdog 心跳）
+# 复用 HTML 页同一服务层（FactorHealthService/HealthService），口径一致。
+# ─────────────────────────────────────────────────────────────
+
+
+def _get_factor_health_svc(request: Request):
+    """FactorHealthService 懒加载（与 /health HTML 页同源）。"""
+    svc = getattr(request.app.state, "factor_health_service", None)
+    if svc is None:
+        from qp.web.services.factor_health_service import FactorHealthService
+
+        svc = FactorHealthService()
+        request.app.state.factor_health_service = svc  # type: ignore[attr-defined]
+    return svc
+
+
+def _get_health_svc(request: Request):
+    """HealthService 懒加载（与 /health HTML 页同源）。"""
+    svc = getattr(request.app.state, "health_service", None)
+    if svc is None:
+        from qp.web.services.health_service import HealthService
+
+        svc = HealthService()
+        request.app.state.health_service = svc  # type: ignore[attr-defined]
+    return svc
+
+
+@router.get("/api/v1/health/factors")
+def health_factors(request: Request) -> dict[str, Any]:
+    """因子健康总览（factor_health.parquet → 服务层聚合口径，含推荐动作）。"""
+    return _get_factor_health_svc(request).overview()
+
+
+@router.get("/api/v1/health/factors/{factor_name}")
+def health_factor_detail(
+    request: Request, factor_name: str, days: int = Query(default=252, ge=30, le=1000)
+) -> dict[str, Any]:
+    """单因子健康详情 + IC 曲线序列（factor_health_service.factor_detail 口径）。"""
+    return _get_factor_health_svc(request).factor_detail(factor_name, days=days)
+
+
+@router.get("/api/v1/health/strategies")
+def health_strategies(request: Request) -> dict[str, Any]:
+    """策略健康列表（strategy_health.parquet 最新 + 趋势 + alerts）。"""
+    return {"strategies": _get_health_svc(request).strategy_health_list()}
+
+
+# watchdog job 期望频率 —— 镜像 scheduler.py add_job 的 CronTrigger 注册
+# （mon-fri HH:MM，UTC+8）。仅 UI 展示参考，非执行依据；执行频率以 scheduler 代码为准。
+_WATCHDOG_EXPECTED = {
+    "monitor_check": "工作日 09:07",
+    "retrain_notify": "工作日 09:17",
+    "pre_close_check": "工作日 16:53",
+    "daily_pipeline": "工作日 18:00",
+    "email_report": "工作日 18:30",
+    "paper_trading": "工作日 18:32",
+}
+
+
+def _watchdog_pings() -> list[dict[str, Any]]:
+    """data/monitoring/watchdog/*.ping → 心跳时间 + 距今小时数。
+
+    ping 文件内容即 UTC ISO 时间；解析失败回退文件 mtime。缺失心跳的
+    job 仍按 _WATCHDOG_EXPECTED 列出（has_ping=false），便于暴露
+    pre_close_check 之类被跳过/未注册的异常。
+    """
+    from datetime import datetime
+
+    from qp.shared.time import now_utc
+
+    now = now_utc()
+    out: list[dict[str, Any]] = []
+    for name, expected in _WATCHDOG_EXPECTED.items():
+        p = WATCHDOG_DIR / f"{name}.ping"
+        has_ping = p.exists()
+        last: datetime | None = None
+        if has_ping:
+            try:
+                raw = p.read_text(encoding="utf-8").strip()
+                last = datetime.fromisoformat(raw)
+            except Exception:
+                last = datetime.fromtimestamp(p.stat().st_mtime, tz=now.tzinfo)
+        out.append(
+            {
+                "name": name,
+                "expected": expected,
+                "has_ping": has_ping,
+                "last_ping": last.isoformat() if last is not None else None,
+                "age_hours": round((now - last).total_seconds() / 3600, 2)
+                if last is not None
+                else None,
+            }
+        )
+    return out
+
+
+@router.get("/api/v1/system-health")
+def system_health(request: Request) -> dict[str, Any]:
+    """系统状态 + 最近健康日志 + watchdog 心跳（运维雷达一页）。"""
+    svc = _get_health_svc(request)
+    return {
+        "system_state": svc.system_state(),
+        "latest_health": svc.latest_health(),
+        "history": svc.health_history(limit=30),
+        "watchdog": _watchdog_pings(),
+    }
