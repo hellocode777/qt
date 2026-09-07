@@ -47,7 +47,13 @@ class TencentAdapter(BaseDataSource):
     # batch watchdog is the fix.
     _CONNECT_TIMEOUT: float = 5.0
     _READ_TIMEOUT: float = 15.0
-    _BATCH_WATCHDOG_SECONDS: float = 1200.0  # 20 min for 3075 symbols
+    # Batch watchdog budget: 3075 symbols × (0.3s sleep + ~0.1-0.2s request)
+    # ≈ 23 min normal wall time (measured 2026-09-02/03: 18:00:00 → 18:23:10).
+    # 1200s was too tight — 9/7 first run under watchdog aborted at 3000/3075
+    # (1188s elapsed, normal pace). 1800s = 23min × 1.3 safety margin; the
+    # watchdog exists to catch pathological whole-batch hangs (e.g. the
+    # 2026-09-04 half-open-connection incident), not normal per-request pace.
+    _BATCH_WATCHDOG_SECONDS: float = 1800.0  # 30 min for 3075 symbols
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__()
