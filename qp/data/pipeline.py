@@ -285,9 +285,33 @@ class DataPipeline(BasePipeline):
                 "date_range": {"min": actual_start, "max": actual_end},
                 "sha256": data_hash,
             }
-            report_path.write_text(
-                _json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
+            # ── 同日重跑保护 ──
+            # 当日已有报告且本次 new_rows ≤ 既有 → 本次是幂等 rerun
+            # (该日数据已由早前 run 追加入库), 跳过覆盖以保留首份报告的
+            # 真实增量。案例: 2026-08-18 18:50 重跑 new_rows=0 覆盖了
+            # 当天首跑 (new_rows=3027) 的报告, 导致监控页 08-18 显示"新增0"。
+            # 反向情形 (首跑 0 行、重跑补数) 由 else 分支覆盖: 本次更大则替换。
+            report_json = _json.dumps(report, indent=2, ensure_ascii=False)
+            if report_path.exists():
+                try:
+                    existing = _json.loads(report_path.read_text(encoding="utf-8"))
+                    existing_new = int(existing.get("new_rows", 0) or 0)
+                    if existing_new >= int(report.get("new_rows", 0) or 0):
+                        logger.info(
+                            "同日重跑 run_id={} new_rows={} ≤ 已有报告 {} (new_rows={}) "
+                            "— 跳过覆盖, 保留当日首份报告",
+                            context.run_id,
+                            report.get("new_rows", 0),
+                            report_path.name,
+                            existing_new,
+                        )
+                    else:
+                        report_path.write_text(report_json, encoding="utf-8")
+                except Exception as e:
+                    logger.warning("读取既有数据质量报告失败, 直接覆盖: {}", e)
+                    report_path.write_text(report_json, encoding="utf-8")
+            else:
+                report_path.write_text(report_json, encoding="utf-8")
             result.artifacts.append(str(output_path))
             result.metadata["version"] = "latest"
             result.metadata["data_hash"] = data_hash

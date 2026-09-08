@@ -6,6 +6,7 @@ Covers the production path that writes to data/dataset — previously uncovered.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from unittest.mock import patch
 
@@ -92,6 +93,68 @@ class TestNonDemoHappyPath:
         assert result.status.value == "success"
         assert result.metrics["existing_rows"] > 0
         assert result.metadata["data_hash"]
+
+    def test_same_day_rerun_zero_increment_keeps_first_report(self, tmp_path, monkeypatch) -> None:
+        """同日幂等重跑 (new_rows=0) 不得覆盖首份报告的真实增量。
+
+        2026-08-18 事故回归: 18:50 的一次重跑把当天首跑 (new_rows=3027)
+        的数据质量报告覆盖成 new_rows=0, 监控页当日柱显示"新增0"。
+        """
+        from qp.shared.time import today_cn
+
+        monkeypatch.chdir(tmp_path)
+        clean_df = _real_clean_df()
+
+        with patch("qp.data.adapter.tencent_adapter.TencentAdapter") as mock_tx:
+            adapter = mock_tx.return_value
+            adapter.fetch_raw.return_value = clean_df.to_pandas()
+            pipeline = DataPipeline()
+            first = pipeline.run(_ctx())
+            report = tmp_path / "data" / "reports" / f"data_quality_{today_cn().isoformat()}.json"
+            first_report_text = report.read_text(encoding="utf-8")
+            # 第二次返回相同数据 → merge 全重复 → new_rows=0
+            second = pipeline.run(_ctx())
+
+        assert first.status.value == "success"
+        assert second.status.value == "success"
+        assert second.metrics["existing_rows"] > 0
+        payload = json.loads(first_report_text)
+        assert payload["new_rows"] == payload["rows_after"]  # 首跑为全量写入
+        # 报告文件保持首份内容 (run_id/时间戳/new_rows 均未被重跑改写)
+        assert report.read_text(encoding="utf-8") == first_report_text
+
+    def test_same_day_rerun_larger_increment_overwrites_report(self, tmp_path, monkeypatch) -> None:
+        """反向: 当日已有报告但本次追加更多 → 仍应覆盖 (重跑补数场景)。"""
+        from qp.shared.time import today_cn
+
+        monkeypatch.chdir(tmp_path)
+        report_dir = tmp_path / "data" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report = report_dir / f"data_quality_{today_cn().isoformat()}.json"
+        # 预置一份"增量极小"的假报告 (模拟首跑只追加了几行)
+        report.write_text(
+            json.dumps(
+                {
+                    "status": "PASS",
+                    "pipeline_run_id": "seed",
+                    "new_rows": 1,
+                    "rows_after": 1,
+                }
+            ),
+            encoding="utf-8",
+        )
+        clean_df = _real_clean_df()
+
+        with patch("qp.data.adapter.tencent_adapter.TencentAdapter") as mock_tx:
+            adapter = mock_tx.return_value
+            adapter.fetch_raw.return_value = clean_df.to_pandas()
+            result = DataPipeline().run(_ctx())
+
+        assert result.status.value == "success"
+        payload = json.loads(report.read_text(encoding="utf-8"))
+        assert payload["pipeline_run_id"] != "seed"  # 假报告被真实报告替换
+        assert payload["new_rows"] == payload["rows_after"]
+        assert payload["new_rows"] > 1
 
     def test_source_tencent(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
