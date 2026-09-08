@@ -156,6 +156,84 @@ class TestRunDayPriceMap:
         assert record.avg_costs["000551"] == pytest.approx(8.2 * 1.001)  # 08-18 close, not 8.06
 
 
+class TestRunDayMonthlyRebalance:
+    """月度调仓 (对齐 shadow daily_pipeline 每月首个交易日) — 2026-09-08 落地。
+
+    run_day 只在首日建仓或调仓日下单; 非调仓日保持持仓不动。
+    """
+
+    @staticmethod
+    def _two_day_prices():
+        import polars as pl
+
+        # 002081/000551 建仓日 08-21; 08-24 增加候选 003000 (换入标的)
+        return pl.DataFrame(
+            {
+                "symbol": [
+                    "002081",
+                    "000551",
+                    "002081",
+                    "000551",
+                    "003000",
+                ],
+                "trade_date": pl.Series(
+                    ["2026-08-21", "2026-08-21", "2026-08-24", "2026-08-24", "2026-08-24"],
+                    dtype=pl.Date,
+                ),
+                "close": [5.55, 12.6, 6.0, 13.0, 10.0],
+                "volume": [100_000_000.0] * 5,
+            }
+        )
+
+    def test_no_trades_on_non_rebalance_day_after_positioning(self, tmp_path, monkeypatch) -> None:
+        import polars as pl
+
+        import qp.simulation.paper_trading as pt
+
+        monkeypatch.setattr(pt, "_is_rebalance_day", lambda _d: False)
+
+        prices = self._two_day_prices()
+        sig_day0 = pl.DataFrame({"symbol": ["002081", "000551"]})
+        sig_later = pl.DataFrame({"symbol": ["002081", "000551"]})
+
+        tracker = PaperTradingTracker(data_dir=str(tmp_path / "pt_non_rb"))
+        run = tracker.start("test_strat", capital=100_000, start_date="2026-08-21")
+        r1 = tracker.run_day(run, "2026-08-21", prices, signals=sig_day0)
+        r2 = tracker.run_day(run, "2026-08-24", prices, signals=sig_later)
+
+        assert r1.n_trades == 2  # 首日建仓 2 只
+        assert r2.n_trades == 0  # 非调仓日: 零成交
+        assert r2.positions == r1.positions  # 持仓零变动
+        for sym, cost in r1.avg_costs.items():
+            assert r2.avg_costs[sym] == pytest.approx(cost)
+
+    def test_monthly_rebalance_switches_to_new_target(self, tmp_path, monkeypatch) -> None:
+        import polars as pl
+
+        import qp.simulation.paper_trading as pt
+
+        monkeypatch.setattr(pt, "_is_rebalance_day", lambda _d: True)
+
+        prices = self._two_day_prices()
+        sig_day0 = pl.DataFrame({"symbol": ["002081", "000551"]})
+        # 调仓日信号换血: 002081 出局, 003000 入列
+        sig_rb = pl.DataFrame({"symbol": ["000551", "003000"]})
+
+        tracker = PaperTradingTracker(data_dir=str(tmp_path / "pt_rb"))
+        run = tracker.start("test_strat", capital=100_000, start_date="2026-08-21")
+        r1 = tracker.run_day(run, "2026-08-21", prices, signals=sig_day0)
+        r2 = tracker.run_day(run, "2026-08-24", prices, signals=sig_rb)
+
+        assert r1.positions["002081"] > 0
+        # 调仓日: 卖出局外标的 + 买入新标的 (先卖后买, 至少 2 笔成交)
+        assert r2.n_trades >= 2
+        assert "002081" not in r2.positions  # 已清仓
+        assert "003000" in r2.positions
+        assert r2.positions["003000"] > 0
+        assert "000551" in r2.positions  # 保留
+        assert 0.8 * r1.equity < r2.equity < 1.2 * r1.equity  # 费用级损耗, 无异常跳变
+
+
 @pytest.fixture
 def paper_client(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -34,6 +34,95 @@ from qp.shared.time import today_cn
 from qp.shared.types import StrategyLifecycle
 
 # ------------------------------------------------------------------
+# Rebalance rule (aligned with shadow/decision side)
+# ------------------------------------------------------------------
+
+
+def _is_rebalance_day(trade_date: str) -> bool:
+    """trade_date 是否为调仓日: 每月首个交易日。
+
+    与 shadow 侧 daily_pipeline 的 BUY 门同口径
+    (qp/pipeline/daily_pipeline.py:219-243):
+    真实 A 股日历 (TradingCalendar) 可用 → is_first_trading_day_of_month;
+    日历不可用 (akshare 网络挂 / 异常) → 退回 day<=5 近似。
+    """
+    try:
+        d = date.fromisoformat(trade_date[:10])
+    except (TypeError, ValueError):
+        return False
+    try:
+        from qp.data.calendar.calendar import TradingCalendar
+
+        cal = TradingCalendar()
+        # 先调用以触发真实日历加载并设置 has_real_calendar (与 daily_pipeline 一致)
+        cal.first_trading_day_of_month(d.year, d.month)
+        if cal.has_real_calendar is True:
+            return cal.is_first_trading_day_of_month(d)
+    except Exception:
+        pass
+    return d.day <= 5
+
+
+def _rebalance_to_equal_weight(broker: Any, symbols: list[str], price_map: dict[str, float]) -> int:
+    """月度调仓日执行: 两阶段 (先卖后买) 把持仓重构为 symbols 等权。
+
+    SimulatedBroker 在 submit 时就校验 BUY 现金, 必须先执行 SELL 释放
+    现金再提交 BUY, 否则买入会被 Insufficient cash 拒绝。返回当日成交笔数。
+
+    Args:
+        broker: SimulatedBroker 实例 (run_day 内惰性导入, 此处用 Any)。
+        symbols: 目标 top-N 名单 (已截断到 10)。
+        price_map: symbol → 当日 (或 <= 当日最近可用) 收盘价。
+    """
+    if not symbols:
+        return 0
+    equity_now = broker.get_equity()
+    per_budget = equity_now / max(len(symbols), 1)
+    desired: dict[str, int] = {}
+    for sym in symbols:
+        px = price_map.get(sym, 0.0)
+        if px <= 0:
+            desired[sym] = 0
+            continue
+        desired[sym] = int(per_budget / px // 100 * 100)
+
+    # 阶段 1: SELL —— 不在目标名单的持仓清掉, 目标内超配的降到等权
+    held = {s: p.shares for s, p in broker._positions.items() if p.shares > 0}
+    for sym, shares in held.items():
+        qty = shares - desired.get(sym, 0)
+        if qty > 0:
+            broker.submit_order(
+                {
+                    "symbol": sym,
+                    "side": "SELL",
+                    "quantity": qty,
+                    "order_type": "market",
+                }
+            )
+    sells = broker.execute_pending()
+    # 清掉已清仓的零股残留: broker.get_positions()/n_positions 会把
+    # shares=0 的 Position 计入长度, 不清理会虚增持仓数
+    broker._positions = {s: p for s, p in broker._positions.items() if p.shares > 0}
+
+    # 阶段 2: BUY —— 目标名单内缺失或低配的补到等权
+    held_now = {s: p.shares for s, p in broker._positions.items() if p.shares > 0}
+    for sym in symbols:
+        need = desired.get(sym, 0) - held_now.get(sym, 0)
+        if need > 0:
+            broker.submit_order(
+                {
+                    "symbol": sym,
+                    "side": "BUY",
+                    "quantity": need,
+                    "order_type": "market",
+                }
+            )
+    buys = broker.execute_pending()
+
+    return len(sells) + len(buys)
+
+
+# ------------------------------------------------------------------
 # Data models
 # ------------------------------------------------------------------
 
@@ -294,26 +383,30 @@ class PaperTradingTracker:
         n_signals = len(signals) if signals is not None and not signals.is_empty() else 0
         n_trades = 0
 
-        # Submit orders only on first day (positioning) or weekly rebalance
-        if run.elapsed_days == 0 and signals is not None:
+        # 下单时机: 首日建仓 (positioning) + 月度调仓日 (每月首个交易日,
+        # 对齐 shadow 侧 daily_pipeline BUY 门口径 — 见 _is_rebalance_day)。
+        if signals is not None and not signals.is_empty():
             symbols = signals["symbol"].to_list()[:10]
-            per_stock = run.capital / max(len(symbols), 1)
-            for sym in symbols:
-                px = price_map.get(sym, 10.0)
-                qty = int(per_stock / px // 100 * 100)
-                if qty > 0:
-                    broker.submit_order(
-                        {
-                            "symbol": sym,
-                            "side": "BUY",
-                            "quantity": qty,
-                            "order_type": "market",
-                        }
-                    )
-
-        # Execute
-        trades = broker.execute_pending()
-        n_trades = len(trades)
+            if run.elapsed_days == 0:
+                # 首日建仓: 全仓等权买入 top-N
+                per_stock = run.capital / max(len(symbols), 1)
+                for sym in symbols:
+                    px = price_map.get(sym, 10.0)
+                    qty = int(per_stock / px // 100 * 100)
+                    if qty > 0:
+                        broker.submit_order(
+                            {
+                                "symbol": sym,
+                                "side": "BUY",
+                                "quantity": qty,
+                                "order_type": "market",
+                            }
+                        )
+                trades = broker.execute_pending()
+                n_trades = len(trades)
+            elif _is_rebalance_day(trade_date):
+                # 月度调仓日: 先卖后买, 重构为当日 signals top-N 等权
+                n_trades = _rebalance_to_equal_weight(broker, symbols, price_map)
 
         equity = broker.get_equity()
         cash = broker.get_cash()

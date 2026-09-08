@@ -76,7 +76,7 @@
 
 ### qp paper start <strategy_id>
 - 入口：`commands/paper.py` → `qp/strategy/paper_trading.py` + `qp/simulation/broker.py`
-- 机制：30 天周期验证**策略本身**（跟策略自选信号走，不经决策包/风控）；首日建仓 top-N，之后每周调仓，持仓跨日持久化
+- 机制：30 天周期验证**策略本身**（跟策略自选信号走，不经决策包/风控）；首日建仓 top-N，之后**月度调仓日**（每月首个交易日，对齐 shadow 侧 daily_pipeline BUY 门）按最新信号等权重构，持仓跨日持久化
 - 自动推进：scheduler job `paper_trading`（工作日 18:32，等 daily_pipeline 拉价完成后）对每个未完成 run 调 `run_day()`；30 天满自动 evaluate（Sharpe≥0.5 / MaxDD≤20% / 信号数 3-30）→ PASS=SHADOW_PRODUCTION / FAIL=RESEARCH
 - ⚠️ CLI 只校验已注册策略，不自动注册（否则污染 strategy_registry.json）
 - ⚠️ 状态文件固定 `data/paper_trading/{strategy_id}_paper.json`——回放验证会覆盖真实 run，验证完记得重启
