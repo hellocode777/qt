@@ -37,6 +37,8 @@ ARTIFACTS_DIR = Path("data/artifacts")
 POSITIONS_DIR = Path("data/positions")
 PORTFOLIO_DIR = Path("data/portfolio")
 OPTUNA_DIR = Path("data/optuna")
+INDUSTRY_HEAT_DIR = Path("data/industry_heat")
+CAPITAL_FLOW_CACHE_DIR = Path("data/capital_flow_cache")
 
 # ── 常用文件 ─────────────────────────────────────────────
 DAILY_PRICE_LATEST = Path("data/dataset/daily_price_latest.parquet")

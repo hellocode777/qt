@@ -477,6 +477,48 @@ def decide(
 
 
 # ==================================================================
+# Industry Heat (行业资金流热度)
+# ==================================================================
+
+
+@cli.group()
+def industry() -> None:
+    """Industry heat operations (行业资金流热度)."""
+
+
+@industry.command("heat")
+@click.option("--date", "as_of", default=None, help="基准日 YYYY-MM-DD (默认: 数据最新日)")
+@click.option("--window", type=int, default=1, help="累计窗口(交易日数), 如 1/5/20")
+@click.option(
+    "--granularity",
+    type=click.Choice(["subsector", "sector"]),
+    default="subsector",
+    help="行业粒度",
+)
+@click.option("--top", type=int, default=15, help="显示前 N 个行业")
+@click.option("--save/--no-save", default=True, help="是否落盘 JSON 快照")
+def industry_heat(
+    as_of: str | None,
+    window: int,
+    granularity: str,
+    top: int,
+    save: bool,
+) -> None:
+    """行业资金流热度榜 (主力净流入 / 换手率 / 涨跌幅 按行业聚合)."""
+    from qp.platform.cli.commands.industry import cmd_industry_heat
+
+    raise SystemExit(
+        cmd_industry_heat(
+            as_of=as_of,
+            window=window,
+            granularity=granularity,
+            top=top,
+            save=save,
+        )
+    )
+
+
+# ==================================================================
 # Paper Trading
 # ==================================================================
 
