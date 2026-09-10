@@ -101,9 +101,14 @@ class CapitalFlowAdapter(BaseDataSource):
         """Fetch capital flow data for given symbols.
 
         Args:
-            start_date: Start date (used for filtering cached results).
+            start_date: Start date. In incremental mode, rows before this date
+                are not fetched from the remote source.
             end_date: End date.
-            **kwargs: Must include 'symbols' (list of 6-digit codes).
+            **kwargs: ``symbols`` (list of 6-digit codes) is required.
+                ``incremental`` (bool, default False): reuse the existing cache
+                as the history base and fetch only the missing tail from the
+                remote source. Full mode (False) preserves the original
+                all-history behaviour.
 
         Returns:
             DataFrame with columns: symbol, date, close, change_pct,
@@ -111,12 +116,17 @@ class CapitalFlowAdapter(BaseDataSource):
             medium_net, small_net.
         """
         symbols: list[str] = kwargs.get("symbols", [])
+        incremental: bool = bool(kwargs.get("incremental", False))
         if not symbols:
             return pd.DataFrame()
 
         all_frames: list[pd.DataFrame] = []
         for symbol in symbols:
-            df = self._fetch_single(symbol)
+            df = self._fetch_single(
+                symbol,
+                incremental=incremental,
+                min_date=start_date,
+            )
             if df is not None and not df.empty:
                 all_frames.append(df)
 
@@ -136,27 +146,58 @@ class CapitalFlowAdapter(BaseDataSource):
     # Internal
     # ------------------------------------------------------------------
 
-    def _fetch_single(self, symbol: str) -> pd.DataFrame | None:
+    def _fetch_single(
+        self,
+        symbol: str,
+        incremental: bool = False,
+        min_date: date | None = None,
+    ) -> pd.DataFrame | None:
         """Fetch capital flow for one stock, with JSON cache.
 
         Uses the configured source directly (default ``sina``) — no
         eastmoney-first probing (it times out behind GFW on every stock).
+
+        Args:
+            symbol: 6-digit stock code.
+            incremental: When True, keep the cached history as the base and
+                fetch only the missing tail from the remote source (1 page in
+                the common case, instead of the ~40 pages a full pull needs).
+                An expired cache is still used as the base — that is exactly
+                what an incremental refresh is for.
+            min_date: Lower bound for fetched rows, used when there is no cache
+                to continue from.
         """
-        # Try cache
-        cached = self._load_cache(symbol)
-        if cached is not None:
+        cached = self._load_cache(symbol, ignore_ttl=incremental)
+        if cached is not None and not incremental:
             return cached
+
+        # Incremental: continue from the last cached date (that day is re-fetched
+        # so a partially-recorded session gets corrected; the merge dedupes it).
+        fetch_min: date | None = None
+        if incremental:
+            if cached is not None and not cached.empty and "date" in cached.columns:
+                fetch_min = date.fromisoformat(str(cached["date"].max())[:10])
+            else:
+                fetch_min = min_date
 
         if self._source == "eastmoney":
             df = self._fetch_eastmoney(symbol)
-            if df is None or df.empty:
-                return None
-            df = self._normalize_eastmoney_df(df, symbol)
+            if df is not None and not df.empty:
+                df = self._normalize_eastmoney_df(df, symbol)
         else:
-            df = self._fetch_sina(symbol)
+            df = self._fetch_sina(symbol, min_date=fetch_min)
 
         if df is None or df.empty:
-            return None
+            # Incremental refresh with a usable cache: keep serving the history
+            return cached if incremental else None
+
+        if incremental and cached is not None and not cached.empty and "date" in cached.columns:
+            df = (
+                pd.concat([cached, df], ignore_index=True)
+                .drop_duplicates(subset=["date"], keep="last")
+                .sort_values("date")
+                .reset_index(drop=True)
+            )
 
         # Cache
         self._save_cache(symbol, df)
@@ -222,17 +263,24 @@ class CapitalFlowAdapter(BaseDataSource):
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         return df
 
-    def _fetch_sina(self, symbol: str) -> pd.DataFrame | None:
+    def _fetch_sina(self, symbol: str, min_date: date | None = None) -> pd.DataFrame | None:
         """Fetch capital flow from Sina MoneyFlow API (GFW fallback).
 
         API: MoneyFlow.ssl_qsfx_lscjfb
         Fields: opendate, trade, changeratio, netamount, ratioamount,
         r0_net (超大单), r1_net (大单), r2_net (中单), r3_net (小单).
 
-        Paged (num=100) to cover the full requested history.
+        Paged (num=100, newest-first) to cover the requested history.
+
+        Args:
+            symbol: 6-digit stock code.
+            min_date: When given, stop paging as soon as a page reaches before
+                this date, and drop rows older than it. This turns a ~40-page
+                full pull into a 1-page request for incremental refreshes.
         """
         import json
 
+        min_str = min_date.isoformat() if min_date is not None else None
         market = _market_tag(symbol)
         prefix = f"{market}{symbol}"
         base_url = (
@@ -259,7 +307,12 @@ class CapitalFlowAdapter(BaseDataSource):
                 batch = json.loads(resp.text)
                 if not batch:
                     break
-                rows.extend(batch)
+                if min_str:
+                    rows.extend(row for row in batch if str(row.get("opendate", "")) >= min_str)
+                    if min(str(row.get("opendate", "")) for row in batch) < min_str:
+                        break  # page reached before min_date — history boundary
+                else:
+                    rows.extend(batch)
                 if len(batch) < 100:
                     break
                 page += 1
@@ -302,19 +355,28 @@ class CapitalFlowAdapter(BaseDataSource):
     def _cache_path(self, symbol: str) -> Path:
         return self._cache_dir / f"{symbol}.json"
 
-    def _load_cache(self, symbol: str) -> pd.DataFrame | None:
+    def _load_cache(self, symbol: str, ignore_ttl: bool = False) -> pd.DataFrame | None:
+        """Load cached history for a symbol.
+
+        Args:
+            symbol: 6-digit stock code.
+            ignore_ttl: When True, return even an expired cache. Incremental
+                refresh relies on this: the stale cache is the history base and
+                only its missing tail gets re-fetched.
+        """
         path = self._cache_path(symbol)
         if not path.exists():
             return None
-        age = (
-            datetime.now(tz=UTC)
-            - datetime.fromtimestamp(
-                path.stat().st_mtime,
-                tz=UTC,
-            )
-        ).days
-        if age > _CACHE_TTL_DAYS:
-            return None
+        if not ignore_ttl:
+            age = (
+                datetime.now(tz=UTC)
+                - datetime.fromtimestamp(
+                    path.stat().st_mtime,
+                    tz=UTC,
+                )
+            ).days
+            if age > _CACHE_TTL_DAYS:
+                return None
         try:
             data = json_load(path)
             if not data:

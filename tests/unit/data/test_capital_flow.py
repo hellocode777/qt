@@ -127,7 +127,7 @@ def test_fetch_single_falls_back_to_sina(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         adapter,
         "_fetch_sina",
-        lambda symbol: pd.DataFrame(
+        lambda symbol, min_date=None: pd.DataFrame(
             {
                 "date": ["2026-08-13"],
                 "symbol": [symbol],
@@ -140,6 +140,57 @@ def test_fetch_single_falls_back_to_sina(tmp_path, monkeypatch) -> None:
     assert df["main_net_flow"].to_list() == [100.0]
     # 已缓存
     assert (tmp_path / "cf_cache" / "600519.json").exists()
+
+
+def test_fetch_raw_incremental_merges_cache(tmp_path, monkeypatch) -> None:
+    """增量模式: 用过期缓存做底座，只拉缺失尾部并合并去重。"""
+    import pandas as pd
+
+    cache_dir = tmp_path / "cf_cache"
+    cache_dir.mkdir(parents=True)
+    # 造一个「一个月前」的过期缓存（mtime 显式设为 30 天前）
+    import os
+    import time
+
+    stale = [{"date": "2026-08-13", "symbol": "600519", "close": 10.0, "main_net_flow": 1.0}]
+    import json
+
+    (cache_dir / "600519.json").write_text(json.dumps(stale), encoding="utf-8")
+    old = time.time() - 30 * 86400
+    os.utime(cache_dir / "600519.json", (old, old))
+
+    adapter = CapitalFlowAdapter(cache_dir=str(cache_dir))
+
+    captured: dict[str, object] = {}
+
+    def fake_sina(symbol: str, min_date=None):
+        captured["min_date"] = min_date
+        # 远端返回「缓存最后一天 + 新的一天」
+        return pd.DataFrame(
+            {
+                "date": ["2026-08-13", "2026-09-10"],
+                "symbol": [symbol, symbol],
+                "close": [10.0, 11.0],
+                "main_net_flow": [1.0, 2.0],
+            }
+        )
+
+    monkeypatch.setattr(adapter, "_fetch_sina", fake_sina)
+
+    df = adapter.fetch_raw(
+        pd.Timestamp("2026-09-01").date(),
+        pd.Timestamp("2026-09-10").date(),
+        symbols=["600519"],
+        incremental=True,
+    )
+
+    assert captured["min_date"] is not None  # 从缓存最后一天续拉
+    assert df["date"].to_list() == ["2026-08-13", "2026-09-10"]  # 合并 + 去重 + 排序
+    assert df["main_net_flow"].to_list() == [1.0, 2.0]
+    # 缓存写回后应含完整历史
+    saved = json.loads((cache_dir / "600519.json").read_text(encoding="utf-8"))
+    assert len(saved) == 2
+    assert max(r["date"] for r in saved) == "2026-09-10"
 
 
 # ── CapitalFlowPipeline ──
