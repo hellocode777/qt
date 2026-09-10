@@ -39,7 +39,7 @@ def _write_parquet(dir_: Path) -> None:
 def svc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> IndustryHeatService:
     _write_parquet(tmp_path)
     monkeypatch.setattr("qp.research.industry_heat.DATASET_DIR", tmp_path)
-    return IndustryHeatService(mapper=_FakeMapper())  # type: ignore[arg-type]
+    return IndustryHeatService(granularity="subsector", mapper=_FakeMapper())  # type: ignore[arg-type]
 
 
 def test_compute_uses_latest_date_by_default(svc: IndustryHeatService) -> None:
@@ -52,7 +52,7 @@ def test_compute_uses_latest_date_by_default(svc: IndustryHeatService) -> None:
 
 def test_compute_aggregates_by_industry(svc: IndustryHeatService) -> None:
     """按行业聚合主力净流入(亿元)，排序为降序。"""
-    res = svc.compute()
+    res = svc.compute(min_members=1)
     by_name = {r.industry: r for r in res.industries}
     # 9/10: 600519=2e8, 600036=3e7 → TechGroup 合计 2.3e8 = 2.3 亿
     assert by_name["TechGroup"].members == 2
@@ -65,7 +65,7 @@ def test_compute_aggregates_by_industry(svc: IndustryHeatService) -> None:
 
 def test_compute_window_accumulates(svc: IndustryHeatService) -> None:
     """window=2 时累计两个交易日。"""
-    res = svc.compute(window=2)
+    res = svc.compute(window=2, min_members=1)
     by_name = {r.industry: r for r in res.industries}
     # 600519: 1e8+2e8=3e8; 600036: 3e7 → 3.3 亿
     assert by_name["TechGroup"].main_net_flow_yi == pytest.approx(3.3)
@@ -75,7 +75,7 @@ def test_compute_explicit_as_of_before_latest(svc: IndustryHeatService) -> None:
     """指定较早日期时按该日切窗口。"""
     from datetime import date
 
-    res = svc.compute(as_of=date(2026, 9, 9))
+    res = svc.compute(as_of=date(2026, 9, 9), min_members=1)
     assert res.as_of == "2026-09-09"
     by_name = {r.industry: r for r in res.industries}
     assert by_name["TechGroup"].main_net_flow_yi == pytest.approx(1.0)  # 仅 600519

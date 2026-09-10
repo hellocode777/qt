@@ -53,6 +53,7 @@ STRATEGY_REGISTRY = Path("data/strategy_registry.json")
 BLACKLIST = Path("data/blacklist.json")
 STOCK_NAMES = Path("data/stock_names.json")
 STOCK_INDUSTRY = Path("data/stock_industry.json")
+STOCK_INDUSTRY_CSRC = Path("data/stock_industry_csrc.json")
 QP_DUCKDB = Path("data/qp.duckdb")
 QP_SQLITE = Path("data/qp.sqlite")
 SOURCES_JSON = Path("data/metadata/sources.json")
@@ -98,6 +99,7 @@ __all__ = [
     "SIMULATION_DIR",
     "SOURCES_JSON",
     "STOCK_INDUSTRY",
+    "STOCK_INDUSTRY_CSRC",
     "STOCK_NAMES",
     "STRATEGY_REGISTRY",
     "SYSTEM_HEALTH_LOG",

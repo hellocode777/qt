@@ -27,9 +27,10 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.data.industry.csrc import CsrcIndustryMapper
 from qp.portfolio.industry import IndustryMapper
 from qp.shared.json_io import json_save
-from qp.shared.paths import DATASET_DIR, INDUSTRY_HEAT_DIR
+from qp.shared.paths import DAILY_PRICE_LATEST, DATASET_DIR, INDUSTRY_HEAT_DIR
 
 # 资金流 parquet 的文件名（DATASET_DIR 下的固定产物）
 CAPITAL_FLOW_PARQUET = "capital_flow_latest.parquet"
@@ -49,6 +50,8 @@ class IndustryRow:
     change_pct: float  # 涨跌幅均值(%)
     super_large_net_yi: float = 0.0  # 超大单净额合计(亿元)
     large_net_yi: float = 0.0  # 大单净额合计(亿元)
+    amount_yi: float = 0.0  # 成交额合计(亿元) — 行情口径
+    up_ratio: float = 0.0  # 上涨家数占比(%) — 行情口径
 
 
 @dataclass
@@ -63,6 +66,7 @@ class HeatResult:
     data_date_max: str
     industries: list[IndustryRow] = field(default_factory=list)
     other_members: int = 0  # 归入 Other 的股票数
+    source: str = "capital_flow"  # capital_flow | price
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -80,13 +84,21 @@ class IndustryHeatService:
 
     def __init__(
         self,
-        granularity: str = "subsector",
+        granularity: str = "csrc",
         mapper: IndustryMapper | None = None,
+        csrc_mapper: CsrcIndustryMapper | None = None,
     ) -> None:
-        if granularity not in ("sector", "subsector"):
+        """Args:
+        granularity: ``csrc``(默认，证监会行业，84 类，覆盖 ~94%) /
+            ``sector`` / ``subsector``(名称关键词分类，覆盖较差)。
+        mapper: 名称关键词映射器(测试可注入)。
+        csrc_mapper: 证监会行业映射器(测试可注入)。
+        """
+        if granularity not in ("csrc", "sector", "subsector"):
             raise ValueError(f"Unknown granularity: {granularity!r}")
         self._granularity = granularity
         self._mapper = mapper or IndustryMapper()
+        self._csrc = csrc_mapper or (CsrcIndustryMapper() if granularity == "csrc" else None)
 
     # ------------------------------------------------------------------
     # 数据加载
@@ -110,6 +122,9 @@ class IndustryHeatService:
         return df
 
     def _industry_of(self, symbol: str) -> str:
+        if self._granularity == "csrc":
+            assert self._csrc is not None
+            return self._csrc.get(symbol)
         if self._granularity == "sector":
             return self._mapper.get_sector(symbol)
         return self._mapper.get_sector_group(symbol)
@@ -218,6 +233,7 @@ class IndustryHeatService:
                     pl.col("change_pct").mean().alias("change_pct"),
                 ]
             )
+            .filter(pl.col("members") >= min_members)
             .sort("main_net_flow", descending=True)
         )
 
@@ -252,6 +268,149 @@ class IndustryHeatService:
         )
 
     # ------------------------------------------------------------------
+    # 行情口径(不依赖外部请求)
+    # ------------------------------------------------------------------
+
+    def compute_from_price(
+        self,
+        as_of: date | None = None,
+        window: int = 1,
+        min_members: int = 3,
+        include_other: bool = False,
+    ) -> HeatResult:
+        """行情口径热度: 行业累计涨跌幅 / 成交额 / 上涨家数占比。
+
+        数据源 ``data/dataset/daily_price_latest.parquet``(本地，无外部请求)。
+        window=1 表示当日涨跌幅(用前一交易日收盘算)。
+
+        Args:
+            as_of: 基准日(默认: 行情数据最新交易日)。
+            window: 累计窗口(交易日数)。
+            min_members: 行业最少成员数。
+            include_other: 是否把 "Other" 放进排行榜。
+        """
+        path = DAILY_PRICE_LATEST
+        if not path.exists():
+            logger.warning("行情数据集不存在: {}", path)
+            return HeatResult(
+                as_of="N/A",
+                requested_as_of=(as_of or date.today()).isoformat(),
+                source="price",
+                window=window,
+                granularity=self._granularity,
+                data_date_min="N/A",
+                data_date_max="N/A",
+            )
+
+        df = pl.read_parquet(
+            str(path),
+            columns=["symbol", "trade_date", "close", "volume", "is_suspended"],
+        )
+        data_min = str(df["trade_date"].min())
+        data_max = str(df["trade_date"].max())
+
+        effective = as_of.isoformat() if as_of else data_max
+        if effective > data_max:
+            effective = data_max
+        eff_d = date.fromisoformat(effective)
+
+        # 交易日序列: 窗口 + 前一日(算收益基准)
+        days = (
+            df.filter(pl.col("trade_date") <= eff_d)
+            .select("trade_date")
+            .unique()
+            .sort("trade_date", descending=True)
+            .head(window + 1)["trade_date"]
+            .to_list()
+        )
+        if not days:
+            days = [eff_d]
+        win_days = days[:window]
+        base_day = days[window] if len(days) > window else None
+
+        keep = list(win_days) + ([base_day] if base_day is not None else [])
+        df = df.filter(pl.col("trade_date").is_in(keep))
+        # 清洗: 停牌 / 无成交
+        df = df.filter((pl.col("close") > 0) & (~pl.col("is_suspended").fill_null(False)))
+        if df.is_empty():
+            logger.warning("行情窗口 {} 无有效行", keep)
+            return HeatResult(
+                as_of=effective,
+                requested_as_of=(as_of or date.today()).isoformat(),
+                source="price",
+                window=window,
+                granularity=self._granularity,
+                data_date_min=data_min,
+                data_date_max=data_max,
+            )
+
+        df = df.sort(["symbol", "trade_date"]).with_columns(
+            pl.col("close").shift(1).over("symbol").alias("prev_close")
+        )
+        df = df.filter(pl.col("trade_date").is_in(win_days))
+        # volume 单位是「手」(已核实: 600519 于 2026-09-09 volume=32226 手，
+        # 32226*100*1290.88 ≈ 41.6 亿元，与实际成交额一致) → 乘 100 换成股
+        df = df.with_columns(
+            (pl.col("close") / pl.col("prev_close") - 1).alias("ret"),
+            (pl.col("volume") * 100 * pl.col("close")).alias("amount"),
+        )
+        df = self._attach_industry(df)
+
+        # 每股: 窗口累计收益 = 窗口末日收盘 / 窗口首日前收 - 1
+        per_stock = df.group_by(["symbol", "industry"]).agg(
+            [
+                (pl.col("close").last() / pl.col("prev_close").first() - 1).alias("ret_w"),
+                pl.col("amount").sum().alias("amount"),
+                pl.col("ret").last().alias("ret_last"),
+            ]
+        )
+
+        agg = (
+            per_stock.group_by("industry")
+            .agg(
+                [
+                    pl.len().alias("members"),
+                    pl.col("ret_w").mean().alias("change_pct"),
+                    pl.col("amount").sum().alias("amount"),
+                    (pl.col("ret_last") > 0).mean().alias("up_ratio"),
+                ]
+            )
+            .filter(pl.col("members") >= min_members)
+            .sort("change_pct", descending=True)
+        )
+
+        rows: list[IndustryRow] = []
+        other_members = 0
+        for r in agg.iter_rows(named=True):
+            if r["industry"] == "Other":
+                other_members = int(r["members"])
+                if not include_other:
+                    continue
+            rows.append(
+                IndustryRow(
+                    industry=str(r["industry"]),
+                    members=int(r["members"]),
+                    main_net_flow_yi=0.0,
+                    main_net_flow_pct=0.0,
+                    change_pct=round(float(r["change_pct"]) * 100, 2),
+                    amount_yi=round(float(r["amount"]) / _YI, 2),
+                    up_ratio=round(float(r["up_ratio"]) * 100, 1),
+                )
+            )
+
+        return HeatResult(
+            as_of=effective,
+            requested_as_of=(as_of or date.today()).isoformat(),
+            source="price",
+            window=window,
+            granularity=self._granularity,
+            data_date_min=data_min,
+            data_date_max=data_max,
+            industries=rows,
+            other_members=other_members,
+        )
+
+    # ------------------------------------------------------------------
     # 落盘
     # ------------------------------------------------------------------
 
@@ -259,6 +418,8 @@ class IndustryHeatService:
         """把热度快照写入 data/industry_heat/YYYY-MM-DD[_wN].json。"""
         INDUSTRY_HEAT_DIR.mkdir(parents=True, exist_ok=True)
         suffix = f"_w{result.window}" if result.window != 1 else ""
+        if result.source != "capital_flow":
+            suffix += f"_{result.source}"
         out = INDUSTRY_HEAT_DIR / f"{result.as_of}{suffix}.json"
         json_save(out, result.to_dict())
         logger.info("行业热度已落盘: {}", out)

@@ -491,9 +491,15 @@ def industry() -> None:
 @click.option("--window", type=int, default=1, help="累计窗口(交易日数), 如 1/5/20")
 @click.option(
     "--granularity",
-    type=click.Choice(["subsector", "sector"]),
-    default="subsector",
-    help="行业粒度",
+    type=click.Choice(["csrc", "subsector", "sector"]),
+    default="csrc",
+    help="行业粒度: csrc=证监会行业(84类,默认) / subsector,sector=名称关键词",
+)
+@click.option(
+    "--source",
+    type=click.Choice(["price", "capital_flow"]),
+    default="price",
+    help="数据口径: price=行情(涨幅/成交额, 最新) / capital_flow=主力净流入",
 )
 @click.option("--top", type=int, default=15, help="显示前 N 个行业")
 @click.option("--save/--no-save", default=True, help="是否落盘 JSON 快照")
@@ -501,10 +507,11 @@ def industry_heat(
     as_of: str | None,
     window: int,
     granularity: str,
+    source: str,
     top: int,
     save: bool,
 ) -> None:
-    """行业资金流热度榜 (主力净流入 / 换手率 / 涨跌幅 按行业聚合)."""
+    """行业热度榜 (行情口径: 涨幅/成交额/上涨占比; 资金流口径: 主力净流入)."""
     from qp.platform.cli.commands.industry import cmd_industry_heat
 
     raise SystemExit(
@@ -514,6 +521,7 @@ def industry_heat(
             granularity=granularity,
             top=top,
             save=save,
+            source=source,
         )
     )
 
