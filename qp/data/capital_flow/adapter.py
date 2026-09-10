@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,9 @@ from qp.shared.protocols.base_data_source import BaseDataSource
 
 _DEFAULT_CACHE_DIR = Path("data/capital_flow_cache")
 _CACHE_TTL_DAYS = 3  # Capital flow data changes daily, shorter TTL
+
+#: 单次会话收到多少次 456(限流) 就熔断中止 — 保护 IP 不被彻底封禁
+_RATE_LIMIT_CIRCUIT_BREAK = 30
 
 # Column renaming map (Chinese → English)
 _CAPITAL_FLOW_COLUMNS = {
@@ -77,16 +81,29 @@ class CapitalFlowAdapter(BaseDataSource):
                                 symbols=["600519"])
     """
 
+    #: 新浪 456 = 请求过于频繁; 单页最多重试次数
+    _SINA_MAX_RETRIES = 3
+
     def __init__(
         self,
         cache_dir: str | Path = _DEFAULT_CACHE_DIR,
         source: str = "sina",
+        request_interval: float = 0.0,
     ) -> None:
+        """Args:
+        cache_dir: 逐股 JSON 缓存目录。
+        source: ``sina``(默认，走新浪 MoneyFlow) 或 ``eastmoney``。
+        request_interval: 每只股票之间的间隔秒数(防新浪 456 限流;
+            全量抓取建议 0.3，单只查询留 0)。
+        """
         self._cache_dir = Path(cache_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         if source not in ("sina", "eastmoney"):
             raise ValueError(f"Unknown capital flow source: {source!r}")
         self._source = source
+        self._request_interval = max(0.0, float(request_interval))
+        #: 本次会话内收到的 456(限流) 次数 — 用于熔断
+        self.rate_limit_hits = 0
 
     @property
     def dataset_name(self) -> str:
@@ -121,7 +138,18 @@ class CapitalFlowAdapter(BaseDataSource):
             return pd.DataFrame()
 
         all_frames: list[pd.DataFrame] = []
-        for symbol in symbols:
+        for idx, symbol in enumerate(symbols):
+            # 熔断: 连续大量 456 说明 IP 已被限流，继续请求只会加重封禁
+            if self.rate_limit_hits >= _RATE_LIMIT_CIRCUIT_BREAK:
+                logger.error(
+                    "新浪限流熔断触发({} 次 456)，已抓取 {} 只后中止;"
+                    " 请降低速率(加大 request_interval)或稍后重试",
+                    self.rate_limit_hits,
+                    idx,
+                )
+                break
+            if self._request_interval > 0 and idx > 0:
+                time.sleep(self._request_interval)
             df = self._fetch_single(
                 symbol,
                 incremental=incremental,
@@ -263,6 +291,37 @@ class CapitalFlowAdapter(BaseDataSource):
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         return df
 
+    def _sina_request(
+        self,
+        base_url: str,
+        params: dict[str, Any],
+        symbol: str,
+    ) -> list[dict[str, Any]] | None:
+        """单页请求新浪接口，带 456 限流退避重试。失败返回 None。"""
+        for attempt in range(self._SINA_MAX_RETRIES):
+            try:
+                resp = requests.get(base_url, params=params, timeout=15)
+                if resp.status_code == 456:
+                    self.rate_limit_hits += 1
+                    wait = 1.5 * (attempt + 1)
+                    logger.debug(
+                        "{} 新浪限流(456)，{:.1f}s 后重试({}/{})",
+                        symbol,
+                        wait,
+                        attempt + 1,
+                        self._SINA_MAX_RETRIES,
+                    )
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                return json.loads(resp.text)
+            except Exception as e:
+                if attempt == self._SINA_MAX_RETRIES - 1:
+                    logger.debug("{} 新浪资金流获取失败: {}", symbol, e)
+                    return None
+                time.sleep(1.0 * (attempt + 1))
+        return None
+
     def _fetch_sina(self, symbol: str, min_date: date | None = None) -> pd.DataFrame | None:
         """Fetch capital flow from Sina MoneyFlow API (GFW fallback).
 
@@ -278,7 +337,6 @@ class CapitalFlowAdapter(BaseDataSource):
                 this date, and drop rows older than it. This turns a ~40-page
                 full pull into a 1-page request for incremental refreshes.
         """
-        import json
 
         min_str = min_date.isoformat() if min_date is not None else None
         market = _market_tag(symbol)
@@ -292,19 +350,19 @@ class CapitalFlowAdapter(BaseDataSource):
         try:
             page = 1
             while page <= 100:  # safety cap
-                resp = requests.get(
+                batch = self._sina_request(
                     base_url,
-                    params={
+                    {
                         "page": page,
                         "num": 100,
                         "sort": "opendate",
                         "asc": 0,
                         "daima": prefix,
                     },
-                    timeout=15,
+                    symbol,
                 )
-                resp.raise_for_status()
-                batch = json.loads(resp.text)
+                if batch is None:
+                    break
                 if not batch:
                     break
                 if min_str:

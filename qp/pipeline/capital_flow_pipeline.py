@@ -34,6 +34,8 @@ class CapitalFlowPipeline(BasePipeline):
         symbols = context.parameters.get("symbols")
         quick_mode = context.parameters.get("quick", False)
         with_northbound = context.parameters.get("northbound", False)
+        # 增量模式: 复用缓存做历史底座，只拉缺失尾部(全量 ~40 页/股 → 增量 1 页/股)
+        incremental = bool(context.parameters.get("incremental", False))
 
         if symbols:
             symbol_list = list(symbols) if isinstance(symbols, list) else [symbols]
@@ -54,11 +56,13 @@ class CapitalFlowPipeline(BasePipeline):
 
         try:
             logger.info("拉取资金流数据: {} 只股票", len(symbol_list))
-            adapter = CapitalFlowAdapter()
+            # 增量模式加请求间隔，规避新浪 456 限流(实测无限速时 3059 只里只有 163 只成功)
+            adapter = CapitalFlowAdapter(request_interval=0.3 if incremental else 0.0)
             raw = adapter.fetch_raw(
                 date(2000, 1, 1),
                 today_cn(),
                 symbols=symbol_list,
+                incremental=incremental,
             )
             result.metrics["raw_rows"] = len(raw)
 

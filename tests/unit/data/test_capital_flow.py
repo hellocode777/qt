@@ -91,6 +91,8 @@ def test_fetch_sina_maps_columns(tmp_path, monkeypatch) -> None:
     calls: dict[str, int] = {"n": 0}
 
     class FakeResp:
+        status_code = 200
+
         def __init__(self, text: str) -> None:
             self.text = text
 
@@ -218,7 +220,10 @@ def test_pipeline_quick_mode_writes_parquet(tmp_path, monkeypatch) -> None:
     )
 
     class FakeAdapter:
-        def fetch_raw(self, start_date, end_date, symbols=None):
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        def fetch_raw(self, start_date, end_date, symbols=None, **kwargs):
             assert symbols is not None and len(symbols) > 0
             return fake
 

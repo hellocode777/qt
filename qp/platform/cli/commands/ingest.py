@@ -32,6 +32,9 @@ def cmd_capital_flow() -> int:
             kwargs["quick"] = True
         elif arg == "--northbound":
             kwargs["northbound"] = True
+        elif arg == "--incremental":
+            # 复用已有缓存，只拉缺失尾部(适合日常更新; 全量重建不要加此参数)
+            kwargs["incremental"] = True
 
     context = PipelineContext(pipeline_name=pipeline.name, parameters=kwargs)
     result = pipeline.run(context)
