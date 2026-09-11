@@ -108,7 +108,17 @@ def _guard_production_monitoring():
     after = _production_fingerprint()
     changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
     if changed:
+        # Concurrent writers are legitimate: the scheduler (09:07 / 16:53 /
+        # 18:00 / 18:32) and manual `qp` commands both touch this directory.
+        # Report what changed and when so the reader can tell a real leak
+        # (a test writing production state) from a concurrent run.
+        detail = ", ".join(
+            f"{name} (mtime={after.get(name, (0, 0))[1] / 1e9:.0f})" for name in changed
+        )
         warnings.warn(
-            "pytest modified the live data/monitoring directory: " + ", ".join(changed),
+            "data/monitoring changed during the pytest session: "
+            + detail
+            + " — if no scheduler job or manual `qp` command ran concurrently, a test is "
+            "writing production state (docs/tracking/rolling_ic_false_stale.md §4.1 / P1-5).",
             stacklevel=1,
         )
