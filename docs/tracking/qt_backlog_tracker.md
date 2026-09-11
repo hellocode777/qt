@@ -112,6 +112,25 @@
 - **关键发现**（详见文档 §7）: `volume` 单位是「手」(×100 才是股)；parquet 的 `turnover` 列语义不明（已排除出聚合）；新浪限流严格（已加 0.3s 间隔 + 退避重试 + 熔断）；**`--quick` 会覆盖整个 parquet**（事故，已从缓存重建恢复）；东财本机不可达
 - **遗留**: 资金流数据停在 2026-08-14（抓取停了一个月），全量更新受限流阻塞 → 需分批慢跑；无「半导体/CPO」等**主题粒度**（证监会行业是国民经济大类）
 
+### #10 实时 IC 假 STALE → 平台误停 ✅ 根因已修（2026-09-11）
+
+- **证据/详情**: `docs/tracking/rolling_ic_false_stale.md`
+- **现象**: 9/10 起系统状态 PAUSED；9/11 18:00 daily_pipeline 被 Step 0 拦住，连续两日无 DecisionPackage（邮件只发占位符）
+- **根因**: `rolling_ic()` 实际只用 ~5 只股票算 Spearman（单日 SE≈0.45），得到 0.0023 → 撞上 `absolute_min_ic=0.005` → STALE → PAUSED；同口径全横截面 IC = **+0.077（t=+5.3）**，模型并未衰减。随机打分有 97.3% 概率被判 STALE
+- **连带**: PAUSED 挡住唯一写信号历史的 Step 10.5 → 指标冻结 → **不会自愈**（死锁）
+- **完成**:
+  - [x] 复现 + 样本量/噪声验伪 + 全横截面金标准交叉验证
+  - [x] `rolling_ic()` 加数据充分性门槛（≥10 贡献日、每日中位 ≥300 只），不足返回 `None`（不可测）
+  - [x] 回归测试 3 项 + ruff/pyright 全仓 0 + monitoring 163 测试全过
+  - [x] 端到端验证 action `pause_buy → watch`；commit `b507576` 已 push；scheduler 已重启
+- **遗留**:
+  - [ ] P1-1 让 `online_signal_history` 落全横截面抽样，否则衰减检查事实上失效（现状门槛永远达不到）
+  - [ ] P1-2 解开结构性死锁：PAUSED 时仍允许记录链路 / 输入未更新时不得重复判定
+  - [ ] P1-3 阈值重标定：0.005 绝对下限在任何现实样本下都不可分辨（全横截面 20 日 SE≈0.004）
+  - [ ] P2-1 信号历史按 (strategy_id, date) 去重后再写
+  - [ ] P2-2 PSI 15.5 疑似空 bin + epsilon 伪影，需复核 `_compute_signal_psi`
+  - [ ] P2-3 IC 不可测时不应显示为 "healthy"，UI 需读 `rolling_ic_available`
+
 ---
 
 ## 统一接口候选（2026-08-27 扫描，仅记录未实施）
