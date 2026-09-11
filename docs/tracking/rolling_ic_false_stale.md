@@ -93,8 +93,42 @@ PAUSED
 
 ---
 
-## 5. 已完成（2026-09-11，commit `b507576`）
+## 4.1 附带发现：状态机 fail-open + 单测污染生产状态（2026-09-11 21:59 实测）
 
+修完度量、跑完 `qp monitor check` 把状态置为 WARNING（21:14）之后，21:59:13 状态被**自动清成 NORMAL**：
+
+```
+2026-09-11T13:59:13.370838+00:00 | 1 -> 0 | KillSwitchPipeline | 监控正常，未发现风险事件
+details: action=ok regime=UNKNOWN psi=0.000
+```
+
+来源查明：`tests/unit/test_pipeline_critical_path.py::TestKillSwitchPipelineIntegration::test_full_pipeline_runs_all_steps`
+直接 `KillSwitchPipeline().run(ctx)`（裸 context、无价格数据、无 tmp 隔离），而 `run()` 末尾无条件调
+`_update_system_state()` → 写**生产** `data/monitoring/system_state.parquet`。
+
+**两个缺陷（均已实测复现，不只是推断）**：
+
+1. **fail-open：读不到任何数据 = 判定"无风险"**
+   沙盒复刻（把状态目录重定向到 /tmp，再 `chdir` 离开仓库根，等价于单测 `monkeypatch.chdir(tmp_path)` 之后的同进程调用）：
+
+   ```
+   沙盒初始状态: WARNING
+   pipeline action: ok
+   沙盒结束状态: NORMAL | 监控正常，未发现风险事件
+   ```
+   → 相对路径 `data/...` 读不到时，PSI=0、rolling_ic 不可用，全部"没有触发"，于是 `action=OK` →**把风险状态降级**。
+   这与"默认值不得伪装成测量值"是同一类问题：**"测不到" 被当成 "没问题"**。正确行为应是"未知则不改状态"（fail-safe）。
+
+2. **测试污染生产状态**
+   `tests/unit/test_pipeline_critical_path.py` 的 `KillSwitchPipeline` 集成测试没有隔离目录，直接写生产状态文件；
+   另有 `tests/unit/pipeline/test_multifactor_fundamental.py` 等用 `monkeypatch.chdir(tmp_path)`，同进程后续测试的相对路径读者都会失准。
+
+   影响：任何一次 `pytest` 都可能悄悄改写生产风险状态，**审计链失真**（功能上本次无损失，NORMAL/WARNING 都允许开仓）。
+   当前状态已在 21:59 被清成 NORMAL；周一 09:07 的 monitor_check 会重新算。
+
+---
+
+## 5. 已完成（2026-09-11，commit `b507576`）
 - [x] 复现 `rolling_ic` 并做样本量/噪声验伪（§3）
 - [x] 全横截面金标准重算，确认模型真实 IC +0.07~+0.08（§2）
 - [x] `online_monitor`：拆出 `_realized_ic_detail()` 返回每日 IC + 对应样本量
@@ -161,6 +195,15 @@ PAUSED
 ### P1-3 阈值重标定
 - [ ] `absolute_min_ic=0.005` 在任何现实样本下都不可分辨：全横截面 20 日 IC 的 SE≈0.004，已经只有 ~1.2σ
 - [ ] 建议改成基于标准误的相对判定（如 `|IC| + 1σ < 阈值` 才算衰减），而不是拿点估计直接比绝对下限
+
+### P1-4 状态机 fail-open 改 fail-safe（见 §4.1，已实测复现）
+- [ ] 数据不可用时 `KillSwitchPipeline` 不得给出 `action=OK`：应返回"未知"并**不改状态**（或只允许向更保守方向迁移）
+- [ ] 判定依据用「关键输入是否真的读到」而非默认值（价格数据 / PSI / rolling_ic 三者的 available 标志）
+
+### P1-5 测试隔离：禁写生产状态（见 §4.1）
+- [ ] `tests/conftest.py` 加 autouse fixture：把 `MONITORING_DIR` / 状态文件 / 信号历史重定向到 tmp（或至少禁止写生产路径）
+- [ ] 给 `test_pipeline_critical_path.py` 的 KillSwitchPipeline 集成测试加 tmp 状态目录
+- [ ] 复查 `monkeypatch.chdir` 的测试：同进程后续的**相对路径**读者（`data/...`）会失准
 
 ### P2-1 信号历史去重 ✅ 已随 P1-1 修掉
 - [x] `_save_signal_snapshot` 改为按 `(strategy_id, date)` 覆盖写（幂等），旧数据里的重复行未回溯清理
