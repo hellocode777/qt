@@ -58,6 +58,15 @@ SIGNAL_DISPERSION_MIN = 0.001  # Score std too low → signals too uniform
 MIN_IC_PAIRS_PER_DAY = 300
 MIN_IC_CONTRIB_DAYS = 10
 
+# ── Signal-history sampling ─────────────────────────────────────────
+# The history used to persist only the strategy's candidate signals
+# (3-18 symbols/day in production), which left the realized IC
+# unmeasurable.  Persist a deterministic cross-section sample instead:
+# both score tails (where the spread lives) plus an evenly spaced middle
+# band → 500 rows/day, comfortably above MIN_IC_PAIRS_PER_DAY.
+HISTORY_SAMPLE_PER_SIDE = 200
+HISTORY_SAMPLE_MIDDLE = 100
+
 
 @dataclass
 class OnlineHealthResult:
@@ -136,6 +145,7 @@ class OnlineSignalMonitor:
         today: date,
         signals_df: pl.DataFrame,
         price_data: dict[str, pl.DataFrame],
+        score_universe_df: pl.DataFrame | None = None,
     ) -> OnlineHealthResult:
         """Run a full online health check for a strategy.
 
@@ -144,6 +154,13 @@ class OnlineSignalMonitor:
             today: Check date.
             signals_df: Today's signals [symbol, raw_score, rank].
             price_data: Full price data {symbol: DataFrame}.
+            score_universe_df: Today's FULL cross-section scores
+                [symbol, raw_score, rank].  When supplied, this (not the
+                candidate signals) is sampled into the persisted signal
+                history — otherwise the realized IC is computed over the
+                top-N tail alone and is pure noise
+                (docs/tracking/rolling_ic_false_stale.md).  ``None`` keeps
+                the legacy candidate-only history.
 
         Returns:
             OnlineHealthResult with metrics and alerts.
@@ -157,7 +174,7 @@ class OnlineSignalMonitor:
         dispersion = self._compute_dispersion(signals_df)
 
         # ── Persist today's signal snapshot ──
-        self._save_signal_snapshot(strategy_id, date_str, signals_df)
+        self._save_signal_snapshot(strategy_id, date_str, signals_df, score_universe_df)
 
         # ── Compute rolling IC ──
         ic_20d = self._compute_realized_ic(strategy_id, price_data, window=20)
@@ -282,6 +299,7 @@ class OnlineSignalMonitor:
         history = self._load_signal_history(strategy_id)
         if history is None or history.is_empty() or history.height < 5:
             return [], []
+        history = self._universe_rows(history)
 
         # Get recent signal dates (last window entries by unique date)
         dates = history.select("date").unique().sort("date").tail(window)["date"].to_list()
@@ -386,8 +404,9 @@ class OnlineSignalMonitor:
 
         ics, pairs = self._realized_ic_detail(strategy_id, price_data, window=window)
         median_pairs = float(np.median(pairs)) if pairs else 0.0
+        measurable = len(ics) >= MIN_IC_CONTRIB_DAYS and median_pairs >= MIN_IC_PAIRS_PER_DAY
         self.last_ic_sample = {
-            "reason": "insufficient_sample",
+            "reason": "measured" if measurable else "insufficient_sample",
             "window": window,
             "contrib_days": len(ics),
             "median_pairs_per_day": median_pairs,
@@ -395,28 +414,110 @@ class OnlineSignalMonitor:
             "min_days_required": MIN_IC_CONTRIB_DAYS,
         }
 
-        if len(ics) < MIN_IC_CONTRIB_DAYS or median_pairs < MIN_IC_PAIRS_PER_DAY:
+        if not measurable:
             return None
         return float(np.mean(ics))
 
     # ── Persistence ────────────────────────────────────────────
+
+    @staticmethod
+    def _universe_rows(history: pl.DataFrame) -> pl.DataFrame:
+        """Keep only the cross-section sample rows (``kind == "universe"``).
+
+        The IC must be computed on the sampled cross-section; the day's
+        candidate signals sit in the extreme tail and carry no spread
+        (docs/tracking/rolling_ic_false_stale.md).  Histories written before
+        the ``kind`` column existed stored candidates only — return them
+        unchanged so those days simply stay "not measurable" instead of
+        being misread.
+        """
+        if "kind" in history.columns:
+            return history.filter(pl.col("kind") == "universe")
+        return history
+
+    @staticmethod
+    def _sample_universe(universe_df: pl.DataFrame) -> pl.DataFrame:
+        """Deterministic cross-section sample for the signal history.
+
+        Keeps both score tails (the spread a rank IC needs) plus an evenly
+        spaced slice of the middle band.  Deterministic so re-runs of the
+        same day persist byte-identical rows.
+
+        Returns:
+            ``[symbol, raw_score, rank]`` with up to
+            ``2*HISTORY_SAMPLE_PER_SIDE + HISTORY_SAMPLE_MIDDLE`` rows.
+            Empty frame when the input is unusable.
+        """
+        if universe_df is None or universe_df.is_empty():
+            return pl.DataFrame()
+        required = {"symbol", "raw_score", "rank"}
+        if not required.issubset(set(universe_df.columns)):
+            return pl.DataFrame()
+
+        df = universe_df.drop_nulls(["symbol", "raw_score"]).sort("raw_score", descending=True)
+        total = 2 * HISTORY_SAMPLE_PER_SIDE + HISTORY_SAMPLE_MIDDLE
+        if df.height <= total:
+            return df
+
+        top = df.head(HISTORY_SAMPLE_PER_SIDE)
+        bottom = df.tail(HISTORY_SAMPLE_PER_SIDE)
+        middle = df.slice(HISTORY_SAMPLE_PER_SIDE, df.height - 2 * HISTORY_SAMPLE_PER_SIDE)
+        step = max(1, middle.height // HISTORY_SAMPLE_MIDDLE)
+        middle = middle.gather_every(step).head(HISTORY_SAMPLE_MIDDLE)
+
+        return pl.concat([top, middle, bottom])
 
     def _save_signal_snapshot(
         self,
         strategy_id: str,
         date_str: str,
         signals_df: pl.DataFrame,
+        score_universe_df: pl.DataFrame | None = None,
     ) -> None:
-        """Append today's signals to the signal history parquet."""
-        if signals_df is None or signals_df.is_empty():
+        """Persist today's signals to the history parquet (idempotent).
+
+        Two row kinds are stored per day, tagged in the ``kind`` column:
+
+        * ``candidate`` — the strategy's own signals (what "how many signals
+          did it emit today" means, consumed by StrategyMonitor's health score)
+        * ``universe`` — a deterministic sample of the full cross-section
+          (what the realized IC must be computed on)
+
+        Mixing the two silently is what made the IC noise *and* would have
+        tripped "High signals: avg 500/day > max 30" — see
+        docs/tracking/rolling_ic_false_stale.md.
+
+        Rows for ``(strategy_id, date_str)`` are replaced, not appended, so
+        repeated runs of the same day cannot inflate the sample (previously
+        whole days were tripled, see §3.3 of the same doc).
+        """
+        frames: list[pl.DataFrame] = []
+
+        def _tag(df: pl.DataFrame | None, kind: str) -> pl.DataFrame | None:
+            if df is None or df.is_empty():
+                return None
+            if not {"symbol", "raw_score", "rank"}.issubset(set(df.columns)):
+                return None
+            return df.select(
+                pl.lit(date_str).alias("date"),
+                pl.lit(strategy_id).alias("strategy_id"),
+                pl.col("symbol"),
+                pl.col("raw_score"),
+                pl.col("rank"),
+                pl.lit(kind).alias("kind"),
+            )
+
+        candidates = _tag(signals_df, "candidate")
+        if candidates is not None:
+            frames.append(candidates)
+        if score_universe_df is not None:
+            sampled = _tag(self._sample_universe(score_universe_df), "universe")
+            if sampled is not None:
+                frames.append(sampled)
+        if not frames:
             return
-        record = signals_df.select(
-            pl.lit(date_str).alias("date"),
-            pl.lit(strategy_id).alias("strategy_id"),
-            pl.col("symbol"),
-            pl.col("raw_score"),
-            pl.col("rank"),
-        )
+        record = pl.concat(frames, how="vertical")
+
         try:
             existing = (
                 pl.read_parquet(str(_ONLINE_SIGNAL_PARQUET))
@@ -424,11 +525,27 @@ class OnlineSignalMonitor:
                 else None
             )
             if existing is not None and not existing.is_empty():
-                combined = pl.concat([existing, record], how="vertical")
+                existing = existing.filter(
+                    ~(
+                        (pl.col("strategy_id") == strategy_id)
+                        & (pl.col("date").cast(pl.Utf8) == date_str)
+                    )
+                )
+                # Rows written before ``kind`` existed were candidate signals.
+                if not existing.is_empty() and "kind" not in existing.columns:
+                    existing = existing.with_columns(pl.lit("candidate").alias("kind"))
+                combined = (
+                    pl.concat([existing, record], how="vertical")
+                    if not existing.is_empty()
+                    else record
+                )
             else:
                 combined = record
             _ONLINE_SIGNAL_PARQUET.parent.mkdir(parents=True, exist_ok=True)
             combined.write_parquet(str(_ONLINE_SIGNAL_PARQUET))
+            # Written history changed → drop the in-memory cache so later
+            # reads in this process see the new rows.
+            self._signal_history = None
         except OSError:
             pass
 

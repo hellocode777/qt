@@ -345,6 +345,14 @@ def build_strategy_monitor_from_signal_history(
     df = pl.read_parquet(p)
     if df.is_empty():
         return None
+    # The same parquet also carries the cross-section sample used for the
+    # realized IC (kind="universe").  "How many signals did the strategy
+    # emit" means the candidate rows only — counting the sample would trip
+    # "High signals: avg 500/day > max 30" (docs/tracking/rolling_ic_false_stale.md).
+    if "kind" in df.columns:
+        df = df.filter(pl.col("kind") == "candidate")
+        if df.is_empty():
+            return None
     monitor = StrategyMonitor("aggregate")
     counts = df.group_by(["strategy_id", "date"]).len().sort("date")
     for row in counts.iter_rows(named=True):

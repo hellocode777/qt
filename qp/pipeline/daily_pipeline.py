@@ -470,12 +470,16 @@ class DailyPipeline(BasePipeline):
             today_str = today.isoformat()
 
             from qp.strategy.config import get_strategy_config
-            from qp.strategy.multifactor import compute_today_signals
+            from qp.strategy.multifactor import compute_today_scores_full
 
             logger.info(
                 "Daily pipeline — loaded from Registry: {}",
                 ", ".join(validated_strategies),
             )
+
+            # Full cross-section scores per strategy (today only) — the online
+            # monitor samples these to persist a measurable signal history.
+            score_universe: dict[str, pl.DataFrame] = {}
 
             for strategy_name in validated_strategies:
                 try:
@@ -509,13 +513,21 @@ class DailyPipeline(BasePipeline):
                     if not isinstance(industry_neutral, bool):
                         industry_neutral = True
 
-                    # Fast path: compute only today's scores, not full history
-                    today_scores = compute_today_signals(
+                    # Fast path: compute only today's scores, not full history.
+                    # Keep the FULL cross-section as well — the online monitor
+                    # needs it to measure a real IC; a top-N-only IC is noise
+                    # (docs/tracking/rolling_ic_false_stale.md).
+                    score_universe_full = compute_today_scores_full(
                         price_data=price_data,
                         weights=weights,
                         today=today_str,
-                        top_n=effective_top_n,
                         industry_neutral=industry_neutral,
+                    )
+                    score_universe[strategy_name] = score_universe_full
+                    today_scores = (
+                        score_universe_full.filter(pl.col("rank") <= effective_top_n)
+                        if not score_universe_full.is_empty()
+                        else score_universe_full
                     )
 
                     # Build strategy from today-only scores (avoids 90s init)
@@ -840,6 +852,7 @@ class DailyPipeline(BasePipeline):
                         today=today,
                         signals_df=sig_df,
                         price_data=price_data,
+                        score_universe_df=score_universe.get(sid),
                     )
                     online_health[sid] = result_item.to_dict()
                     result.metrics[f"online_health_{sid}"] = float(result_item.health_score)

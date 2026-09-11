@@ -334,6 +334,14 @@ class KillSwitchPipeline(BasePipeline):
             if df is None or "raw_score" not in df.columns:
                 return 0.0, False
 
+            # Score-distribution drift is a property of the whole ranking,
+            # not of the day's few candidate signals.  Prefer the sampled
+            # cross-section rows (kind="universe") when present.
+            if "kind" in df.columns:
+                df = df.filter(pl.col("kind") == "universe")
+                if df.is_empty():
+                    return 0.0, False
+
             best = 0.0
             any_computed = False
             for sid in df["strategy_id"].unique().to_list():

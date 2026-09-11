@@ -1340,29 +1340,30 @@ class MultiFactorStrategy(BaseStrategy):
 # ============================================================================
 
 
-def compute_today_signals(
+def compute_today_scores_full(
     price_data: dict[str, pl.DataFrame],
     weights: dict[str, float],
     today: str,
-    top_n: int = 10,
     industry_neutral: bool = True,
 ) -> pl.DataFrame:
-    """Compute factor scores for today only — no historical loop.
+    """Compute today's scores for the WHOLE cross-section — no top-N cut.
 
-    ADR-031: Daily Pipeline should *not* recompute full cross-sectional
-    history.  Instead, for each stock take only the last row's factor
-    values, apply frozen weights, cross-sectionally normalize, and return
-    the top-N.
+    Same computation as :func:`compute_today_signals`, but returns every
+    scored symbol as ``[symbol, raw_score, rank]`` (~3000 rows) instead of
+    only the top-N.  Needed by the online monitor: a rank IC computed over
+    the top-N tail alone is dominated by noise (see
+    ``docs/tracking/rolling_ic_false_stale.md``).
 
-    Tries the fast path first: if factor_values_daily.parquet exists and
-    contains the target date, reads pre-computed factor values directly.
-    Falls back to on-the-fly computation if the parquet is unavailable.
+    Tries the fast path first (pre-computed ``factor_values_daily.parquet``),
+    falls back to on-the-fly per-stock factor computation.
 
-    Runs in O(stocks) instead of O(stocks × dates).
+    Returns:
+        Full ranked cross-section, or an empty frame with the right schema
+        when nothing could be scored.
     """
     # Fast path: read from factor_values_daily.parquet
     try:
-        result = _compute_today_from_parquet(weights, today, top_n)
+        result = _compute_today_from_parquet(weights, today)
         if not result.is_empty():
             return result
     except Exception:
@@ -1403,7 +1404,7 @@ def compute_today_signals(
     if not today_scores:
         return pl.DataFrame(schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64})
 
-    # Build DataFrame, cross-sectionally rank
+    # Build DataFrame, cross-sectionally rank (full universe, no cut)
     result = pl.DataFrame(
         {
             "symbol": list(today_scores.keys()),
@@ -1414,21 +1415,43 @@ def compute_today_signals(
     result = result.with_columns(
         pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
     )
-    result = result.filter(pl.col("rank") <= top_n)
-
-    # Industry neutralization (simplified: rank-based)
-    if industry_neutral:
-        # During signal generation, industry exposure is already diversified
-        # by the sector overconcentration check in daily_pipeline.
-        pass
-
     return result
+
+
+def compute_today_signals(
+    price_data: dict[str, pl.DataFrame],
+    weights: dict[str, float],
+    today: str,
+    top_n: int = 10,
+    industry_neutral: bool = True,
+) -> pl.DataFrame:
+    """Compute factor scores for today only — no historical loop.
+
+    ADR-031: Daily Pipeline should *not* recompute full cross-sectional
+    history.  Instead, for each stock take only the last row's factor
+    values, apply frozen weights, cross-sectionally normalize, and return
+    the top-N.
+
+    Thin wrapper over :func:`compute_today_scores_full` — identical output
+    to before.
+
+    Runs in O(stocks) instead of O(stocks × dates).
+    """
+    full = compute_today_scores_full(
+        price_data=price_data,
+        weights=weights,
+        today=today,
+        industry_neutral=industry_neutral,
+    )
+    if full.is_empty() or "rank" not in full.columns:
+        return full
+    return full.filter(pl.col("rank") <= top_n)
 
 
 def _compute_today_from_parquet(
     weights: dict[str, float],
     today: str,
-    top_n: int = 10,
+    top_n: int | None = None,
 ) -> pl.DataFrame:
     """Compute today's signals from pre-computed factor_values_daily.parquet.
 
@@ -1483,6 +1506,7 @@ def _compute_today_from_parquet(
     result = result.with_columns(
         pl.col("raw_score").rank(descending=True).cast(pl.Int64).alias("rank")
     )
-    result = result.filter(pl.col("rank") <= top_n)
+    if top_n is not None:
+        result = result.filter(pl.col("rank") <= top_n)
 
     return result

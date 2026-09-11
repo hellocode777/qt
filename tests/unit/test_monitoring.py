@@ -2703,3 +2703,282 @@ class TestRollingICDataSufficiency:
         assert monitor.last_ic_sample is not None
         assert monitor.last_ic_sample["reason"] == "insufficient_sample"
         assert monitor.last_ic_sample["contrib_days"] == 0
+
+
+class TestSignalHistoryUniverseSampling:
+    """P1-1 of the false-STALE fix: persist a cross-section sample, not the
+    top-N tail, so the realized IC is actually measurable.
+
+    ``docs/tracking/rolling_ic_false_stale.md``
+    """
+
+    @staticmethod
+    def _universe(n_symbols: int):
+        import polars as pl
+
+        return pl.DataFrame(
+            {
+                "symbol": [f"{i:06d}" for i in range(n_symbols)],
+                "raw_score": [float(n_symbols - i) for i in range(n_symbols)],
+                "rank": list(range(1, n_symbols + 1)),
+            }
+        )
+
+    @staticmethod
+    def _declining_prices(symbols, dates):
+        import polars as pl
+
+        # Gentler slope: prices must stay positive for the whole window,
+        # otherwise those rows are (correctly) skipped as unusable.
+        return {
+            s: pl.DataFrame(
+                {"date": dates, "close": [200.0 - 0.01 * j * k for k in range(len(dates))]}
+            )
+            for j, s in enumerate(symbols)
+        }
+
+    def test_sampler_keeps_both_tails_and_caps_rows(self):
+        from qp.monitoring.online_monitor import (
+            HISTORY_SAMPLE_MIDDLE,
+            HISTORY_SAMPLE_PER_SIDE,
+            OnlineSignalMonitor,
+        )
+
+        universe = self._universe(3000)
+        sample = OnlineSignalMonitor._sample_universe(universe)
+
+        expected = 2 * HISTORY_SAMPLE_PER_SIDE + HISTORY_SAMPLE_MIDDLE
+        assert sample.height == expected
+        # Both tails must survive — the middle band alone carries no spread.
+        assert sample["rank"].min() == 1
+        assert sample["rank"].max() == 3000
+        # Deterministic: same input → identical output (re-runs must not drift).
+        again = OnlineSignalMonitor._sample_universe(universe)
+        assert sample.equals(again)
+
+    def test_sampler_passes_small_universe_through(self):
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        small = self._universe(120)
+        assert OnlineSignalMonitor._sample_universe(small).height == 120
+        assert OnlineSignalMonitor._sample_universe(None).is_empty()
+
+    def test_snapshot_write_is_idempotent(self, tmp_path, monkeypatch):
+        import polars as pl
+
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        hist = tmp_path / "online_signal_history.parquet"
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        universe = self._universe(600)
+        candidates = pl.DataFrame({"symbol": ["911111"], "raw_score": [1.0], "rank": [1]})
+
+        monitor._save_signal_snapshot("s1", "2026-09-11", candidates, universe)
+        first = pl.read_parquet(hist)
+        monitor._save_signal_snapshot("s1", "2026-09-11", candidates, universe)
+        second = pl.read_parquet(hist)
+
+        # 500 sampled universe rows + 1 candidate row, and re-running the same
+        # day must replace rather than append.
+        assert first.height == second.height == 501
+        assert second.filter(pl.col("kind") == "universe").height == 500
+        assert second.filter(pl.col("kind") == "candidate").height == 1
+
+    def test_snapshot_falls_back_to_candidates(self, tmp_path, monkeypatch):
+        import polars as pl
+
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        hist = tmp_path / "online_signal_history.parquet"
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        candidates = pl.DataFrame(
+            {"symbol": ["000001", "000002"], "raw_score": [1.0, 0.5], "rank": [1, 2]}
+        )
+        monitor._save_signal_snapshot("s1", "2026-09-11", candidates, None)
+
+        assert pl.read_parquet(hist).height == 2
+
+    def test_sampled_history_makes_ic_measurable(self, tmp_path, monkeypatch):
+        import polars as pl
+
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        dates = [f"2026-08-{d:02d}" for d in range(3, 15)]  # 12 signal days
+        universe = self._universe(600)
+        symbols = universe["symbol"].to_list()
+        hist = tmp_path / "online_signal_history.parquet"
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        empty = pl.DataFrame(schema={"symbol": pl.Utf8, "raw_score": pl.Float64, "rank": pl.Int64})
+        for d in dates:
+            monitor._save_signal_snapshot("s1", d, empty, universe)
+
+        value = monitor.rolling_ic("s1", self._declining_prices(symbols, dates), window=20)
+
+        assert value is not None, "sampled cross-section must be measurable"
+        # Scores were built to agree with next-day returns → IC ≈ +1.
+        assert value > 0.9
+        assert monitor.last_ic_sample is not None
+        assert monitor.last_ic_sample["median_pairs_per_day"] == 500
+
+
+class TestSignalHistoryKindSeparation:
+    """The history carries two row kinds; each consumer must read its own.
+
+    ``candidate`` = the strategy's own signals (StrategyMonitor counts these),
+    ``universe`` = cross-section sample (the realized IC uses these).
+    Conflating them either makes the IC noise or trips a bogus
+    "High signals" alert — see docs/tracking/rolling_ic_false_stale.md.
+    """
+
+    @staticmethod
+    def _universe(n_symbols: int):
+        import polars as pl
+
+        return pl.DataFrame(
+            {
+                "symbol": [f"{i:06d}" for i in range(n_symbols)],
+                "raw_score": [float(n_symbols - i) for i in range(n_symbols)],
+                "rank": list(range(1, n_symbols + 1)),
+            }
+        )
+
+    @staticmethod
+    def _declining_prices(symbols, dates):
+        import polars as pl
+
+        return {
+            s: pl.DataFrame(
+                {"date": dates, "close": [200.0 - 0.01 * j * k for k in range(len(dates))]}
+            )
+            for j, s in enumerate(symbols)
+        }
+
+    def test_rows_are_tagged_by_kind(self, tmp_path, monkeypatch):
+        import polars as pl
+
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        hist = tmp_path / "online_signal_history.parquet"
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        universe = self._universe(600)
+        candidates = pl.DataFrame(
+            {"symbol": ["900001", "900002"], "raw_score": [1.0, 0.9], "rank": [1, 2]}
+        )
+        monitor._save_signal_snapshot("s1", "2026-09-11", candidates, universe)
+
+        saved = pl.read_parquet(hist)
+        assert saved.filter(pl.col("kind") == "candidate").height == 2
+        assert saved.filter(pl.col("kind") == "universe").height == 500
+
+    def test_ic_ignores_candidate_rows(self, tmp_path, monkeypatch):
+        import polars as pl
+
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        dates = [f"2026-08-{d:02d}" for d in range(3, 15)]
+        universe = self._universe(600)
+        universe_symbols = universe["symbol"].to_list()
+        hist = tmp_path / "online_signal_history.parquet"
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        # Candidate symbols deliberately OUTSIDE the universe so they can only
+        # enter the window if the kind filter is missing.
+        odd = ["900001", "900002", "900003", "900004", "900005", "900006"]
+        candidates = pl.DataFrame(
+            {"symbol": odd, "raw_score": [9.0 - i for i in range(6)], "rank": list(range(1, 7))}
+        )
+        for d in dates:
+            monitor._save_signal_snapshot("s1", d, candidates, universe)
+
+        saved = pl.read_parquet(hist)
+        assert saved.filter(pl.col("date") == dates[0]).height == 506
+
+        prices = self._declining_prices(universe_symbols + odd, dates)
+        value = monitor.rolling_ic("s1", prices, window=20)
+
+        assert value is not None
+        assert monitor.last_ic_sample is not None
+        # 500 sampled universe rows only — candidates must not be counted in.
+        assert monitor.last_ic_sample["median_pairs_per_day"] == 500
+
+    def test_strategy_monitor_counts_candidates_only(self, tmp_path):
+        import polars as pl
+
+        from qp.monitoring.strategy_monitor import build_strategy_monitor_from_signal_history
+
+        rows = []
+        for d in ("2026-09-10", "2026-09-11"):
+            rows += [
+                {
+                    "date": d,
+                    "strategy_id": "s1",
+                    "symbol": f"{i:06d}",
+                    "raw_score": float(500 - i),
+                    "rank": i + 1,
+                    "kind": "universe",
+                }
+                for i in range(500)
+            ]
+            rows += [
+                {
+                    "date": d,
+                    "strategy_id": "s1",
+                    "symbol": f"{900000 + i}",
+                    "raw_score": 1.0,
+                    "rank": 1,
+                    "kind": "candidate",
+                }
+                for i in range(3)
+            ]
+        hist = tmp_path / "online_signal_history.parquet"
+        pl.DataFrame(rows).write_parquet(hist)
+
+        monitor = build_strategy_monitor_from_signal_history(path=hist)
+        assert monitor is not None
+        health = monitor.health_check()
+
+        assert health.avg_daily_signals == 3.0
+        assert not any("High signals" in a for a in health.alerts)
+
+    def test_legacy_history_without_kind_still_reads(self, tmp_path, monkeypatch):
+        import polars as pl
+
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+        from qp.monitoring.strategy_monitor import build_strategy_monitor_from_signal_history
+
+        rows = [
+            {
+                "date": f"2026-09-{d:02d}",
+                "strategy_id": "s1",
+                "symbol": f"00000{i}",
+                "raw_score": 1.0 - i * 0.1,
+                "rank": i + 1,
+            }
+            for d in (10, 11)
+            for i in range(5)
+        ]
+        hist = tmp_path / "online_signal_history.parquet"
+        pl.DataFrame(rows).write_parquet(hist)
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        # No `kind` column → no universe sample → honestly "not measurable".
+        assert OnlineSignalMonitor().rolling_ic("s1", {}, window=20) is None
+
+        monitor = build_strategy_monitor_from_signal_history(path=hist)
+        assert monitor is not None
+        assert monitor.health_check().avg_daily_signals == 5.0
