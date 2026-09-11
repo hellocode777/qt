@@ -76,13 +76,16 @@ class MonitorReport:
     regime: RegimeResult | None = None
     kill_switch_triggered: bool = False
     kill_switch_triggers: list[str] = field(default_factory=list)
-    model_decay_stage: DecayStage = DecayStage.HEALTHY
+    model_decay_stage: DecayStage = DecayStage.NOT_MEASURED
     strategy_health: StrategyHealth | None = None
     factor_health: FactorHealthReport | None = None
     psi_value: float = 0.0
     psi_available: bool = False
     rolling_ic: float = 0.0
     rolling_ic_available: bool = False
+    # P1-3: standard error of ``rolling_ic`` — a low IC with a wide SE is not
+    # evidence of decay (see qp.monitoring.model_decay.ic_below_boundary).
+    rolling_ic_se: float = 0.0
     strategy_name: str = ""
     alerts: list[str] = field(default_factory=list)
     summary: str = ""
@@ -155,16 +158,21 @@ class KillSwitchPipeline(BasePipeline):
             # Step 2.5: Online signal health — realized rolling IC from
             # accumulated daily signal history (real value, not a 0.0 stub).
             # Computed BEFORE model decay so decay uses the real IC.
-            report.rolling_ic, report.rolling_ic_available = self._check_online_signal_health(
-                context
-            )
+            (
+                report.rolling_ic,
+                report.rolling_ic_se,
+                report.rolling_ic_available,
+            ) = self._check_online_signal_health(context)
             report.strategy_name = self._last_monitored_strategy or ""
 
-            # Step 3: Model decay (uses realized IC when available;
-            # when IC is unavailable the stage stays HEALTHY = "not
-            # measured", never a fabricated DECAYING/STALE verdict).
+            # Step 3: Model decay (uses realized IC + its standard error when
+            # available).  When IC is unavailable or too noisy to resolve the
+            # threshold the stage is NOT_MEASURED — never a fabricated
+            # HEALTHY, DECAYING or STALE verdict (P1-3 / P2-3).
             report.model_decay_stage = self._check_model_decay(
-                context, report.rolling_ic if report.rolling_ic_available else None
+                context,
+                report.rolling_ic if report.rolling_ic_available else None,
+                report.rolling_ic_se,
             )
 
             # Step 3.5: Factor health (per-factor IC + decay)
@@ -178,6 +186,7 @@ class KillSwitchPipeline(BasePipeline):
                 context,
                 psi=report.psi_value,
                 rolling_ic=report.rolling_ic,
+                rolling_ic_se=report.rolling_ic_se,
             )
             report.kill_switch_triggered = ks_result.get("triggered", False)
             report.kill_switch_triggers = ks_result.get("triggers", [])
@@ -324,7 +333,11 @@ class KillSwitchPipeline(BasePipeline):
 
             import polars as pl
 
-            from qp.monitoring.drift import DriftMonitor
+            from qp.monitoring.drift import (
+                PSI_MIN_PER_BIN,
+                DriftMonitor,
+                psi_sample_is_sufficient,
+            )
 
             signal_path = Path(ONLINE_SIGNAL_HISTORY)
             if not signal_path.exists():
@@ -334,13 +347,24 @@ class KillSwitchPipeline(BasePipeline):
             if df is None or "raw_score" not in df.columns:
                 return 0.0, False
 
-            # Score-distribution drift is a property of the whole ranking,
-            # not of the day's few candidate signals.  Prefer the sampled
-            # cross-section rows (kind="universe") when present.
-            if "kind" in df.columns:
-                df = df.filter(pl.col("kind") == "universe")
-                if df.is_empty():
-                    return 0.0, False
+            # Score-distribution drift is a property of the whole ranking, not
+            # of the day's few candidate signals: the candidate set is a
+            # strategy-selected tail whose shape tracks the filter, not the
+            # score distribution.  Measuring PSI on it produced a fake 15.529
+            # (and still 5.395 after the epsilon fix) from 3-18 names/day
+            # (P2-2, docs/tracking/rolling_ic_false_stale.md §3.2).  Only the
+            # cross-section sample taken by the daily pipeline can support it,
+            # so a legacy (candidate-only) history is "not measured".
+            if "kind" not in df.columns:
+                logger.warning(
+                    "信号分布漂移不可测：历史为旧格式（无 kind 列，仅候选信号）"
+                    "→ 需要全横截面抽样（P1-1）/ PSI not measurable: legacy "
+                    "candidate-only history, waiting for universe samples"
+                )
+                return 0.0, False
+            df = df.filter(pl.col("kind") == "universe")
+            if df.is_empty():
+                return 0.0, False
 
             best = 0.0
             any_computed = False
@@ -357,6 +381,18 @@ class KillSwitchPipeline(BasePipeline):
                 expected = sdf.filter(pl.col("date").is_in(ref_dates))["raw_score"].to_numpy()
                 if len(actual) < 2 or len(expected) < 2:
                     continue
+                # P2-2: PSI over a handful of scores per day is binning noise,
+                # not drift (3–18/day produced a fake PSI of 15.5 on
+                # 2026-09-11).  Report "not measured" instead of a number.
+                if not psi_sample_is_sufficient(len(expected), len(actual)):
+                    logger.warning(
+                        "信号分布漂移不可测（样本不足 n_expected={} n_actual={}，"
+                        "需 ≥{}）/ PSI not measurable: thin sample",
+                        len(expected),
+                        len(actual),
+                        PSI_MIN_PER_BIN * 10,
+                    )
+                    continue
                 any_computed = True
                 psi = DriftMonitor.compute_psi(expected, actual)
                 best = max(best, psi)
@@ -368,25 +404,34 @@ class KillSwitchPipeline(BasePipeline):
         self,
         context: Any,
         rolling_ic: float | None = None,
+        rolling_ic_se: float | None = None,
     ) -> DecayStage:
         """Check for model performance decay.
 
         Args:
             context: Pipeline context (kept for future use / compatibility).
             rolling_ic: Realized rolling IC from online signal health.
-                ``None`` (or an unset context value) means IC is unavailable
-                — the stage stays HEALTHY ("not measured"), never a
-                fabricated DECAYING/STALE verdict.
+                ``None`` (or an unset context value) means IC is unavailable.
+            rolling_ic_se: Standard error of ``rolling_ic``, forwarded to the
+                detector so a noisy estimate yields NOT_MEASURED instead of a
+                fabricated decay verdict.
+
+        Returns:
+            DecayStage.  ``NOT_MEASURED`` whenever the IC could not be
+            established — never HEALTHY, which would dress an absent
+            measurement up as a healthy model (P1-3 / P2-3).
         """
         if self._model_decay is None:
-            return DecayStage.HEALTHY
+            return DecayStage.NOT_MEASURED
 
         if rolling_ic is None:
             rolling_ic = getattr(context, "rolling_ic", None)
         if rolling_ic is None:
-            return DecayStage.HEALTHY
+            return ModelDecayDetector.unavailable(
+                "realized rolling IC unavailable (no price data or thin signal history)"
+            ).stage
 
-        status = self._model_decay.check(rolling_ic)
+        status = self._model_decay.check(rolling_ic, rolling_ic_se)
         return status.stage
 
     def _check_strategy_health(self, context: Any) -> StrategyHealth | None:
@@ -425,23 +470,26 @@ class KillSwitchPipeline(BasePipeline):
             pass
         return None
 
-    def _check_online_signal_health(self, context: Any) -> tuple[float, bool]:
+    def _check_online_signal_health(self, context: Any) -> tuple[float, float, bool]:
         """Compute realized rolling IC from online signal history.
 
         Reads the accumulated daily signal snapshots (written by the daily
         pipeline) and computes the 20-day mean rank IC against price data.
 
         Returns:
-            (rolling_ic_20d, available). ``available=False`` means the IC
-            was never computed — no price data in context, or fewer than 5
-            signal days in history.  A 0.0 IC with available=False is a
-            data gap, NOT model decay, and callers must not alarm on it.
+            (rolling_ic_20d, ic_se, available). ``available=False`` means the
+            IC was never computed — no price data in context, too few signal
+            days, or a sample too thin to trust.  A 0.0 IC with
+            available=False is a data gap, NOT model decay, and callers must
+            not alarm on it.  ``ic_se`` is the standard error of the mean IC
+            (0.0 when unavailable) — the kill switch needs it to decide
+            whether a low IC is measurable at all (P1-3).
         """
         self._last_monitored_strategy = ""
         try:
             prices = self._get_price_data(context)
             if not prices:
-                return 0.0, False
+                return 0.0, 0.0, False
 
             from qp.monitoring.online_monitor import OnlineSignalMonitor
             from qp.strategy.registry import StrategyRegistry
@@ -449,25 +497,27 @@ class KillSwitchPipeline(BasePipeline):
             registry = StrategyRegistry()
             candidates = registry.list_strategies()
             if not candidates:
-                return 0.0, False
+                return 0.0, 0.0, False
 
             monitor = OnlineSignalMonitor()
             # First candidate with signal history wins; prefer one whose
             # realized IC is actually non-zero (a 0.0 usually means the
             # signal/price join produced no IC values for that strategy).
-            first_available: tuple[str, float] | None = None
+            first_available: tuple[str, float, float] | None = None
             for sid in candidates:
                 ic = monitor.rolling_ic(sid, prices, window=20)
                 if ic is None:
                     continue
+                sample = getattr(monitor, "last_ic_sample", None) or {}
+                ic_se = float(sample.get("se", 0.0) or 0.0)
                 if first_available is None:
-                    first_available = (sid, float(ic))
+                    first_available = (sid, float(ic), ic_se)
                 if ic != 0.0:
                     self._last_monitored_strategy = sid
-                    return float(ic), True
+                    return float(ic), ic_se, True
             if first_available is not None:
                 self._last_monitored_strategy = first_available[0]
-                return first_available[1], True
+                return first_available[1], first_available[2], True
 
             # No strategy produced a measurable IC.  Say so out loud: a
             # silent 0.0 would be read downstream as "healthy" (the decay
@@ -481,15 +531,16 @@ class KillSwitchPipeline(BasePipeline):
                     "not measurable (thin sample) → model-decay check skipped: {}",
                     sample,
                 )
-            return 0.0, False
+            return 0.0, 0.0, False
         except Exception:
-            return 0.0, False
+            return 0.0, 0.0, False
 
     def _check_kill_switch(
         self,
         context: Any,
         psi: float = 0.0,
         rolling_ic: float = 0.0,
+        rolling_ic_se: float = 0.0,
     ) -> dict[str, Any]:
         """Evaluate all Kill Switch triggers including P0 safety triggers."""
         from qp.monitoring.kill_switch import (
@@ -534,6 +585,8 @@ class KillSwitchPipeline(BasePipeline):
             "rolling_60d_drawdown": getattr(context, "rolling_60d_drawdown", 0.0),
             "psi": psi,
             "rolling_ic": rolling_ic,
+            # P1-3: lets ModelDecayTrigger refuse a verdict it cannot resolve.
+            "rolling_ic_se": rolling_ic_se,
             "training_ic_mean": training_ic,
             # P0 safety metrics
             "weekly_drawdown": getattr(context, "weekly_drawdown", 0.0),

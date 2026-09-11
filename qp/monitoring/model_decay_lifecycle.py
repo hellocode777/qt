@@ -38,6 +38,7 @@ _DECAY_LIFECYCLE_MAP: dict[DecayStage, StrategyLifecycle | None] = {
     DecayStage.WARNING: None,  # No change — monitor only
     DecayStage.DECAYING: StrategyLifecycle.SHADOW_PRODUCTION,  # Downgrade to Shadow
     DecayStage.STALE: StrategyLifecycle.KILL_SWITCH,  # Full stop
+    DecayStage.NOT_MEASURED: None,  # No measurement → no lifecycle action
 }
 
 
@@ -60,7 +61,7 @@ class LifecycleAction:
     """
 
     strategy_id: str = ""
-    decay_stage: DecayStage = DecayStage.HEALTHY
+    decay_stage: DecayStage = DecayStage.NOT_MEASURED
     old_lifecycle: StrategyLifecycle = StrategyLifecycle.PRODUCTION
     new_lifecycle: StrategyLifecycle | None = None
     action: str = "OK"

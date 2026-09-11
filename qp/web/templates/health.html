@@ -214,7 +214,7 @@
     <div class="stat-row" style="margin-top: 12px;">
       <div class="stat-tile">
         <div class="stat-label">模型衰减</div>
-        <div class="stat-value" style="font-size: 16px;">{{ latest_health.model_decay_stage }}</div>
+        <div class="stat-value" style="font-size: 16px;">{{ latest_health.model_decay_label | default("不可测") }}</div>
       </div>
       <div class="stat-tile">
         <div class="stat-label">市场状态</div>

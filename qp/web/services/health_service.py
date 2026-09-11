@@ -13,6 +13,21 @@ from loguru import logger
 from qp.monitoring.system_state import SystemStateManager
 from qp.shared.paths import SYSTEM_HEALTH_LOG
 
+# P2-3: never dress an absent measurement up as a healthy model.  A missing
+# or unknown decay stage must render as "不可测", not "HEALTHY".
+_DECAY_LABELS = {
+    "healthy": "健康",
+    "warning": "关注",
+    "decaying": "衰减",
+    "stale": "失效",
+    "not_measured": "不可测",
+}
+
+
+def decay_stage_label(stage: Any) -> str:
+    """Human label for a model-decay stage (unknown/missing → 不可测)."""
+    return _DECAY_LABELS.get(str(stage or "").strip().lower(), "不可测")
+
 
 class HealthService:
     """Read-only service for system health and state.
@@ -150,7 +165,8 @@ class HealthService:
             "regime": row.get("regime", "unknown"),
             "kill_switch_level": kill_level,
             "kill_switch_triggered": kill_triggered,
-            "model_decay_stage": row.get("model_decay_stage", "HEALTHY"),
+            "model_decay_stage": row.get("model_decay_stage") or "NOT_MEASURED",
+            "model_decay_label": decay_stage_label(row.get("model_decay_stage")),
             "strategy_health_score": health_score,
             "health_score_pct": int(health_score),
             "action": action,

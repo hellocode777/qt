@@ -16,6 +16,8 @@ from typing import Any
 
 import numpy as np
 
+from qp.monitoring.model_decay import ic_below_boundary
+
 
 class KillSwitchLevel(StrEnum):
     """Kill switch escalation levels per docs/11_12.md design.
@@ -262,43 +264,29 @@ class PSITrigger(_BaseTrigger):
         expected: np.ndarray,
         actual: np.ndarray,
         bins: int = 10,
-        epsilon: float = 1e-6,
+        epsilon: float | None = None,
     ) -> float:
         """Compute PSI between expected and actual distributions.
+
+        Delegates to :meth:`qp.monitoring.drift.DriftMonitor.compute_psi` so
+        the project keeps ONE implementation.  The copy that used to live here
+        hard-coded ``epsilon=1e-6`` against proportions on a 0..1 scale, which
+        made every empty bin contribute ≈ +1.15 and turned a 10-sample
+        comparison into a fake PSI of 15.5 (P2-2, 2026-09-11 incident).
 
         Args:
             expected: Reference (training) distribution.
             actual: Recent (production) distribution.
             bins: Number of bins for discretization.
-            epsilon: Small value to avoid log(0).
+            epsilon: Floor for zero proportions; ``None`` uses 1/(2n)
+                smoothing per sample.
 
         Returns:
             PSI value (0 = identical distributions, > 0.25 = significant shift).
         """
-        # Combine to get bin edges
-        combined = np.concatenate([expected, actual])
-        bin_edges = np.percentile(combined, np.linspace(0, 100, bins + 1))
-        bin_edges = np.unique(bin_edges)  # Dedup edges
+        from qp.monitoring.drift import DriftMonitor
 
-        if len(bin_edges) < 2:
-            return 0.0
-
-        # Count samples per bin
-        exp_counts, _ = np.histogram(expected, bins=bin_edges)
-        act_counts, _ = np.histogram(actual, bins=bin_edges)
-
-        # Normalize to proportions
-        exp_pct = exp_counts / len(expected)
-        act_pct = act_counts / len(actual)
-
-        # PSI formula
-        psi = 0.0
-        for e, a in zip(exp_pct, act_pct, strict=True):
-            e = max(e, epsilon)
-            a = max(a, epsilon)
-            psi += (a - e) * np.log(a / e)
-
-        return float(psi)
+        return DriftMonitor.compute_psi(expected, actual, bins=bins, epsilon=epsilon)
 
 
 class ModelDecayTrigger(_BaseTrigger):
@@ -347,6 +335,10 @@ class ModelDecayTrigger(_BaseTrigger):
         """
         rolling_ic = abs(float(metrics.get("rolling_ic", 0.0)))
         training_ic = abs(float(metrics.get("training_ic_mean", self._train_ic)))
+        # P1-3: a decay verdict needs the estimate to be able to resolve the
+        # threshold — an IC of 0.0023 with SE 0.16 is noise, not decay.
+        ic_se_raw = metrics.get("rolling_ic_se")
+        ic_se = float(ic_se_raw) if ic_se_raw else None
 
         # No real IC data → don't fire (prevent false positive on default 0.0)
         if rolling_ic == 0.0:
@@ -367,7 +359,17 @@ class ModelDecayTrigger(_BaseTrigger):
         ratio = rolling_ic / training_ic if training_ic > 0 else 0.0
 
         # Determine if fired
-        if rolling_ic < self._absolute_min_ic:
+        if rolling_ic < self._absolute_min_ic and not ic_below_boundary(
+            rolling_ic, ic_se, self._absolute_min_ic
+        ):
+            fired = False  # inconclusive, not a decay verdict
+            level = "NOT_MEASURED"
+            kill_level = KillSwitchLevel.NORMAL
+            message = (
+                f"Model IC {rolling_ic:.4f} < floor {self._absolute_min_ic} but "
+                f"SE {ic_se:.4f} cannot resolve it — no decay verdict."
+            )
+        elif rolling_ic < self._absolute_min_ic:
             fired = True
             level = "STALE"
             kill_level = KillSwitchLevel.HALT_BUY
@@ -375,7 +377,9 @@ class ModelDecayTrigger(_BaseTrigger):
                 f"Model STALE: rolling IC {rolling_ic:.4f} < absolute minimum "
                 f"{self._absolute_min_ic}. Retire model, retrain required."
             )
-        elif ratio < self._decay_ratio:
+        elif ratio < self._decay_ratio and ic_below_boundary(
+            rolling_ic, ic_se, self._decay_ratio * training_ic
+        ):
             fired = True
             level = "DECAYING"
             kill_level = KillSwitchLevel.WARNING

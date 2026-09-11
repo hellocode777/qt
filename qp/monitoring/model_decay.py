@@ -28,7 +28,29 @@ class DecayStage(StrEnum):
     HEALTHY = "healthy"  # IC stable, no degradation
     WARNING = "warning"  # OOS IC declining but still above decay threshold
     DECAYING = "decaying"  # OOS IC < 30% of training IC
-    STALE = "stale"  # IC below minimum acceptable level
+    STALE = "stale"  # IC below minimum acceptable level, measured confidently
+    NOT_MEASURED = "not_measured"  # 无法测量：输入缺失或样本不足以分辨阈值
+
+
+# P1-3 (docs/tracking/rolling_ic_false_stale.md §3): an absolute IC floor is
+# only meaningful when the estimate can resolve it.  A rolling IC of 0.0023
+# computed from 5 stocks/day has SE ~ 0.16 — orders of magnitude wider than the
+# 0.005 floor — so "below the floor" was noise, not decay.  A positive verdict
+# requires the upper confidence bound to stay below the boundary.
+DEFAULT_DECAY_CONFIDENCE_Z = 1.0
+
+
+def ic_below_boundary(
+    abs_ic: float, se: float | None, boundary: float, z: float = DEFAULT_DECAY_CONFIDENCE_Z
+) -> bool:
+    """True only when ``abs_ic`` is *confidently* below ``boundary``.
+
+    ``se=None`` means "no error estimate available" and preserves the legacy
+    point-estimate behaviour; callers that can compute an SE should pass it.
+    """
+    if se is None or se <= 0:
+        return abs_ic < boundary
+    return (abs_ic + z * se) < boundary
 
 
 @dataclass
@@ -67,7 +89,9 @@ class ModelDecayDetector:
       - IC ratio < 0.30 → DECAYING (downgraded to Shadow)
       - IC ratio < 0.50 → WARNING (monitor closely)
       - IC ratio ≥ 0.50 → HEALTHY
-      - Rolling IC < absolute_min_ic → STALE (retirement candidate)
+      - Rolling IC < absolute_min_ic → STALE (retirement candidate), but only
+        when the estimate is confidently below the floor; otherwise the stage
+        is NOT_MEASURED (P1-3)
 
     Model version binding (#6 fix): training_ic_mean is tied to a specific
     model_version + feature_version + universe_version. Comparing rolling IC
@@ -94,6 +118,7 @@ class ModelDecayDetector:
         model_version: str = "",
         feature_version: str = "",
         universe_version: str = "",
+        decay_confidence_z: float = DEFAULT_DECAY_CONFIDENCE_Z,
     ) -> None:
         self._train_ic = abs(training_ic_mean)
         self._train_ic_std = training_ic_std
@@ -104,31 +129,64 @@ class ModelDecayDetector:
         self._model_version = model_version
         self._feature_version = feature_version
         self._universe_version = universe_version
+        self._confidence_z = decay_confidence_z
 
     # ------------------------------------------------------------------
     # Public API
+
+    @staticmethod
+    def unavailable(reason: str) -> DecayStatus:
+        """Status for "cannot measure" — never a fabricated HEALTHY.
+
+        Callers must use this (not ``DecayStatus()``) when the realized IC is
+        missing or too noisy to judge; the default stage is HEALTHY, which
+        would dress an absent measurement up as a healthy model.
+        """
+        return DecayStatus(
+            stage=DecayStage.NOT_MEASURED,
+            ic_ratio=1.0,
+            recommended_action=f"NOT_MEASURED: {reason}",
+            summary=f"Model NOT_MEASURED: {reason}",
+        )
+
     # ------------------------------------------------------------------
 
-    def check(self, rolling_ic: float) -> DecayStatus:
+    def check(self, rolling_ic: float, rolling_ic_se: float | None = None) -> DecayStatus:
         """Check model decay for a single rolling IC value.
 
         Args:
             rolling_ic: Current rolling-window OOS IC (e.g. 20-day).
+            rolling_ic_se: Standard error of ``rolling_ic``.  When given, a
+                STALE / DECAYING verdict additionally requires the estimate to
+                be confidently below its boundary (see :func:`ic_below_boundary`);
+                an inconclusive estimate yields NOT_MEASURED instead of a
+                fabricated decay verdict.  ``None`` keeps the legacy behaviour.
 
         Returns:
             DecayStatus with stage and recommended action.
         """
         abs_ic = abs(rolling_ic)
         ratio = abs_ic / self._train_ic if self._train_ic > 0 else 0.0
+        se = rolling_ic_se
 
         if abs_ic < self._absolute_min_ic:
-            stage = DecayStage.STALE
-            action = (
-                "STALE: Rolling IC below absolute minimum "
-                f"({abs_ic:.4f} < {self._absolute_min_ic}). "
-                "Retire model, retrain with new data."
-            )
-        elif ratio < self._decay_ratio:
+            if ic_below_boundary(abs_ic, se, self._absolute_min_ic, self._confidence_z):
+                stage = DecayStage.STALE
+                action = (
+                    "STALE: Rolling IC below absolute minimum "
+                    f"({abs_ic:.4f} < {self._absolute_min_ic}). "
+                    "Retire model, retrain with new data."
+                )
+            else:
+                stage = DecayStage.NOT_MEASURED
+                action = (
+                    f"NOT_MEASURED: rolling IC {abs_ic:.4f} is below the floor "
+                    f"{self._absolute_min_ic} but its standard error "
+                    f"({se:.4f}) cannot resolve it — no decay verdict."
+                )
+        elif ratio < self._decay_ratio and ic_below_boundary(
+            abs_ic, se, self._decay_ratio * self._train_ic, self._confidence_z
+        ):
             stage = DecayStage.DECAYING
             action = (
                 f"DECAYING: OOS IC {abs_ic:.4f} = {ratio:.0%} of training IC "

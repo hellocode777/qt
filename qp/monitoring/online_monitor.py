@@ -405,11 +405,15 @@ class OnlineSignalMonitor:
         ics, pairs = self._realized_ic_detail(strategy_id, price_data, window=window)
         median_pairs = float(np.median(pairs)) if pairs else 0.0
         measurable = len(ics) >= MIN_IC_CONTRIB_DAYS and median_pairs >= MIN_IC_PAIRS_PER_DAY
+        # P1-3: the point estimate alone cannot support a decay verdict — the
+        # kill switch needs the sampling error of the mean as well.
+        ic_se = float(np.std(ics, ddof=1) / np.sqrt(len(ics))) if len(ics) >= 2 else 0.0
         self.last_ic_sample = {
             "reason": "measured" if measurable else "insufficient_sample",
             "window": window,
             "contrib_days": len(ics),
             "median_pairs_per_day": median_pairs,
+            "se": ic_se,
             "min_pairs_required": MIN_IC_PAIRS_PER_DAY,
             "min_days_required": MIN_IC_CONTRIB_DAYS,
         }

@@ -2,7 +2,7 @@
 <div class="card" x-data="{ score: {{ health.strategy_health_score | default(100) | int }} }">
   <div class="card-header">
     <span>💚 Strategy Health</span>
-    <span class="text-xs text-gray-500">{{ health.model_decay_stage | default("HEALTHY") }}</span>
+    <span class="text-xs text-gray-500">{{ health.model_decay_label | default("不可测") }}</span>
   </div>
 
   <div class="card-body space-y-4">
@@ -41,7 +41,7 @@
       </div>
       <div>
         <span class="text-gray-500">Model Decay</span>
-        <div class="font-mono text-gray-300">{{ health.model_decay_stage | default("HEALTHY") }}</div>
+        <div class="font-mono text-gray-300">{{ health.model_decay_label | default("不可测") }}</div>
       </div>
       <div>
         <span class="text-gray-500">Kill Switch</span>

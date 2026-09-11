@@ -3067,3 +3067,142 @@ class TestSystemStateFailSafe:
         )
 
         assert mgr.current().to_state is ss.SystemState.PAUSED
+
+
+class TestDecayVerdictResolvability:
+    """P1-3: a low IC is not decay unless the estimate can resolve the floor.
+
+    The 2026-09-10 incident: rolling IC 0.0023 measured from ~5 stocks/day
+    (SE ~ 0.16) tripped the 0.005 absolute floor and paused the platform while
+    the full-cross-section IC was +0.077.
+    docs/tracking/rolling_ic_false_stale.md §3
+    """
+
+    def test_noisy_low_ic_is_not_stale(self) -> None:
+        from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
+
+        detector = ModelDecayDetector(training_ic_mean=0.0773)
+        status = detector.check(0.0023, rolling_ic_se=0.16)
+
+        assert status.stage is DecayStage.NOT_MEASURED
+        assert not status.needs_attention
+        assert "NOT_MEASURED" in status.recommended_action
+
+    def test_confident_low_ic_is_still_stale(self) -> None:
+        from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
+
+        detector = ModelDecayDetector(training_ic_mean=0.0773)
+        status = detector.check(0.0023, rolling_ic_se=0.0005)
+
+        assert status.stage is DecayStage.STALE
+        assert status.needs_attention
+
+    def test_no_se_keeps_legacy_point_estimate_behaviour(self) -> None:
+        from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
+
+        detector = ModelDecayDetector(training_ic_mean=0.0773)
+        assert detector.check(0.0023).stage is DecayStage.STALE
+
+    def test_unavailable_is_not_reported_as_healthy(self) -> None:
+        from qp.monitoring.model_decay import DecayStage, ModelDecayDetector
+
+        status = ModelDecayDetector.unavailable("thin history")
+
+        assert status.stage is DecayStage.NOT_MEASURED
+        assert not status.needs_attention
+
+    def test_trigger_refuses_unresolvable_verdict(self) -> None:
+        from qp.monitoring.kill_switch import KillSwitchLevel, ModelDecayTrigger
+
+        trigger = ModelDecayTrigger(training_ic_mean=0.0773)
+        result = trigger.evaluate({"rolling_ic": 0.0023, "rolling_ic_se": 0.16})
+
+        assert result["fired"] is False
+        assert result["level"] == "NOT_MEASURED"
+        assert result["kill_level"] == KillSwitchLevel.NORMAL
+        assert "cannot resolve" in result["message"]
+
+    def test_trigger_still_fires_on_resolvable_stale(self) -> None:
+        from qp.monitoring.kill_switch import KillSwitchLevel, ModelDecayTrigger
+
+        trigger = ModelDecayTrigger(training_ic_mean=0.0773)
+        result = trigger.evaluate({"rolling_ic": 0.0023, "rolling_ic_se": 0.0005})
+
+        assert result["fired"] is True
+        assert result["level"] == "STALE"
+        assert result["kill_level"] == KillSwitchLevel.HALT_BUY
+
+    def test_pipeline_decay_stage_is_not_measured_when_ic_missing(self) -> None:
+        """P2-3: absent IC must not surface as HEALTHY."""
+        from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline
+
+        stage = KillSwitchPipeline()._check_model_decay(context=None, rolling_ic=None)
+
+        from qp.monitoring.model_decay import DecayStage
+
+        assert stage is DecayStage.NOT_MEASURED
+
+    def test_web_label_never_fabricates_healthy(self) -> None:
+        from qp.web.services.health_service import decay_stage_label
+
+        assert decay_stage_label(None) == "不可测"
+        assert decay_stage_label("") == "不可测"
+        assert decay_stage_label("something_new") == "不可测"
+        assert decay_stage_label("not_measured") == "不可测"
+        assert decay_stage_label("STALE") == "失效"
+        assert decay_stage_label("healthy") == "健康"
+
+
+class TestPSIArtifacts:
+    """P2-2: PSI must not be manufactured from a sample that cannot support it.
+
+    The 2026-09-11 incident: signal history held 3-18 scores per day, and the
+    epsilon floor (1e-6 against proportions on a 0..1 scale) made every empty
+    bin contribute ~ +1.15, so PSI read 15.529 (threshold 0.25).
+    docs/tracking/rolling_ic_false_stale.md §3.2
+    """
+
+    @staticmethod
+    def _day_scores(n: int, offset: float = 0.0):
+        import numpy as np
+
+        return np.linspace(-1.0, 1.0, n) + offset
+
+    def test_tiny_sample_psi_stays_bounded(self) -> None:
+        from qp.monitoring.drift import DriftMonitor
+
+        # 10 scores per side, actual shifted by half a step -> a couple of
+        # empty bins.  The old 1e-6 epsilon produced PSI > 10 here.
+        psi = DriftMonitor.compute_psi(self._day_scores(10), self._day_scores(10, 0.1))
+
+        assert psi < 1.0, f"PSI exploded on a thin sample: {psi}"
+
+    def test_identical_distributions_stay_near_zero(self) -> None:
+        from qp.monitoring.drift import DriftMonitor
+
+        scores = self._day_scores(200)
+        assert DriftMonitor.compute_psi(scores, scores) < 0.01
+
+    def test_real_drift_is_still_detected(self) -> None:
+        from qp.monitoring.drift import DriftMonitor
+
+        psi = DriftMonitor.compute_psi(self._day_scores(300), self._day_scores(300, 0.8))
+
+        assert psi > 0.25, f"real drift missed: {psi}"
+
+    def test_sample_sufficiency_gate(self) -> None:
+        from qp.monitoring.drift import psi_sample_is_sufficient
+
+        assert not psi_sample_is_sufficient(18, 18)  # 10 bins x 5 needed
+        assert not psi_sample_is_sufficient(50, 20)
+        assert psi_sample_is_sufficient(500, 500)
+
+    def test_trigger_psi_delegates_to_single_implementation(self) -> None:
+        from qp.monitoring.drift import DriftMonitor
+        from qp.monitoring.kill_switch import PSITrigger
+
+        expected, actual = self._day_scores(300), self._day_scores(300, 0.5)
+
+        assert PSITrigger.compute_psi(expected, actual) == DriftMonitor.compute_psi(
+            expected, actual
+        )

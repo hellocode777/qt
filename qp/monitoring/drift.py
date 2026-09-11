@@ -34,6 +34,23 @@ class DriftSeverity(StrEnum):
     SIGNIFICANT = "significant"  # PSI ≥ 0.25 (threshold)
 
 
+# PSI is a 10-bin histogram comparison: with fewer than ~5 observations per
+# bin the estimate is dominated by binning noise (the 2026-09-11 incident had
+# 3–18 scores per day).  Callers must gate on this instead of trusting the
+# number — see docs/tracking/rolling_ic_false_stale.md §3.2.
+PSI_MIN_PER_BIN = 5
+
+
+def psi_sample_is_sufficient(
+    n_expected: int,
+    n_actual: int,
+    bins: int = 10,
+    min_per_bin: int = PSI_MIN_PER_BIN,
+) -> bool:
+    """True when both samples can support a PSI estimate over ``bins`` bins."""
+    return min(n_expected, n_actual) >= bins * min_per_bin
+
+
 @dataclass
 class DriftResult:
     """Result of a drift check on a single feature.
@@ -104,7 +121,7 @@ class DriftMonitor:
         expected: np.ndarray,
         actual: np.ndarray,
         bins: int = 10,
-        epsilon: float = 1e-6,
+        epsilon: float | None = None,
     ) -> float:
         """Compute Population Stability Index.
 
@@ -114,7 +131,15 @@ class DriftMonitor:
             expected: Reference (training) distribution values.
             actual: Current (production) distribution values.
             bins: Number of bins for discretization.
-            epsilon: Small value to avoid log(0).
+            epsilon: Floor applied to zero proportions before the log.
+                ``None`` (default) uses the conventional ``1/(2n)`` smoothing
+                of each sample.  Do NOT pass a tiny constant here: proportions
+                are on a 0..1 scale, so an epsilon of 1e-6 makes every empty
+                bin contribute ≈ +1.15, which turned a 10-sample comparison
+                into a fake PSI of 15.5 (2026-09-11 incident, see
+                docs/tracking/rolling_ic_false_stale.md §3.2).  Even with the
+                default smoothing, callers must check sample sufficiency —
+                see :func:`psi_sample_is_sufficient`.
 
         Returns:
             PSI value (0 = identical, > 0.25 = significant drift).
@@ -145,11 +170,15 @@ class DriftMonitor:
         exp_pct = exp_counts / len(expected_arr)
         act_pct = act_counts / len(actual_arr)
 
-        # PSI formula
+        # PSI formula.  Floor zero proportions at 1/(2n) of the *respective*
+        # sample (the conventional smoothing) unless the caller asked for a
+        # specific epsilon.
+        eps_exp = epsilon if epsilon is not None else 1.0 / (2.0 * len(expected_arr))
+        eps_act = epsilon if epsilon is not None else 1.0 / (2.0 * len(actual_arr))
         psi = 0.0
         for e, a in zip(exp_pct, act_pct, strict=True):
-            e = max(e, epsilon)
-            a = max(a, epsilon)
+            e = max(e, eps_exp)
+            a = max(a, eps_act)
             psi += (a - e) * np.log(a / e)
 
         return float(psi)
