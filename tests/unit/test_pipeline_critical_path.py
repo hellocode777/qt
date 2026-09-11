@@ -30,11 +30,20 @@ class TestDailyPipelineCriticalPath:
         p = DailyPipeline()
         assert p.name == "daily"
 
-    def test_system_state_paused_blocks_execution(self) -> None:
-        """When SystemState is PAUSED, DailyPipeline should skip strategies."""
+    def test_system_state_paused_runs_record_only(self) -> None:
+        """P1-2: a blocked state must NOT abort the run.
+
+        Step 0 used to return immediately, which also skipped Step 10.5 — the
+        only writer of the online signal history the kill switch measures — so
+        a paused platform could never be revised (deadlock, see
+        docs/tracking/rolling_ic_false_stale.md §4).  Blocked now means
+        "record only": the recording chain runs, no decisions are produced.
+        """
         from qp.monitoring.system_state import SystemState, SystemStateManager
         from qp.pipeline.daily_pipeline import DailyPipeline
         from qp.platform.pipeline.context import PipelineContext
+        from qp.platform.pipeline.result import PipelineResult
+        from qp.shared.types import PipelineStatus
 
         with tempfile.TemporaryDirectory() as tmpdir:
             mgr = SystemStateManager(base_dir=tmpdir)
@@ -45,16 +54,23 @@ class TestDailyPipelineCriticalPath:
                 parameters={"capital": 500000, "top_n": 5, "allocator": "equal_weight"},
             )
 
+            # DataPipeline is the first step after the state check: reaching it
+            # proves the run continued past Step 0.
+            sentinel = PipelineResult(status=PipelineStatus.FAILED)
+            sentinel.errors = ["RECORDING_CHAIN_ENTERED"]
+
             pipeline = DailyPipeline()
-            with patch(
-                "qp.monitoring.system_state.SystemStateManager",
-                return_value=mgr,
+            with (
+                patch("qp.monitoring.system_state.SystemStateManager", return_value=mgr),
+                patch("qp.pipeline.daily_pipeline.DataPipeline") as data_cls,
             ):
+                data_cls.return_value.run.return_value = sentinel
                 result = pipeline.run(ctx)
 
-            assert result.status.value == "success"
+            assert data_cls.return_value.run.called, "state check must not abort the run"
+            assert "RECORDING_CHAIN_ENTERED" in result.errors
             assert result.metadata.get("system_state") == "PAUSED"
-            assert "skip_reason" in result.metadata
+            assert result.metadata.get("record_only") is True
             assert "PAUSED" in result.metadata["skip_reason"]
 
     def test_system_state_normal_allows_execution_fails_on_missing_data(self) -> None:

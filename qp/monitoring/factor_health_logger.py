@@ -78,8 +78,9 @@ class FactorHealthLogger:
         latest = logger.load_all_latest()
     """
 
-    def __init__(self, base_dir: str | Path = DEFAULT_FACTOR_HEALTH_DIR) -> None:
-        self._base = Path(base_dir)
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        # Resolved at call time so the monitoring dir can be redirected in tests.
+        self._base = Path(base_dir if base_dir is not None else DEFAULT_FACTOR_HEALTH_DIR)
         self._filepath = self._base / FACTOR_HEALTH_FILE
 
     # ------------------------------------------------------------------

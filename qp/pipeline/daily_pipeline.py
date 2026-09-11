@@ -245,6 +245,14 @@ class DailyPipeline(BasePipeline):
             # ================================================================
             # Step 0: System state check (#8 fix)
             # ================================================================
+            # P1-2: a blocked state no longer aborts the run.  Aborting used to
+            # also skip Step 10.5 — the only writer of the online signal
+            # history that the kill switch measures — so the metrics froze and
+            # a paused platform could never be revised (deadlock, see
+            # docs/tracking/rolling_ic_false_stale.md §4).
+            # Blocked now means "record only": the data / factor / scoring /
+            # signal-history chain runs, no orders or DecisionPackage are made.
+            record_only = False
             try:
                 from qp.monitoring.system_state import SystemStateManager
 
@@ -255,16 +263,18 @@ class DailyPipeline(BasePipeline):
                 result.metadata["system_state_reason"] = current_state.reason
 
                 if not current_state.to_state.can_open_positions():
+                    record_only = True
+                    result.metadata["record_only"] = True
+                    result.metadata["skip_reason"] = (
+                        f"System state {current_state.to_state.name}: {current_state.reason}"
+                        " (record-only: 记录链路照常推进，不生成决策包)"
+                    )
                     logger.warning(
-                        "⛔ 系统状态 {} — 跳过策略执行 / System {} — skipping strategies",
+                        "⛔ 系统状态 {} — 仅运行记录链路（数据/因子/打分/信号历史），"
+                        "不生成决策包 / System {} — record-only run, no decisions",
                         current_state.to_state.label(),
                         current_state.to_state.name,
                     )
-                    result.status = PipelineStatus.SUCCESS
-                    result.metadata["skip_reason"] = (
-                        f"System state {current_state.to_state.name}: {current_state.reason}"
-                    )
-                    return result
             except Exception:
                 pass  # State check is advisory — don't block if unavailable
 
@@ -876,6 +886,21 @@ class DailyPipeline(BasePipeline):
                         validation_results[sid]["online_health"] = health
             except Exception as exc:
                 logger.warning("Online monitor skipped: {}", exc)
+
+            # ================================================================
+            # P1-2: record-only runs stop here.  Everything the monitoring
+            # layer measures (data, factors, scores, online signal history)
+            # has been refreshed, but no orders / DecisionPackage are produced
+            # while the system state blocks new positions.
+            # ================================================================
+            if record_only:
+                result.status = PipelineStatus.SUCCESS
+                result.metadata["record_only_completed"] = True
+                logger.info(
+                    "记录链路完成（系统状态 {}）→ 跳过成本估算/仓位分配/退出引擎/决策包",
+                    result.metadata.get("system_state", "UNKNOWN"),
+                )
+                return result
 
             # ================================================================
             # Step 11: Cost estimation

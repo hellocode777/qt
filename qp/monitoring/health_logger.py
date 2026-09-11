@@ -15,7 +15,7 @@ Usage:
         regime="TREND_UP",
         kill_switch_level="NORMAL",
         kill_switch_triggered=False,
-        model_decay_stage="HEALTHY",
+        model_decay_stage="NOT_MEASURED",
         strategy_health_score=92.0,
         action="OK",
         alerts=[],
@@ -68,7 +68,7 @@ class HealthRecord:
         regime: Market regime classification.
         kill_switch_level: KillSwitchLevel (NORMAL/WARNING/HALT_BUY/FULL_STOP).
         kill_switch_triggered: Whether any trigger fired.
-        model_decay_stage: DecayStage (HEALTHY/WARNING/DECAYING/STALE).
+        model_decay_stage: DecayStage (HEALTHY/WARNING/DECAYING/STALE/NOT_MEASURED).
         strategy_health_score: 0-100 health score.
         action: Recommended MonitorAction.
         n_alerts: Number of active alerts.
@@ -84,7 +84,7 @@ class HealthRecord:
     regime: str = "UNKNOWN"
     kill_switch_level: str = "NORMAL"
     kill_switch_triggered: bool = False
-    model_decay_stage: str = "HEALTHY"
+    model_decay_stage: str = "NOT_MEASURED"
     strategy_health_score: float = 100.0
     action: str = "OK"
     n_alerts: int = 0
@@ -122,8 +122,9 @@ class SystemHealthLogger:
         recent = logger.get_latest()
     """
 
-    def __init__(self, base_dir: str | Path = DEFAULT_HEALTH_LOG_DIR) -> None:
-        self._base = Path(base_dir)
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        # Resolved at call time so the monitoring dir can be redirected in tests.
+        self._base = Path(base_dir if base_dir is not None else DEFAULT_HEALTH_LOG_DIR)
         self._filepath = self._base / HEALTH_LOG_FILE
 
     # ------------------------------------------------------------------
@@ -149,7 +150,7 @@ class SystemHealthLogger:
             regime=str(kwargs.get("regime", "UNKNOWN")),
             kill_switch_level=str(kwargs.get("kill_switch_level", "NORMAL")),
             kill_switch_triggered=bool(kwargs.get("kill_switch_triggered", False)),
-            model_decay_stage=str(kwargs.get("model_decay_stage", "HEALTHY")),
+            model_decay_stage=str(kwargs.get("model_decay_stage", "NOT_MEASURED")),
             strategy_health_score=float(kwargs.get("strategy_health_score", 100.0)),
             action=str(kwargs.get("action", "OK")),
             n_alerts=int(kwargs.get("n_alerts", 0)),
@@ -189,7 +190,7 @@ class SystemHealthLogger:
             regime=report.regime.regime.value if report.regime else "UNKNOWN",
             kill_switch_level=_get_ks_level(report),
             kill_switch_triggered=getattr(report, "kill_switch_triggered", False),
-            model_decay_stage=getattr(report, "model_decay_stage", "HEALTHY"),
+            model_decay_stage=getattr(report, "model_decay_stage", "NOT_MEASURED"),
             strategy_health_score=(
                 report.strategy_health.health_score if report.strategy_health else 100.0
             ),

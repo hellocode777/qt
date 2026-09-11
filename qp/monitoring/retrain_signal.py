@@ -152,8 +152,9 @@ class RetrainSignalLogger:
         logger.log(signal)
     """
 
-    def __init__(self, base_dir: str | Path = DEFAULT_RETRAIN_DIR) -> None:
-        self._base = Path(base_dir)
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        # Resolved at call time so the monitoring dir can be redirected in tests.
+        self._base = Path(base_dir if base_dir is not None else DEFAULT_RETRAIN_DIR)
         self._filepath = self._base / RETRAIN_LOG_FILE
 
     def log(self, signal: RetrainSignal) -> RetrainSignal:
@@ -202,7 +203,7 @@ def evaluate_retrain_need(
     rolling_ic: float = 0.0,
     training_ic: float = 0.035,
     current_regime: str = "UNKNOWN",
-    model_decay_stage: str = "HEALTHY",
+    model_decay_stage: str = "NOT_MEASURED",
 ) -> RetrainSignal:
     """Evaluate whether a strategy needs retraining or weight adjustment.
 
@@ -219,7 +220,8 @@ def evaluate_retrain_need(
         rolling_ic: Current rolling IC.
         training_ic: Reference training IC.
         current_regime: Market regime.
-        model_decay_stage: HEALTHY / WARNING / DECAYING / STALE.
+        model_decay_stage: HEALTHY / WARNING / DECAYING / STALE / NOT_MEASURED.
+            Defaults to NOT_MEASURED — an unset stage is not evidence of health.
 
     Returns:
         RetrainSignal with recommended action.
@@ -367,7 +369,7 @@ _ACTION_LOOKBACK_DAYS = 10
 def load_weight_scales(
     strategy_ids: list[str] | None = None,
     days: int = _ACTION_LOOKBACK_DAYS,
-    base_dir: str | Path = DEFAULT_RETRAIN_DIR,
+    base_dir: str | Path | None = None,
 ) -> dict[str, float]:
     """Load the latest retrain signal per strategy and map it to a weight scale.
 

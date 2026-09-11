@@ -113,8 +113,10 @@ class SystemStateManager:
     Thread-safe: writes are atomic (write new file, rename).
     """
 
-    def __init__(self, base_dir: str | Path = DEFAULT_STATE_DIR) -> None:
-        self._base = Path(base_dir)
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        # Resolved at call time (not import time) so the monitoring dir can be
+        # redirected — tests must never write the live state machine.
+        self._base = Path(base_dir if base_dir is not None else DEFAULT_STATE_DIR)
         self._base.mkdir(parents=True, exist_ok=True)
         self._state_file = self._base / STATE_FILE
         self._log_file = self._base / STATE_LOG_FILE
