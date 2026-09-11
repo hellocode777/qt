@@ -2606,3 +2606,100 @@ class TestFundamentalExitDetector:
         assert "ROE" in detail
         assert "营收增速" in detail
         assert "FUNDAMENTAL_DETERIORATION" in exits[0].reasons
+
+
+class TestRollingICDataSufficiency:
+    """Regression for the 2026-09-10 false-STALE incident.
+
+    ``online_signal_history`` held only 3-18 signals per day, so
+    ``rolling_ic()`` averaged a handful of 5-name days.  The resulting
+    number (0.0023) tripped ModelDecayTrigger's 0.005 absolute floor,
+    paused the whole platform (DailyPipeline step 0 skip) and deadlocked
+    the daily pipeline that feeds the very history being measured —
+    while the full-cross-section IC over the same days was +0.077 (t=+5.3).
+
+    A thin sample must therefore report "not measured" (None), never a
+    noise-dominated number.
+    """
+
+    @staticmethod
+    def _write_history(path, dates, symbols, strategy_id="s1"):
+        import polars as pl
+
+        rows = [
+            {
+                "date": d,
+                "strategy_id": strategy_id,
+                "symbol": s,
+                "raw_score": float(i),
+                "rank": i + 1,
+            }
+            for d in dates
+            for i, s in enumerate(symbols)
+        ]
+        pl.DataFrame(rows).write_parquet(str(path))
+
+    @staticmethod
+    def _prices(symbols, dates):
+        import polars as pl
+
+        return {
+            s: pl.DataFrame(
+                {
+                    "date": dates,
+                    "close": [10.0 + 0.1 * j * (i + 1) for i in range(len(dates))],
+                }
+            )
+            for j, s in enumerate(symbols)
+        }
+
+    def test_thin_sample_returns_none(self, tmp_path, monkeypatch):
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        dates = [f"2026-08-{d:02d}" for d in range(3, 20)]  # 17 signal days
+        symbols = [f"00000{i}" for i in range(5)]  # 5 names/day, as in prod
+        hist = tmp_path / "online_signal_history.parquet"
+        self._write_history(hist, dates, symbols)
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        value = monitor.rolling_ic("s1", self._prices(symbols, dates), window=20)
+
+        assert value is None, "thin sample must not be reported as a measurement"
+        assert monitor.last_ic_sample is not None
+        assert monitor.last_ic_sample["contrib_days"] == 16
+        assert monitor.last_ic_sample["median_pairs_per_day"] == 5
+
+    def test_wide_sample_returns_value(self, tmp_path, monkeypatch):
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        dates = [f"2026-08-{d:02d}" for d in range(3, 15)]  # 12 signal days
+        symbols = [f"{i:06d}" for i in range(300)]
+        hist = tmp_path / "online_signal_history.parquet"
+        self._write_history(hist, dates, symbols)
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        value = monitor.rolling_ic("s1", self._prices(symbols, dates), window=20)
+
+        assert value is not None
+        # Scores are constructed to agree with next-day returns → IC ≈ +1.
+        assert value > 0.9
+
+    def test_history_too_short_is_reported_as_such(self, tmp_path, monkeypatch):
+        from qp.monitoring import online_monitor
+        from qp.monitoring.online_monitor import OnlineSignalMonitor
+
+        dates = ["2026-08-03", "2026-08-04"]
+        symbols = ["000001", "000002", "000003", "000004", "000005", "000006"]
+        hist = tmp_path / "online_signal_history.parquet"
+        self._write_history(hist, dates, symbols)
+        monkeypatch.setattr(online_monitor, "_ONLINE_SIGNAL_PARQUET", hist)
+
+        monitor = OnlineSignalMonitor()
+        assert monitor.rolling_ic("s1", self._prices(symbols, dates)) is None
+        assert monitor.last_ic_sample is not None
+        assert monitor.last_ic_sample["reason"] == "insufficient_sample"
+        assert monitor.last_ic_sample["contrib_days"] == 0

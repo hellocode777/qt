@@ -40,6 +40,24 @@ ROLLING_IC_HALT = 0.01  # 60-day IC below this → HALT
 CONCENTRATION_WARN = 0.60  # Top-3 symbol weight > 60% → WARNING
 SIGNAL_DISPERSION_MIN = 0.001  # Score std too low → signals too uniform
 
+# ── Data-sufficiency gates for the realized rolling IC ──────────────
+# The realized IC is a mean of per-signal-day Spearman correlations.  Its
+# standard error is driven by the number of symbols ranked *per day*, not
+# by the number of days: n=5 names/day gives a single-day IC SE of ≈0.45,
+# so a 20-day mean of it carries SE ≈0.16 — 30x coarser than the 0.005
+# absolute floor used by ModelDecayTrigger.  Judging decay on such a
+# sample produces false STALE verdicts (observed 2026-09-10: rolling IC
+# 0.0023 while the full-cross-section IC was +0.077, t=+5.3).
+#
+# Therefore: refuse to report a value at all when the sample cannot
+# support any verdict.  300 names/day → single-day SE ≈0.058; with
+# ≥10 contributing days the mean's SE is ≈0.018, i.e. the same order as
+# ROLLING_IC_WARN, which is the coarsest scale the check pretends to
+# resolve.  Callers get ``None`` (= "not measured"), never a number that
+# looks like a measurement but is noise.
+MIN_IC_PAIRS_PER_DAY = 300
+MIN_IC_CONTRIB_DAYS = 10
+
 
 @dataclass
 class OnlineHealthResult:
@@ -105,6 +123,10 @@ class OnlineSignalMonitor:
 
     def __init__(self) -> None:
         self._signal_history: pl.DataFrame | None = None
+        # Diagnostic for the most recent rolling_ic() call — populated with
+        # the sample it saw, so callers can log *why* an IC was not
+        # measurable instead of silently reading "no value" as "healthy".
+        self.last_ic_sample: dict[str, Any] | None = None
 
     # ── Main entry point ───────────────────────────────────────
 
@@ -230,23 +252,44 @@ class OnlineSignalMonitor:
         price_data: dict[str, pl.DataFrame],
         window: int = 20,
     ) -> float:
-        """Compute realized rank IC: correlation between prior signal rank
-        and subsequent return over the last ``window`` signal records.
+        """Mean realized rank IC over the window (0.0 when not computable).
 
-        For each day in the signal history, we check the next day's close
-        return for each symbol, then compute Spearman rank correlation.
-        Only meaningful when we have >= 5 signal days in the window.
+        Kept for the daily health score; the kill-switch path goes through
+        :meth:`rolling_ic`, which additionally enforces the data-sufficiency
+        gates and returns ``None`` rather than a noise-dominated number.
+        """
+        ics, _pairs = self._realized_ic_detail(strategy_id, price_data, window=window)
+        return float(np.mean(ics)) if ics else 0.0
+
+    def _realized_ic_detail(
+        self,
+        strategy_id: str,
+        price_data: dict[str, pl.DataFrame],
+        window: int = 20,
+    ) -> tuple[list[float], list[int]]:
+        """Per-day realized rank ICs plus the sample size behind each one.
+
+        Correlation between prior signal rank and subsequent return over the
+        last ``window`` signal records.  For each day in the signal history we
+        check the next day's close return for each symbol, then compute
+        Spearman rank correlation.
+
+        Returns:
+            ``(ic_values, pairs_per_day)`` — aligned lists.  A day appears
+            only when it had >= 5 rankable symbols and a non-NaN IC.
+            ``([], [])`` when there is not enough signal history.
         """
         history = self._load_signal_history(strategy_id)
         if history is None or history.is_empty() or history.height < 5:
-            return 0.0
+            return [], []
 
         # Get recent signal dates (last window entries by unique date)
         dates = history.select("date").unique().sort("date").tail(window)["date"].to_list()
         if len(dates) < 5:
-            return 0.0
+            return [], []
 
         ic_values: list[float] = []
+        pair_counts: list[int] = []
         for _i, signal_date in enumerate(dates[:-1]):  # Exclude today
             day_signals = history.filter(pl.col("date") == signal_date)
             if day_signals.is_empty():
@@ -295,12 +338,11 @@ class OnlineSignalMonitor:
                         corr = float(str(result))  # type: ignore[arg-type]
                     if not np.isnan(corr):
                         ic_values.append(corr)
+                        pair_counts.append(len(ranks))
                 except Exception:
                     pass
 
-        if not ic_values:
-            return 0.0
-        return float(np.mean(ic_values))
+        return ic_values, pair_counts
 
     def rolling_ic(
         self,
@@ -311,9 +353,19 @@ class OnlineSignalMonitor:
         """Public realized rolling IC for monitoring.
 
         Unlike ``_compute_realized_ic`` (which returns 0.0 when data is
-        missing), this returns **None** when there is insufficient signal
-        history — so callers can distinguish "no data yet" from "real
+        missing), this returns **None** whenever the sample cannot support a
+        verdict — so callers can distinguish "not measured" from "real
         decay".  Callers must NOT treat None as a zero IC.
+
+        ``None`` is returned when either:
+
+        * there is insufficient signal history (< 5 signal days), or
+        * the effective sample is too thin (:data:`MIN_IC_CONTRIB_DAYS`
+          contributing days, each ranking at least
+          :data:`MIN_IC_PAIRS_PER_DAY` symbols).  A mean over a handful of
+          5-name days is noise (single-day IC SE ≈0.45), and reporting it as
+          a measurement is what produced the false STALE verdict on
+          2026-09-10.
 
         Args:
             strategy_id: Strategy identifier.
@@ -321,12 +373,31 @@ class OnlineSignalMonitor:
             window: Rolling window size.
 
         Returns:
-            Mean rank IC over the window, or None when history < 5 days.
+            Mean rank IC over the window, or None when not measurable.
         """
+        self.last_ic_sample = None
         history = self._load_signal_history(strategy_id)
         if history is None or history.is_empty() or history.height < 5:
+            self.last_ic_sample = {
+                "reason": "history_too_short",
+                "height": 0 if history is None else history.height,
+            }
             return None
-        return self._compute_realized_ic(strategy_id, price_data, window=window)
+
+        ics, pairs = self._realized_ic_detail(strategy_id, price_data, window=window)
+        median_pairs = float(np.median(pairs)) if pairs else 0.0
+        self.last_ic_sample = {
+            "reason": "insufficient_sample",
+            "window": window,
+            "contrib_days": len(ics),
+            "median_pairs_per_day": median_pairs,
+            "min_pairs_required": MIN_IC_PAIRS_PER_DAY,
+            "min_days_required": MIN_IC_CONTRIB_DAYS,
+        }
+
+        if len(ics) < MIN_IC_CONTRIB_DAYS or median_pairs < MIN_IC_PAIRS_PER_DAY:
+            return None
+        return float(np.mean(ics))
 
     # ── Persistence ────────────────────────────────────────────
 

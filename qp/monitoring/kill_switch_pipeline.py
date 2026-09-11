@@ -461,6 +461,18 @@ class KillSwitchPipeline(BasePipeline):
                 self._last_monitored_strategy = first_available[0]
                 return first_available[1], True
 
+            # No strategy produced a measurable IC.  Say so out loud: a
+            # silent 0.0 would be read downstream as "healthy" (the decay
+            # check treats unavailable IC as HEALTHY = not measured), and an
+            # operator staring at "healthy" deserves to know that nothing
+            # was actually measured.
+            sample = getattr(monitor, "last_ic_sample", None)
+            if sample:
+                logger.warning(
+                    "实时 IC 不可测（样本不足）→ 跳过模型衰减判定 / realized IC "
+                    "not measurable (thin sample) → model-decay check skipped: {}",
+                    sample,
+                )
             return 0.0, False
         except Exception:
             return 0.0, False
