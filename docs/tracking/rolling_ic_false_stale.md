@@ -108,16 +108,20 @@ details: action=ok regime=UNKNOWN psi=0.000
 
 **两个缺陷（均已实测复现，不只是推断）**：
 
-1. **fail-open：读不到任何数据 = 判定"无风险"**
+1. **fail-open：读不到任何数据 = 判定"无风险"** ✅ **已修（P1-4）**
    沙盒复刻（把状态目录重定向到 /tmp，再 `chdir` 离开仓库根，等价于单测 `monkeypatch.chdir(tmp_path)` 之后的同进程调用）：
 
    ```
-   沙盒初始状态: WARNING
-   pipeline action: ok
-   沙盒结束状态: NORMAL | 监控正常，未发现风险事件
+   修复前：沙盒初始 WARNING → pipeline action: ok → 沙盒结束 NORMAL（监控正常，未发现风险事件）
+   修复后：沙盒初始 WARNING → pipeline action: ok → 沙盒结束 WARNING | sandbox seed
+           （并打出 WARNING 日志：监控输入不可用 → 保持系统状态不变）
    ```
    → 相对路径 `data/...` 读不到时，PSI=0、rolling_ic 不可用，全部"没有触发"，于是 `action=OK` →**把风险状态降级**。
-   这与"默认值不得伪装成测量值"是同一类问题：**"测不到" 被当成 "没问题"**。正确行为应是"未知则不改状态"（fail-safe）。
+   这与"默认值不得伪装成测量值"是同一类问题：**"测不到" 被当成 "没问题"**。
+
+   修法：`_update_system_state()` 加 fail-safe 守卫 —— `action=OK` 且 `_measurements_present(report)` 为假时**不改状态**。
+   `_measurements_present` = 有 regime（说明价格数据真的进来了）**且**（PSI 或 rolling_ic 至少一个可算）。
+   只有 OK 被拦；WATCH / PAUSE_BUY / STOP 等保守方向照常写入（真的测到了风险就该升级）。
 
 2. **测试污染生产状态**
    `tests/unit/test_pipeline_critical_path.py` 的 `KillSwitchPipeline` 集成测试没有隔离目录，直接写生产状态文件；
@@ -176,6 +180,14 @@ details: action=ok regime=UNKNOWN psi=0.000
 
 > PSI 由 15.5 掉到 1.6 佐证了 P2-2 的判断：原值是小样本（每天 3–18 个分数做 10 个分箱）+ epsilon 的伪影，而不是真实漂移。它仍 > 0.25，所以 PSI 触发的 WARNING 还会继续，这条留 P2-2 单独处理。
 
+**⚠️ 过渡期（新历史累积期）**：抽样历史从下一个交易日 18:00 起逐日累积，
+- PSI 需要 ≥4 个信号日 → 约 **4 个交易日**恢复可算
+- realized IC 需要 ≥10 个贡献日 → 约 **2 周**恢复可测
+
+这段时间里两类测量都不可用。配合 P1-4 的 fail-safe 守卫，系统**不会**用 `action=OK`
+去覆盖状态（什么都不写），也不会误报警；但反过来说，**这两周模型衰减与漂移检查实际上是休眠的**。
+`rolling_ic` 恢复后即可验证真实值（本次用 25 日回填测到 +0.05 量级）。
+
 > 修复后 PSI 单独触发只到 WARNING 级 → action=WATCH → 状态自动从 PAUSED 落到
 > WARNING（允许开仓）→ **下次 monitor 运行（周一 09:07）即自动解除**，无需人工改状态。
 
@@ -196,9 +208,12 @@ details: action=ok regime=UNKNOWN psi=0.000
 - [ ] `absolute_min_ic=0.005` 在任何现实样本下都不可分辨：全横截面 20 日 IC 的 SE≈0.004，已经只有 ~1.2σ
 - [ ] 建议改成基于标准误的相对判定（如 `|IC| + 1σ < 阈值` 才算衰减），而不是拿点估计直接比绝对下限
 
-### P1-4 状态机 fail-open 改 fail-safe（见 §4.1，已实测复现）
-- [ ] 数据不可用时 `KillSwitchPipeline` 不得给出 `action=OK`：应返回"未知"并**不改状态**（或只允许向更保守方向迁移）
-- [ ] 判定依据用「关键输入是否真的读到」而非默认值（价格数据 / PSI / rolling_ic 三者的 available 标志）
+### P1-4 状态机 fail-open 改 fail-safe ✅ 已完成（2026-09-11，见 §4.1）
+- [x] 数据不可用时 `action=OK` 不再改状态（`_measurements_present` 守卫）
+- [x] 判定依据改为「关键输入是否真的读到」（regime + PSI/IC 的 available 标志），不再依赖默认值 0.0
+- [x] 守卫只拦 OK；WATCH / PAUSE_BUY / STOP 照常写入
+- [x] 4 个单测（无测量值保持状态 / 有 regime 无测量值也保持 / 有测量值仍能迁移 / 保守方向不受影响）
+- [x] 沙盒复刻验证：原先把 WARNING 清成 NORMAL 的那次调用，现在保持 WARNING 并打出 fail-safe 日志
 
 ### P1-5 测试隔离：禁写生产状态（见 §4.1）
 - [ ] `tests/conftest.py` 加 autouse fixture：把 `MONITORING_DIR` / 状态文件 / 信号历史重定向到 tmp（或至少禁止写生产路径）

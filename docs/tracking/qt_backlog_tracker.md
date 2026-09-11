@@ -128,8 +128,8 @@
   - [x] P2-1 ✅ 随 P1-1 修掉：`_save_signal_snapshot` 改为按 `(strategy_id, date)` 覆盖写（幂等）
   - [ ] P1-2 解开结构性死锁：PAUSED 时仍允许记录链路 / 输入未更新时不得重复判定
   - [ ] P1-3 阈值重标定：0.005 绝对下限在任何现实样本下都不可分辨（全横截面 20 日 SE≈0.004）
-  - [ ] P1-4 状态机 fail-open 改 fail-safe：数据读不到时不得给出 action=OK 降级状态（已实测复现，见文档 §4.1）
-  - [ ] P1-5 测试隔离：单测会写生产 system_state.parquet（21:59 实测把 WARNING 清成 NORMAL）
+  - [x] P1-4 ✅ 2026-09-11 修复：状态机 fail-open → fail-safe（数据读不到时 OK 不再降级状态）；沙盒复刻验证通过
+  - [ ] P1-5 测试隔离：单测会写生产 system_state.parquet（21:59 实测把 WARNING 清成 NORMAL；fail-open 已修，写入路径仍待隔离）
   - [ ] P2-2 PSI 15.5 疑似空 bin + epsilon 伪影，需复核 `_compute_signal_psi`
   - [ ] P2-3 IC 不可测时不应显示为 "healthy"，UI 需读 `rolling_ic_available`
 
