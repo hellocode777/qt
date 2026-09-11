@@ -238,6 +238,16 @@ details: action=ok regime=UNKNOWN psi=0.000
 - **交易行为不变**：仍然不开新仓（也不生成 SELL），只多了"记录"；订单与 DecisionPackage 都不产出
 - 兼容：保留 `metadata["skip_reason"]`（WebUI/日志读取），新增 `record_only` / `record_only_completed`
 - 回归测试：`test_system_state_paused_runs_record_only`（断言 DataPipeline 被调用 = 真的越过 Step 0）
+- 沙盒 e2e（状态=PAUSED + 真实数据 + 监控路径全重定向 /tmp）：
+
+  ```
+  沙盒状态: PAUSED
+  ⛔ 系统状态 暂停 / PAUSED — 仅运行记录链路（数据/因子/打分/信号历史），不生成决策包
+  记录链路完成（系统状态 PAUSED）→ 跳过成本估算/仓位分配/退出引擎/决策包
+  status: success | record_only: True | record_only_completed: True | errors: []
+  沙盒信号历史: 总行数 693 | 最新日期 2026-09-11 | 当日行数 501   ← 500 universe + 1 candidate
+  生产 data/decisions 变动: False
+  ```
 - 从 PAUSED 出来的路径也随之可达：测量恢复 → `action=OK` → `auto_transition` → RECOVERY → NORMAL
 
 ### 5.3 P1-3 IC 衰减判定改为标准误感知 ✅（2026-09-11）
@@ -259,6 +269,25 @@ details: action=ok regime=UNKNOWN psi=0.000
   `health_logger` 里的 `getattr(..., "HEALTHY")` —— 未设置的阶段不再自称健康
 - WebUI：新增 `health_service.decay_stage_label()`（缺失/未知 → **不可测**），
   `health.html` 与 `components/strategy_health.html` 去掉 `| default("HEALTHY")`
+
+---
+
+## 5.5 收尾真机验收（2026-09-11 22:40，全套修复上线后跑真实 `qp monitor check`）
+
+```
+── 熔断检查 / Kill Switch ──   ✅ 状态: 正常   熔断级别: NORMAL
+── 特征漂移 / Drift ──         PSI: 0.000      ← 旧格式历史显式判「不可测」
+── 模型衰减 / Model Decay ──   状态: not_measured   ← 不再伪装成 healthy
+── 建议操作 / Action ──        ✅ OK
+```
+
+状态文件**零写入**（对比修复前：同一路径曾把 WARNING 写成 NORMAL）。三个效果同时成立：
+
+1. 不再被假 STALE 推成 PAUSED
+2. 也不会用"什么都没测到"的 OK 去覆盖已有状态（fail-safe 守卫）
+3. WebUI / CLI 明说 `not_measured`，而不是给一个"健康"的假象
+
+> 遗留：策略健康 85/100（12 个因子 degraded、5 个 warning）是**因子层**既有问题，不在本次范围。
 
 ---
 
