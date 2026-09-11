@@ -2982,3 +2982,88 @@ class TestSignalHistoryKindSeparation:
         monitor = build_strategy_monitor_from_signal_history(path=hist)
         assert monitor is not None
         assert monitor.health_check().avg_daily_signals == 5.0
+
+
+class TestSystemStateFailSafe:
+    """P1-4: an OK verdict from a run that measured nothing must not
+    downgrade the stored state.
+
+    Before the guard, `KillSwitchPipeline.run()` with no market data reached
+    in context returned action=OK and wrote NORMAL over PAUSED/WARNING —
+    "could not measure" was silently read as "all clear".
+    docs/tracking/rolling_ic_false_stale.md §4.1
+    """
+
+    @staticmethod
+    def _report(action, regime, psi_available: bool, ic_available: bool):
+        from qp.monitoring.kill_switch_pipeline import MonitorReport
+
+        rep = MonitorReport(run_id="test", timestamp="2026-09-11T00:00:00+00:00")
+        rep.action = action
+        rep.regime = regime
+        rep.psi_available = psi_available
+        rep.rolling_ic_available = ic_available
+        return rep
+
+    @staticmethod
+    def _seeded_state(tmp_path, monkeypatch):
+        from qp.monitoring import system_state as ss
+
+        real = ss.SystemStateManager
+        monkeypatch.setattr(ss, "SystemStateManager", lambda *a, **k: real(base_dir=tmp_path))
+        seeded = real(base_dir=tmp_path)
+        seeded.transition(ss.SystemState.PAUSED, reason="seed", source="test")
+        return real(base_dir=tmp_path), ss
+
+    def test_ok_without_measurements_keeps_state(self, tmp_path, monkeypatch):
+        from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline, MonitorAction
+
+        mgr, ss = self._seeded_state(tmp_path, monkeypatch)
+        KillSwitchPipeline()._update_system_state(
+            self._report(MonitorAction.OK, None, psi_available=False, ic_available=False)
+        )
+
+        assert mgr.current().to_state is ss.SystemState.PAUSED
+        assert mgr.current().reason == "seed"
+
+    def test_ok_with_regime_but_no_risk_measurement_keeps_state(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline, MonitorAction
+
+        mgr, ss = self._seeded_state(tmp_path, monkeypatch)
+        regime = SimpleNamespace(regime=SimpleNamespace(value="RANGING"))
+        KillSwitchPipeline()._update_system_state(
+            self._report(MonitorAction.OK, regime, psi_available=False, ic_available=False)
+        )
+
+        assert mgr.current().to_state is ss.SystemState.PAUSED
+
+    def test_ok_with_measurement_still_clears(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline, MonitorAction
+
+        mgr, ss = self._seeded_state(tmp_path, monkeypatch)
+        regime = SimpleNamespace(regime=SimpleNamespace(value="RANGING"))
+        KillSwitchPipeline()._update_system_state(
+            self._report(MonitorAction.OK, regime, psi_available=True, ic_available=False)
+        )
+
+        # A measured OK must still move the state — this is the regression
+        # guard against over-blocking.  PAUSED exits to RECOVERY (two-step
+        # re-entry by design), not straight to NORMAL.
+        assert mgr.current().to_state is ss.SystemState.RECOVERY
+
+    def test_conservative_action_still_applies_without_measurements(self, tmp_path, monkeypatch):
+        """Only OK is gated — raising the state must keep working."""
+        from qp.monitoring.kill_switch_pipeline import KillSwitchPipeline, MonitorAction
+
+        mgr, ss = self._seeded_state(tmp_path, monkeypatch)
+        mgr.transition(ss.SystemState.NORMAL, reason="reset", source="test")
+
+        KillSwitchPipeline()._update_system_state(
+            self._report(MonitorAction.PAUSE_BUY, None, psi_available=False, ic_available=False)
+        )
+
+        assert mgr.current().to_state is ss.SystemState.PAUSED

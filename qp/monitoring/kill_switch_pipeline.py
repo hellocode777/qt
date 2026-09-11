@@ -738,12 +738,32 @@ class KillSwitchPipeline(BasePipeline):
         based on the determined action. Downstream pipelines (DailyPipeline)
         read this state before executing.
 
+        Fail-safe guard (P1-4): an ``OK`` verdict only means "no risk event"
+        when the run actually measured something.  If the key inputs never
+        reached the pipeline (no price data → no regime, no drift, no
+        realized IC), the honest verdict is "unknown" — leave the stored
+        state untouched instead of downgrading it.  Before this guard a
+        data-less run (a unit test, a mis-invoked CLI) cleared PAUSED /
+        WARNING to NORMAL, i.e. missing data was silently read as "all
+        clear".  See docs/tracking/rolling_ic_false_stale.md §4.1.
+
         The ``reason`` shown on the WebUI is a human-readable sentence;
         machine-readable fields (action/regime/psi/triggers) go into
         ``details`` so logs stay complete without confusing the display.
         """
         try:
             from qp.monitoring.system_state import SystemStateManager
+
+            if report.action == MonitorAction.OK and not self._measurements_present(report):
+                logger.warning(
+                    "监控输入不可用（regime={} psi_available={} ic_available={}）→ "
+                    "保持系统状态不变 / monitor inputs unavailable → system state "
+                    "left unchanged (fail-safe, no OK downgrade)",
+                    report.regime is not None,
+                    report.psi_available,
+                    report.rolling_ic_available,
+                )
+                return
 
             mgr = SystemStateManager()
             regime_str = report.regime.regime.value if report.regime else "UNKNOWN"
@@ -760,6 +780,20 @@ class KillSwitchPipeline(BasePipeline):
             )
         except Exception:
             pass  # Best-effort — state machine failure should not block pipeline
+
+    @staticmethod
+    def _measurements_present(report: MonitorReport) -> bool:
+        """True when the run actually measured the risk posture.
+
+        Requires market data (a missing regime means no price data reached
+        the pipeline at all) plus at least one real risk measurement —
+        drift (PSI) or realized IC.  A missing IC on its own is tolerated:
+        it is routinely unavailable while signal history accumulates, and
+        the decay check reports "not measured" rather than "clear".
+        """
+        if report.regime is None:
+            return False
+        return bool(report.psi_available or report.rolling_ic_available)
 
     @staticmethod
     def _human_reason(report: MonitorReport, regime_str: str) -> str:
