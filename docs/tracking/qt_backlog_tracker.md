@@ -126,12 +126,12 @@
 - **遗留**:
   - [x] P1-1 ✅ 2026-09-11 落地：信号历史改落全横截面抽样（头 200 + 中段 100 + 尾 200 = 500/日）；真机验证 rolling_ic(20) 由 -0.0023（不可测）→ **+0.0502（可测）**，贡献日 19 / 中位样本 500。见 §5.1
   - [x] P2-1 ✅ 随 P1-1 修掉：`_save_signal_snapshot` 改为按 `(strategy_id, date)` 覆盖写（幂等）
-  - [ ] P1-2 解开结构性死锁：PAUSED 时仍允许记录链路 / 输入未更新时不得重复判定
-  - [ ] P1-3 阈值重标定：0.005 绝对下限在任何现实样本下都不可分辨（全横截面 20 日 SE≈0.004）
+  - [x] P1-2 ✅ 2026-09-11 修复：PAUSED 改为「只跑记录链路」到 Step 10.5 才早退（沙盒 e2e：记录跑通 + data/decisions 零变动）
+  - [x] P1-3 ✅ 2026-09-11 修复：IC 衰减判定加标准误门禁（点估计 + 1σ 仍低于边界才判 STALE/DECAYING，否则 NOT_MEASURED）
   - [x] P1-4 ✅ 2026-09-11 修复：状态机 fail-open → fail-safe（数据读不到时 OK 不再降级状态）；沙盒复刻验证通过
-  - [ ] P1-5 测试隔离：单测会写生产 system_state.parquet（21:59 实测把 WARNING 清成 NORMAL；fail-open 已修，写入路径仍待隔离）
-  - [ ] P2-2 PSI 15.5 疑似空 bin + epsilon 伪影，需复核 `_compute_signal_psi`
-  - [ ] P2-3 IC 不可测时不应显示为 "healthy"，UI 需读 `rolling_ic_available`
+  - [x] P1-5 ✅ 2026-09-11 修复：conftest 把监控路径重定向到 tmp + session 级守卫；4 个 logger/状态类默认目录改为调用期解析；验证后生产 data/monitoring 13 文件 md5 未变
+  - [x] P2-2 ✅ 2026-09-11 修复：PSI epsilon 尺度错误（实测 15.529 → 5.395）+ 样本充分性门禁 + 只在 universe 抽样上计算；重复实现删除，委托 DriftMonitor
+  - [x] P2-3 ✅ 2026-09-11 修复：新增 DecayStage.NOT_MEASURED；默认值不再自称 healthy；WebUI decay_stage_label（缺失/未知 → 不可测）
 
 ---
 

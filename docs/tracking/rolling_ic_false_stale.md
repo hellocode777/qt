@@ -76,6 +76,44 @@ mean = -0.00230  SE = 0.164  t = -0.01
 
 ---
 
+### 3.4 PSI 15.529 也是假的（P2-2，2026-09-11 实测）
+
+`_compute_signal_psi()` 的值由 `DriftMonitor.compute_psi()` 算出。两个独立缺陷叠加：
+
+**① epsilon 尺度错了（FACT，可复现）**：`epsilon=1e-6` 被用在 **0..1 的比例**上。
+某个 bin 一侧计数为 0 时，`max(pct, 1e-6)` → 该项贡献 `(1e-6 − 0.25)·ln(1e-6/0.25) ≈ +1.0`。
+用同一份真实数据实测：
+
+```
+修复前 (epsilon=1e-6):  PSI = 15.529   ← 与事故值完全一致
+修复后 (1/(2n) 平滑):   PSI =  5.395
+```
+
+**② 更根本：抽样对象就不对**。历史里只有候选尾部信号，逐日候选数从 3 到 18 不等
+（8/7=18，8/13=12，8/16=15…9/1 起只有 3），而且 9 月的候选分数全挤在
+`−0.15 ~ −0.12` 的窄带里 → 分箱后 4 个 bin 一侧为空，各贡献 +0.5：
+
+```
+bin0: exp=0.254 act=0.000 contrib=+0.999
+bin6: exp=0.000 act=0.165 contrib=+0.499
+bin7: exp=0.000 act=0.165 contrib=+0.499
+bin8: exp=0.000 act=0.165 contrib=+0.499
+bin9: exp=0.000 act=0.165 contrib=+0.499
+```
+
+**结论**：候选尾部（策略筛选出来的一个子集）的形状随筛选口径变化，**不能用来衡量
+分数分布的稳定性** —— 与 P1-1 同源。修复三件事：
+
+1. `DriftMonitor.compute_psi()` 默认平滑改为 `1/(2n)`（各样本各自 n），显式传 epsilon 的行为保留；
+   `PSITrigger.compute_psi()` 删掉重复实现，改为委托（两处曾在同一天各犯一次同样的错）
+2. 新增 `psi_sample_is_sufficient()`：10 箱 × ≥5 样本/箱 = 每侧 ≥50，不足即判「不可测」
+3. `_compute_signal_psi()` 只在 `kind="universe"` 抽样上计算 PSI；旧格式（无 kind 列，仅候选信号）
+   直接返回 `available=False` 并打日志 —— 宁可说"测不了"，不给一个假数字
+
+> 过渡期内 PSI 会一直是"不可测"（需要 ≥4 个 universe 抽样日），这正是预期行为。
+
+---
+
 ## 4. 死锁（这是比假 STALE 更严重的结构性缺陷）
 
 ```
@@ -193,20 +231,53 @@ details: action=ok regime=UNKNOWN psi=0.000
 
 ---
 
+### 5.2 P1-2 解开结构性死锁 ✅（2026-09-11）
+
+- Step 0 不再 `return`：改为 `record_only = True`，继续跑数据/因子/打分/策略执行（内存中）到
+  **Step 10.5（线上信号监控）之后**才早退 —— 这正是 kill switch 依赖的两类测量（PSI / realized IC）的输入
+- **交易行为不变**：仍然不开新仓（也不生成 SELL），只多了"记录"；订单与 DecisionPackage 都不产出
+- 兼容：保留 `metadata["skip_reason"]`（WebUI/日志读取），新增 `record_only` / `record_only_completed`
+- 回归测试：`test_system_state_paused_runs_record_only`（断言 DataPipeline 被调用 = 真的越过 Step 0）
+- 从 PAUSED 出来的路径也随之可达：测量恢复 → `action=OK` → `auto_transition` → RECOVERY → NORMAL
+
+### 5.3 P1-3 IC 衰减判定改为标准误感知 ✅（2026-09-11）
+
+- 新增 `model_decay.ic_below_boundary(abs_ic, se, boundary, z=1.0)`：**点估计 + 1σ 仍低于边界**才算"确定低于"
+- `ModelDecayDetector.check(rolling_ic, rolling_ic_se=None)`：STALE / DECAYING 需可分辨，否则 `NOT_MEASURED`
+  （不传 se 的旧调用保持原行为，向后兼容）
+- `ModelDecayTrigger` 读 `metrics["rolling_ic_se"]`；不可分辨时 `fired=False` / `level="NOT_MEASURED"`
+- SE 从哪来：`rolling_ic()` 在给出均值的同时算 `SE = std(每日IC)/√n`（`last_ic_sample["se"]`），
+  经 `_check_online_signal_health → MonitorReport.rolling_ic_se → _check_kill_switch` 传到触发器
+- **事故数字回归**：IC=0.0023 / SE=0.16 → `NOT_MEASURED`（原来 STALE）；SE=0.0005 → 仍 `STALE`
+  （真衰减不会被这套门禁掩盖）
+
+### 5.4 P2-3 「不可测」不再伪装成 healthy ✅（2026-09-11）
+
+- 新增 `DecayStage.NOT_MEASURED`，`model_decay_lifecycle` 映射为"不变更"（`None`）
+- `_check_model_decay()` 在 IC 缺失时返回 `NOT_MEASURED`（原来返回 HEALTHY）
+- 所有兜底默认值改掉：`MonitorReport.model_decay_stage`、`HealthLog`、`RetrainSignal.model_decay_stage`、
+  `health_logger` 里的 `getattr(..., "HEALTHY")` —— 未设置的阶段不再自称健康
+- WebUI：新增 `health_service.decay_stage_label()`（缺失/未知 → **不可测**），
+  `health.html` 与 `components/strategy_health.html` 去掉 `| default("HEALTHY")`
+
+---
+
 ## 6. 待办（按优先级）
 
 ### P1-1 让 rolling_ic 变成真测量 ✅ 已完成（2026-09-11，见 §5.1）
 - [x] `online_signal_history` 落全横截面抽样（头 200 + 中段 100 + 尾 200 = 500/日）
 - [x] 真机验证：贡献日 19、中位样本 500、rolling_ic(20)=+0.0502（可测）
 
-### P1-2 解开结构性死锁
-- [ ] 方案：PAUSED 时仍允许「只读 + 记录」链路（数据/因子/评分/信号历史写入），只禁止开新仓
-- [ ] 或：状态机加保护 —— 指标数据未更新（输入 mtime 未变）时不得重复判定/升级状态
-- [ ] 补一条集成测试：PAUSED → 下一日 pipeline 仍能推进信号历史
+### P1-2 解开结构性死锁 ✅ 已完成（2026-09-11，见 §5.2）
+- [x] PAUSED 时仍运行"记录链路"（数据/因子/打分/信号历史），只禁止开新仓
+- [x] 回归测试：`test_system_state_paused_runs_record_only`
+- [x] 沙盒 e2e：状态=PAUSED + 真实数据 → 记录链路跑通、生产 `data/decisions` 零变动
 
-### P1-3 阈值重标定
-- [ ] `absolute_min_ic=0.005` 在任何现实样本下都不可分辨：全横截面 20 日 IC 的 SE≈0.004，已经只有 ~1.2σ
-- [ ] 建议改成基于标准误的相对判定（如 `|IC| + 1σ < 阈值` 才算衰减），而不是拿点估计直接比绝对下限
+### P1-3 阈值重标定 ✅ 已完成（2026-09-11，见 §5.3）
+- [x] `ic_below_boundary()`：点估计 + 1σ 仍低于边界才判 STALE / DECAYING
+- [x] `ModelDecayDetector.check(ic, se)` + `ModelDecayTrigger` 读 `rolling_ic_se`
+- [x] SE 由 `rolling_ic()` 计算并一路传到 kill switch
+- [x] 事故数字回归：0.0023/SE=0.16 → NOT_MEASURED；0.0023/SE=0.0005 → 仍 STALE
 
 ### P1-4 状态机 fail-open 改 fail-safe ✅ 已完成（2026-09-11，见 §4.1）
 - [x] 数据不可用时 `action=OK` 不再改状态（`_measurements_present` 守卫）
@@ -224,13 +295,16 @@ details: action=ok regime=UNKNOWN psi=0.000
 - [x] `_save_signal_snapshot` 改为按 `(strategy_id, date)` 覆盖写（幂等），旧数据里的重复行未回溯清理
 - [ ] （可选）回溯清理历史里既有的重复行
 
-### P2-2 PSI 15.5 大概率也是假警报
-- [ ] PSI 常年 13–22，而 0.25 就是「显著漂移」阈值 —— 60x 超标本身不合理，疑似空 bin + epsilon 伪影（20 日窗口内每天仅 3–18 个分数做分箱）
-- [ ] 建议同样加样本充分性门槛，并复核 `_compute_signal_psi` 的 epsilon 处理
+### P2-2 PSI 假警报 ✅ 已完成（2026-09-11，见 §3.4）
+- [x] `compute_psi()` epsilon 尺度修正（1/(2n) 平滑）：实测 15.529 → 5.395
+- [x] 样本充分性门禁 `psi_sample_is_sufficient()`（≥10 箱 × 5 样本/侧）
+- [x] PSI 只在 `kind="universe"` 抽样上计算；旧格式历史显式判「不可测」
+- [x] `PSITrigger.compute_psi()` 重复实现删除，委托给唯一实现
 
-### P2-3 「不可测」不要显示成「healthy」
-- [ ] IC 不可测时 `DecayStage.HEALTHY` 的语义是 "not measured"，但 WebUI/摘要显示 "healthy" —— 属「默认值伪装成测量值」
-- [ ] 建议引入 `NOT_MEASURED` 展示态，或让 UI 读 `rolling_ic_available` 显式标注
+### P2-3 「不可测」不要显示成「healthy」✅ 已完成（2026-09-11，见 §5.4）
+- [x] `DecayStage.NOT_MEASURED` + 生命周期映射
+- [x] 兜底默认值全部改为 NOT_MEASURED（MonitorReport / HealthLog / RetrainSignal / health_logger）
+- [x] WebUI `decay_stage_label()`（缺失/未知 → 不可测）+ 模板去掉 `| default("HEALTHY")`
 
 ---
 
