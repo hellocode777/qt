@@ -108,6 +108,40 @@ PAUSED
       状态机模拟 `PAUSED → auto_transition(WATCH) → WARNING`，`can_open_positions=True`
 - [x] 重启 `qp-scheduler`（git hook 已自动重启，PID 575440 @ 21:01:43），修复对新任务生效
 
+### 5.1 P1-1 落地：让信号历史变成可测量的全横截面抽样 ✅（2026-09-11）
+
+- [x] `multifactor.compute_today_scores_full()`：拆出「全横截面打分」，返回全部 ~3020 只的 `[symbol, raw_score, rank]`；`compute_today_signals()` 变成它的 top-N 薄包装，契约与输出不变
+- [x] `daily_pipeline`：每个策略只算一次全横截面，自己切 top-N 给策略，并把全量交给在线监控（不再重复计算）
+- [x] `online_monitor._sample_universe()`：确定性抽样 = 分数头部 200 + 中段等距 100 + 尾部 200 = **500 只/日**（保留两端才有分数 spread）
+- [x] `_save_signal_snapshot()` 改为**按 `(strategy_id, date)` 覆盖写**（幂等，顺带修掉 §3.3 的重复累加）
+- [x] `check(..., score_universe_df=...)`：有全横截面就用抽样落盘，没有则回退候选信号（保持旧行为）
+- [x] **新增 `kind` 列分离两种语义**（这一步是必须的，见下方"下游耦合"）
+- [x] 新增 9 个测试（抽样保留两端/上限、小截面直通、幂等、回退、抽样后 IC 可测、kind 打标、IC 忽略候选行、策略计数只数候选、无 kind 的旧历史兼容）
+
+**下游耦合（落地时才暴露，已修）**：同一个 parquet 有三个消费者，语义不同：
+
+| 消费者 | 要的行 | 修法 |
+|---|---|---|
+| `online_monitor` IC | `kind="universe"`（全横截面抽样） | 只读 universe 行 |
+| `strategy_monitor` 信号计数 | `kind="candidate"`（当日候选信号） | 只数 candidate 行 |
+| `kill_switch_pipeline` PSI | `kind="universe"`（分数分布） | 只读 universe 行 |
+
+不做分离的后果（真机验证过）：`strategy_monitor` 会把 500 抽样行当成 500 条信号 → `High signals: avg 505/day > max 30` 假告警 + 健康分掉到 75。旧历史没有 `kind` 列时按 `candidate` 回填，读取端各自回退，行为与今天一致。
+
+**真机验证**（真实 `factor_values_daily`，25 个交易日，历史写 /tmp，生产文件未触碰）：
+
+| 指标 | 修复前 | P1-1 后 |
+|---|---|---|
+| 每日持久化行数 | 3–18（候选信号） | **500**（rank 1 ~ 3016 抽样）+ 5 候选 |
+| 贡献日 / 中位样本 | 11 日 / 5 | **19 日 / 500** |
+| rolling_ic(20) | -0.0023（不可测噪声） | **+0.0502**（可测） |
+| rolling_ic(60) | -0.1118 | +0.0302 |
+| 全横截面金标准 | +0.077 | +0.077（口径不同，量级一致） |
+| 策略健康 | score 85 / `Signal dispersion` 告警 | **score 100 / 无告警**（avg 5 条/日，未误报 High signals） |
+| PSI | 15.529（小样本伪影） | **1.557**（量级回到正常区间；本次仅 25 日窗口、ref 只有 5 日，生产会随 40+ 日累积而更准） |
+
+> PSI 由 15.5 掉到 1.6 佐证了 P2-2 的判断：原值是小样本（每天 3–18 个分数做 10 个分箱）+ epsilon 的伪影，而不是真实漂移。它仍 > 0.25，所以 PSI 触发的 WARNING 还会继续，这条留 P2-2 单独处理。
+
 > 修复后 PSI 单独触发只到 WARNING 级 → action=WATCH → 状态自动从 PAUSED 落到
 > WARNING（允许开仓）→ **下次 monitor 运行（周一 09:07）即自动解除**，无需人工改状态。
 
@@ -115,9 +149,9 @@ PAUSED
 
 ## 6. 待办（按优先级）
 
-### P1-1 让 rolling_ic 变成真测量 ⭐ 推荐先做
-- [ ] 评估：让 `online_signal_history` 落**全横截面排序的抽样**（如 top/bottom 200 + random 100），或直接复用 pipeline 已算出的得分矩阵
-- [ ] 落地后 `rolling_ic()` 才会返回数值 —— **当前现状下门槛 300/日永远达不到，等于模型衰减检查事实上失效**，必须在文档/UI 上标明
+### P1-1 让 rolling_ic 变成真测量 ✅ 已完成（2026-09-11，见 §5.1）
+- [x] `online_signal_history` 落全横截面抽样（头 200 + 中段 100 + 尾 200 = 500/日）
+- [x] 真机验证：贡献日 19、中位样本 500、rolling_ic(20)=+0.0502（可测）
 
 ### P1-2 解开结构性死锁
 - [ ] 方案：PAUSED 时仍允许「只读 + 记录」链路（数据/因子/评分/信号历史写入），只禁止开新仓
@@ -128,8 +162,9 @@ PAUSED
 - [ ] `absolute_min_ic=0.005` 在任何现实样本下都不可分辨：全横截面 20 日 IC 的 SE≈0.004，已经只有 ~1.2σ
 - [ ] 建议改成基于标准误的相对判定（如 `|IC| + 1σ < 阈值` 才算衰减），而不是拿点估计直接比绝对下限
 
-### P2-1 信号历史去重
-- [ ] `_save_signal_snapshot` 按 `(strategy_id, date)` 去重后再追加（现状同日可写多份，8/7 是 3 份）
+### P2-1 信号历史去重 ✅ 已随 P1-1 修掉
+- [x] `_save_signal_snapshot` 改为按 `(strategy_id, date)` 覆盖写（幂等），旧数据里的重复行未回溯清理
+- [ ] （可选）回溯清理历史里既有的重复行
 
 ### P2-2 PSI 15.5 大概率也是假警报
 - [ ] PSI 常年 13–22，而 0.25 就是「显著漂移」阈值 —— 60x 超标本身不合理，疑似空 bin + epsilon 伪影（20 日窗口内每天仅 3–18 个分数做分箱）

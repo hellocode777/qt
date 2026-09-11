@@ -124,10 +124,10 @@
   - [x] 回归测试 3 项 + ruff/pyright 全仓 0 + monitoring 163 测试全过
   - [x] 端到端验证 action `pause_buy → watch`；commit `b507576` 已 push；scheduler 已重启
 - **遗留**:
-  - [ ] P1-1 让 `online_signal_history` 落全横截面抽样，否则衰减检查事实上失效（现状门槛永远达不到）
+  - [x] P1-1 ✅ 2026-09-11 落地：信号历史改落全横截面抽样（头 200 + 中段 100 + 尾 200 = 500/日）；真机验证 rolling_ic(20) 由 -0.0023（不可测）→ **+0.0502（可测）**，贡献日 19 / 中位样本 500。见 §5.1
+  - [x] P2-1 ✅ 随 P1-1 修掉：`_save_signal_snapshot` 改为按 `(strategy_id, date)` 覆盖写（幂等）
   - [ ] P1-2 解开结构性死锁：PAUSED 时仍允许记录链路 / 输入未更新时不得重复判定
   - [ ] P1-3 阈值重标定：0.005 绝对下限在任何现实样本下都不可分辨（全横截面 20 日 SE≈0.004）
-  - [ ] P2-1 信号历史按 (strategy_id, date) 去重后再写
   - [ ] P2-2 PSI 15.5 疑似空 bin + epsilon 伪影，需复核 `_compute_signal_psi`
   - [ ] P2-3 IC 不可测时不应显示为 "healthy"，UI 需读 `rolling_ic_available`
 
