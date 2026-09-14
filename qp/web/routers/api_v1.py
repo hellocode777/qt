@@ -25,6 +25,7 @@ from loguru import logger
 
 from qp.shared.json_io import json_load
 from qp.shared.paths import (
+    DAILY_PRICE_LATEST,
     DATA_DIR,
     DECISIONS_DIR,
     EXPERIMENTS_DIR,
@@ -80,6 +81,50 @@ def _as_records(df) -> list[dict[str, Any]]:
     return records
 
 
+def _mtime_ns(path) -> int:
+    """文件 mtime(ns)；不存在返回 0 —— 作为缓存键，文件一变缓存即失效。"""
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
+@lru_cache(maxsize=4)
+def _latest_quotes_cached(path: str, mtime_ns: int) -> dict[str, Any]:
+    """daily_price_latest.parquet 最后一个 trade_date 的 symbol → 收盘价。
+
+    缓存键含 mtime_ns：数据文件每天更新后自动重读（全表 700 万行，不缓存会拖慢页面）。
+    无文件/无数据 → 空 dict（不作为 0 参与计算）。
+    """
+    import polars as pl
+
+    empty: dict[str, Any] = {"quote_date": None, "closes": {}, "suspended": {}}
+    if mtime_ns <= 0:
+        return empty
+    try:
+        px = pl.read_parquet(path)
+    except Exception as exc:
+        logger.warning("latest quotes unavailable: {}", exc)
+        return empty
+    if px.is_empty():
+        return empty
+    latest = px["trade_date"].max()
+    snapshot = (
+        px.filter(pl.col("trade_date") == latest)
+        .select(["symbol", "close", "is_suspended"])
+        .unique(subset=["symbol"], keep="first")
+    )
+    closes: dict[str, float] = {}
+    suspended: dict[str, bool] = {}
+    for r in snapshot.iter_rows(named=True):
+        sym = str(r["symbol"])
+        if r["close"] is None:
+            continue
+        closes[sym] = float(r["close"])
+        suspended[sym] = bool(r["is_suspended"])
+    return {"quote_date": str(latest)[:10], "closes": closes, "suspended": suspended}
+
+
 # ─────────────────────────────────────────────────────────────
 # 账户 & 持仓
 # ─────────────────────────────────────────────────────────────
@@ -96,9 +141,16 @@ def account() -> dict[str, Any]:
 
 @router.get("/api/v1/positions")
 def positions(active_only: bool = Query(default=False)) -> dict[str, Any]:
-    """持仓明细（positions.parquet）。
+    """持仓明细（positions.parquet）+ 最新收盘价标记（daily_price_latest.parquet）。
 
-    market_value 为记录时点市值，非实时行情 —— 前端展示需标注。
+    字段语义（两套口径，勿混用）：
+    - 记录时点值：market_value=成本市值(entry×shares)；pnl/pnl_pct=**已实现**盈亏，
+      仅平仓时结算（Position.realized_pnl / close()），持仓中恒为 0 —— 故持仓行
+      必须用下面的标记值展示，不能把 0 当盈亏。
+    - 标记值（最新收盘）：latest_price / quote_date / market_value_latest /
+      unrealized_pnl / unrealized_pnl_pct（**小数**，0.1333 = +13.33%，与 pnl_pct 同口径）。
+      无行情（停牌/退市/数据缺失）→ None，前端显示 —，不得回落为 0。
+    - unrealized_* 只对 is_active 行计算；已平仓行的盈亏以 pnl/pnl_pct 为准。
     """
     import polars as pl
 
@@ -109,10 +161,40 @@ def positions(active_only: bool = Query(default=False)) -> dict[str, Any]:
     if active_only:
         df = df.filter(pl.col("is_active"))
     rows = _as_records(df)
+
+    quote = _latest_quotes_cached(str(DAILY_PRICE_LATEST), _mtime_ns(DAILY_PRICE_LATEST))
+    quote_date: str | None = quote.get("quote_date")
+    closes: dict[str, float] = quote.get("closes", {})
+    suspended: dict[str, bool] = quote.get("suspended", {})
+
+    for r in rows:
+        symbol = str(r.get("symbol", ""))
+        close = closes.get(symbol)
+        entry = float(r.get("entry_price") or 0.0)
+        shares = float(r.get("shares") or 0)
+        r["latest_price"] = close
+        r["latest_suspended"] = suspended.get(symbol) if close is not None else None
+        r["quote_date"] = quote_date if close is not None else None
+        if close is not None and bool(r.get("is_active")):
+            r["market_value_latest"] = round(close * shares, 2)
+            if entry > 0:
+                r["unrealized_pnl"] = round((close - entry) * shares, 2)
+                r["unrealized_pnl_pct"] = round((close - entry) / entry, 6)
+            else:
+                r["unrealized_pnl"] = None
+                r["unrealized_pnl_pct"] = None
+        else:
+            r["market_value_latest"] = None
+            r["unrealized_pnl"] = None
+            r["unrealized_pnl_pct"] = None
+
     return {
         "positions": rows,
         "count": len(rows),
-        "meta": {"note": "market_value = 记录时点市值，非实时行情"},
+        "quote_date": quote_date,
+        "meta": {
+            "note": "market_value/pnl = 记录时点值(已实现，平仓结算)；latest_price/unrealized_* = 最新收盘标记"
+        },
     }
 
 

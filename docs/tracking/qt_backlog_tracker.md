@@ -135,6 +135,25 @@
 
 ---
 
+## 待办清单（2026-09-14 更新）
+
+### #11 WebUI 持仓页「盈亏」恒为 0 —— 字段口径错配 ✅ 根因已修（2026-09-14）
+
+- **现象**: `/proto/positions` 活跃持仓「盈亏 / 盈亏%」两列恒显示 `0.00 / 0.00%`；Dashboard「浮动盈亏」列同（column title 写的是"浮动"，数据却是已实现）
+- **根因**: 前端绑定 `positions.parquet` 的 `pnl`/`pnl_pct`，而这两个字段是 **已实现盈亏** —— `Position.realized_pnl` 仅在 `status == CLOSED and exit_price > 0` 时非零，`pnl_pct` 仅 `close()` 时赋值；HOLDING 行永远是建仓默认值 0，被当作测量值展示（违反 WebUI 铁律：默认值不得伪装成测量值）
+- **二级 bug**: `pnl_pct` 语义是**小数**（0.0211 = +2.11%，见 `Position.close()` 与 `Simulation.vue` 的 `*100`），`Positions.vue` 直接 `toFixed(2) + '%'` → 历史行少 100 倍（0.02%）
+- **修复**:
+  - [x] `qp/web/routers/api_v1.py` `/api/v1/positions` 增加标记到市价字段：`latest_price / quote_date / latest_suspended / market_value_latest / unrealized_pnl / unrealized_pnl_pct`（数据源 `daily_price_latest.parquet` 最后一个 trade_date 收盘价；`_latest_quotes_cached` 缓存键含 `mtime_ns`，数据更新自动失效；无行情/停牌 → `None`，不回落为 0）
+  - [x] SPA `Positions.vue` / `Dashboard.vue`（`~/workspace/quant-ui-research/qp-proto`）：活跃行用标记值、历史行用已实现值，`pnl_pct` 统一 ×100；新增「最新价 / 平仓价」列与口径脚注
+  - [x] 验证：`curl /api/v1/positions?active_only=true`（600207→5.10/510.00/+60.00/+13.33%）+ headless Chrome 真实 DOM 渲染两视图（活跃视图同上；历史视图 P-00006 → +2.11%）；ruff format --check / ruff check / pyright 全 0
+  - [x] `bash scripts/spa_deploy.sh` 重建并部署（`/proto/` 已引用新 bundle）
+- **遗留**:
+  - [ ] 未计佣金/印花税/滑点（与老 UI `/portfolio` 同口径）；要精确持仓收益需接交易成本模型
+  - [ ] `/api/v1/account` 的 `index.json.active_value` 仍为成本市值（`PositionLedger.total_active_value()`），与页面标记值不同源
+  - [ ] SPA 源码目录无版本控制，改动只存在于工作区 + 构建产物；`qp/web/static/spa` 为构建产物（不入库）
+
+---
+
 ## 统一接口候选（2026-08-27 扫描，仅记录未实施）
 
 > 背景：时间接口已统一（`qp/shared/time.py`，commit fb8d00b）。以下 4 处为同类"散落多点、值得收编"的横切关注点。
