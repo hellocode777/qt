@@ -41,7 +41,7 @@
 | `qp/shared/` | protocols（BaseStrategy 等）、types、constants、exceptions |
 | `qp/pipeline/` | 长任务 Pipeline：daily、factor_calc、multifactor、fundamental |
 | `qp/lineage/` | 血缘图（Rule 7）：LineageRegistry DAG → `data/metadata/lineage_graph.json` |
-| `qp/web/` | Web UI（FastAPI 前端） |
+| `qp/web/` | Web UI（FastAPI 前端）：Jinja 旧页 `templates/` + JSON 端点 `routers/api_v1.py` + SPA `spa_src/`（源码入库，构建产物 `static/spa/` 不入库，`scripts/spa_deploy.sh` 部署到 `/proto/`） |
 | `tests/` | 1488 测试函数 |
 | `docs/` | 人读文档；`docs/ai/` 是 AI 导航层（本目录） |
 | `data/` | 所有数据与运行时产物（见 DATA_FLOW.md） |
