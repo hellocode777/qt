@@ -80,3 +80,7 @@ data/archive/
 
 # SPA 构建产物 (scripts/spa_deploy.sh 生成, 不入库)
 qp/web/static/spa/
+
+# SPA 前端：依赖与构建输出（源码 qp/web/spa_src/ 入库，这两个不入库）
+qp/web/spa_src/node_modules/
+qp/web/spa_src/dist/
