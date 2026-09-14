@@ -13,6 +13,7 @@ Covers all modules created in the Layer 6 (Strategy Engine) commit:
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -2622,6 +2623,31 @@ class TestStrategyRegistry:
         meta2 = registry2.get_meta("simple_rank_v1.0")
         assert meta2.weights == {"Factor_A": -0.15}
         assert meta2.backtest_sharpe == pytest.approx(0.95)
+
+    def test_save_writes_sorted_key_order(self, tmp_path: Path) -> None:
+        """_save() writes strategy ids in sorted order — not set-iteration order.
+
+        Regression (2026-09-13): ids came from a Python ``set``, whose iteration
+        order depends on PYTHONHASHSEED.  Every ``qp run daily`` therefore
+        rewrote ``data/strategy_registry.json`` with a fresh random key
+        permutation — a ~272-line no-op diff on each run.
+        """
+        import json
+
+        from qp.strategy.registry import StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        path = tmp_path / "strategy_registry.json"
+        registry = StrategyRegistry(registry_path=path)
+        # Registered in non-alphabetical order, and the ids are long enough that
+        # a set-iteration (or insertion) order would not come out sorted.
+        ids = ["zulu_v1", "alpha_v1", "mike_v1", "bravo_v1", "yankee_v1", "charlie_v1"]
+        for sid in ids:
+            registry.register(SimpleRankStrategy(strategy_id=sid))
+
+        assert list(json.loads(path.read_text(encoding="utf-8"))["strategies"].keys()) == sorted(
+            ids
+        )
 
     def test_approved_lifecycle(self) -> None:
         """APPROVED lifecycle is recognized as active."""

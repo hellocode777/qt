@@ -241,9 +241,16 @@ class StrategyRegistry:
                 continue
 
     def _save(self) -> None:
-        """Persist lifecycle, metadata, and approved snapshots to disk."""
+        """Persist lifecycle, metadata, and approved snapshots to disk.
+
+        Strategy ids are iterated in sorted order: the keys come from a Python
+        ``set``, whose iteration order depends on PYTHONHASHSEED and therefore
+        differs per process. Without the sort every pipeline run rewrote the
+        file with a fresh random key permutation, producing a large no-op diff
+        on each run.
+        """
         data: dict[str, dict[str, object]] = {}
-        for sid in set(self._strategies.keys()) | set(self._lifecycles.keys()):
+        for sid in sorted(set(self._strategies.keys()) | set(self._lifecycles.keys())):
             lifecycle = self._lifecycles.get(sid, StrategyLifecycle.RESEARCH)
             meta = self._metadata.get(sid, StrategyMeta())
             entry: dict[str, object] = {
