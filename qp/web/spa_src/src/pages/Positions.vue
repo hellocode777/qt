@@ -3,6 +3,7 @@ import { onMounted, ref, computed } from 'vue';
 import { api, fmtMoney, fmtPct, pnlClass } from '../api';
 const positions = ref([]);
 const quoteDate = ref('');
+const fees = ref(null);
 const err = ref('');
 const filter = ref('active'); // active | all
 
@@ -18,12 +19,25 @@ const pnlPctPct = p => {
   const v = p.is_active ? p.unrealized_pnl_pct : p.pnl_pct; // 后端口径为小数
   return (v === null || v === undefined) ? null : v * 100;
 };
+// 费用后（估算）：后端 PositionService 计算，未计券商最低佣金/过户费
+const netValue = p => p.is_active ? p.unrealized_pnl_net : p.realized_pnl_net;
+const netPctPct = p => {
+  const v = p.is_active ? p.unrealized_pnl_net_pct : p.realized_pnl_net_pct;
+  return (v === null || v === undefined) ? null : v * 100;
+};
+const feeTip = p => {
+  if (p.est_buy_fee == null) return '费用估算不可用（无成本价）';
+  const sell = p.est_sell_fee;
+  return `费用估算: 买入 ¥${p.est_buy_fee}` + (sell == null ? '' : ` + 卖出 ¥${sell} = ¥${p.est_round_trip_fee}`)
+    + '；佣金0.025%双向 + 印花税0.05%(卖) + 滑点0.1%双向（未含券商最低佣金/过户费）';
+};
 
 async function load() {
   try {
     const d = await api.positions();
     positions.value = d.positions;
     quoteDate.value = d.quote_date || '';
+    fees.value = d.meta?.fees || null;
   } catch (e) { err.value = e.message; }
 }
 
@@ -53,6 +67,7 @@ onMounted(load);
               <th class="px-4 py-2 text-right">建仓</th><th class="px-4 py-2 text-right">成本价</th>
               <th class="px-4 py-2 text-right">最新价 / 平仓价</th><th class="px-4 py-2 text-right">股数</th>
               <th class="px-4 py-2 text-right">市值</th><th class="px-4 py-2 text-right">盈亏</th><th class="px-4 py-2 text-right">盈亏%</th>
+              <th class="px-4 py-2 text-right">净盈亏(费后)</th>
               <th class="px-4 py-2">平仓原因 / 备注</th>
             </tr>
           </thead>
@@ -77,15 +92,20 @@ onMounted(load);
               <td class="px-4 py-2 mono text-right">{{ fmtMoney(mktValue(p)) }}</td>
               <td class="px-4 py-2 mono text-right" :class="pnlClass(pnlValue(p))">{{ fmtMoney(pnlValue(p)) }}</td>
               <td class="px-4 py-2 mono text-right" :class="pnlClass(pnlPctPct(p))">{{ fmtPct(pnlPctPct(p)) }}</td>
+              <td class="px-4 py-2 mono text-right" :class="pnlClass(netValue(p))" :title="feeTip(p)">
+                {{ fmtMoney(netValue(p)) }}
+                <span class="text-[11px] text-slate-500">{{ fmtPct(netPctPct(p)) }}</span>
+              </td>
               <td class="px-4 py-2 text-slate-500 max-w-56 truncate" :title="p.notes">{{ p.exit_reason || p.notes || '—' }}</td>
             </tr>
-            <tr v-if="!shown.length"><td colspan="12" class="px-4 py-6 text-center text-slate-500">无数据</td></tr>
+            <tr v-if="!shown.length"><td colspan="13" class="px-4 py-6 text-center text-slate-500">无数据</td></tr>
           </tbody>
         </table>
       </div>
       <div class="px-4 py-2 text-[10px] text-slate-600 border-t border-slate-800">
-        活跃行：市值/盈亏 = 最新收盘价 × 股数（未计佣金/印花税/滑点）；无行情或停牌显示 —。
-        历史行：盈亏/盈亏% = 平仓时已实现（positions.parquet 记录值）。
+        活跃行：市值/盈亏 = 最新收盘价 × 股数（毛）；净盈亏 = 毛盈亏 − 买入费 − 卖出费（估算）。
+        历史行：盈亏/盈亏% = 平仓时已实现；净盈亏 = 已实现 − 估算费用。
+        <template v-if="fees">费率：佣金 {{ (fees.commission_rate * 100).toFixed(3) }}% 双向 · 印花税 {{ (fees.stamp_tax_rate * 100).toFixed(3) }}% 卖出 · 滑点 {{ (fees.slippage_bps / 100).toFixed(2) }}% 双向 · 来源 {{ fees.source }}；未含{{ fees.excludes }}。无行情或停牌显示 —。费用按“每行都真实成交”估算：若某行是记账回滚（entry=exit、pnl=0，如 rollback_* 原因），实际未成交，其费用属记账假象。</template>
       </div>
     </div>
   </div>

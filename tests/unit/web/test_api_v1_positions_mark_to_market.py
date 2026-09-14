@@ -18,6 +18,7 @@ import polars as pl
 import pytest
 
 from qp.web.routers import api_v1
+from qp.web.services import position_service
 
 
 def _pos(
@@ -97,7 +98,7 @@ def isolated(tmp_path, monkeypatch):
     ).write_parquet(str(px_path))
     monkeypatch.setattr(api_v1, "POSITIONS_DIR", pos_dir)
     monkeypatch.setattr(api_v1, "DAILY_PRICE_LATEST", px_path)
-    api_v1._latest_quotes_cached.cache_clear()
+    position_service.clear_quote_cache()
     return api_v1.positions(active_only=False)
 
 
@@ -162,3 +163,87 @@ def test_missing_positions_file_reports_error(tmp_path, monkeypatch):
     out = api_v1.positions(active_only=False)
     assert out["positions"] == []
     assert "error" in out
+
+
+# ----------------------------------------------------------------------
+# 费用后盈亏（估）：CostModel 口径，未含券商最低佣金/过户费
+# ----------------------------------------------------------------------
+
+
+def test_active_row_fee_and_net_fields(isolated):
+    """活跃行补费用后字段：净盈亏 = 毛 − 买入费 − 卖出费（费率来自 CostModel）。"""
+    p = next(r for r in isolated["positions"] if r["position_id"] == "P-00001")
+    # 买 450：佣金0.025% + 滑点0.1% = 0.5625 → 0.56；卖 490：+印花税0.05% = 0.8575 → 0.86
+    assert p["est_buy_fee"] == pytest.approx(0.56, abs=1e-9)
+    assert p["est_sell_fee"] == pytest.approx(0.86, abs=1e-9)
+    assert p["est_round_trip_fee"] == pytest.approx(1.42, abs=1e-9)
+    assert p["unrealized_pnl"] == 40.0
+    assert p["unrealized_pnl_net"] == pytest.approx(38.58, abs=1e-9)
+    # 成本基准含买入费：40 - fees / (450 + 0.5625 未四舍五入)
+    assert p["unrealized_pnl_net_pct"] == pytest.approx(38.58 / (450 + 0.56), abs=1e-5)
+    # 费率元数据随 meta 返回（前端展示口径）
+    fees = isolated["meta"]["fees"]
+    assert fees["commission_rate"] == 0.00025
+    assert fees["stamp_tax_rate"] == 0.0005
+    assert fees["slippage_bps"] == 10.0
+
+
+def test_closed_row_realized_net_fields(isolated):
+    """已平仓行：realized_pnl_net = 已实现毛 − 估算费用；毛值 pnl 不被改写。"""
+    p = next(r for r in isolated["positions"] if r["position_id"] == "P-00003")
+    # 买 2000 → 2.5；卖 2200 → 3.85；200 − 6.35 = 193.65
+    assert p["est_buy_fee"] == pytest.approx(2.5, abs=1e-9)
+    assert p["est_sell_fee"] == pytest.approx(3.85, abs=1e-9)
+    assert p["realized_pnl_net"] == pytest.approx(193.65, abs=1e-9)
+    assert p["pnl"] == 200.0
+
+
+def test_missing_quote_keeps_fee_none(isolated, tmp_path):
+    """无行情：卖出费/净盈亏一律 None（只有买入费可估），不回落 0。"""
+    _write(
+        api_v1.POSITIONS_DIR / "positions.parquet",
+        [_pos("P-00009", "600519", 1500.0, 100, entry_date="2026-09-01")],
+    )
+    p = api_v1.positions(active_only=True)["positions"][0]
+    assert p["est_buy_fee"] == pytest.approx(187.5, abs=1e-6)  # 150000 × 0.125%
+    assert p["est_sell_fee"] is None
+    assert p["est_round_trip_fee"] is None
+    assert p["unrealized_pnl_net"] is None
+
+
+# ----------------------------------------------------------------------
+# /api/v1/account 与页面同源（valuation 三口径）
+# ----------------------------------------------------------------------
+
+
+def test_account_valuation_views(isolated):
+    """valuation 给出成本/最新收盘/费用后三口径，cost 与 index.json.active_value 同值。"""
+    out = api_v1.account()
+    v = out["valuation"]
+    assert v["quote_date"] == "2026-09-14"
+    # 成本口径 = Σ entry×shares（活跃行：450 + 389）
+    assert v["cost"]["positions_value"] == 839.0
+    # 最新收盘口径 = Σ 收盘×shares（活跃行：4.9×100 + 3.94×100）
+    assert v["mark"]["positions_value"] == 884.0
+    assert v["mark"]["total_equity"] == 884.0  # fixture 无 account.json → cash 0
+    assert v["mark"]["unrealized_pnl"] == pytest.approx(45.0)  # 40 + 5
+    assert v["mark"]["n_active"] == 2
+    assert v["mark"]["n_fallback_cost"] == 0
+    # 已实现：毛 200 / 费后 193.65
+    assert v["realized"]["gross"] == 200.0
+    assert v["realized"]["net"] == pytest.approx(193.65, abs=1e-9)
+    assert v["realized"]["n_closed"] == 1
+    assert v["fees"]["source"] == "qp/portfolio/cost_model.py"
+
+
+def test_account_missing_json_degrades(tmp_path, monkeypatch):
+    """account.json / index.json 缺失 → 空 dict + 空估值，而不是 500。"""
+    monkeypatch.setattr(api_v1, "POSITIONS_DIR", tmp_path / "empty_pos")
+    monkeypatch.setattr(api_v1, "DAILY_PRICE_LATEST", tmp_path / "none.parquet")
+    position_service.clear_quote_cache()
+    out = api_v1.account()
+    assert out["account"] == {}
+    assert out["index"] == {}
+    assert out["valuation"]["cost"]["positions_value"] == 0.0
+    assert out["valuation"]["mark"]["positions_value"] == 0.0
+    assert out["valuation"]["mark"]["n_active"] == 0

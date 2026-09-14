@@ -16,6 +16,9 @@
   <div class="card" style="text-align: center; padding: 16px; border-left: 4px solid var(--green);">
     <div style="font-size: 12px; color: var(--c-muted);">账户总资产</div>
     <div style="font-size: 22px; font-weight: 700;">{{ stats.account_total_equity_fmt }}</div>
+    <div style="font-size: 11px; color: var(--c-muted);" title="成本口径 {{ stats.cost_value_fmt }}（entry×shares）">
+      最新收盘 {{ stats.quote_date or "—" }} · 成本口径 {{ stats.cost_value_fmt }}
+    </div>
   </div>
   <div class="card" style="text-align: center; padding: 16px;">
     <div style="font-size: 12px; color: var(--c-muted);">可用现金</div>
@@ -42,9 +45,10 @@
     <div style="font-size: 20px; font-weight: 700;">{{ stats.total_value_fmt }}</div>
   </div>
   <div class="card" style="text-align: center; padding: 16px;">
-    <div style="font-size: 12px; color: var(--c-muted);">已实现盈亏</div>
-    <div style="font-size: 20px; font-weight: 700; color: {% if stats.total_realized_pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">
-      {{ stats.total_realized_pnl_fmt }}
+    <div style="font-size: 12px; color: var(--c-muted);">已实现盈亏 (毛 / 费后)</div>
+    <div style="font-size: 20px; font-weight: 700; color: {% if stats.total_realized_pnl_net >= 0 %}var(--green){% else %}var(--red){% endif %};"
+         title="费后 = 毛盈亏 − 买入费 − 卖出费（CostModel 估算；未含券商最低佣金/过户费）。费用按每行都真实成交估算——记账回滚行（entry=exit、pnl=0）实际未成交，会高估费用。">
+      {{ stats.total_realized_pnl_fmt }} <span style="font-size: 14px; color: var(--c-muted);">{{ stats.total_realized_pnl_net_fmt }}</span>
     </div>
   </div>
   <div class="card" style="text-align: center; padding: 16px;">
@@ -138,6 +142,7 @@
           <th>股数</th>
           <th>市值(最新)</th>
           <th>盈亏 %</th>
+          <th>费后 %</th>
           <th>策略</th>
           <th>决策包</th>
         </tr>
@@ -154,7 +159,17 @@
           <td>¥{{ "%.0f"|format(p.market_value_marked) }}</td>
           <td>
             {% if p.unrealized_pnl_pct is not none %}
-            <span class="badge {{ 'badge-green' if p.unrealized_pnl_pct >= 0 else 'badge-red' }}" style="font-size: 11px;">{{ "%+.2f"|format(p.unrealized_pnl_pct) }}%</span>
+            <span class="badge {{ 'badge-green' if p.unrealized_pnl_pct >= 0 else 'badge-red' }}" style="font-size: 11px;">{{ "%+.2f"|format(p.unrealized_pnl_pct * 100) }}%</span>
+            {% else %}
+            <span class="c-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if p.unrealized_pnl_net_pct is not none %}
+            <span class="c-muted" style="font-size: 11px;"
+                  title="费用后（估）: 买入费 ¥{{ '%.2f'|format(p.est_buy_fee) }} + 卖出费 ¥{{ '%.2f'|format(p.est_sell_fee) }}；未含券商最低佣金/过户费">
+              {{ "%+.2f"|format(p.unrealized_pnl_net_pct * 100) }}%
+            </span>
             {% else %}
             <span class="c-muted">—</span>
             {% endif %}
@@ -178,7 +193,7 @@
 <div class="card" style="margin-bottom: 20px;">
   <div class="card-header">
     <span>&#128200; 已平仓持仓 Closed Positions</span>
-    <span class="c-muted" style="font-size: 12px;">{{ closed_positions | length }} 笔 · 已实现 {{ stats.total_realized_pnl_fmt }}</span>
+    <span class="c-muted" style="font-size: 12px;">{{ closed_positions | length }} 笔 · 已实现 毛 {{ stats.total_realized_pnl_fmt }} / 费后 {{ stats.total_realized_pnl_net_fmt }}</span>
   </div>
   <div class="card-body">
     <table class="data-table">
@@ -191,6 +206,7 @@
           <th>卖出价</th>
           <th>股数</th>
           <th>盈亏金额</th>
+          <th>费后金额</th>
           <th>盈亏 %</th>
           <th>卖出原因</th>
         </tr>
@@ -205,6 +221,16 @@
           <td>{% if p.exit_price %}¥{{ "%.2f"|format(p.exit_price) }}{% else %}<span class="c-muted">—</span>{% endif %}</td>
           <td>{{ p.shares }}</td>
           <td><span class="{{ 'badge-green' if p.pnl >= 0 else 'badge-red' }}" style="font-size: 12px;">¥{{ "%+.0f"|format(p.pnl) }}</span></td>
+          <td>
+            {% if p.realized_pnl_net is not none %}
+            <span class="{{ 'badge-green' if p.realized_pnl_net >= 0 else 'badge-red' }}" style="font-size: 12px;"
+                  title="费用(估) 买 ¥{{ '%.2f'|format(p.est_buy_fee) }} + 卖 ¥{{ '%.2f'|format(p.est_sell_fee) }}；未含券商最低佣金/过户费">
+              ¥{{ "%+.0f"|format(p.realized_pnl_net) }}
+            </span>
+            {% else %}
+            <span class="c-muted">—</span>
+            {% endif %}
+          </td>
           <td><span class="badge {{ 'badge-green' if p.pnl_pct >= 0 else 'badge-red' }}" style="font-size: 11px;">{{ "%+.2f"|format(p.pnl_pct * 100) }}%</span></td>
           <td style="font-size: 12px;">{{ p.exit_reason or "—" }}</td>
         </tr>

@@ -36,6 +36,13 @@ Decisions(决策) / SystemHealth / Knowledge；路由见 `src/App.vue`，端点�
 ## 显示口径铁律（与 WebUI 一致）
 
 后端拿不到的值返回 `None`，前端显示 `—`/`N/A`，**不得回落为 0**；
-数字必须标注口径与数据日期。示例：`/api/v1/positions` 的 `pnl`/`pnl_pct` 是
-**已实现盈亏**（平仓才结算），持仓行的盈亏要用 `unrealized_pnl`/
-`unrealized_pnl_pct`（最新收盘标记，**小数**口径，0.1333 = +13.33%）。
+数字必须标注口径与数据日期。持仓/账户有**三套**口径，唯一实现在
+`qp/web/services/position_service.py`，前端只消费、不重算：
+
+  cost = entry_price × shares（记录时点；= index.json.active_value）
+  mark = 最新收盘 × shares（daily_price_latest 最后交易日）
+  net  = 毛盈亏 − 买入费 − 卖出费（CostModel 估算：佣金0.025%双向 + 印花税0.05%卖出 + 滑点0.1%双向）
+
+对应字段：`market_value` / `pnl`（已实现）、`market_value_latest` / `unrealized_pnl(_pct)`
+（**小数**口径，0.1333 = +13.33%）、`est_*_fee` / `unrealized_pnl_net(_pct)`。
+未计：券商最低佣金、过户费、市场冲击 —— 小额单真实费用高于估算，UI 已注明。

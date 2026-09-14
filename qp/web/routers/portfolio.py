@@ -5,6 +5,9 @@ GET "/portfolio" — Current portfolio with:
   - Latest exit signals from today's DecisionPackage
   - P&L summary
   - Decision package links
+
+口径：市值/盈亏/费用后盈亏全部来自 ``qp.web.services.position_service.PositionService``
+（与 ``/api/v1/*`` 及 SPA 同源，避免同一页面两个"总权益"）。
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from loguru import logger
 from qp.shared.paths import DAILY_PRICE_LATEST
 from qp.web.routers._templates import templates
 from qp.web.services.decision_service import DecisionService
+from qp.web.services.position_service import PositionService
 
 router = APIRouter(tags=["portfolio"])
 
@@ -36,45 +40,30 @@ async def portfolio(request: Request) -> Any:
     from qp.decision.position_ledger import PositionLedger
 
     ledger = PositionLedger()
-    active = ledger.get_active()
-    total_pnl = ledger.total_realized_pnl()
-    all_positions = ledger.get_history(limit=50)
-    account = ledger.get_account_summary()  # ADR-032
 
-    # Enrich positions with current status
-    positions = [p.to_dict() for p in active]
-
-    # Mark-to-market: latest close per symbol from daily_price_latest.parquet
-    latest_prices: dict[str, float] = {}
-    try:
-        import polars as pl
-
-        px = pl.read_parquet(DAILY_PRICE_LATEST)
-        if not px.is_empty():
-            latest_date = px["trade_date"].max()
-            px_latest = (
-                px.filter(pl.col("trade_date") == latest_date)
-                .select(["symbol", "close"])
-                .unique(subset=["symbol"], keep="first")
-            )
-            latest_prices = {
-                str(r["symbol"]): float(r["close"]) for r in px_latest.iter_rows(named=True)
-            }
-    except Exception as exc:
-        logger.warning("Mark-to-market prices unavailable: {}", exc)
-
+    # 统一口径：标记(最新收盘) + 费用后盈亏（与 /api/v1/positions、SPA 同一实现）
+    svc = PositionService(quote_path=DAILY_PRICE_LATEST)
+    all_rows = svc.enrich([p.to_dict() for p in ledger.get_all()])
+    positions = [r for r in all_rows if r.get("is_active")]
     for p in positions:
-        close = latest_prices.get(p.get("symbol", ""))
-        p["latest_price"] = close
-        entry = p.get("entry_price", 0.0)
-        if close is not None:
-            # Market value = latest close × shares (true market value)
-            p["market_value_marked"] = round(close * p.get("shares", 0), 2)
-            p["unrealized_pnl_pct"] = round((close - entry) / entry * 100, 2) if entry > 0 else None
-        else:
-            # No quote (suspended/delisted) → fall back to cost value
-            p["market_value_marked"] = p.get("market_value", 0.0)
-            p["unrealized_pnl_pct"] = None
+        # 模板兼容字段：最新收盘市值（无行情 → 回落成本市值，本行仍有 latest_price=None 标识）
+        p["market_value_marked"] = (
+            p["market_value_latest"] if p["market_value_latest"] is not None else p["market_value"]
+        )
+
+    closed_positions = [r for r in all_rows if not r.get("is_active")]
+    winning = [r for r in closed_positions if (r.get("pnl") or 0) > 0]
+
+    # ADR-032 成本口径账户 + 最新收盘口径（同源，均由服务给出）
+    account = ledger.get_account_summary()  # cash / initial_capital / invested / cost value
+    views = svc.account_views(cash=account["cash"], rows=all_rows)
+    cost_value = views["cost"]["positions_value"]
+    account["positions_value_cost"] = cost_value
+    account["positions_value"] = views["mark"]["positions_value"]  # 页面口径 = 最新收盘
+    account["total_equity"] = views["mark"]["total_equity"]
+    account["unrealized_pnl"] = views["mark"]["unrealized_pnl"]
+    account["unrealized_pnl_net"] = views["mark"]["unrealized_pnl_net"]
+    account["est_round_trip_fee"] = views["mark"]["est_round_trip_fee"]
 
     # Get latest decision for sell signals
     decision_svc = _get_service(request, "decision_service", DecisionService)
@@ -92,30 +81,29 @@ async def portfolio(request: Request) -> Any:
                     if "STOP_LOSS" in w or "RANK_DROP" in w or "FUNDAMENTAL" in w:
                         sell_signals.append({**rec, "exit_reason": w})
 
-    # P&L stats
-    closed = [p for p in all_positions if not p.is_active]
-    winning = [p for p in closed if p.pnl > 0]
-
-    # ADR-032 + mark-to-market: 账户卡与净值曲线同口径
-    # PositionLedger.positions_value 是成本市值 (entry_price×shares)，
-    # 净值曲线(影子盘) 用最新收盘市值 — 两者必须一致，否则同一页面两个"总权益"
-    mkt_positions_value = round(sum(p["market_value_marked"] for p in positions), 2)
-    account["positions_value"] = mkt_positions_value
-    account["total_equity"] = round(account["cash"] + mkt_positions_value, 2)
-
-    # Closed positions for the realized-PnL table
-    closed_positions = [p.to_dict() for p in closed]
+    realized_net = views["realized"]["net"]
 
     portfolio_stats = {
-        "active_count": len(active),
-        "total_value": mkt_positions_value,
-        "total_value_fmt": f"¥{mkt_positions_value:,.0f}",
-        "closed_count": len(closed),
+        "active_count": len(positions),
+        "cost_value": cost_value,
+        "cost_value_fmt": f"¥{cost_value:,.0f}",
+        "total_value": views["mark"]["positions_value"],
+        "total_value_fmt": f"¥{views['mark']['positions_value']:,.0f}",
+        "quote_date": views["quote_date"],
+        "closed_count": len(closed_positions),
         "winning_count": len(winning),
-        "win_rate": f"{len(winning) / len(closed) * 100:.0f}%" if closed else "N/A",
-        "total_realized_pnl": total_pnl,
-        "total_realized_pnl_fmt": f"¥{total_pnl:+,.0f}",
-        "pnl_badge": "badge-green" if total_pnl >= 0 else "badge-red",
+        "win_rate": f"{len(winning) / len(closed_positions) * 100:.0f}%"
+        if closed_positions
+        else "N/A",
+        "total_realized_pnl": views["realized"]["gross"],
+        "total_realized_pnl_fmt": f"¥{views['realized']['gross']:+,.0f}",
+        "total_realized_pnl_net": realized_net,
+        "total_realized_pnl_net_fmt": f"¥{realized_net:+,.0f}",
+        "pnl_badge": "badge-green" if views["realized"]["gross"] >= 0 else "badge-red",
+        "unrealized_pnl": views["mark"]["unrealized_pnl"],
+        "unrealized_pnl_fmt": f"¥{views['mark']['unrealized_pnl']:+,.0f}",
+        "unrealized_pnl_net_fmt": f"¥{views['mark']['unrealized_pnl_net']:+,.0f}",
+        "est_round_trip_fee_fmt": f"¥{views['mark']['est_round_trip_fee']:,.2f}",
         # ADR-032 account truth
         "account_cash": account["cash"],
         "account_cash_fmt": f"¥{account['cash']:,.0f}",
@@ -159,10 +147,11 @@ async def portfolio(request: Request) -> Any:
         pass
 
     logger.info(
-        "Portfolio: {} active, {} closed, PnL=¥{:.0f}",
-        len(active),
-        len(closed),
-        total_pnl,
+        "Portfolio: {} active, {} closed, PnL=¥{:.0f} (net ¥{:.0f})",
+        len(positions),
+        len(closed_positions),
+        views["realized"]["gross"],
+        realized_net,
     )
 
     return templates.TemplateResponse(

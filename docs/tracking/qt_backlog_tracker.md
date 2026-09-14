@@ -154,6 +154,44 @@
 
 ---
 
+## 待办清单（2026-09-14 第二轮）
+
+### #12 持仓盈亏计费用 + 账户口径同源 ✅ 已完成（2026-09-14）
+
+- **背景**: #11 的两条遗留 —— (a) 盈亏未计佣金/印花税/滑点；(b) `/api/v1/account` 的
+  `index.json.active_value` 是成本市值，与页面按最新收盘标记的市值不同源（同一页面两个"总权益"）
+- **完成**:
+  - [x] 新增 `qp/web/services/position_service.py`：**唯一**估值实现，三套显式口径 ——
+        `cost`（entry×shares，= `PositionLedger.total_active_value` / `index.json.active_value`）、
+        `mark`（最新收盘×shares）、`fees`/`net`（`CostModel` 估算：买入=佣金+滑点；卖出=佣金+印花税+滑点）；
+        行情缓存键含 `mtime_ns`（数据更新自动失效）；无行情 → `None`（显示 —，不回落 0）；
+        账户视图标 `n_fallback_cost` / `fallback_symbols`（无行情行回落成本，显式计数）
+  - [x] `/api/v1/positions` 增 `est_buy_fee`/`est_sell_fee`/`est_round_trip_fee`/
+        `unrealized_pnl_net(_pct)`（活跃）/`realized_pnl_net(_pct)`（已平仓）+ `meta.fees` 费率元数据
+  - [x] `/api/v1/account` 增 `valuation`（cost/mark/realized/fees 三口径），前端不再本地重算
+  - [x] 老 UI 同源：`routers/portfolio.py`（市值/盈亏/费后列 + 账户卡标注成本口径）、
+        `routers/dashboard.py`（账户卡加"账户总资产（最新收盘）/成本口径/浮动盈亏 毛·费后"）
+  - [x] SPA：持仓页加「净盈亏(费后)」列（tooltip 拆费用、页脚列费率与未计项）、总览页 KPI 卡改用服务端口径
+  - [x] 顺带修同类缺陷：`api_v1` 的 `json_load(account.json / index.json / 两个 registry / stock_names)`
+        文件缺失时直接 500 → 新增 `_json_or_empty()` 降级为空 dict（运行产物在新机器上本就不存在）
+  - [x] 验证：新增/更新 9 项测试（`tests/unit/web` 20 项全过）；ruff format --check / ruff check / pyright 全 0；
+        真机 curl + headless Chrome DOM：持仓页 600207 毛 +60.00/+13.33% → 净 +58.55/+12.99%（费 ¥1.45）、
+        总览页 总资产 ¥100,408（= 现金 99,504 + 最新市值 904；成本口径 839）、浮盈 ¥65.00 → 费后 ¥62.37、
+        已实现 ¥343.00 → 费后 ¥−33.38；老 UI `/` 与 `/portfolio` 同步显示
+- **数据结论（用户可见）**: 小额持仓被费用吃掉 —— 13 笔平仓毛 +¥343、估算费用 ¥376 → 费后 **−¥33**；
+  两只在持仓位毛 +¥65（+7.75%）→ 费后 +¥62.37（+7.42%）
+- **遗留（待用户决定）**:
+  - [ ] 记账回滚行（`exit_reason=rollback_wrong_size`，entry=exit 且 pnl=0，共 5 笔）实际未成交，
+        但费用估算按"都成交"计 → 汇总费后被高估约 ¥289：是否按原因串排除？
+  - [ ] 券商最低佣金（常见 ¥5/笔）与过户费未建模 —— 小额单（¥450 级）真实费用远高于估算，是否加可配置项？
+  - [ ] `MarketImpactModel.compute_adv()` 的 volume 单位：日线 `volume` 单位是**手**，
+        而 `compute_adv` 用 `close*volume` 当成交额 → ADV 低估 100× → 冲击成本估算**高估 10×**
+        （实测 1 万元单：600207 ¥5.47 vs 修正后 ¥0.55；600930 ¥2.54 vs ¥0.25），
+        并让 10%-ADV 流动性惩罚提前 100× 触发。影响 `daily_pipeline` Step 11 的
+        `estimated_cost_pct`（进决策包 markdown / portfolio_snapshot）—— 生产路径，待批准后修（一行 ×100）
+
+---
+
 ## 统一接口候选（2026-08-27 扫描，仅记录未实施）
 
 > 背景：时间接口已统一（`qp/shared/time.py`，commit fb8d00b）。以下 4 处为同类"散落多点、值得收编"的横切关注点。

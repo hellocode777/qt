@@ -13,10 +13,19 @@ const errs = ref([]);
 const activePositions = computed(() => positions.value.filter(p => p.is_active));
 // 活跃持仓按最新收盘标记；无行情时回落成本市值（后端 market_value_latest=None）
 const mktValue = p => p.market_value_latest ?? p.market_value ?? 0;
+// 账户估值统一来自 /api/v1/account 的 valuation（服务端单一实现，勿本地重算口径）
+const valuation = computed(() => account.value?.valuation ?? null);
 const totalValue = computed(() => {
+  const v = valuation.value;
+  if (v?.mark?.total_equity != null) return v.mark.total_equity;
   if (!account.value) return null;
   const mv = activePositions.value.reduce((s, p) => s + mktValue(p), 0);
   return account.value.account.cash + mv;
+});
+const activeMktValue = computed(() => {
+  const v = valuation.value;
+  if (v?.mark?.positions_value != null) return v.mark.positions_value;
+  return activePositions.value.reduce((s, p) => s + mktValue(p), 0);
 });
 
 async function load() {
@@ -109,18 +118,32 @@ onMounted(load);
         <div class="card-title mb-2">账户总资产 (现金+持仓市值)</div>
         <div class="text-2xl font-semibold mono">{{ totalValue !== null ? fmtMoney(totalValue) : '—' }}</div>
         <div class="text-[11px] text-slate-500 mt-1">初始 100,000 · 现金 {{ account ? fmtMoney(account.account.cash) : '—' }}</div>
+        <div class="text-[11px] text-slate-500 mt-0.5" v-if="valuation?.mark">
+          持仓按 {{ valuation.quote_date || '—' }} 收盘 · 成本口径 {{ fmtMoney(valuation.cost.positions_value) }}
+          <span v-if="valuation.mark.n_fallback_cost"> · {{ valuation.mark.n_fallback_cost }} 只无行情按成本计</span>
+        </div>
+        <div class="text-[11px] mt-0.5" v-if="valuation?.mark">
+          浮动盈亏
+          <span :class="pnlClass(valuation.mark.unrealized_pnl)">{{ fmtMoney(valuation.mark.unrealized_pnl) }}</span>
+          <span class="text-slate-500">（费后 {{ fmtMoney(valuation.mark.unrealized_pnl_net) }}，估费 {{ fmtMoney(valuation.mark.est_round_trip_fee) }}）</span>
+        </div>
       </div>
       <div class="card p-4">
         <div class="card-title mb-2">活跃持仓</div>
         <div class="text-2xl font-semibold mono">{{ activePositions.length }} <span class="text-sm text-slate-500">/ {{ positions.length }} 总</span></div>
-        <div class="text-[11px] text-slate-500 mt-1">市值 {{ fmtMoney(activePositions.reduce((s,p)=>s+(p.market_value||0),0)) }}</div>
+        <div class="text-[11px] text-slate-500 mt-1">市值(最新收盘) {{ fmtMoney(activeMktValue) }}</div>
       </div>
       <div class="card p-4">
-        <div class="card-title mb-2">已实现盈亏 (累计)</div>
+        <div class="card-title mb-2">已实现盈亏 (累计 · 毛/费后)</div>
         <div class="text-2xl font-semibold mono" :class="pnlClass(account ? account.index.total_realized_pnl : null)">
           {{ account ? fmtMoney(account.index.total_realized_pnl) : '—' }}
         </div>
-        <div class="text-[11px] text-slate-500 mt-1">positions/index.json</div>
+        <div class="text-[11px] mt-1" v-if="valuation?.realized">
+          费后
+          <span :class="pnlClass(valuation.realized.net)" title="费用按每行都真实成交估算；记账回滚行（entry=exit、pnl=0）实际未成交，会高估费用">{{ fmtMoney(valuation.realized.net) }}</span>
+          <span class="text-slate-500"> · {{ valuation.realized.n_closed }} 笔平仓</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-0.5">positions/index.json · 费率见持仓页脚注</div>
       </div>
       <div class="card p-4">
         <div class="card-title mb-2">建议敞口 (最新 regime)</div>
@@ -202,6 +225,9 @@ onMounted(load);
             <td class="px-4 py-2 mono text-right" :class="pnlClass(p.unrealized_pnl)">
               {{ fmtMoney(p.unrealized_pnl) }}
               <span class="text-[11px] text-slate-500">{{ p.unrealized_pnl_pct != null ? fmtPct(p.unrealized_pnl_pct * 100) : '' }}</span>
+              <div class="text-[10px] text-slate-600" v-if="p.unrealized_pnl_net != null">
+                费后 {{ fmtMoney(p.unrealized_pnl_net) }} {{ fmtPct(p.unrealized_pnl_net_pct * 100) }}
+              </div>
             </td>
             <td class="px-4 py-2 text-slate-500 max-w-52 truncate">{{ p.notes || '—' }}</td>
           </tr>

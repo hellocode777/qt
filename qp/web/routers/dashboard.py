@@ -57,11 +57,28 @@ async def dashboard(request: Request) -> Any:
 
     # ADR-032: account truth (cash ledger) — replaces recommendation-level
     # remaining_cash in the "Today's Decisions" panel.
-    account = {}
+    # 2026-09-14: 市值/浮盈改用统一估值服务（与 /api/v1/account、SPA 同源）
+    account: dict[str, Any] = {}
     try:
         from qp.decision.position_ledger import PositionLedger
+        from qp.shared.paths import DAILY_PRICE_LATEST
+        from qp.web.services.position_service import PositionService
 
-        account = PositionLedger().get_account_summary()
+        ledger = PositionLedger()
+        account = ledger.get_account_summary()  # 成本口径（cash/initial/invested 保持原键）
+        svc = PositionService(quote_path=DAILY_PRICE_LATEST)
+        rows = svc.enrich([p.to_dict() for p in ledger.get_all()])
+        views = svc.account_views(cash=account["cash"], rows=rows)
+        account["cost_positions_value"] = views["cost"]["positions_value"]
+        account["positions_value"] = views["mark"]["positions_value"]
+        account["total_equity"] = views["mark"]["total_equity"]
+        account["unrealized_pnl"] = views["mark"]["unrealized_pnl"]
+        account["unrealized_pnl_net"] = views["mark"]["unrealized_pnl_net"]
+        account["quote_date"] = views["quote_date"]
+        account["total_equity_fmt"] = f"¥{views['mark']['total_equity']:,.0f}"
+        account["cost_positions_value_fmt"] = f"¥{views['cost']['positions_value']:,.0f}"
+        account["unrealized_pnl_fmt"] = f"¥{views['mark']['unrealized_pnl']:+,.0f}"
+        account["unrealized_pnl_net_fmt"] = f"¥{views['mark']['unrealized_pnl_net']:+,.0f}"
     except Exception:
         account = {}
 

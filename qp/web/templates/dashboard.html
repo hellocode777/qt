@@ -431,6 +431,11 @@
       {% if account %}
       已用 ¥{{ "%.0f"|format(account.invested) }} / 剩余 ¥{{ "%.0f"|format(account.cash) }}
       <span style="font-size:11px;">（账户口径 · 初始 ¥{{ "%.0f"|format(account.initial_capital) }}）</span>
+      {% if account.total_equity_fmt is defined %}
+      <br /><span style="font-size:11px;">账户总资产 {{ account.total_equity_fmt }}
+        （持仓按 {{ account.quote_date or "—" }} 收盘 · 成本口径 {{ account.cost_positions_value_fmt }}）
+        · 浮动盈亏 {{ account.unrealized_pnl_fmt }}（费后 {{ account.unrealized_pnl_net_fmt }}）</span>
+      {% endif %}
       {% else %}
       已用 ¥{{ decision.report.total_invested_fmt }} / 剩余 ¥{{ decision.report.remaining_cash_fmt }}
       {% endif %}

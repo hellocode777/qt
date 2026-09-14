@@ -40,6 +40,7 @@ from qp.shared.paths import (
     STRATEGY_REGISTRY,
     WATCHDOG_DIR,
 )
+from qp.web.services.position_service import PositionService
 
 router = APIRouter(tags=["api_v1"])
 
@@ -81,76 +82,70 @@ def _as_records(df) -> list[dict[str, Any]]:
     return records
 
 
-def _mtime_ns(path) -> int:
-    """文件 mtime(ns)；不存在返回 0 —— 作为缓存键，文件一变缓存即失效。"""
-    try:
-        return path.stat().st_mtime_ns
-    except OSError:
-        return 0
-
-
-@lru_cache(maxsize=4)
-def _latest_quotes_cached(path: str, mtime_ns: int) -> dict[str, Any]:
-    """daily_price_latest.parquet 最后一个 trade_date 的 symbol → 收盘价。
-
-    缓存键含 mtime_ns：数据文件每天更新后自动重读（全表 700 万行，不缓存会拖慢页面）。
-    无文件/无数据 → 空 dict（不作为 0 参与计算）。
-    """
-    import polars as pl
-
-    empty: dict[str, Any] = {"quote_date": None, "closes": {}, "suspended": {}}
-    if mtime_ns <= 0:
-        return empty
-    try:
-        px = pl.read_parquet(path)
-    except Exception as exc:
-        logger.warning("latest quotes unavailable: {}", exc)
-        return empty
-    if px.is_empty():
-        return empty
-    latest = px["trade_date"].max()
-    snapshot = (
-        px.filter(pl.col("trade_date") == latest)
-        .select(["symbol", "close", "is_suspended"])
-        .unique(subset=["symbol"], keep="first")
-    )
-    closes: dict[str, float] = {}
-    suspended: dict[str, bool] = {}
-    for r in snapshot.iter_rows(named=True):
-        sym = str(r["symbol"])
-        if r["close"] is None:
-            continue
-        closes[sym] = float(r["close"])
-        suspended[sym] = bool(r["is_suspended"])
-    return {"quote_date": str(latest)[:10], "closes": closes, "suspended": suspended}
-
-
 # ─────────────────────────────────────────────────────────────
 # 账户 & 持仓
 # ─────────────────────────────────────────────────────────────
 
 
+def _json_or_empty(path: Any) -> dict[str, Any]:
+    """读 JSON；文件缺失/损坏/非 dict → ``{}``（只读端点降级，不 500）。
+
+    ``json_load`` 直接抛 FileNotFoundError —— 运行产物（account.json / registry 等）
+    在新机器或首次运行前并不存在，前端应看到空数据（显示 —），而不是整页 500。
+    """
+    try:
+        if not path.exists():
+            return {}
+        data = json_load(path)
+    except Exception as exc:
+        logger.warning("json unavailable ({}): {}", path, exc)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 @router.get("/api/v1/account")
 def account() -> dict[str, Any]:
-    """账户现金 (account.json) + 持仓汇总 (index.json)。"""
+    """账户现金 (account.json) + 持仓汇总 (index.json) + 统一估值三口径 (valuation)。
+
+    ``index.json.active_value`` 是**成本市值**（记录时点，非实时）—— 与页面按最新收盘
+    标记的市值不同源，故这里额外给出 ``valuation``：成本口径 / 最新收盘口径 / 费用后。
+    前端一律消费 ``valuation``，不要自己拿 cash+市值重算（否则同一页面会出现两个"总权益"）。
+    """
+    import polars as pl
+
+    acct = _json_or_empty(POSITIONS_DIR / _ACCOUNT_JSON)
+    cash = float(acct.get("cash", 0.0) or 0.0)
+
+    valuation: dict[str, Any] = {}
+    try:
+        path = POSITIONS_DIR / _POSITIONS_PARQUET
+        rows = _as_records(pl.read_parquet(str(path))) if path.exists() else []
+        svc = PositionService(quote_path=DAILY_PRICE_LATEST)
+        valuation = svc.account_views(cash=cash, rows=svc.enrich(rows))
+    except Exception as exc:
+        logger.warning("account valuation unavailable: {}", exc)
+        valuation = {"error": "valuation unavailable"}
+
     return {
-        "account": json_load(POSITIONS_DIR / _ACCOUNT_JSON),
-        "index": json_load(POSITIONS_DIR / _INDEX_JSON),
+        "account": acct,
+        "index": _json_or_empty(POSITIONS_DIR / _INDEX_JSON),
+        "valuation": valuation,
     }
 
 
 @router.get("/api/v1/positions")
 def positions(active_only: bool = Query(default=False)) -> dict[str, Any]:
-    """持仓明细（positions.parquet）+ 最新收盘价标记（daily_price_latest.parquet）。
+    """持仓明细（positions.parquet）+ 最新收盘标记 + 费用后盈亏。
 
-    字段语义（两套口径，勿混用）：
-    - 记录时点值：market_value=成本市值(entry×shares)；pnl/pnl_pct=**已实现**盈亏，
-      仅平仓时结算（Position.realized_pnl / close()），持仓中恒为 0 —— 故持仓行
-      必须用下面的标记值展示，不能把 0 当盈亏。
-    - 标记值（最新收盘）：latest_price / quote_date / market_value_latest /
-      unrealized_pnl / unrealized_pnl_pct（**小数**，0.1333 = +13.33%，与 pnl_pct 同口径）。
-      无行情（停牌/退市/数据缺失）→ None，前端显示 —，不得回落为 0。
-    - unrealized_* 只对 is_active 行计算；已平仓行的盈亏以 pnl/pnl_pct 为准。
+    字段语义（三套口径，勿混用；统一实现在 qp.web.services.position_service）：
+    - 记录时点/已实现：``market_value``=成本市值(entry×shares)；``pnl``/``pnl_pct`` 是
+      **已实现盈亏**（仅平仓时结算，持仓中恒 0）—— 持仓行展示必须用标记值，别把 0 当盈亏。
+    - 标记（最新收盘）：``latest_price`` / ``quote_date`` / ``latest_suspended`` /
+      ``market_value_latest`` / ``unrealized_pnl(_pct)``（**小数**：0.1333 = +13.33%）。
+    - 费用后（估算）：``est_buy_fee`` / ``est_sell_fee`` / ``est_round_trip_fee`` /
+      ``unrealized_pnl_net(_pct)``（活跃行）、``realized_pnl_net(_pct)``（已平仓行）；
+      费率见 ``meta.fees``，未含券商最低佣金/过户费/市场冲击。
+    无行情（停牌/退市/数据缺失）→ ``None``，前端显示 —，不得回落为 0。
     """
     import polars as pl
 
@@ -160,40 +155,15 @@ def positions(active_only: bool = Query(default=False)) -> dict[str, Any]:
     df = pl.read_parquet(str(path))
     if active_only:
         df = df.filter(pl.col("is_active"))
-    rows = _as_records(df)
-
-    quote = _latest_quotes_cached(str(DAILY_PRICE_LATEST), _mtime_ns(DAILY_PRICE_LATEST))
-    quote_date: str | None = quote.get("quote_date")
-    closes: dict[str, float] = quote.get("closes", {})
-    suspended: dict[str, bool] = quote.get("suspended", {})
-
-    for r in rows:
-        symbol = str(r.get("symbol", ""))
-        close = closes.get(symbol)
-        entry = float(r.get("entry_price") or 0.0)
-        shares = float(r.get("shares") or 0)
-        r["latest_price"] = close
-        r["latest_suspended"] = suspended.get(symbol) if close is not None else None
-        r["quote_date"] = quote_date if close is not None else None
-        if close is not None and bool(r.get("is_active")):
-            r["market_value_latest"] = round(close * shares, 2)
-            if entry > 0:
-                r["unrealized_pnl"] = round((close - entry) * shares, 2)
-                r["unrealized_pnl_pct"] = round((close - entry) / entry, 6)
-            else:
-                r["unrealized_pnl"] = None
-                r["unrealized_pnl_pct"] = None
-        else:
-            r["market_value_latest"] = None
-            r["unrealized_pnl"] = None
-            r["unrealized_pnl_pct"] = None
-
+    svc = PositionService(quote_path=DAILY_PRICE_LATEST)
+    rows = svc.enrich(_as_records(df))
     return {
         "positions": rows,
         "count": len(rows),
-        "quote_date": quote_date,
+        "quote_date": svc.quotes()["quote_date"],
         "meta": {
-            "note": "market_value/pnl = 记录时点值(已实现，平仓结算)；latest_price/unrealized_* = 最新收盘标记"
+            "note": "market_value/pnl = 记录时点值(已实现，平仓结算)；latest_price/unrealized_* = 最新收盘标记；*_net = 估算费用后",
+            "fees": svc.cost_rates(),
         },
     }
 
@@ -231,7 +201,7 @@ def paper() -> dict[str, Any]:
 @router.get("/api/v1/strategies")
 def strategies() -> dict[str, Any]:
     """策略注册表（strategy_registry.json）概要 + 回测指标。"""
-    reg = json_load(STRATEGY_REGISTRY)
+    reg = _json_or_empty(STRATEGY_REGISTRY)
     rows: list[dict[str, Any]] = []
     for sid, s in (reg.get("strategies") or {}).items():
         meta = s.get("meta", {})
@@ -258,7 +228,7 @@ def strategies() -> dict[str, Any]:
 @router.get("/api/v1/factors")
 def factors() -> dict[str, Any]:
     """因子注册表（factor_registry.json）。"""
-    fr = json_load(FACTOR_REGISTRY)
+    fr = _json_or_empty(FACTOR_REGISTRY)
     items: list[dict[str, Any]] = []
     for name, f in (fr.get("factors") or {}).items():
         items.append(
@@ -619,7 +589,7 @@ def data_quality() -> dict[str, Any]:
 @lru_cache(maxsize=1)
 def _stock_names_cached() -> dict[str, str]:
     """stock_names.json 全量缓存（代码 → 名称）。"""
-    return json_load(STOCK_NAMES)
+    return _json_or_empty(STOCK_NAMES)
 
 
 @router.get("/api/v1/stocks/search")
