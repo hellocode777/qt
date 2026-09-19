@@ -337,11 +337,21 @@ def cmd_factor_validate(
     print(f"  {'N Days':20s} {ic_result.n_days}")
     print()
 
+    # direction=-1 的因子 IC 天然为负（A 股均值回归），"IC>0% ≥ 50%" 对它们
+    # 结构性不适用（必然失败）。改看「与期望方向一致的占比」——#14，2026-09-19。
+    same_dir_pct = (
+        ic_result.ic_positive_pct if expected_direction > 0 else 100.0 - ic_result.ic_positive_pct
+    )
     checks = [
         ("Rank IC ≥ 0.02", abs(ic_result.ic_mean) >= 0.02, f"{abs(ic_result.ic_mean):.4f}"),
         ("IC IR ≥ 0.30", ic_result.ic_ir >= 0.30, f"{ic_result.ic_ir:.2f}"),
         ("IC t-stat ≥ 2.0", ic_result.ic_t_stat >= 2.0, f"{ic_result.ic_t_stat:.2f}"),
-        ("IC>0% ≥ 50%", ic_result.ic_positive_pct >= 50.0, f"{ic_result.ic_positive_pct:.1f}%"),
+        (
+            "同向占比 ≥ 50%",
+            same_dir_pct >= 50.0,
+            f"{same_dir_pct:.1f}% (dir={'+1' if expected_direction > 0 else '-1'}；"
+            f"IC>0%={ic_result.ic_positive_pct:.1f}%)",
+        ),
         (
             "Direction match",
             (ic_result.ic_mean * expected_direction) > 0,
