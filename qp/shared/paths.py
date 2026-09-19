@@ -46,6 +46,8 @@ FEATURE_STORE_DIR = Path("data/feature_store_data")
 FUNDAMENTAL_CACHE_DIR = Path("data/fundamental_cache")
 VALUATION_CACHE_DIR = Path("data/valuation_cache")
 REGIME_NOTES_DIR = Path("data/knowledge/market_regime_notes")
+PROPOSALS_DIR = Path("data/proposals")
+RESEARCH_CACHE_DIR = Path("data/cache/research")
 
 # ── 常用文件 ─────────────────────────────────────────────
 DAILY_PRICE_LATEST = Path("data/dataset/daily_price_latest.parquet")

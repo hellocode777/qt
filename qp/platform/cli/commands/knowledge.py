@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from qp.shared.paths import KNOWLEDGE_DIR
+
 
 def cmd_knowledge_stats() -> int:
     """Show knowledge archive statistics."""
@@ -31,7 +33,7 @@ def cmd_knowledge_stats() -> int:
     print(f"  {'─' * 55}")
     print(f"  {'总计 / Total':40s} {stats.get('total', 0):3d}")
     print()
-    print("  存储位置 / Storage: data/knowledge/")
+    print(f"  存储位置 / Storage: {KNOWLEDGE_DIR}/")
     return 0
 
 

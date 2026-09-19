@@ -20,6 +20,8 @@ from typing import Any
 
 import polars as pl
 
+from qp.shared.paths import RESEARCH_CACHE_DIR
+
 
 class ResearchDataset:
     """PIT-aware dataset for research consumption.
@@ -37,7 +39,7 @@ class ResearchDataset:
     def __init__(
         self,
         path: str,
-        cache_dir: str = "data/cache/research",
+        cache_dir: str | Path = RESEARCH_CACHE_DIR,
         date_col: str = "trade_date",
         symbol_col: str = "symbol",
     ) -> None:

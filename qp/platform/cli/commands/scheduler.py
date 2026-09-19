@@ -215,7 +215,7 @@ def format_decision_email(data: dict, date_str: str) -> str:
 
     lines.append("")
     lines.append("-" * 45)
-    lines.append("完整报告: data/decisions/")
+    lines.append(f"完整报告: {DECISIONS_DIR}/")
     lines.append("人工审核: qp decide --review")
     lines.append("⚠️ 本报告仅供学习参考，不构成投资建议。")
 

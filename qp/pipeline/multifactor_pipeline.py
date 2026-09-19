@@ -51,7 +51,13 @@ from qp.research.feature.compute import (
     PRICE_VOLUME_FACTORS,
     compute_all_factors,
 )
-from qp.shared.paths import CAPITAL_FLOW_LATEST, DATASET_DIR, EXPERIMENTS_DIR, FUNDAMENTALS_LATEST
+from qp.shared.paths import (
+    CAPITAL_FLOW_LATEST,
+    DATASET_DIR,
+    EXPERIMENTS_DIR,
+    FUNDAMENTALS_LATEST,
+    KNOWLEDGE_DIR,
+)
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import fmt_date, fmt_display, fmt_ts, now_cn, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
@@ -218,7 +224,7 @@ class MultiFactorPipeline(BasePipeline):
 
         if not price_data:
             logger.error("数据为空 — 请检查数据集名称是否正确 (--dataset)")
-            logger.error("可用数据集: qp data 命令或查看 data/dataset/registry.json")
+            logger.error(f"可用数据集: qp data 命令或查看 {DATASET_DIR}/registry.json")
             result.status = PipelineStatus.FAILED
             result.errors.append("数据为空 — 数据集不存在或无数据")
             return result
@@ -697,7 +703,7 @@ class MultiFactorPipeline(BasePipeline):
                 end=end_date_str,
                 gate_result=gate,
             )
-            gate.artifacts.append(f"data/knowledge/research_debt/{debt_id}.md")
+            gate.artifacts.append(str(KNOWLEDGE_DIR / "research_debt" / f"{debt_id}.md"))
 
             # Persist GateResult JSON
             from pathlib import Path
@@ -1499,10 +1505,10 @@ class MultiFactorPipeline(BasePipeline):
 
             # Fallback 2: direct file search
             if not gold_path:
-                pattern = f"data/dataset/{dataset}_*.parquet"
+                pattern = f"{DATASET_DIR}/{dataset}_*.parquet"
                 candidates = sorted(_Path().glob(pattern), reverse=True)
                 # Also check exact match without version suffix (e.g. daily_price_latest.parquet)
-                exact_path = _Path(f"data/dataset/{dataset}.parquet")
+                exact_path = DATASET_DIR / f"{dataset}.parquet"
                 if exact_path.exists():
                     candidates.insert(0, exact_path)
                 for candidate in candidates:

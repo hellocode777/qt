@@ -19,14 +19,13 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from qp.platform.proposals.models import StrategyProposal
+from qp.shared.paths import PROPOSALS_DIR
 
-PROPOSALS_DIR = Path("data/proposals")
 PROPOSALS_INDEX = PROPOSALS_DIR / "index.json"
 
 

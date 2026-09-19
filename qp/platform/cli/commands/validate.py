@@ -64,7 +64,7 @@ def cmd_validate() -> int:
     try:
         feature_df = pl.read_parquet(MOMENTUM_20D)
         if not price_files:
-            raise FileNotFoundError("no data/dataset/daily_price_*.parquet found")
+            raise FileNotFoundError(f"no {DATASET_DIR}/daily_price_*.parquet found")
         price_df = pl.read_parquet(str(price_files[-1]))
     except FileNotFoundError as e:
         msg = f"Data not found. Run 'qp run daily' first. ({e})"

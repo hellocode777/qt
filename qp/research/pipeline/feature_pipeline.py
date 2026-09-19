@@ -8,6 +8,7 @@ from qp.platform.pipeline.result import PipelineResult
 from qp.research.feature.momentum import Momentum20dFeature
 from qp.research.feature.registry import FeatureRegistry
 from qp.research.feature.volatility import Volatility20dFeature
+from qp.shared.paths import DATASET_DIR
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.types import PipelineStatus
 
@@ -56,7 +57,7 @@ class FeaturePipeline(BasePipeline):
                 # Save feature
                 import polars as pl
 
-                path = f"data/dataset/{fname}.parquet"
+                path = str(DATASET_DIR / f"{fname}.parquet")
                 pl.from_pandas(feature_df.to_pandas()).write_parquet(path)
                 result.artifacts.append(path)
 

@@ -38,7 +38,7 @@ def cmd_lineage_snapshot() -> int:
         print(f"  ✅ 特征 / Features:    {counts['features']}")
     except FileNotFoundError:
         print(
-            "  ⚠ 特征跳过 / Features skipped: data/factor_registry.json 不存在，先跑 `qp factor register`"
+            f"  ⚠ 特征跳过 / Features skipped: {FACTOR_REGISTRY} 不存在，先跑 `qp factor register`"
         )
         counts["features"] = 0
     except Exception as e:

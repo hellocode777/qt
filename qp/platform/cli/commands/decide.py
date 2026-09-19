@@ -314,7 +314,7 @@ def cmd_decide_show(package_id: str) -> int:
     try:
         pkg = DecisionPackage.from_json(json_path)
         print_decision_package_summary(pkg)
-        print(f"\n  完整报告: data/decisions/{pkg.date}.md")
+        print(f"\n  完整报告: {DECISIONS_DIR}/{pkg.date}.md")
         return 0
     except Exception as exc:
         print(f"❌ Failed to load: {exc}")
