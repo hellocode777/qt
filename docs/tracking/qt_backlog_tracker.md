@@ -96,7 +96,26 @@
 - **对照脚本**: `scripts/research/factor_health_significance_gate_compare_20260919.py`
 - [x] 因子级 decay 判定加显著性门禁（1σ，可关闭）
 - [x] `validate` 的 IC>0% 判定改方向调整口径
-- [x] 回归测试 10 项（`tests/unit/test_factor_health_significance_gate.py`：计数不再等于全历史 / |IC| 上升不判衰减 / 弱因子仍 degraded / 中期显著→25% vs 50%）
+- 回归测试（`tests/unit/test_factor_health_significance_gate.py`：计数不再等于全历史 / |IC| 上升不判衰减 / 弱因子仍 degraded / 渐进衰减端到端）
+
+### #15 因子健康判定的归因口径与展示精度 ⭐⭐⭐（2026-09-19 完成分析 + 展示层修复）
+
+**起因**: `Volatility_20D` 全历史 t=19.5、2026YTD t=+3.4，却因 60 日斜率显著被建议「降权 50%」——怀疑判定过激。
+
+**结论（实测三层证据，原怀疑被否）**:
+1. **不是过激判定**: `|ic_30d|` 的历史分位（ic_series 样本 2024-12 起）——`Volatility_20D` **12%** / `Volatility_60D` **12%** / `Volume_Price_Trend` **5%** → 当前水平已在历史底部，斜率显著为负是真实衰减
+2. **「多窗口一致」判据被数据排除**: 120 日与 252 日 |IC| 斜率对 19 个因子**几乎全为正**（+0.0001~+0.0017）——长窗口斜率反映「全样本水平漂移」，不是近期衰减 → 原方案 B 撤销
+3. **真问题是归因混杂**: 三类条件（IC_IR 低 / 60 日斜率越线 / |ic30|<0.02）任一触发即降级；`Implied_Net_Flow`（|ic30| 分位 91%、IC_IR=0.21）与 `MaxDD_60D`（分位 76%、IC_IR=0.13）被判 degraded 的原因是**历史一致性差**，不是当前衰减
+
+**本次已修（展示层精度，判定逻辑未动）**:
+- `weakening` 文案不再显示无意义的「持续 0 天」，改显示近 60 日 decay 与门禁阈值
+- `degraded(IC_IR)` 文案改为 `IC_IR=0.297 < 0.3`（3 位小数），消除「0.30 < 0.3」的自相矛盾，去掉「持续 N 天」
+- `degraded(decay)` 文案门禁阈值格式化（原为 `-0.00221909071710342`）
+
+**待决策（需拍板）**:
+- [ ] 是否引入**策略级口径**: 用因子在生产策略里的实际边际贡献（而非单窗口 IC）决定降权幅度 —— 约半天
+- [ ] 是否改变**分层**: 多条件同时触发 → degraded；仅单条件（如仅 IC_IR 低）→ weakening —— 会改变清单（19 因子 7 个 degraded 中 2 个属「仅 IC_IR」）
+- [x] 展示层归因与精度修复（本次）
 
 ### #6 策略池扩容 ⭐⭐⭐⭐（依赖 #5，已解除）
 - **证据**: mvF 唯一 APPROVED；lvr_vol_mom1m（research）、lvr_vol_only（backtest_passed）待提升
