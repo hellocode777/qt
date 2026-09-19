@@ -65,13 +65,31 @@
 
 ## 待办清单（2026-08-13 更新 — 已规划项全部清零）
 
-### #5 因子失效应对 ⭐⭐⭐⭐⭐ 最紧迫
-- **证据**: `qp factor health` — 28 因子中 12 DEGRADED + 11 WEAKENING；10 因子模型 9 个近期反向（Momentum_3M ic_30d=-0.21、Amplitude_5D=-0.25），仅 Volatility_20D 健康（+0.25）；Optuna OOS IC 负（-0.0444）
+### #5 因子失效应对 ⭐⭐⭐⭐⭐
+- **证据**: `qp factor health`（2026-09-18 快照）— 28 因子中 **17 DEGRADED** + 1 WEAKENING；8/13 首轮曾显示 12 DEGRADED + 11 WEAKENING
 - **价值**: 决定生产策略（mvF）是否逆风；策略池扩容前提
-- [ ] mvF 生产策略 5 因子滚动 IC 健康度
-- [ ] 关键失效因子 OOS 验证（qp factor validate），区分真失效 vs 窗口噪音
-- [ ] 因子失效诊断报告入 Obsidian
-- [ ] 决策：调方向 / 降权 / 换池 / 等 regime
+- [x] mvF 生产策略 5 因子滚动 IC 健康度 → ✅ 2026-08-13 首轮 + **2026-09-19 复检**（多窗口 + 4 分窗表）
+- [x] 关键失效因子 OOS 验证（`qp factor validate`），区分真失效 vs 窗口噪音 → ✅ **2026-09-19**：全历史 t=17.2–35.3；分窗 2019-2021/2022-2023/2024-2025/2026YTD **5 因子全部同符号显著**；近 30 日弱值落在自身噪声带内
+- [x] 因子失效诊断报告入 Obsidian → ✅ 2026-08-13 [[技术深挖/因子失效诊断报告-20260813]] + **2026-09-19 [[技术深挖/因子失效诊断报告-20260919]]**
+- [x] 决策：调方向 / 降权 / 换池 / 等 regime → ✅ **维持原版不动**（8/13 决定，9/19 二次确认；替换实验负结果原版超额 +15.82% 最高）
+
+> 📌 **2026-09-19 复检结论**（本次）：
+> - 全历史 `qp factor validate`：Amplitude_5D t=23.12 / Volatility_20D t=19.53 / Momentum_3M t=17.66 / Volume_Concentration t=35.30 / Volume_Trend_10D t=17.17 → 全部 ≥4/5 过（唯一未过项 `IC>0%≥50%` 对 direction=-1 因子结构性不适，见 §#14）
+> - 分窗稳定性：5 因子在 4 个窗口全部同符号且显著（|t| ≥ 3.4），无方向反转 → **无因子真失效**
+> - 近 30 日弱值（Volatility_20D +0.0162、Amplitude_5D −0.0282）**落在自身 30 日噪声带 ±0.056~0.063 内**（日 IC σ≈0.16，SE=σ/√30）
+> - Volume_Trend_10D 近 30 日 ic_30d=−0.074（t=−4.4）反而是 5 因子中最强之一 → 8/13 的 ic_30d=0 属窗口噪音
+> - 生产影响澄清：`factor_health.recommended_action`（含"建议降权 50%"）**只有展示层消费**，不自动改权重；自动降权走策略级 retrain signal（2026-09-19 已修，见 §#13-3）
+> - 复现：`scripts/research/factor_decay_window_diagnosis_20260919.py`
+
+### #14 因子健康判定规则缺显著性门禁 ⭐⭐⭐（2026-09-19 新增，建议整改）
+
+- **证据（量化）**: 60 日 IC 线性斜率的**噪声量级 σ ≈ 0.0011–0.0013/day**，而判定阈值 `decay_slope = -0.001/day` 恰好 ≈ 1σ；全历史实测「斜率 < −0.001」的窗口占比 **20.4%–39.7%**（Volatility_20D 39.7%）→ **纯噪声下 1/5~2/5 的窗口会被判衰减**
+- **后果**: 一旦越线，因滑动窗口自相关会连续数周（规则要求连续 30 天才判 DEGRADED）→ 越线即长期锁死 degraded；本次 17/28 degraded 多源于此（ε Volatility_20D 全历史 t=19.5、2026YTD t=+3.4 仍被判 degraded 且建议降权 50%）
+- **不一致**: 策略级 rolling_ic 已于 2026-09-11 加「点估计 + 1σ 仍越界才判」门禁（P1-3），因子级 `FactorHealthMonitor._classify_state` 至今没有同类门禁
+- **第二处**: `qp factor validate` 的 `IC>0% ≥ 50%` 对 direction=−1 因子结构性不适（Amplitude_5D 31.3% / Momentum_3M 37.2% / Volume_Concentration 24.7% / Volume_Trend_10D 36.6%）→ 应改为按方向调整后的「同向占比」
+- [ ] 给 `_classify_state` 的 decay/ic_ratio 判定加标准误门禁（对齐 P1-3 口径）
+- [ ] `validate` 的 `IC>0%` 判定改为方向调整后口径
+- [ ] 两个规则改动后回归：确认真衰减因子仍能被标记（用 PCF_OCF / 基本面那批做正对照）
 
 ### #6 策略池扩容 ⭐⭐⭐⭐（依赖 #5，已解除）
 - **证据**: mvF 唯一 APPROVED；lvr_vol_mom1m（research）、lvr_vol_only（backtest_passed）待提升
