@@ -86,10 +86,23 @@ class WalkForwardScorer:
         feature_cols: list[str] | None = None,
         forward_window: int = FORWARD_DAYS,
         train_window_days: int = TRAIN_WINDOW_DAYS,
+        lgb_params: dict[str, Any] | None = None,
     ) -> None:
+        """初始化 walk-forward 打分器。
+
+        Args:
+            feature_cols: 特征列（默认 FEATURES）。
+            forward_window: 标签的前向收益窗口（天）。
+            train_window_days: 滚动训练窗口（天）。
+            lgb_params: 覆盖 LightGBM 超参。**默认 None = 用 DEFAULT_LGB_PARAMS**
+                （生产行为不变）。用于验证 Optuna 搜出的参数在时间序外推下是否
+                真的更好（TDR-005 ⚠️：短样本最优参数不得直接进生产，
+                需完整 walk-forward 验证）。
+        """
         self.feature_cols = feature_cols or FEATURES
         self.forward_window = forward_window
         self.train_window_days = train_window_days
+        self._lgb_params_override = lgb_params
         self._latest_model_id: str = ""
         self._latest_feature_importance: dict[str, float] = {}
 
@@ -308,7 +321,7 @@ class WalkForwardScorer:
             y_te = fold_test["label"].astype(np.float64)
 
             model = LightGBMRankModel()
-            model._params = {**DEFAULT_LGB_PARAMS}
+            model._params = {**DEFAULT_LGB_PARAMS, **(self._lgb_params_override or {})}
             model._params["verbose"] = -1
             model._params["num_boost_round"] = 100
             if monotone_constraints:
@@ -359,7 +372,7 @@ class WalkForwardScorer:
         from qp.research.trainer.lgb_rank import DEFAULT_LGB_PARAMS, LightGBMRankModel
 
         model = LightGBMRankModel()
-        model._params = {**DEFAULT_LGB_PARAMS}
+        model._params = {**DEFAULT_LGB_PARAMS, **(self._lgb_params_override or {})}
         model._params["verbose"] = -1
         if monotone_constraints:
             model._params["monotone_constraints"] = monotone_constraints
