@@ -39,6 +39,13 @@ PORTFOLIO_DIR = Path("data/portfolio")
 OPTUNA_DIR = Path("data/optuna")
 INDUSTRY_HEAT_DIR = Path("data/industry_heat")
 CAPITAL_FLOW_CACHE_DIR = Path("data/capital_flow_cache")
+BRONZE_DIR = Path("data/bronze")
+SILVER_DIR = Path("data/silver")
+FACTOR_STORE_DIR = Path("data/factor_store")
+FEATURE_STORE_DIR = Path("data/feature_store_data")
+FUNDAMENTAL_CACHE_DIR = Path("data/fundamental_cache")
+VALUATION_CACHE_DIR = Path("data/valuation_cache")
+REGIME_NOTES_DIR = Path("data/knowledge/market_regime_notes")
 
 # ── 常用文件 ─────────────────────────────────────────────
 DAILY_PRICE_LATEST = Path("data/dataset/daily_price_latest.parquet")
@@ -62,30 +69,56 @@ SYSTEM_HEALTH_LOG = Path("data/monitoring/system_health_log.parquet")
 WATCHDOG_DIR = Path("data/monitoring/watchdog")
 FACTOR_RAW_FULL = Path("data/experiments/_factor_raw_full_5factors_2015_2026.parquet")
 FACTOR_RAW_CACHE = Path("data/experiments/_factor_raw_cache.parquet")
+MAIN_BOARD_CODES = Path("data/main_board_codes.json")
+DELISTED_CACHE = Path("data/delisted_cache.json")
+ADJ_FACTOR = Path("data/dataset/adj_factor.parquet")
+INDUSTRY_CACHE = Path("data/industry_cache.json")
+LISTING_DATES_CACHE = Path("data/listing_dates_cache.json")
+LINEAGE_JSON = Path("data/metadata/lineage.json")
+SCHEMAS_JSON = Path("data/metadata/schemas.json")
+LINEAGE_GRAPH_JSON = Path("data/metadata/lineage_graph.json")
+BLACKLIST_RULES = Path("data/knowledge/blacklist_rules.json")
+VERSION_TREE_JSON = Path("data/knowledge/version_tree.json")
+ONLINE_HEALTH_HISTORY = Path("data/monitoring/online_health_history.parquet")
+CAPITAL_FLOW_LATEST = Path("data/dataset/capital_flow_latest.parquet")
 
 __all__ = [
+    "ADJ_FACTOR",
     "ARTIFACTS_DIR",
     "BLACKLIST",
+    "BLACKLIST_RULES",
+    "BRONZE_DIR",
     "CACHE_DIR",
+    "CAPITAL_FLOW_LATEST",
     "DAILY_PRICE_LATEST",
     "DAILY_PRICE_MAIN",
     "DAILY_PRICE_PREFIX",
     "DATASET_DIR",
     "DATA_DIR",
     "DECISIONS_DIR",
+    "DELISTED_CACHE",
     "EXPERIMENTS_DIR",
     "FACTOR_LIBRARY_DIR",
     "FACTOR_RAW_CACHE",
     "FACTOR_RAW_FULL",
     "FACTOR_REGISTRY",
+    "FACTOR_STORE_DIR",
     "FACTOR_VALUES_DAILY",
     "FEATURES_DIR",
+    "FEATURE_STORE_DIR",
     "FUNDAMENTALS_LATEST",
+    "FUNDAMENTAL_CACHE_DIR",
+    "INDUSTRY_CACHE",
     "KNOWLEDGE_DIR",
+    "LINEAGE_GRAPH_JSON",
+    "LINEAGE_JSON",
+    "LISTING_DATES_CACHE",
+    "MAIN_BOARD_CODES",
     "METADATA_DIR",
     "MODELS_DIR",
     "MOMENTUM_20D",
     "MONITORING_DIR",
+    "ONLINE_HEALTH_HISTORY",
     "ONLINE_SIGNAL_HISTORY",
     "OPTUNA_DIR",
     "PAPER_TRADING_DIR",
@@ -95,7 +128,10 @@ __all__ = [
     "QP_DUCKDB",
     "QP_SQLITE",
     "RAW_DIR",
+    "REGIME_NOTES_DIR",
     "REPORTS_DIR",
+    "SCHEMAS_JSON",
+    "SILVER_DIR",
     "SIMULATION_DIR",
     "SOURCES_JSON",
     "STOCK_INDUSTRY",
@@ -103,6 +139,8 @@ __all__ = [
     "STOCK_NAMES",
     "STRATEGY_REGISTRY",
     "SYSTEM_HEALTH_LOG",
+    "VALUATION_CACHE_DIR",
+    "VERSION_TREE_JSON",
     "VOLATILITY_20D",
     "WATCHDOG_DIR",
 ]
