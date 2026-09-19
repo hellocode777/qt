@@ -12,6 +12,7 @@ import Experiments from './pages/Experiments.vue';
 import SystemHealth from './pages/SystemHealth.vue';
 import Simulation from './pages/Simulation.vue';
 import Knowledge from './pages/Knowledge.vue';
+import IndustryHeat from './pages/IndustryHeat.vue';
 import './style.css';
 
 const router = createRouter({
@@ -19,6 +20,7 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', component: Dashboard, meta: { title: '总览' } },
+    { path: '/industry', component: IndustryHeat, meta: { title: '行业热度' } },
     { path: '/paper', component: Paper, meta: { title: '模拟盘' } },
     { path: '/positions', component: Positions, meta: { title: '持仓' } },
     { path: '/chart', component: Chart, meta: { title: '行情' } },

@@ -30,6 +30,7 @@ from qp.shared.paths import (
     DECISIONS_DIR,
     EXPERIMENTS_DIR,
     FACTOR_REGISTRY,
+    INDUSTRY_HEAT_DIR,
     KNOWLEDGE_DIR,
     PAPER_TRADING_DIR,
     PORTFOLIO_DIR,
@@ -43,6 +44,75 @@ from qp.shared.paths import (
 from qp.web.services.position_service import PositionService
 
 router = APIRouter(tags=["api_v1"])
+
+
+@router.get("/api/v1/industry-heat")
+def industry_heat(
+    source: str = Query(default="", description="price | capital_flow（空 = 最新快照）"),
+    limit: int = Query(default=40, ge=1, le=200),
+) -> dict[str, Any]:
+    """行业热度快照（阶段 1 落盘产物，由 `qp industry heat --save` 生成）。
+
+    **如实标注**：``as_of`` 是快照真正覆盖到的数据日、``requested_as_of`` 是请求日、
+    ``data_date_max`` 是底层价格数据的最末日，并给出 ``lag_days`` / ``data_lag_days``
+    两个滞后天数；无快照或读取失败 → ``{ok: False, error: ...}``，**不伪造空排行**
+    （WebUI 铁律：默认值不得伪装成测量值）。
+
+    文件名约定：``YYYY-MM-DD_price.json``（价格源）/ ``YYYY-MM-DD.json``（资金流源）。
+    """
+    from datetime import date as _date
+
+    from qp.shared.time import fmt_date
+
+    files = sorted(INDUSTRY_HEAT_DIR.glob("*.json")) if INDUSTRY_HEAT_DIR.is_dir() else []
+    if source == "price":
+        files = [f for f in files if f.stem.endswith("_price")]
+    elif source == "capital_flow":
+        files = [f for f in files if not f.stem.endswith("_price")]
+    if not files:
+        return {
+            "ok": False,
+            "error": "no industry-heat snapshot",
+            "hint": "生成: qp industry heat --save [--source price|capital_flow]",
+            "dir": str(INDUSTRY_HEAT_DIR),
+            "available": [],
+        }
+
+    latest = files[-1]
+    try:
+        payload = json_load(latest)
+    except Exception as exc:
+        logger.warning("industry-heat 快照读取失败 {}: {}", latest.name, exc)
+        return {"ok": False, "error": f"snapshot unreadable: {exc}", "file": latest.name}
+
+    as_of = str(payload.get("as_of") or "")
+    data_max = str(payload.get("data_date_max") or "")
+    today = _date.fromisoformat(fmt_date())
+
+    def _lag(day: str) -> int | None:
+        try:
+            return (today - _date.fromisoformat(day)).days
+        except ValueError:
+            return None
+
+    industries = list(payload.get("industries") or [])
+    return {
+        "ok": True,
+        "snapshot_file": latest.name,
+        "source": payload.get("source"),
+        "window": payload.get("window"),
+        "granularity": payload.get("granularity"),
+        "as_of": as_of or None,
+        "requested_as_of": payload.get("requested_as_of"),
+        "data_date_min": payload.get("data_date_min"),
+        "data_date_max": data_max or None,
+        "lag_days": _lag(as_of) if as_of else None,
+        "data_lag_days": _lag(data_max) if data_max else None,
+        "n_industries": len(industries),
+        "other_members": payload.get("other_members"),
+        "rows": industries[:limit],
+        "available_snapshots": [f.name for f in sorted(INDUSTRY_HEAT_DIR.glob("*.json"))],
+    }
 
 
 @router.get("/api/v1/health")

@@ -11,6 +11,7 @@ const nav = [
   { to: '/chart', icon: '◫', label: '行情' },
   { to: '/strategies', icon: '◈', label: '策略' },
   { to: '/factors', icon: '✦', label: '因子' },
+  { to: '/industry', icon: '◭', label: '行业' },
   { to: '/monitor', icon: '♡', label: '监控' },
   { to: '/decisions', icon: '◉', label: '决策' },
   { to: '/knowledge', icon: '⟳', label: '复盘' },

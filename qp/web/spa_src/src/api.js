@@ -51,6 +51,8 @@ export const api = {
   executeDecision: (id, notes = '') => post(`/decisions/${id}/execute`, { notes }),
   closeDecision: (id, notes = '') => post(`/decisions/${id}/close`, { notes }),
   // K线走 qp 原生 stocks 端点 (8080)
+  industryHeat: (source = '', limit = 200) =>
+    get(`/industry-heat?limit=${limit}${source ? '&source=' + source : ''}`),
   kline: (code, days = 365) => getRaw(`/api/stocks/${code}/kline?days=${days}`),
 };
 
