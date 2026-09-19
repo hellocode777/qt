@@ -28,6 +28,42 @@
 
 > 📌 **2026-09-19 复核**：模块 / CLI / 结果文件 / 测试（`tests/unit/research/test_optuna_search.py`）均在位，本节 4 项中 3 项早已完成（tracker 过时）。**只剩「最优参数的完整 walk-forward 验证」**——这一步会决定是否调整生产模型参数（production-sensitive，需批准）。
 
+#### #1-a 时间序验证（2026-09-19 进行中/已建能力）
+
+- **核实发现**：`WalkForwardScorer` 内部**硬编码** `DEFAULT_LGB_PARAMS` → 8/13 搜出的 best 参数**没有任何入口可验证**，也从未进过生产；`qp experiment optuna` 用的是 **PurgedKFold（随机折）**，不是时间序外推（TDR-005 要求后者）
+- **已补能力**（commit `91b0340`，默认行为不变）：
+  - `WalkForwardScorer(lgb_params: dict | None = None)` —— 两处训练点改为
+    `{**DEFAULT_LGB_PARAMS, **(lgb_params or {})}`；+4 项测试
+  - `scripts/research/optuna_params_walkforward_validate_20260919.py` —— 复用
+    `qp experiment optuna` 的数据组装（同样本同标签），做 expanding-window
+    时间序验证（train ≤ N 年 → test N+1 年），baseline 与 best 各训一次
+  - **评估口径用 |IC|**：A 股价量因子 IC 为负属正常（`direction=-1`），带符号比较
+    会把「变差」读成「改善」（与 §#14 的 |IC| 是同一类陷阱，当天第二次遇到）
+- **抽样预跑结论（200 股）**：均值 |OOS IC| baseline **0.0428** vs best **0.0426**
+  （Δ ≈ 0），best 胜出 **2/4** 年；而 best 的样本内 IC 明显更高（+0.0976 vs +0.0380）
+  → **典型过拟合特征**，8/13 PurgedKFold 的「改善 22%」是随机折偏乐观
+- **全量结果（1500 股 / 2,153,113 行 / 4 个测试年）**：
+
+  year | base \|OOS\| | best \|OOS\| | Δ\|OOS\| | best IS
+  ---|---|---|---|---
+  2022 | 0.0421 | 0.0500 | **+0.0079** | −0.0242
+  2023 | 0.1130 | 0.0996 | **−0.0134** | −0.0258
+  2024 | 0.0204 | 0.0291 | **+0.0087** | −0.0385
+  2025 | 0.0409 | 0.0370 | **−0.0039** | −0.0254
+
+  均值 \|OOS IC\|：baseline **0.0541** vs best **0.0539**（Δ **−0.0002**），best 胜出 **2/4** 年
+
+- **结论：best 参数在时间序外推下无稳定优势 → `DEFAULT_LGB_PARAMS` 不动**。
+  8/13 PurgedKFold 报的「改善 22%」是随机折偏乐观（与全量时间序结论矛盾），
+  这正是 TDR-005 要求「完整 walk-forward 才能进生产」的意义
+- **附带发现（影响面已核实）**：所有测试年的 OOS IC **均为负**（−0.02 ~ −0.11）→ 该
+  ML 打分在时间序外推下与实现收益**反向**。`factor_processor` 把 `ml_scores` 直接写入
+  `score`（**未取反**，见 `factor_processor.py:953-960`），但 `model_mode` **默认 False**
+  （`multifactor_pipeline.py:135`、`experiment/models.py:62`）→ 仅影响
+  `qp experiment run --model` 实验路径，**生产不受影响**（生产走因子加权 momentum_vol_full）
+- 产物：`scripts/research/optuna_params_walkforward_validate_20260919.py`
+  + `data/optuna/walkforward_validation_*.json`
+
 ### #2 文档重建收尾
 
 - **证据**: `docs/doc_rebuild_tracker.md` 停在 Phase 1；architecture.md / module_overview.md / workflow.md / developer_guide.md / api.md 全缺失
