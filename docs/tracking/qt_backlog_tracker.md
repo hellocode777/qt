@@ -251,15 +251,31 @@
 
 > 背景：时间接口已统一（`qp/shared/time.py`，commit fb8d00b）。以下 4 处为同类"散落多点、值得收编"的横切关注点。
 
-### C-1 路径常量 ⭐ 推荐先做
-- 现状：`data/` 字符串硬编码 **153 处 / 87 文件**（data/dataset、data/experiments、data/decisions、data/paper_trading、data/monitoring、data/knowledge 等）
-- 方案：`qp/shared/paths.py` 统一常量 → 改目录位置只动一处
-- 成本：中（机械替换为主）
+### C-1 路径常量 ✅ 已完成（2026-09-19）
+- 原状（2026-08-27 扫描）：`data/` 字符串硬编码 **153 处 / 87 文件**
+- **2026-09-19 复核 + 收尾**：AST 审计（区分代码字面量 vs 注释/docstring）显示
+  扫描后已消掉大半（qp/ 剩 79 处），本轮全部补齐：
+  - `paths.py` 常量 41 → **62**（新增 bronze/silver/factor_store/feature_store_data/
+    fundamental_cache/valuation_cache/market_regime_notes/proposals/cache_research
+    + 12 个具名文件常量 + __all__ 同步）
+  - **批次 1**：21 文件 / 22 处「路径使用」→ 常量（commit `f64a589`）
+  - **批次 2**：11 处（4 处真实路径 + 7 处用户可见文本，f-string 逐字等价）（commit `78856eb`）
+  - **最终：`qp/` + `scripts/` + `tests/` 内 `data/` 代码字面量清零**，仅剩
+    `qp/shared/paths.py` 自身的常量定义（定义源豁免）
+- 验证：ruff format --check / ruff check 全过；pyright **0 errors**；
+  tests/unit/data + test_lineage_registry（61 项）+ test_feature_registry 全过；
+  实测 `qp doctor` 通过、`qp knowledge stats` 输出与替换前逐字一致
+- 过程中修掉 2 类自动替换陷阱（已记入 skill）：① 替换脚本必须排除定义源文件
+  （否则 paths.py 自我引用）② 补 import 必须用 AST 定位（正则会把新 import
+  插进多行括号 import 内部，破坏 `from qp.lineage.types import (...)`）
 
-### C-2 JSON 读写封装
-- 现状：`json.dump` 58 处 + `json.load` 60 处 / 50 文件
-- 方案：`json_save()/json_load()`（统一 ensure_ascii=False + indent=2 + 自动建目录）
-- 成本：低-中
+### C-2 JSON 读写封装 ✅ 已完成（2026-09-19）
+- 原状（2026-08-27 扫描）：`json.dump` 58 处 + `json.load` 60 处 / 50 文件
+- **2026-09-19 复核 + 收尾**：`qp/` 生产代码**早已清零**（仅 `json_io.py` 自身的
+  实现，定义源豁免）；本轮清掉 `scripts/` + `tests/` 的 6 处（commit `4d8d751`）：
+  orthogonalize_sameuniverse / orthogonalize_walkforward / retrain_monthly /
+  test_feature_registry
+- 统一走 `qp.shared.json_io`（utf-8 / indent=2 / ensure_ascii=False / 自动建父目录）
 
 ### C-3 strftime 格式收编
 - 现状：56 处 / **10 种格式**（%Y-%m-%d 29、%Y%m%d 10、%Y%m%d_%H%M%S 5...）
