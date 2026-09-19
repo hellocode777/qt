@@ -277,10 +277,25 @@
   test_feature_registry
 - 统一走 `qp.shared.json_io`（utf-8 / indent=2 / ensure_ascii=False / 自动建父目录）
 
-### C-3 strftime 格式收编
-- 现状：56 处 / **10 种格式**（%Y-%m-%d 29、%Y%m%d 10、%Y%m%d_%H%M%S 5...）
-- 方案：并入 `qp/shared/time.py`（format_cn / format_ts_file 等）
-- 成本：低，价值低-中（格式各有用途）
+### C-3 strftime 格式收编 ✅ 已完成（2026-09-19）
+- 原状（2026-08-27 扫描）：56 处 / 10 种格式
+- **2026-09-19 核实**：AST 审计实际 **23 处 / 10 种**（原扫描口径含数据框层的 `.dt.strftime`，
+  与 Python datetime 混在一起统计）
+- 本轮收编 **9 处** Python datetime 调用（格式全部映射到既有函数）：
+  - `'%Y-%m-%d'` → `fmt_date()`：retrain_monthly ×2（**顺带修掉裸 `datetime.now()` 的时区隐患**）、
+    test_retrain_signal_weights ×2（改为 `now_cn()` 基准，与 `load_weight_scales` 的 CN cutoff 同源）、
+    exit_signals
+  - `'%Y%m%d'` → `fmt_compact()`；`'v%Y%m%d'` → `f"v{fmt_compact()}"`（multifactor_pipeline 策略版本号）
+  - `'%Y%m%dT%H%M%S'` → `fmt_ts(now_utc(), sep="T")`；`datetime.now(UTC).isoformat()` → `utc_iso()`（lineage_tracker）
+  - 新增 `fmt_short()`（`'MM-DD HH:MM'`）收编 data_quality_service 的最后一处
+- **剩余 14 处明确不收编**（理由记录在案，避免以后反复「清理」）：
+  1. **数据框层（6 处）**：`records[col].dt.strftime` / `pd.to_datetime(...).dt.strftime` /
+     `pl.col(...).dt.strftime` —— polars/pandas 的**列级**格式化，与 `qp/shared/time.py`
+     （Python datetime）不同层，强行收编会破坏类型与语义
+  2. **`qp/shared/time.py` 自身实现（8 处）** —— 定义源豁免
+- 验证：ruff format --check / ruff check 全过；pyright **0 errors**；
+  tests/unit/web + test_retrain_signal_weights + test_lineage_registry 全过；
+  `scripts/retrain_monthly.py` 编译通过
 
 ### C-4 print() 残留甄别 ✅ 已完成（2026-08-27，0 处违规）
 - 现状：print( 调用 1048 处 / 59 文件
