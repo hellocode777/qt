@@ -22,6 +22,10 @@ STAMP_TAX_RATE = 0.0005  # 0.05%, sell side only
 COMMISSION_RATE = 0.00025  # 0.025%, both sides
 DEFAULT_SLIPPAGE_BPS = 10.0  # 10 bps = 0.1%
 DEFAULT_IMPACT_BASE_BPS = 5.0  # 5 bps base for sqrt model
+# 真实券商规则（默认不启用，见 CostModel 的 min_commission / transfer_fee_rate）：
+# 多数券商单笔佣金最低 ¥5；过户费 2022-04-29 起沪深统一 0.001%（双向）。
+MIN_COMMISSION_CNY = 5.0
+TRANSFER_FEE_RATE = 0.00001  # 0.001%，双向
 
 
 @dataclass
@@ -35,10 +39,17 @@ class CostBreakdown:
     commission: float = 0.0
     slippage: float = 0.0
     market_impact: float = 0.0
+    transfer_fee: float = 0.0  # 过户费（双向，仅当 transfer_fee_rate>0 时非零）
 
     @property
     def total_cost(self) -> float:
-        return self.stamp_tax + self.commission + self.slippage + self.market_impact
+        return (
+            self.stamp_tax
+            + self.commission
+            + self.slippage
+            + self.market_impact
+            + self.transfer_fee
+        )
 
     @property
     def total_cost_pct(self) -> float:
@@ -59,10 +70,26 @@ class CostModel:
         stamp_tax_rate: float = STAMP_TAX_RATE,
         commission_rate: float = COMMISSION_RATE,
         slippage_bps: float = DEFAULT_SLIPPAGE_BPS,
+        min_commission: float = 0.0,
+        transfer_fee_rate: float = 0.0,
     ) -> None:
+        """Initialize the cost model.
+
+        Args:
+            stamp_tax_rate: 印花税率（卖出单边）。
+            commission_rate: 佣金率（双向）。
+            slippage_bps: 滑点（bps）。
+            min_commission: 单笔佣金下限（CNY）。**默认 0 = 不启用**，保持与历史
+                回测结果可比；实盘/纸面按真实券商规则传 MIN_COMMISSION_CNY。
+                小额单受影响最大：¥450 的单，0.025% 佣金 ≈ ¥0.11，而真实最低
+                ¥5（差 45 倍）。
+            transfer_fee_rate: 过户费率（双向）。默认 0 = 不启用，同理由。
+        """
         self._stamp_tax_rate = stamp_tax_rate
         self._commission_rate = commission_rate
         self._slippage_rate = slippage_bps / 10000.0  # bps → decimal
+        self._min_commission = min_commission
+        self._transfer_fee_rate = transfer_fee_rate
 
     # ------------------------------------------------------------------
     # Single trade estimation
@@ -90,8 +117,14 @@ class CostModel:
         """
         cost = CostBreakdown(symbol=symbol, trade_value=trade_value, side=side)
 
-        # Commission: both sides
-        cost.commission = trade_value * self._commission_rate
+        # Commission: both sides（可配置单笔下限，默认 0 = 不启用）
+        commission = trade_value * self._commission_rate
+        if self._min_commission > 0:
+            commission = max(commission, self._min_commission)
+        cost.commission = commission
+
+        # 过户费：双向（默认 0 = 不启用）
+        cost.transfer_fee = trade_value * self._transfer_fee_rate
 
         # Stamp tax: sell only
         if side.upper() == "SELL":

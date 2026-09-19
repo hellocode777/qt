@@ -40,11 +40,15 @@ class DecisionEngine:
         stamp_tax_rate: float = 0.0005,
         commission_rate: float = 0.00025,
         slippage_bps: float = 10.0,
+        min_commission: float = 0.0,
+        transfer_fee_rate: float = 0.0,
     ) -> None:
         self._cost_model = CostModel(
             stamp_tax_rate=stamp_tax_rate,
             commission_rate=commission_rate,
             slippage_bps=slippage_bps,
+            min_commission=min_commission,
+            transfer_fee_rate=transfer_fee_rate,
         )
 
     # ------------------------------------------------------------------
