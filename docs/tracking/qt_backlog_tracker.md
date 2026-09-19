@@ -112,10 +112,16 @@
 - `degraded(IC_IR)` 文案改为 `IC_IR=0.297 < 0.3`（3 位小数），消除「0.30 < 0.3」的自相矛盾，去掉「持续 N 天」
 - `degraded(decay)` 文案门禁阈值格式化（原为 `-0.00221909071710342`）
 
-**待决策（需拍板）**:
-- [ ] 是否引入**策略级口径**: 用因子在生产策略里的实际边际贡献（而非单窗口 IC）决定降权幅度 —— 约半天
-- [ ] 是否改变**分层**: 多条件同时触发 → degraded；仅单条件（如仅 IC_IR 低）→ weakening —— 会改变清单（19 因子 7 个 degraded 中 2 个属「仅 IC_IR」）
-- [x] 展示层归因与精度修复（本次）
+**已实施（2026-09-19，用户拍板「两个全做」）**:
+- [x] **分层口径**: 主条件（60 日斜率越门禁 / IC_IR 偏低）1 条 → WEAKENING，≥2 条 → DEGRADED；「当前 |IC_30d| < 0.02」是**加重项**（单独出现不算，仍走 RESEARCH —— 那是「新因子评估中」不是衰退）
+- [x] **策略级口径**: 降权幅度按因子在生产策略**冻结权重中的 |w| 占比**分档 —— 0 暴露 → 不建议降权（仅标记复核）；<10% → 幅度减半；≥10% → 全档。暴露由 `load_production_factor_exposure()` 从 `StrategyRegistry.load_active()` 的 approved weights 计算（多个生产策略取平均；registry 不可读 → 显示 **N/A**，不用 0 冒充）
+  - 实测暴露（momentum_vol_full v20260811）: Amplitude_5D 25% / Volatility_20D 22% / Momentum_3M 20% / Volume_Concentration 19% / Volume_Trend_10D 14%
+- **实测清单变化（19 因子）**: degraded 7 → **5**、weakening 7 → **9**、validated 5（不变）
+  - `Implied_Net_Flow` / `MaxDD_60D` / `Short_Term_Reversal_5D`: degraded → weakening（仅 IC_IR 单条件）
+  - `Momentum_6M`: weakening → degraded（decay + IC_IR 两项同时成立）
+  - `Volatility_20D`（暴露 22%）→ degraded + 降权 50%；`Amplitude_5D`（25%）→ weakening + 降权 25%；非生产因子（暴露 0%）→ 「未进入生产策略，无需降权，仅标记复核」
+- 测试: `tests/unit/test_factor_health_significance_gate.py` 20 项（新增分层 4 项 + 暴露分档 5 项）
+- [x] 展示层归因与精度修复
 
 ### #6 策略池扩容 ⭐⭐⭐⭐（依赖 #5，已解除）
 - **证据**: mvF 唯一 APPROVED；lvr_vol_mom1m（research）、lvr_vol_only（backtest_passed）待提升
