@@ -196,7 +196,7 @@
   - [x] 1.2 热度聚合 → `qp/research/industry_heat.py`（双口径 + N 日窗口 + min_members 小样本过滤）
   - [x] 1.3 CLI → `qp industry heat [--source price|capital_flow] [--granularity csrc|subsector|sector] [--window N]`
   - [x] **接入选股**：`~/.hermes/scripts/stock_morning_report.py` 输出带「行业 + 当日热度 + 排名」，行业逆势时显式警示
-  - [ ] 1.4 SPA 卡片
+  - [x] 1.4 SPA 卡片 → ✅ **2026-09-19 完成**：`GET /api/v1/industry-heat`（只读，如实标注 as_of/滞后天数）+ `IndustryHeat.vue` 页面（源切换 / 表格 / 价格源资金流列显示 — 而非 0）+ `/industry` 路由与 nav；headless DOM 验证过（真实行业名 26 行）
 - **关键发现**（详见文档 §7）: `volume` 单位是「手」(×100 才是股)；parquet 的 `turnover` 列语义不明（已排除出聚合）；新浪限流严格（已加 0.3s 间隔 + 退避重试 + 熔断）；**`--quick` 会覆盖整个 parquet**（事故，已从缓存重建恢复）；东财本机不可达
 - **遗留**: 资金流数据停在 2026-08-14（抓取停了一个月），全量更新受限流阻塞 → 需分批慢跑；无「半导体/CPO」等**主题粒度**（证监会行业是国民经济大类）
 
