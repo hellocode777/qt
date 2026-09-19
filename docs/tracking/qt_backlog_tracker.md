@@ -81,15 +81,22 @@
 > - 生产影响澄清：`factor_health.recommended_action`（含"建议降权 50%"）**只有展示层消费**，不自动改权重；自动降权走策略级 retrain signal（2026-09-19 已修，见 §#13-3）
 > - 复现：`scripts/research/factor_decay_window_diagnosis_20260919.py`
 
-### #14 因子健康判定规则缺显著性门禁 ⭐⭐⭐（2026-09-19 新增，建议整改）
+### #14 因子健康判定规则修正 ⭐⭐⭐⭐（2026-09-19 完成，含一处被实测推翻的初始假设）
 
-- **证据（量化）**: 60 日 IC 线性斜率的**噪声量级 σ ≈ 0.0011–0.0013/day**，而判定阈值 `decay_slope = -0.001/day` 恰好 ≈ 1σ；全历史实测「斜率 < −0.001」的窗口占比 **20.4%–39.7%**（Volatility_20D 39.7%）→ **纯噪声下 1/5~2/5 的窗口会被判衰减**
-- **后果**: 一旦越线，因滑动窗口自相关会连续数周（规则要求连续 30 天才判 DEGRADED）→ 越线即长期锁死 degraded；本次 17/28 degraded 多源于此（ε Volatility_20D 全历史 t=19.5、2026YTD t=+3.4 仍被判 degraded 且建议降权 50%）
-- **不一致**: 策略级 rolling_ic 已于 2026-09-11 加「点估计 + 1σ 仍越界才判」门禁（P1-3），因子级 `FactorHealthMonitor._classify_state` 至今没有同类门禁
-- **第二处**: `qp factor validate` 的 `IC>0% ≥ 50%` 对 direction=−1 因子结构性不适（Amplitude_5D 31.3% / Momentum_3M 37.2% / Volume_Concentration 24.7% / Volume_Trend_10D 36.6%）→ 应改为按方向调整后的「同向占比」
-- [ ] 给 `_classify_state` 的 decay/ic_ratio 判定加标准误门禁（对齐 P1-3 口径）
-- [ ] `validate` 的 `IC>0%` 判定改为方向调整后口径
-- [ ] 两个规则改动后回归：确认真衰减因子仍能被标记（用 PCF_OCF / 基本面那批做正对照）
+- **初始假设（部分被实测推翻，如实记录）**: 判定阈值 `decay_slope=-0.001/day` 与 60 日斜率的噪声同量级（σ≈0.0011–0.0013/day）→ 曾怀疑 degraded 泛滥用是噪声误判
+- **实测（用真实日 IC 序列，28 因子）**:
+  - 只加 1σ 门禁时 **stage 零变化** → 越线者的斜率通常 3σ+（Volatility_20D −0.00526±0.00235，t=−2.24），**不是噪声**；门禁保留（对齐 P1-3 策略级口径，无害）
+  - **真 bug ①（计数语义）**: `_count_consecutive_degraded` 把当前标量（60 日斜率 / 全历史 IC_IR）当逐日条件 → 实测计数 = **2822/2822 天**，「连续 30 天」保护形同虚设 → 改按 trailing 30 日均值序列计数（实测降到 0–43）
+  - **真 bug ②（方向语义，本次最实质）**: 衰减用**带符号 IC** 计算 → 对 40% 的 direction=−1 因子「IC 更负 = 信号增强」被误判为衰减（实例：Implied_Net_Flow ic_30d=−0.059 强于 ic_90d=−0.016，却因斜率 −0.00267 被判 DEGRADED）→ 改为按 **|IC|** 计算衰减
+  - **口径改进（已原型化，最终未采用）**: 曾加「显著衰减 + 90 日 IC 仍显著 → WEAKENING（25%）」的中期对照；实测它无法只凭 IC 序列与真衰减区分，且与既有语义冲突（`tests/unit/test_factor_health.py` 的 `test_degraded_low_ic_ratio` / `test_decay_trend_degraded` 期望「IC 大幅下滑 → 降级」）→ **撤销**，留作待评估建议
+  - **连带修正**: WEAKENING 的旧前置 `consecutive_degraded >= 15` 在计数修好后会整体压制 weakening（旧计数恒真才显得可用）→ 改由斜率显著性承担
+  - **validate 门禁修正**: `IC>0% ≥ 50%` → 「同向占比 ≥ 50%」（按 expected_direction 换算）；实测 Amplitude_5D 31.3% → 同向 68.7%，**4/5 → 5/5**
+- **实测效果（28 因子，最终规则）**: degraded 15→**15**、weakening 10→8、validated 3→5 —— 判定**稳定不震荡**；真正改变的是语义正确性（连续计数 2822 → 0–43；消除「信号增强被判衰减」的误判；validate 由 4/5 → 5/5）
+- **已知局限（未改）**: 衰减只看 trailing 60 日窗口 → 对「台阶式下跌」（衰减发生在窗口之外）不敏感，只对渐进衰减有效
+- **对照脚本**: `scripts/research/factor_health_significance_gate_compare_20260919.py`
+- [x] 因子级 decay 判定加显著性门禁（1σ，可关闭）
+- [x] `validate` 的 IC>0% 判定改方向调整口径
+- [x] 回归测试 10 项（`tests/unit/test_factor_health_significance_gate.py`：计数不再等于全历史 / |IC| 上升不判衰减 / 弱因子仍 degraded / 中期显著→25% vs 50%）
 
 ### #6 策略池扩容 ⭐⭐⭐⭐（依赖 #5，已解除）
 - **证据**: mvF 唯一 APPROVED；lvr_vol_mom1m（research）、lvr_vol_only（backtest_passed）待提升
