@@ -11,10 +11,13 @@ TencentAdapter) — AkShare was a network fallback that violates the
 sh000001 (上证指数) with a symbol parameter.
 """
 
+from datetime import timedelta
+
 import polars as pl
 import pytest
 
 from qp.data.dataset import index_provider
+from qp.shared.time import today_cn
 
 
 def _fake_tencent_rows() -> list[list]:
@@ -54,11 +57,12 @@ def test_fetch_index_data_writes_parquet(tmp_path, monkeypatch) -> None:
     assert df["close"].to_list() == [4015.0, 4030.0]
 
 
-def test_fetch_index_data_skips_when_exists(tmp_path, monkeypatch) -> None:
+def test_fetch_index_data_skips_when_fresh(tmp_path, monkeypatch) -> None:
+    """A fresh local file (last trade_date today) is reused without a fetch."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
     path = tmp_path / "index_csi300.parquet"
-    _index_df().write_parquet(path)
+    _fresh_index_df().write_parquet(path)
 
     calls: list[str] = []
 
@@ -69,7 +73,31 @@ def test_fetch_index_data_skips_when_exists(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(index_provider.requests, "get", fake_get)
     out = index_provider.fetch_index_data(force=False, symbol="sh000300")
     assert out == path
-    assert calls == []  # 已存在不重新拉
+    assert calls == []  # 新鲜 → 不重新拉
+
+
+def test_fetch_index_data_refetches_when_stale(tmp_path, monkeypatch) -> None:
+    """2026-09-19: an existing-but-old file used to be reused forever, which
+    left index_csi300 frozen at 2026-08-20 while the market filter kept
+    consuming it.  Stale files must be re-fetched."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+    path = tmp_path / "index_csi300.parquet"
+    _index_df().write_parquet(path)  # last trade_date 2026-01-06 → stale
+
+    calls: list[str] = []
+
+    def fake_get(url, params, timeout):
+        calls.append(params["param"])
+        return _FakeResp(
+            [["2026-01-05", "4000.0", "4015.0", "4010.0", "3980.0", "1000000000.0"]],
+            symbol="sh000300",
+        )
+
+    monkeypatch.setattr(index_provider.requests, "get", fake_get)
+    out = index_provider.fetch_index_data(force=False, symbol="sh000300")
+    assert out == path
+    assert len(calls) == 1  # 过时 → 重新拉
 
 
 def test_fetch_index_data_raises_on_empty(tmp_path, monkeypatch) -> None:
@@ -82,6 +110,24 @@ def test_fetch_index_data_raises_on_empty(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(index_provider.requests, "get", fake_get)
     with pytest.raises(RuntimeError, match="空数据"):
         index_provider.fetch_index_data(force=True, symbol="sh000300")
+
+
+def test_fetch_index_data_keeps_local_file_when_refresh_fails(tmp_path, monkeypatch) -> None:
+    """A failed refresh must not be reported as success, and the old file stays
+    on disk (callers see the error and the stale date, not a silent lie)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(index_provider, "INDEX_DIR", tmp_path)
+    path = tmp_path / "index_csi300.parquet"
+    _index_df().write_parquet(path)
+    before = path.read_bytes()
+
+    def fake_get(url, params, timeout):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(index_provider.requests, "get", fake_get)
+    with pytest.raises(RuntimeError, match="本地已保留旧数据"):
+        index_provider.fetch_index_data(force=False, symbol="sh000300")
+    assert path.read_bytes() == before  # 未被覆盖
 
 
 def test_fetch_index_sh000001_uses_own_file(tmp_path, monkeypatch) -> None:
@@ -130,7 +176,7 @@ def test_pipeline_load_index_data_with_local_file(tmp_path, monkeypatch) -> None
     monkeypatch.chdir(tmp_path)
     path = tmp_path / "data" / "dataset" / "index_csi300.parquet"
     path.parent.mkdir(parents=True)
-    _index_df().write_parquet(path)
+    _fresh_index_df().write_parquet(path)  # fresh → no refresh attempt
 
     pipe = MultiFactorPipeline.__new__(MultiFactorPipeline)
     df = pipe._load_index_data()
@@ -156,6 +202,23 @@ class _FakeResp:
         if self._rows is None:
             return {"data": {self._symbol: {"day": None}}}
         return {"data": {self._symbol: {"day": self._rows}}}
+
+
+def _fresh_index_df() -> pl.DataFrame:
+    """Index DataFrame whose last trade_date is today (age 0 → reused as-is)."""
+    today = today_cn()
+    return pl.DataFrame(
+        {
+            "trade_date": pl.Series(
+                [today - timedelta(days=3), today - timedelta(days=2)], dtype=pl.Date
+            ),
+            "open": [4000.0, 4020.0],
+            "high": [4010.0, 4040.0],
+            "low": [3980.0, 4000.0],
+            "close": [4015.0, 4030.0],
+            "volume": [1.0e9, 1.2e9],
+        }
+    )
 
 
 def _index_df() -> pl.DataFrame:

@@ -35,18 +35,34 @@ INDEX_SYMBOLS = {
 # Legacy alias kept for backward compatibility (old callers use this name).
 INDEX_DATASET_PATH = INDEX_DIR / "index_csi300.parquet"
 
+# 本地文件最新交易日距今的自然日上限：超过即视为过时并重新拉取。
+# 指数只有 ~260 个交易日窗口、刷新 = 1 次 HTTP，所以宁可重抓。
+# 2026-09-19 事故：旧逻辑「文件存在就跳过」让 index_csi300 停在 2026-08-20，
+# 而 market filter / regime 一直吃 20 个交易日前的指数 —— 静默过时才是风险。
+DEFAULT_MAX_AGE_DAYS = 7
+
 # TDR-001: 腾讯主源为 `kline/kline`（无复权，raw day 序列）。
 # ⛔ fqkline/get + qfq 接口被禁止（负价格坏数据 bug，600438 2018-10 实证）。
 _TENCENT_KLINE_URL = "https://ifzq.gtimg.cn/appstock/app/kline/kline"
 
 
-def fetch_index_data(force: bool = False, symbol: str = "sh000300") -> Path:
+def fetch_index_data(
+    force: bool = False,
+    symbol: str = "sh000300",
+    max_age_days: int = DEFAULT_MAX_AGE_DAYS,
+) -> Path:
     """Fetch daily index OHLCV via Tencent kline and persist to Gold dataset.
 
+    The local file is reused only while it is fresh (its last ``trade_date``
+    within ``max_age_days`` natural days).  A stale file is re-fetched — an
+    existing-but-old file is exactly the failure mode that left CSI300 at
+    2026-08-20 while the market filter kept consuming it.
+
     Args:
-        force: Re-fetch full history even when the local file already exists.
+        force: Re-fetch full history even when the local file is fresh.
         symbol: Tencent index symbol (``sh000300`` default for CSI300,
             ``sh000001`` for 上证指数).
+        max_age_days: Max age of the local file before it is re-fetched.
 
     Returns:
         Path to the written parquet file.
@@ -60,11 +76,29 @@ def fetch_index_data(force: bool = False, symbol: str = "sh000300") -> Path:
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
 
     if not force and out_path.exists():
-        logger.info("指数数据已存在: {}", out_path)
-        return out_path
+        latest = latest_local_date(out_path)
+        if latest is None:
+            logger.warning("指数数据无法解析最新日期: {} → 重新拉取", out_path)
+        else:
+            age = (today_cn() - latest).days
+            if age <= max_age_days:
+                logger.info("指数数据仍新鲜: {} (最新 {}, {} 天前)", out_path, latest, age)
+                return out_path
+            logger.warning(
+                "指数数据已过时: {} (最新 {}, {} 天前 > {} 天) → 重新拉取",
+                out_path,
+                latest,
+                age,
+                max_age_days,
+            )
 
     df = _fetch_tencent_index(symbol, days=260)
     if df is None or df.is_empty():
+        if out_path.exists():
+            raise RuntimeError(
+                f"指数拉取失败: {symbol}；本地已保留旧数据 "
+                f"(最新 {latest_local_date(out_path)})，未被覆盖"
+            )
         raise RuntimeError(f"指数拉取返回空数据: {symbol}")
 
     df.write_parquet(out_path)
@@ -120,6 +154,31 @@ def _fetch_tencent_index(symbol: str, days: int = 260) -> pl.DataFrame | None:
         }
     ).with_columns(pl.col("trade_date").str.to_date())
     return out.sort("trade_date")
+
+
+def latest_local_date(path: str | Path) -> date | None:
+    """Latest ``trade_date`` in a persisted index file.
+
+    Returns None when the file is missing, unreadable, empty, or has no
+    parseable date — callers must treat None as "unknown", never as fresh.
+    """
+    import polars as pl
+
+    try:
+        df = pl.read_parquet(str(path), columns=["trade_date"])
+    except Exception:
+        return None
+    if df.is_empty():
+        return None
+    latest = df["trade_date"].max()
+    if latest is None:
+        return None
+    if isinstance(latest, date):
+        return latest
+    try:
+        return date.fromisoformat(str(latest)[:10])
+    except ValueError:
+        return None
 
 
 def load_index_data(symbol: str = "sh000300") -> pl.DataFrame | None:

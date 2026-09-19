@@ -6,18 +6,46 @@ import sys
 
 
 def cmd_data_index() -> int:
-    """Fetch CSI300 index daily data (for market filter + regime detection)."""
-    from qp.data.dataset.index_provider import fetch_index_data
+    """Fetch benchmark index daily data (market filter + regime + benchmark NAV).
+
+    Reports the resulting freshness so a silent stale file is visible:
+    reuse only happens while the local last trade_date is recent.
+    """
+    from qp.data.dataset.index_provider import (
+        DEFAULT_MAX_AGE_DAYS,
+        INDEX_SYMBOLS,
+        fetch_index_data,
+        latest_local_date,
+    )
+    from qp.shared.time import today_cn
 
     args = sys.argv[3:] if len(sys.argv) > 3 else []
     force = "--force" in args
+    symbol = "sh000300"
+    for arg in args:
+        if arg.startswith("--symbol="):
+            symbol = arg.split("=", 1)[1]
+
     try:
-        path = fetch_index_data(force=force)
-        print(f"Index data written: {path}")
-        return 0
+        path = fetch_index_data(force=force, symbol=symbol)
     except Exception as exc:
         print(f"Index fetch failed: {exc}")
         return 1
+
+    print(f"Index data written: {path}")
+    print(f"  latest trade_date: {latest_local_date(path)}")
+
+    # Freshness of both index files, so a consumer of a stale series is visible.
+    print("  freshness:")
+    for sym, fname in INDEX_SYMBOLS.items():
+        latest = latest_local_date(path.parent / fname)
+        if latest is None:
+            print(f"    {sym}: missing / unreadable")
+            continue
+        age = (today_cn() - latest).days
+        mark = "OK" if age <= DEFAULT_MAX_AGE_DAYS else "STALE"
+        print(f"    {sym}: {latest} ({age}d, {mark})")
+    return 0
 
 
 def cmd_data_fetch() -> int:

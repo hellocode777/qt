@@ -1362,25 +1362,51 @@ class MultiFactorPipeline(BasePipeline):
         """Load CSI300 index data for market filter / regime detection.
 
         Reads the local Gold dataset (data/dataset/index_csi300.parquet,
-        produced by ``qp data index``). If the file is missing, attempts a
-        one-time AkShare fetch (lazy network fallback); returns None only
-        when both fail (market filter / regime detection skipped).
+        produced by ``qp data index``). A stale local file (last trade_date
+        older than ``DEFAULT_MAX_AGE_DAYS``) triggers a refresh from the
+        Tencent source before use — a silent weeks-old series is exactly how
+        the market filter ran on an index frozen at 2026-08-20.
+
+        If refreshing fails but a local series exists, the local series is
+        used WITH an explicit warning carrying its last date and lag; None is
+        returned only when no series is available at all (market filter
+        skipped). None → no filtering is not a safe default, but neither is
+        silently pretending a stale series is current.
         """
         from qp.data.dataset.index_provider import (
+            DEFAULT_MAX_AGE_DAYS,
+            INDEX_DATASET_PATH,
             fetch_index_data,
+            latest_local_date,
             load_index_data,
         )
+        from qp.shared.time import today_cn
 
-        # Try local Gold dataset first; if missing, one-time network fetch.
         local = load_index_data()
-        if local is not None:
-            return local
+        if local is not None and not local.is_empty():
+            # Reuse the provider's own date parsing (single source of truth).
+            latest = latest_local_date(INDEX_DATASET_PATH)
+            age = (today_cn() - latest).days if latest is not None else None
+            if age is not None and age <= DEFAULT_MAX_AGE_DAYS:
+                return local
+            logger.warning("指数数据过时 (最新 {}, {} 天前) → 先刷新再使用", latest, age)
+        else:
+            logger.info("指数数据缺失，尝试拉取...")
 
-        logger.info("指数数据缺失，尝试拉取...")
         try:
             fetch_index_data(force=False)
-            return load_index_data()
+            refreshed = load_index_data()
+            if refreshed is not None:
+                return refreshed
+            return local
         except Exception as exc:
+            if local is not None and not local.is_empty():
+                logger.warning(
+                    "指数刷新失败，回退到旧数据 (最新 {})，大盘过滤基于滞后指数: {}",
+                    local["trade_date"].max(),
+                    exc,
+                )
+                return local
             logger.warning("指数拉取失败（市场过滤跳过）: {}", exc)
             return None
 
