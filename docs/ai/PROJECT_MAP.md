@@ -42,6 +42,7 @@
 | `qp/pipeline/` | 长任务 Pipeline：daily、factor_calc、multifactor、fundamental |
 | `qp/lineage/` | 血缘图（Rule 7）：LineageRegistry DAG → `data/metadata/lineage_graph.json` |
 | `qp/web/` | Web UI（FastAPI 前端）：Jinja 旧页 `templates/` + JSON 端点 `routers/api_v1.py` + SPA `spa_src/`（源码入库，构建产物 `static/spa/` 不入库，`scripts/spa_deploy.sh` 部署到 `/proto/`） |
+| `scripts/` | 运维/研究脚本（`maintenance/` 一次性数据修正、`research/` 研究、`spa_deploy.sh` 部署） |
 | `tests/` | 1488 测试函数 |
 | `docs/` | 人读文档；`docs/ai/` 是 AI 导航层（本目录） |
 | `data/` | 所有数据与运行时产物（见 DATA_FLOW.md） |
@@ -114,6 +115,7 @@
 | `data/paper_trading/` | Paper Trading 状态（`{strategy_id}_paper.json`） |
 | `data/experiments/` | 实验产物 |
 | `data/metadata/lineage_graph.json` | 血缘图（`qp lineage snapshot` 生成） |
+| `data/monitoring/` | 监控产物：健康日志、`retrain_signals.parquet`（信号→策略权重，见 Step 9）、`retrain_notify_state.json`（告警去重） |
 | `logs/{日期}/{job}.log` | 调度任务日志（7 天清理） |
 
 ## 证据等级（回答 QP 问题时的强制分层）

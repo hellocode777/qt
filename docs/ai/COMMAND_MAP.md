@@ -9,7 +9,7 @@
 
 | 命令组 | 入口文件 | 主要子命令 |
 |---|---|---|
-| data | `commands/data_cmd.py` | fetch（拉取行情） |
+| data | `commands/data_cmd.py` | fetch（拉取行情）, index（基准指数 CSI300/上证，打印最新交易日 + OK/STALE，支持 `--symbol=`） |
 | decide | `commands/decide.py` | 生成/审阅投资决策 |
 | doctor | `commands/meta.py`（cmd_doctor） | 环境自检 |
 | experiment | `commands/experiment.py` | list, show, run, compare, validate, clean, optuna |
@@ -61,7 +61,8 @@
 
 ### qp monitor check / regime
 - 入口：`commands/monitor.py` → `qp/monitoring/kill_switch_pipeline.py`（full/fast）+ `online_monitor.py`
-- 输出：MonitorReport（含 rolling_ic / rolling_ic_available）；IC_DECAY 报警语义：available=False=没数据不报，True+ic≈0=真衰减才报
+- 输出：MonitorReport（含 rolling_ic / rolling_ic_available / psi_available）；IC_DECAY 报警语义：available=False=没数据不报，True+ic≈0=真衰减才报
+- 显示铁律：`psi_available=False`（或 `rolling_ic_available=False`）时，CLI/日志/邮件/模板必须显示「不可测」，不得打印默认值 `0.000`
 - 产物：`data/monitoring/retrain_signals.parquet`
 
 ### qp experiment run multifactor
@@ -85,6 +86,7 @@
 - 服务：`qp-scheduler.service`，ExecStart=`python -m qp.platform.cli.main scheduler start`，Restart=always RestartSec=30
 - 6 个工作日 job：monitor_check 09:07 / retrain_notify 09:17 / pre_close_check 16:53 / daily_pipeline 18:00 / paper_trading 18:32 / email_report 18:30
 - 重启：sudo 或 `kill -TERM <MainPID>` 等 30s 自动拉起；**勿绕过 systemd 起第二实例**
+- `retrain_notify` 去重：同一批信号只通知一次（状态文件 `data/monitoring/retrain_notify_state.json` 记 `last_notified_at`），无新信号只打日志；信号→策略权重在 `daily_pipeline` Step 9（`load_weight_scales`）
 
 ## 查命令细节的方法
 1. `.venv/bin/qp <组> --help` 看子命令

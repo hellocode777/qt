@@ -221,6 +221,71 @@
 
 ---
 
+## 待办清单（2026-09-19 更新 — 项目巡检四项修复）
+
+> 来源：2026-09-19 项目巡检（`qp doctor` / `qp monitor check` / 数据新鲜度实测 / git 状态）。
+> 架构与运行时整体健康（Action=OK、Regime=RANGING、Health 84、数据到最新交易日），
+> 以下 4 项为巡检发现的「静默错误」，均已修复并验证。
+
+### #13-1 指数数据静默过时 ⚠️ 已修（2026-09-19）
+
+- **现象**: `data/dataset/index_csi300.parquet` 最新交易日停在 **2026-08-20**，缺 8/21–9/18 共 20 个交易日；`index_sh000001.parquet` 同
+- **根因**: `qp/data/dataset/index_provider.py:fetch_index_data()` 的逻辑是「本地文件存在就直接 return」→ 首次落盘后再不会被更新（不是网络问题）
+- **影响面（区分清楚，避免误判）**:
+  - `multifactor_pipeline._load_index_data()` → 策略侧 **market filter（MA20/MA60 大盘过滤）/regime 检测**实际消费的是滞后 20 个交易日的指数
+  - daily_pipeline 决策包里的 regime **不受影响**：它用 `_build_index_df(price_data)`（全市场收盘均值合成代理指数，随行情每日更新）
+- **修复**:
+  - [x] `fetch_index_data()` 增加新鲜度判定：本地最新 `trade_date` 距今天 ≤ `DEFAULT_MAX_AGE_DAYS`(7) 才复用，否则重抓；新增 `latest_local_date()` 辅助函数
+  - [x] 抓取失败但本地有旧数据 → **raise 明确错误**（含旧数据日期），不覆盖、不假装成功
+  - [x] `_load_index_data()` 消费侧：过时先刷新；刷新失败回退旧数据并 WARNING 携带滞后天数（不静默）
+  - [x] `qp data index` CLI 打印 `latest trade_date` + 两个指数文件的新鲜度（OK/STALE），并支持 `--symbol=`
+  - [x] 实测补拉：两个指数 2026-01-05 → **2026-09-18**（260 天滚动窗口，174 个交易日，gap 仅春节/五一）
+- **遗留观察**: 滚动窗口只有 ~174 个交易日 < `MarketRegimeDetector.min_history=200` → 该指数**不能**独立支撑 regime 检测（detect() 会返回「数据不足」默认值）；这是窗口设计，不是 bug
+
+### #13-2 PSI 不可测却显示 `0.000` ⚠️ 已修（2026-09-19）
+
+- **现象**: `qp monitor check` 打印 `PSI: 0.000`，实际日志明确 `psi_available=False`（样本不足）→ 不可测被渲染成「测量值 0」，绿色读作「无漂移」（违反 WebUI/监控铁律：默认值不得伪装成测量值；同类问题 P2-3 修过 decay，PSI 漏了）
+- **修复**:
+  - [x] `qp/platform/cli/commands/monitor.py`：`psi_available=False` → 打印「不可测 / not measured (样本不足，非 0)」
+  - [x] `qp/platform/cli/commands/scheduler.py`：日志行 `psi=n/a`（原 `psi=0.000`）
+  - [x] `qp/monitoring/kill_switch_pipeline.py`：归档/邮件摘要 `**PSI**: 不可测 (n/a)`
+  - [x] `qp/web/templates/components/strategy_health.html`：PSI/rolling_ic 均按 `*_available` 分支，不可测显示「不可测」（`health.html`/`dashboard.html` 原本已正确）
+
+### #13-3 retrain signal：行数上限冒充日期窗口 + 每日重复告警 + 假 PSI 驱动降权 ⚠️ 已修（2026-09-19）
+
+- **现象**: scheduler 每天打印 `retrain_signals: 70 actionable`，条目重复（momentum_vol_full×2 + unknown×3，全 `[PSI_DRIFT]`）
+- **根因（三层，逐层实证）**:
+  1. `RetrainSignalLogger.load_history(days)` 实现是 `head(days * 10)` —— **行数上限，不是日期窗口**。7 天窗口 = "最新 70 行"，`70` 正是该上限被当成 actionable 计数上报
+  2. 告警无「已通知」状态 → 同一批未处理信号在滚出窗口前**每天重复发邮件**（9/12–9/18 重复同一批 9/11 信号）
+  3. **更严重**：`retrain_signals.parquet` 里 66 行 `PSI_DRIFT` 的 `psi_value` 为 **4.22–22.32**（P2-2 已确认修复前 PSI 实现产出假值 15.529），被 `daily_pipeline` Step 9 的 `load_weight_scales` 消费 → momentum_vol_full **9/2–9/11 被降权至 0.85**，并把 `strategy_exposure_scale`（组合总敞口）一并压到 0.85
+- **修复**:
+  - [x] `load_history(days, limit=None)` 改为**按信号日期过滤**（`date >= today - days`），行数上限只作为可选 `limit`
+  - [x] `scheduler.job_retrain_notify`：只对「比上次通知时间更新」的信号发信（状态文件 `data/monitoring/retrain_notify_state.json`），无新信号时打日志不发邮件；`job_monitor_check` 打印带上窗口最新日期
+  - [x] `load_weight_scales` 增加防御：`trigger=PSI_DRIFT` 且 `psi_value >= 1.0`（阈值体系 0.10/0.25）判为不可信 → 跳过并 WARNING，不据此降权
+  - [x] 数据修正：`scripts/maintenance/purge_implausible_psi_signals_20260919.py` —— 全量备份 `retrain_signals_archive_20260919.parquet`，移除 66 行假 PSI（198 → 132 行；剩余 132 行是 8/02–8/11 的 `IC_DECAY` 空名信号，早已出窗且代码本就忽略空 strategy_name）
+  - [x] 实测：`load_weight_scales(['momentum_vol_full'])` → **1.0**（降权已解除）
+- **遗留**: `strategy_name="unknown"` 的信号无语义（来自 report 无策略上下文的运行）；生成侧 P2-2 修复后已不再产生，未额外改动
+
+### #13-4 ADV 单位错（volume 是「手」）影响 3 处实现 ⚠️ 已修（2026-09-19）
+
+- **现象/证据**: 日线 `volume` 单位是**手**（1 手 = 100 股）。实测 600519 @2026-09-18 `close=1257.12, volume=24891`：按股算成交额 ¥3,129 万（不合理），按手算 ¥31.3 亿（符合茅台量级）
+- **影响面（原 tracker #12 只记了第 1 处，本次审计发现 3 处同源）**:
+  1. `qp/portfolio/cost_model.py:MarketImpactModel.compute_adv()` → ADV 低估 100× → 冲击成本高估 10×（`sqrt(100)`），且 10%-ADV 流动性惩罚提前 100× 触发 → 进 `daily_pipeline` Step 11 `estimated_cost_pct`
+  2. `qp/portfolio/exposure/liquidity_exposure.py:_compute_adv()` → ADV 低估 100× → `liquidity_score` 被系统性压低（`log10(adv)/10` ⇒ −0.2），阈值 50M/200M 判级同样失真
+  3. `qp/portfolio/portfolio_risk_engine.py:_compute_advs()` → 同上，影响 Layer 7 风控候选
+- **修复**:
+  - [x] `qp/shared/constants/__init__.py` 新增单一来源 `SHARES_PER_LOT = 100.0`（附单位说明），三处统一引用
+  - [x] 三处公式改为 `close × volume × SHARES_PER_LOT`，docstring 标注「手 → 股」
+  - [x] 测试：`compute_adv` 值断言、`sqrt_impact` 小额单不再触发流动性惩罚、两处 ADV 单位断言
+- **遗留（待决定，与 #12 同源）**: 券商最低佣金 ¥5/笔、过户费未建模；回滚行（`exit_reason=rollback_wrong_size`，实际未成交）费用被高估约 ¥289
+
+### 质量门禁（2026-09-19）
+- [x] `uvx ruff format --check .` → 473 files already formatted；`uvx ruff check .` → All checks passed
+- [x] `uv run pyright` → 0 errors, 0 warnings, 0 informations（注意：`uvx pyright` 找不到 .venv，会假报 ~692 个 reportMissingImports）
+- [x] 全量 `pytest -q` → exit 0（基线 1768 passed；本次新增/更新 9 项测试）
+
+---
+
 ## 关联
 
 - 架构导航: `docs/ai/PROJECT_MAP.md`
