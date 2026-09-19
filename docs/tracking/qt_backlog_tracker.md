@@ -21,10 +21,12 @@
 - **成本**: 中
 - **涉及**: `qp/research/trainer/lgb_rank.py`, `docs/tdr/TDR-005-optuna.md`
 
-- [ ] 读 lgb_rank.py + TDR-005，出集成方案
-- [ ] 接入 Optuna 搜索（num_leaves / learning_rate 等）
-- [ ] walk-forward + Purged CV 验证
-- [ ] 与固定参数基线对比，记录结果
+- [x] 读 lgb_rank.py + TDR-005，出集成方案 → ✅ 2026-08-13 完成（tracker 过时）
+- [x] 接入 Optuna 搜索（num_leaves / learning_rate 等）→ ✅ 已实现：`qp/research/trainer/optuna_search.py`（329 行）+ CLI `qp experiment optuna`（参数由函数内手工解析，故 `--help` 只显示 `--help`，非缺陷）
+- [ ] walk-forward + Purged CV 验证 → **Purged CV 部分已实现**（目标函数即 PurgedKFold OOS IC 均值）；**真实剩余**：用 8/13 搜出的最优参数跑一次**完整 walk-forward 回测**，与生产固定参数对比（TDR-005 ⚠️：短样本最优参数不得直接写进生产）
+- [x] 与固定参数基线对比，记录结果 → ✅ 内置 ΔIC 对比：8/13 结果见 `data/optuna/lgb_optuna_20260813_011526.json`（30 trials，best −0.0444 vs baseline −0.0572，改善约 22%）
+
+> 📌 **2026-09-19 复核**：模块 / CLI / 结果文件 / 测试（`tests/unit/research/test_optuna_search.py`）均在位，本节 4 项中 3 项早已完成（tracker 过时）。**只剩「最优参数的完整 walk-forward 验证」**——这一步会决定是否调整生产模型参数（production-sensitive，需批准）。
 
 ### #2 文档重建收尾
 
@@ -233,12 +235,15 @@
 - **遗留（待用户决定）**:
   - [ ] 记账回滚行（`exit_reason=rollback_wrong_size`，entry=exit 且 pnl=0，共 5 笔）实际未成交，
         但费用估算按"都成交"计 → 汇总费后被高估约 ¥289：是否按原因串排除？
-  - [ ] 券商最低佣金（常见 ¥5/笔）与过户费未建模 —— 小额单（¥450 级）真实费用远高于估算，是否加可配置项？
-  - [ ] `MarketImpactModel.compute_adv()` 的 volume 单位：日线 `volume` 单位是**手**，
+  - [x] 券商最低佣金与过户费 → ✅ **2026-09-19 实现**：`CostModel` 新增 `min_commission`（默认 **0 = 不启用**）与 `transfer_fee_rate`（默认 0），`CostBreakdown` 增 `transfer_fee` 字段并计入 `total_cost`，`DecisionEngine` 透传；常量 `MIN_COMMISSION_CNY = 5.0` / `TRANSFER_FEE_RATE = 0.00001`（2022-04-29 起沪深统一 0.001%，双向）。
+        **默认 0 的取舍**：保持与历史回测结果可比；实盘/纸面要精确需显式传参启用（¥450 的单：¥0.11 → ¥5，**45 倍**）。
+        测试：`tests/unit/portfolio/test_cost_model.py`（9 项，含「默认行为不变」守卫与真实小额单对比）
+  - [x] `MarketImpactModel.compute_adv()` 的 volume 单位 → ✅ **2026-09-19 已修**（commit `c8d8124`
+        「fix(portfolio): ADV 计算补 手→股 换算」）。原问题：日线 `volume` 单位是**手**，
         而 `compute_adv` 用 `close*volume` 当成交额 → ADV 低估 100× → 冲击成本估算**高估 10×**
         （实测 1 万元单：600207 ¥5.47 vs 修正后 ¥0.55；600930 ¥2.54 vs ¥0.25），
         并让 10%-ADV 流动性惩罚提前 100× 触发。影响 `daily_pipeline` Step 11 的
-        `estimated_cost_pct`（进决策包 markdown / portfolio_snapshot）—— 生产路径，待批准后修（一行 ×100）
+        `estimated_cost_pct`（进决策包 markdown / portfolio_snapshot）
 
 ---
 
