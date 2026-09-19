@@ -39,6 +39,7 @@ from typing import Any
 from loguru import logger
 
 from qp.shared.paths import LINEAGE_JSON
+from qp.shared.time import fmt_ts, now_utc, utc_iso
 
 
 @dataclass
@@ -61,8 +62,8 @@ class DataLineage:
         notes: Human-readable notes.
     """
 
-    lineage_id: str = field(default_factory=lambda: datetime.now(UTC).strftime("%Y%m%dT%H%M%S"))
-    recorded_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    lineage_id: str = field(default_factory=lambda: fmt_ts(now_utc(), sep="T"))
+    recorded_at: str = field(default_factory=utc_iso)
     source_name: str = ""
     source_version: str = ""
     cleaning_run_id: str = ""

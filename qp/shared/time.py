@@ -32,6 +32,7 @@ __all__ = [
     "fmt_display",
     "fmt_display_utc",
     "fmt_sec",
+    "fmt_short",
     "fmt_ts",
     "now_cn",
     "now_utc",
@@ -102,3 +103,8 @@ def fmt_sec(dt: datetime | date | None = None) -> str:
 def fmt_display_utc(dt: datetime | None = None) -> str:
     """'YYYY-MM-DD HH:MM UTC' UTC 显示。"""
     return (dt or now_utc()).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def fmt_short(dt: datetime | None = None) -> str:
+    """'MM-DD HH:MM' 省略年份的紧凑显示（近期时间点横向排版用）。"""
+    return (dt or now_cn()).strftime("%m-%d %H:%M")

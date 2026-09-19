@@ -18,6 +18,7 @@ from qp.monitoring.retrain_signal import (
     RetrainSignalLogger,
     load_weight_scales,
 )
+from qp.shared.time import fmt_date, now_cn
 
 
 @pytest.fixture()
@@ -39,7 +40,7 @@ def _sig(
     date: str | None = None,
 ) -> RetrainSignal:
     return RetrainSignal(
-        date=date or datetime.now().strftime("%Y-%m-%d"),
+        date=date or fmt_date(),
         timestamp=datetime.now().isoformat(),
         strategy_name=strategy,
         action=action,
@@ -88,7 +89,7 @@ class TestLoadWeightScales:
         from datetime import timedelta
 
         stale = _sig("mom", "REDUCE_WEIGHT", "WARNING")
-        stale.date = (datetime.now() - timedelta(days=40)).strftime("%Y-%m-%d")
+        stale.date = fmt_date(now_cn() - timedelta(days=40))
         _log_signals(signal_dir, [stale])
         scales = load_weight_scales(strategy_ids=["mom"], base_dir=signal_dir)
         assert scales["mom"] == 1.0

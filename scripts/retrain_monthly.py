@@ -32,6 +32,7 @@ from pathlib import Path
 import polars as pl
 
 from qp.shared.json_io import json_load
+from qp.shared.time import fmt_compact, fmt_date
 
 ROOT = Path(__file__).resolve().parent.parent
 QP = str(ROOT / ".venv" / "bin" / "qp")
@@ -70,10 +71,10 @@ def _latest_trade_date() -> str:
     """最近交易日 = daily_price_latest.parquet 的最大 trade_date。"""
     path = ROOT / "data" / "dataset" / "daily_price_latest.parquet"
     if not path.exists():
-        return datetime.now().strftime("%Y-%m-%d")
+        return fmt_date()
     df = pl.read_parquet(str(path))
     if "trade_date" not in df.columns or df.is_empty():
-        return datetime.now().strftime("%Y-%m-%d")
+        return fmt_date()
     return str(df["trade_date"].max())
 
 
@@ -144,9 +145,7 @@ def main() -> int:
 
     strategy = args.strategy
     end = _latest_trade_date()
-    start = (
-        datetime.strptime(end, "%Y-%m-%d") - timedelta(days=30 * args.lookback_months)
-    ).strftime("%Y-%m-%d")
+    start = fmt_date(datetime.strptime(end, "%Y-%m-%d") - timedelta(days=30 * args.lookback_months))
     print(f"月度重训 [{strategy}]  窗口: {start} → {end}", flush=True)
 
     current = _load_approved(strategy)
@@ -174,7 +173,7 @@ def main() -> int:
 
     # ── 对比与裁决 ──
     CANDIDATE_DIR.mkdir(parents=True, exist_ok=True)
-    cand_id = f"retrain_{datetime.now().strftime('%Y%m%d')}"
+    cand_id = f"retrain_{fmt_compact()}"
     cand_path = CANDIDATE_DIR / f"{cand_id}.json"
 
     cur_ic = exp_current.get("metrics", {}).get("ic_mean")

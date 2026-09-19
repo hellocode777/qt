@@ -24,6 +24,7 @@ from datetime import datetime as _dt
 import polars as pl
 
 from qp.portfolio.risk_exit import Priority, RiskExitSignal, TradeReason
+from qp.shared.time import fmt_date
 
 # ==================================================================
 # FundamentalExitDetector
@@ -114,7 +115,7 @@ def _find_prev_same_period(sorted_desc: pl.DataFrame, current_date: object) -> d
             mask = pl.col("report_date").cast(pl.Utf8).str.ends_with(prefix)
             filtered = sorted_desc.filter(mask)
             # exclude rows equal-or-after current by date string compare
-            cur_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+            cur_str = fmt_date(d) if hasattr(d, "strftime") else str(d)[:10]
             prev = filtered.filter(pl.col("report_date").cast(pl.Utf8) < cur_str)
         except Exception:
             return None

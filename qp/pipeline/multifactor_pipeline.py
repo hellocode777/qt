@@ -59,7 +59,7 @@ from qp.shared.paths import (
     KNOWLEDGE_DIR,
 )
 from qp.shared.protocols.base_pipeline import BasePipeline
-from qp.shared.time import fmt_date, fmt_display, fmt_ts, now_cn, today_cn
+from qp.shared.time import fmt_compact, fmt_date, fmt_display, fmt_ts, now_cn, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
 from qp.strategy.multifactor import generate_rebalance_signals
 
@@ -939,7 +939,7 @@ class MultiFactorPipeline(BasePipeline):
                     backtest_max_dd=float(bt.get("max_dd_pct", 0)),
                     backtest_excess_return=float(excess),
                     owner="experiment",
-                    strategy_version=now_cn().strftime("v%Y%m%d"),
+                    strategy_version=f"v{fmt_compact()}",
                 )
 
                 # Update metadata if strategy exists, otherwise just save

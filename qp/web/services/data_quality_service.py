@@ -17,7 +17,7 @@ import polars as pl
 from loguru import logger
 
 from qp.shared.paths import DATASET_DIR, REPORTS_DIR, SOURCES_JSON
-from qp.shared.time import fmt_date, today_cn
+from qp.shared.time import fmt_date, fmt_short, today_cn
 
 
 class DataQualityService:
@@ -449,6 +449,6 @@ def _format_time(iso_str: str) -> str:
         return ""
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        return dt.strftime("%m-%d %H:%M")
+        return fmt_short(dt)
     except (ValueError, TypeError):
         return iso_str[:16] if len(iso_str) >= 16 else iso_str
