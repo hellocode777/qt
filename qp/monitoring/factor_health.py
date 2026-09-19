@@ -595,8 +595,8 @@ class FactorHealthMonitor:
             return (
                 FactorLifecycle.WEAKENING,
                 None,
-                f"衰退中: 历史强 (IC₉₀={ic_90d:+.4f}) 但近期衰减 "
-                f"(decay_60d={decay_rate:+.5f}/天, 持续{consecutive_degraded}天)。"
+                f"衰退中: 历史强 (IC₉₀={ic_90d:+.4f}) 但近 60 日衰减 "
+                f"(decay={decay_rate:+.5f}/天, 门禁 {thr:+.5f})。"
                 "建议降权 25%，密切监控。",
             )
 
@@ -609,8 +609,8 @@ class FactorHealthMonitor:
             return (
                 FactorLifecycle.DEGRADED,
                 None,
-                f"衰减: IC_IR={ic_ir:.2f}<{self._degraded_ic_ir} 持续{consecutive_degraded}天。"
-                "信号一致性下降，建议降权。",
+                f"衰减: IC_IR={ic_ir:.3f} < {self._degraded_ic_ir}"
+                "（全历史信号一致性偏低）。建议降权 50%。",
             )
 
         # (b) Significant decay: the 60d slope is below the significance-gated
@@ -626,7 +626,7 @@ class FactorHealthMonitor:
             return (
                 FactorLifecycle.DEGRADED,
                 None,
-                f"衰减: IC decay={decay_rate:+.5f}/day < {thr}（噪声门禁后）。"
+                f"衰减: IC decay={decay_rate:+.5f}/day < {thr:+.5f}（噪声门禁后）。"
                 "IC 趋势显著下行。降权 50%，安排复核。",
             )
 
@@ -647,7 +647,7 @@ class FactorHealthMonitor:
             return (
                 FactorLifecycle.VALIDATED,
                 None,
-                f"已验证: |IC|={abs_ic:.4f}≥0.02, IC_IR={ic_ir:.2f}≥{self._degraded_ic_ir}。"
+                f"已验证: |IC|={abs_ic:.4f}≥0.02, IC_IR={ic_ir:.3f}≥{self._degraded_ic_ir}。"
                 "可进入策略，建议半权重。",
             )
 
