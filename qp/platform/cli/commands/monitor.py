@@ -101,9 +101,17 @@ def cmd_monitor_check() -> int:
 
     print()
     print("── 特征漂移 / Drift ──")
-    print(
-        f"  PSI:               {report.psi_value:.3f}" + (" ⚠" if report.psi_value >= 0.25 else "")
-    )
+    # psi_available=False means PSI was never computed (thin sample / legacy
+    # per-strategy history) — psi_value then stays at its 0.0 default, which
+    # must not be rendered as a measurement (a green "0.000" reads as "no
+    # drift" when the truth is "not measured").
+    if report.psi_available:
+        print(
+            f"  PSI:               {report.psi_value:.3f}"
+            + (" ⚠" if report.psi_value >= 0.25 else "")
+        )
+    else:
+        print("  PSI:               不可测 / not measured (样本不足，非 0)")
 
     print()
     print("── 模型衰减 / Model Decay ──")

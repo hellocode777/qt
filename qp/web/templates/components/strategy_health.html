@@ -29,15 +29,24 @@
     <div class="grid grid-cols-2 gap-2 text-xs">
       <div>
         <span class="text-gray-500">Rolling IC</span>
+        {# unavailable ≠ good: never render an unmeasured value as 0 #}
+        {% if health.rolling_ic_available %}
         <div class="font-mono {{ 'text-green-400' if health.rolling_ic > 0.02 else 'text-yellow-400' if health.rolling_ic > 0 else 'text-red-400' }}">
-          {{ "%.4f" | format(health.rolling_ic | default(0)) }}
+          {{ "%.4f" | format(health.rolling_ic) }}
         </div>
+        {% else %}
+        <div class="font-mono text-gray-500">不可测</div>
+        {% endif %}
       </div>
       <div>
         <span class="text-gray-500">PSI Value</span>
+        {% if health.psi_available %}
         <div class="font-mono {{ 'text-green-400' if health.psi_value < 0.1 else 'text-yellow-400' if health.psi_value < 0.25 else 'text-red-400' }}">
-          {{ "%.3f" | format(health.psi_value | default(0)) }}
+          {{ "%.3f" | format(health.psi_value) }}
         </div>
+        {% else %}
+        <div class="font-mono text-gray-500">不可测</div>
+        {% endif %}
       </div>
       <div>
         <span class="text-gray-500">Model Decay</span>

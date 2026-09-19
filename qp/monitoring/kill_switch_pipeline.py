@@ -746,12 +746,15 @@ class KillSwitchPipeline(BasePipeline):
                 ", ".join(report.kill_switch_triggers) if report.kill_switch_triggers else "none"
             )
 
+            # Unmeasured PSI keeps its 0.0 default — report it as n/a rather
+            # than as a measured zero.
+            psi_str = f"{report.psi_value:.3f}" if report.psi_available else "不可测 (n/a)"
             event_summary = (
                 f"**Action**: {report.action.value}\n"
                 f"**Regime**: {regime_str}\n"
                 f"**Kill Switch Triggers**: {triggers_str}\n"
                 f"**Model Decay Stage**: {report.model_decay_stage}\n"
-                f"**PSI**: {report.psi_value:.3f}\n"
+                f"**PSI**: {psi_str}\n"
                 f"**Health Score**: {report.strategy_health.health_score:.0f}"
                 if report.strategy_health
                 else "N/A"
