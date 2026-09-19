@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 import numpy as np
 
@@ -273,6 +274,42 @@ class FactorHealthStatus:
         }
 
 
+def load_production_factor_exposure(
+    registry_path: Path | str | None = None,
+) -> dict[str, float] | None:
+    """各因子在生产策略冻结权重中的暴露占比 |w_i| / Σ|w|。
+
+    用于把「降权建议幅度」与实际暴露挂钩：没进生产组合的因子谈降权没有意义，
+    暴露很小的因子也不该按全档降权（#15 策略级口径，2026-09-19）。
+
+    Returns:
+        {factor_name: exposure ∈ [0, 1]}；存在多个生产策略时取平均。
+        None = **无法确定**（registry 缺失/不可读/无 weights）—— 调用方必须
+        显示 N/A，不得用 0 或 1 冒充测量值。
+    """
+    try:
+        from qp.strategy.registry import StrategyRegistry
+
+        registry = StrategyRegistry(registry_path) if registry_path else StrategyRegistry()
+        active = registry.load_active()
+    except Exception:  # registry 不存在或结构变化 → 明确返回未知
+        return None
+
+    totals: dict[str, float] = {}
+    n_strategies = 0
+    for strategy in active:
+        weights = getattr(strategy, "weights", None) or {}
+        denom = sum(abs(float(w)) for w in weights.values())
+        if denom <= 0:
+            continue
+        n_strategies += 1
+        for factor, weight in weights.items():
+            totals[str(factor)] = totals.get(str(factor), 0.0) + abs(float(weight)) / denom
+    if n_strategies == 0 or not totals:
+        return None
+    return {f: v / n_strategies for f, v in totals.items()}
+
+
 class FactorHealthMonitor:
     """Monitors per-factor health using IC, decay rate, and consistency.
 
@@ -319,6 +356,7 @@ class FactorHealthMonitor:
         ir_degradation_pct: float = 0.50,  # 50% IR drop → DEGRADED
         significance_sigma: float = 1.0,  # decay gate: σ multiple of the slope SE
         use_significance_gate: bool = True,  # apply the SE gate to decay rules
+        production_exposure: dict[str, float] | None = None,  # |w| share in production
     ) -> None:
         self._reference_ic = abs(reference_ic_mean) if reference_ic_mean else None
         self._decay_ratio = decay_ratio
@@ -342,6 +380,11 @@ class FactorHealthMonitor:
         # 口径与策略级 rolling_ic 的 P1-3 门禁一致。
         self._significance_sigma = significance_sigma
         self._use_significance_gate = use_significance_gate
+        # 生产暴露（#15 策略级口径，2026-09-19）：降权建议幅度按因子在生产策略
+        # 冻结权重中的 |w| 占比分档。None = 首次使用时懒加载 registry；
+        # 加载失败 → 显示 N/A（不得用 0/1 冒充）。
+        self._production_exposure = production_exposure
+        self._production_exposure_loaded = production_exposure is not None
 
     # ------------------------------------------------------------------
     # Public API
@@ -436,6 +479,7 @@ class FactorHealthMonitor:
             direction_actual=direction_actual,
             decay_threshold=decay_threshold,
             decay_se=decay_60d_se,
+            factor_name=factor_name,
         )
 
         # ── Build status ──
@@ -522,6 +566,34 @@ class FactorHealthMonitor:
     # Classification logic
     # ------------------------------------------------------------------
 
+    def _production_share(self, factor_name: str) -> float | None:
+        """因子在生产策略里的暴露占比；None = 无法确定。"""
+        if not self._production_exposure_loaded:
+            self._production_exposure = load_production_factor_exposure()
+            self._production_exposure_loaded = True
+        if self._production_exposure is None:
+            return None
+        return float(self._production_exposure.get(factor_name, 0.0))
+
+    def _deweight_advice(self, base_pct: float, factor_name: str) -> tuple[float, str]:
+        """按生产暴露调制降权幅度（#15 策略级口径）。
+
+        暴露 = 该因子在生产策略冻结权重中的 |w| 占比：
+          - 未知（registry 不可读）→ 默认档 + 显式标注 N/A
+          - <1%（未进入生产组合）  → 不建议降权，仅标记复核
+          - <10%（低暴露）        → 幅度减半
+          - ≥10%                  → 默认档
+        """
+        share = self._production_share(factor_name)
+        if share is None:
+            return base_pct, f"生产暴露 N/A（registry 不可读），按默认档降权 {base_pct:.0f}%"
+        if share < 0.01:
+            return 0.0, "未进入生产策略（暴露 0%），无需降权，仅标记复核"
+        if share < 0.10:
+            pct = base_pct / 2
+            return pct, f"生产暴露 {share * 100:.1f}%（低），降权减半至 {pct:.0f}%"
+        return base_pct, f"生产暴露 {share * 100:.1f}%，建议降权 {base_pct:.0f}%"
+
     def _classify_state(
         self,
         ic_30d: float,
@@ -534,6 +606,7 @@ class FactorHealthMonitor:
         direction_actual: int,
         decay_threshold: float | None = None,
         decay_se: float = 0.0,
+        factor_name: str = "",
     ) -> tuple[FactorLifecycle, RetiredReason | None, str]:
         """State-machine classification (v2).
 
@@ -585,49 +658,42 @@ class FactorHealthMonitor:
                 f"淘汰({reason.value}): IC decay={decay_rate:+.5f}/day 不可逆。",
             )
 
-        # ── WEAKENING: historically strong, currently declining (DP-002 v3) ──
-        # Criteria: |IC| still OK but decay is real and sustained
-        # "持续下行" 的证据由斜率本身承担：decay_rate 低于显著性门禁阈值即表示
-        # trailing 60 日窗口在噪声之上持续下行。旧实现额外要求
-        # `consecutive_degraded >= 15`，而那个计数器当时恒等于序列长度（无意义）；
-        # 计数器修好后该条件会整体压制 WEAKENING（#14）。
-        if abs_ic >= 0.02 and abs(ic_90d) >= 0.02 and decay_rate < thr:
+        # ── 严重度分层（#15 分层口径，2026-09-19）──
+        # 两个「独立成立即说明有问题」的条件：
+        #   - 近 60 日 |IC| 斜率越过显著性门禁（真实衰减）
+        #   - 全历史 IC_IR 偏低（信号一致性差）
+        # 一个「加重项」：当前 |IC_30d| 已跌到 0.02 以下（只在已有主条件时计数，
+        # 单独出现仍走 RESEARCH —— 那是「新因子评估中」，不是「衰退」）。
+        #   主条件 1 项 → WEAKENING（基准降权 25%）
+        #   主条件 + 加重项 或 ≥2 项 → DEGRADED（基准降权 50%）
+        # 降权幅度再按因子在生产策略里的暴露调制（见 _deweight_advice）。
+        primary: list[str] = []
+        if decay_rate < thr:
+            primary.append(f"近 60 日 |IC| 衰减 {decay_rate:+.5f}/天（门禁 {thr:+.5f}）")
+        if ic_ir < self._degraded_ic_ir:
+            primary.append(f"IC_IR={ic_ir:.3f} < {self._degraded_ic_ir}（全历史一致性偏低）")
+        level_low = abs_ic < self._absolute_min_ic * 2
+        if level_low and primary:
+            primary.append(
+                f"|IC_30d|={abs_ic:.4f} < {self._absolute_min_ic * 2:g}（当前水平偏低，加重项）"
+            )
+
+        if len(primary) >= 2:
+            _, note = self._deweight_advice(50.0, factor_name)
+            return (
+                FactorLifecycle.DEGRADED,
+                None,
+                f"衰减（{len(primary)} 项条件同时成立）: "
+                + "；".join(primary)
+                + f"。{note}，安排复核。",
+            )
+
+        if primary:
+            _, note = self._deweight_advice(25.0, factor_name)
             return (
                 FactorLifecycle.WEAKENING,
                 None,
-                f"衰退中: 历史强 (IC₉₀={ic_90d:+.4f}) 但近 60 日衰减 "
-                f"(decay={decay_rate:+.5f}/天, 门禁 {thr:+.5f})。"
-                "建议降权 25%，密切监控。",
-            )
-
-        # ── DEGRADED conditions ──
-        # (a) Weak signal consistency.  IC_IR is a FULL-HISTORY statistic (it
-        #     barely moves day to day), so it is judged directly — wrapping it
-        #     in a ">= 30 consecutive days" guard (as before) coupled it to the
-        #     broken day counter and made weak factors flip to RESEARCH (#14).
-        if ic_ir < self._degraded_ic_ir:
-            return (
-                FactorLifecycle.DEGRADED,
-                None,
-                f"衰减: IC_IR={ic_ir:.3f} < {self._degraded_ic_ir}"
-                "（全历史信号一致性偏低）。建议降权 50%。",
-            )
-
-        # (b) Significant decay: the 60d slope is below the significance-gated
-        #     threshold → DEGRADED.
-        #     NOTE (2026-09-19, #14): a mid-term counterweight ("90d IC still
-        #     significant → WEAKENING instead of DEGRADED") was prototyped here
-        #     and reverted: it cannot be told apart from real decay by the IC
-        #     series alone and it contradicts the established semantics
-        #     (IC 大幅下滑 → 降级; see tests/unit/test_factor_health.py
-        #     test_degraded_low_ic_ratio / test_decay_trend_degraded).
-        #     The proposal is recorded in docs/tracking/qt_backlog_tracker.md §#14.
-        if decay_rate < thr:
-            return (
-                FactorLifecycle.DEGRADED,
-                None,
-                f"衰减: IC decay={decay_rate:+.5f}/day < {thr:+.5f}（噪声门禁后）。"
-                "IC 趋势显著下行。降权 50%，安排复核。",
+                f"衰退中（单项条件）: {primary[0]}。{note}，密切监控。",
             )
 
         # ── PRODUCTION: strong, stable signal ──

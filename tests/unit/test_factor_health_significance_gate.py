@@ -4,8 +4,8 @@
   1. 逐日 degraded 计数器不再等于全历史长度（旧实现把当前标量当逐日条件，
      实测 2822/2822 天都是 degraded，「连续 30 天」保护形同虚设）
   2. 衰减按 |IC| 计算：direction=-1 因子的「IC 更负」是信号增强，不是衰减
-  3. 显著衰减但中期（90 日）仍显著 → WEAKENING（观察 + 25% 降权），不是 50% 降权的 DEGRADED
-  4. 正对照：IC_IR 长期偏低的弱因子仍被标 DEGRADED（修正不能把真弱因子放过）
+  3. 严重度分层（#15）：1 条主条件 → WEAKENING；≥2 条 → DEGRADED
+  4. 降权幅度按生产暴露分档（#15 策略级口径）：0 暴露不建议降权，低暴露减半
 """
 
 from __future__ import annotations
@@ -13,7 +13,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from qp.monitoring.factor_health import FactorHealthMonitor, FactorLifecycle
+from qp.monitoring.factor_health import (
+    FactorHealthMonitor,
+    FactorLifecycle,
+    load_production_factor_exposure,
+)
 
 
 def _monitor() -> FactorHealthMonitor:
@@ -112,16 +116,137 @@ class TestDecayRules:
         assert st.lifecycle == FactorLifecycle.DEGRADED
 
 
+class TestSeverityLayering:
+    """#15 分层口径：1 条主条件 → WEAKENING；≥2 条 → DEGRADED。"""
+
+    def test_single_condition_is_weakening(self) -> None:
+        mon = FactorHealthMonitor(production_exposure={})
+        stage, _, action = mon._classify_state(
+            ic_30d=0.05,
+            ic_90d=0.06,
+            ic_ir=0.20,  # IC_IR 偏低 —— 唯一条件
+            decay_rate=0.0,
+            stale_days=0,
+            consecutive_degraded=0,
+            consecutive_healthy=0,
+            direction_actual=1,
+            decay_threshold=-0.001,
+            factor_name="X",
+        )
+        assert stage == FactorLifecycle.WEAKENING
+        assert "单项条件" in action
+        assert "无需降权" in action  # 暴露 0 → 不建议降权
+
+    def test_decay_plus_low_level_is_degraded(self) -> None:
+        mon = FactorHealthMonitor(production_exposure={"X": 0.22})
+        stage, _, action = mon._classify_state(
+            ic_30d=0.01,  # 水平偏低（加重项）
+            ic_90d=0.06,
+            ic_ir=0.60,
+            decay_rate=-0.005,  # 主条件：斜率越门禁
+            stale_days=0,
+            consecutive_degraded=0,
+            consecutive_healthy=0,
+            direction_actual=1,
+            decay_threshold=-0.001,
+            factor_name="X",
+        )
+        assert stage == FactorLifecycle.DEGRADED
+        assert "2 项条件" in action
+        assert "加重项" in action
+        assert "生产暴露 22.0%" in action
+        assert "降权 50%" in action
+
+    def test_two_primary_conditions_is_degraded(self) -> None:
+        mon = FactorHealthMonitor(production_exposure={})
+        stage, _, _ = mon._classify_state(
+            ic_30d=0.05,
+            ic_90d=0.06,
+            ic_ir=0.20,
+            decay_rate=-0.005,
+            stale_days=0,
+            consecutive_degraded=0,
+            consecutive_healthy=0,
+            direction_actual=1,
+            decay_threshold=-0.001,
+            factor_name="X",
+        )
+        assert stage == FactorLifecycle.DEGRADED
+
+    def test_low_level_alone_is_not_weakening(self) -> None:
+        """仅「当前水平偏低」而无主条件 → 仍走 RESEARCH（新因子评估中，非衰退）。"""
+        mon = FactorHealthMonitor(production_exposure={})
+        stage, _, _ = mon._classify_state(
+            ic_30d=0.005,
+            ic_90d=0.06,
+            ic_ir=0.60,
+            decay_rate=0.0,
+            stale_days=0,
+            consecutive_degraded=0,
+            consecutive_healthy=0,
+            direction_actual=1,
+            decay_threshold=-0.001,
+            factor_name="X",
+        )
+        assert stage == FactorLifecycle.RESEARCH
+
+
+class TestProductionExposureWeighting:
+    """#15 策略级口径：降权幅度按因子在生产策略里的暴露分档。"""
+
+    def test_high_exposure_uses_base_advice(self) -> None:
+        mon = FactorHealthMonitor(production_exposure={"X": 0.22})
+        pct, note = mon._deweight_advice(50.0, "X")
+        assert pct == 50.0
+        assert "22.0%" in note
+
+    def test_low_exposure_halves_advice(self) -> None:
+        mon = FactorHealthMonitor(production_exposure={"X": 0.05})
+        pct, note = mon._deweight_advice(50.0, "X")
+        assert pct == 25.0
+        assert "减半" in note
+
+    def test_zero_exposure_skips_deweight(self) -> None:
+        mon = FactorHealthMonitor(production_exposure={})
+        pct, note = mon._deweight_advice(50.0, "X")
+        assert pct == 0.0
+        assert "无需降权" in note
+
+    def test_unknown_exposure_is_na_not_zero(self) -> None:
+        """registry 不可读 → 显示 N/A 且保留默认档，不得用 0 冒充测量值。"""
+        mon = FactorHealthMonitor(production_exposure=None)
+        mon._production_exposure = None
+        mon._production_exposure_loaded = True  # 模拟「已尝试但读不到」
+
+        pct, note = mon._deweight_advice(50.0, "X")
+
+        assert pct == 50.0
+        assert "N/A" in note
+
+    def test_real_registry_exposure_matches_production_weights(self) -> None:
+        """真实 registry：生产策略 5 个因子暴露合计 1.0，Volatility_20D = 0.22。"""
+        exposure = load_production_factor_exposure()
+        if exposure is None:
+            pytest.skip("strategy registry unavailable in this environment")
+        assert abs(sum(exposure.values()) - 1.0) < 1e-6
+        assert abs(exposure.get("Volatility_20D", 0.0) - 0.22) < 1e-6
+
+
 class TestWeakFactorStillFlagged:
-    def test_low_ic_ir_factor_stays_degraded(self) -> None:
-        """正对照：IC_IR 长期偏低（信号一致性差）的因子必须仍被标 DEGRADED。"""
+    def test_low_ic_ir_factor_is_weakening(self) -> None:
+        """仅 IC_IR 偏低（单一条件）→ WEAKENING。
+
+        #15 分层（2026-09-19）：单条件不再直接判 DEGRADED —— 只有「多项条件
+        同时成立」才降级；IC_IR 低单独出现说明信号一致性差，仍要标记但降权减档。
+        """
         rng = np.random.default_rng(3)
         ics = rng.normal(0.02, 0.16, 500)  # |IC| 不小，但 IC_IR ≈ 0.13
 
         st = _monitor().check_factor("case_weak", ics.tolist())
 
         assert st.ic_ir < 0.30
-        assert st.lifecycle == FactorLifecycle.DEGRADED
+        assert st.lifecycle == FactorLifecycle.WEAKENING
+        assert "IC_IR" in st.recommended_action
         assert "IC_IR" in st.recommended_action
 
 
