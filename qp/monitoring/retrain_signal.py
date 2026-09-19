@@ -193,7 +193,13 @@ class RetrainSignalLogger:
         if df.is_empty():
             return df
         cutoff = (datetime.now(CN_TZ) - timedelta(days=days)).date().isoformat()
-        recent = df.filter(pl.col("date") >= cutoff).sort("date", descending=True)
+        # maintain_order=True 让相同 date 的行保持写入顺序 —— 该顺序是「最新」
+        # 的唯一权威（同日多条信号的 timestamp 可能完全相同，无法用 timestamp
+        # 区分）。实测：不指定时 POLARS_MAX_THREADS=2 下两行同 date 会反序，
+        # load_weight_scales 因此取错行，CI 长期失败。
+        recent = df.filter(pl.col("date") >= cutoff).sort(
+            "date", descending=True, maintain_order=True
+        )
         if limit is not None:
             recent = recent.head(limit)
         return recent
@@ -438,6 +444,9 @@ def load_weight_scales(
     # appended in time order, so the last occurrence of a strategy id
     # inside the window is the latest).
     latest: dict[str, dict[str, Any]] = {}
+    # 显式比较 (date, timestamp) 取最新，不依赖行序：同一天可能有多条信号，
+    # 而排序在相同 date 上的顺序是未定义的（#CI-fix 2026-09-19）。
+    _best_key: dict[str, tuple[str, str]] = {}
     for row in history.iter_rows(named=True):
         sig_date = str(row.get("date", ""))
         if sig_date and sig_date < cutoff:
@@ -458,7 +467,12 @@ def load_weight_scales(
                 sig_date,
             )
             continue
-        latest[sid] = row
+        key = (sig_date, str(row.get("timestamp", "")))
+        # >= ：同日同 timestamp 时后出现的（= 后写入的）胜出，与
+        # load_history(maintain_order=True) 的写入顺序语义一致。
+        if sid not in _best_key or key >= _best_key[sid]:
+            _best_key[sid] = key
+            latest[sid] = row
 
     scales: dict[str, float] = {}
     for sid, row in latest.items():
