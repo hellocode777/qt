@@ -35,8 +35,9 @@ from pathlib import Path
 from typing import Any
 
 from qp.knowledge.archive import KnowledgeArchive, KnowledgeCategory
+from qp.shared.paths import VERSION_TREE_JSON
 
-DEFAULT_VERSION_TREE_PATH = "data/knowledge/version_tree.json"
+DEFAULT_VERSION_TREE_PATH = VERSION_TREE_JSON
 
 
 @dataclass
@@ -125,7 +126,7 @@ class StrategyVersionTree:
         diff = tree.diff("alpha_multi_factor", "v2.0", "v2.1")
     """
 
-    def __init__(self, filepath: str = DEFAULT_VERSION_TREE_PATH) -> None:
+    def __init__(self, filepath: str | Path = DEFAULT_VERSION_TREE_PATH) -> None:
         self._filepath = Path(filepath)
         self._filepath.parent.mkdir(parents=True, exist_ok=True)
         self._archive = KnowledgeArchive()

@@ -20,6 +20,7 @@ import polars as pl
 from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
+from qp.shared.paths import VALUATION_CACHE_DIR
 
 # Fundamental fields needed for valuation computation
 _VALUATION_INPUTS = ["EPS", "NAV", "cashflow_per_share"]
@@ -28,7 +29,7 @@ _VALUATION_INPUTS = ["EPS", "NAV", "cashflow_per_share"]
 VALUATION_FIELDS = ["PE_TTM", "PB", "PCF_OCF"]
 
 # Cache directory
-_DEFAULT_CACHE_DIR = Path("data/valuation_cache")
+_DEFAULT_CACHE_DIR = VALUATION_CACHE_DIR
 _CACHE_TTL_DAYS = 7
 
 

@@ -35,11 +35,12 @@ from typing import ClassVar
 from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
+from qp.shared.paths import DELISTED_CACHE
 from qp.shared.time import today_cn
 
 # Cache: 30 days for delisted stock list (changes infrequently)
 _CACHE_TTL_DAYS = 30
-_DEFAULT_CACHE_PATH = Path("data/delisted_cache.json")
+_DEFAULT_CACHE_PATH = DELISTED_CACHE
 
 # Hardcoded list of known delisted A-share stocks (verified 2020-2025)
 # Format: [(code, name, last_trade_date, reason)]

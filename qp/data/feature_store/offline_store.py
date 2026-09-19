@@ -27,9 +27,10 @@ import polars as pl
 from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
+from qp.shared.paths import FEATURE_STORE_DIR
 from qp.shared.time import utc_iso
 
-_DEFAULT_STORE_DIR = Path("data/feature_store_data")
+_DEFAULT_STORE_DIR = FEATURE_STORE_DIR
 
 
 class OfflineStore:

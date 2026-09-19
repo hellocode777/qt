@@ -19,9 +19,10 @@ import requests
 from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
+from qp.shared.paths import CAPITAL_FLOW_CACHE_DIR
 from qp.shared.protocols.base_data_source import BaseDataSource
 
-_DEFAULT_CACHE_DIR = Path("data/capital_flow_cache")
+_DEFAULT_CACHE_DIR = CAPITAL_FLOW_CACHE_DIR
 _CACHE_TTL_DAYS = 3  # Capital flow data changes daily, shorter TTL
 
 #: 单次会话收到多少次 456(限流) 就熔断中止 — 保护 IP 不被彻底封禁

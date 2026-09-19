@@ -30,6 +30,8 @@ from typing import Any
 
 from loguru import logger
 
+from qp.shared.paths import SCHEMAS_JSON
+
 
 @dataclass
 class SchemaVersion:
@@ -134,7 +136,7 @@ class SchemaTracker:
         history = tracker.get_history("daily_price")
     """
 
-    def __init__(self, store_path: str | Path = "data/metadata/schemas.json") -> None:
+    def __init__(self, store_path: str | Path = SCHEMAS_JSON) -> None:
         self._store_path = Path(store_path)
         self._schemas: dict[str, list[SchemaVersion]] = {}
         self._load_from_disk()

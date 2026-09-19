@@ -38,6 +38,8 @@ from typing import Any
 
 from loguru import logger
 
+from qp.shared.paths import LINEAGE_JSON
+
 
 @dataclass
 class DataLineage:
@@ -124,7 +126,7 @@ class LineageTracker:
     consumers can trace their data back to its origin.
     """
 
-    def __init__(self, store_path: str | Path = "data/metadata/lineage.json") -> None:
+    def __init__(self, store_path: str | Path = LINEAGE_JSON) -> None:
         self._store_path = Path(store_path)
         self._records: list[DataLineage] = []
         self._load_from_disk()

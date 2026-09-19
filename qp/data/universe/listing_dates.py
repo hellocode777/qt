@@ -28,10 +28,11 @@ from typing import ClassVar
 from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
+from qp.shared.paths import LISTING_DATES_CACHE
 
 # Cache TTL for IPO date data (changes very rarely)
 _CACHE_TTL_DAYS = 90
-_DEFAULT_CACHE_PATH = Path("data/listing_dates_cache.json")
+_DEFAULT_CACHE_PATH = LISTING_DATES_CACHE
 
 # Default minimum days since IPO before stock is tradeable
 _DEFAULT_MIN_LISTING_DAYS = 200  # ~1 trading year

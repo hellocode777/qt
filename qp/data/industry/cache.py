@@ -14,9 +14,10 @@ from typing import Any
 from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
+from qp.shared.paths import INDUSTRY_CACHE
 
 DEFAULT_CACHE_TTL_DAYS = 90
-DEFAULT_CACHE_PATH = Path("data/industry_cache.json")
+DEFAULT_CACHE_PATH = INDUSTRY_CACHE
 
 
 class IndustryCache:

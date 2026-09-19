@@ -51,7 +51,7 @@ from qp.research.feature.compute import (
     PRICE_VOLUME_FACTORS,
     compute_all_factors,
 )
-from qp.shared.paths import DATASET_DIR, EXPERIMENTS_DIR, FUNDAMENTALS_LATEST
+from qp.shared.paths import CAPITAL_FLOW_LATEST, DATASET_DIR, EXPERIMENTS_DIR, FUNDAMENTALS_LATEST
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import fmt_date, fmt_display, fmt_ts, now_cn, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
@@ -1289,7 +1289,7 @@ class MultiFactorPipeline(BasePipeline):
         Returns {code: DataFrame(date, main_net_flow, ...)} — empty dict if
         the file is missing (downstream flow features skip gracefully).
         """
-        path = Path("data/dataset/capital_flow_latest.parquet")
+        path = CAPITAL_FLOW_LATEST
         if not path.exists():
             logger.info(
                 "资金流 parquet 不存在 ({}) — 资金流特征跳过。先运行 `qp ingest capital-flow`",

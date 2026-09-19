@@ -688,7 +688,7 @@ class LineageRegistry:
         """Persist the lineage graph to a JSON file.
 
         Args:
-            path: File path (e.g. 'data/metadata/lineage_graph.json').
+            path: File path (e.g. LINEAGE_GRAPH_JSON).
         """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

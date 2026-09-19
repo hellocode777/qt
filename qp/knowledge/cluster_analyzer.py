@@ -35,7 +35,7 @@ from typing import Any
 import polars as pl
 
 from qp.knowledge.failure_archive_logger import FailureArchiveLogger, FailureType
-from qp.shared.paths import KNOWLEDGE_DIR
+from qp.shared.paths import BLACKLIST_RULES, KNOWLEDGE_DIR
 
 DEFAULT_RULES_DIR = KNOWLEDGE_DIR
 
@@ -464,7 +464,7 @@ class FailureClusterAnalyzer:
                 for a in adjustments
             ],
             "feed_consumers": {
-                "layer_2_data": "data/knowledge/blacklist_rules.json",
+                "layer_2_data": BLACKLIST_RULES,
                 "layer_4_features": "Manual review of feature_suggestions above",
                 "layer_8_strategy": "Manual review of strategy_adjustments above",
             },

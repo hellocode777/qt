@@ -31,8 +31,9 @@ from pathlib import Path
 import polars as pl
 
 from qp.data.adapter.akshare_adapter import AKShareAdapter
+from qp.shared.paths import ADJ_FACTOR
 
-ADJ_FACTOR_PATH = Path("data/dataset/adj_factor.parquet")
+ADJ_FACTOR_PATH = ADJ_FACTOR
 
 
 def build_adj_factor(

@@ -28,11 +28,11 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from qp.shared.paths import ONLINE_SIGNAL_HISTORY
+from qp.shared.paths import ONLINE_HEALTH_HISTORY, ONLINE_SIGNAL_HISTORY
 
 # Persistence path
 _ONLINE_SIGNAL_PARQUET = Path(ONLINE_SIGNAL_HISTORY)
-_ONLINE_HEALTH_PARQUET = Path("data/monitoring/online_health_history.parquet")
+_ONLINE_HEALTH_PARQUET = ONLINE_HEALTH_HISTORY
 
 # Thresholds (rule.md §10.3, ADR-031 §Online Monitoring)
 ROLLING_IC_WARN = 0.02  # 20-day IC below this → WARNING

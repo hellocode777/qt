@@ -34,9 +34,10 @@ from pathlib import Path
 from typing import Any
 
 from qp.knowledge.archive import KnowledgeArchive, KnowledgeCategory, KnowledgeEntry
+from qp.shared.paths import REGIME_NOTES_DIR
 from qp.shared.time import fmt_date
 
-DEFAULT_REGIME_NOTES_DIR = "data/knowledge/market_regime_notes"
+DEFAULT_REGIME_NOTES_DIR = REGIME_NOTES_DIR
 
 REGIME_NOTE_TEMPLATE = """## Market Event
 
@@ -124,7 +125,7 @@ class RegimeNoteLogger:
         events = logger.query_by_regime("LIQUIDITY_CRUNCH")
     """
 
-    def __init__(self, base_dir: str = DEFAULT_REGIME_NOTES_DIR) -> None:
+    def __init__(self, base_dir: str | Path = DEFAULT_REGIME_NOTES_DIR) -> None:
         self._base = Path(base_dir)
         self._base.mkdir(parents=True, exist_ok=True)
         self._archive = KnowledgeArchive()

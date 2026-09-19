@@ -16,6 +16,7 @@ import pandas as pd
 from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
+from qp.shared.paths import FUNDAMENTAL_CACHE_DIR
 from qp.shared.protocols.base_data_source import BaseDataSource
 
 # ------------------------------------------------------------------
@@ -44,7 +45,7 @@ _PUBLISH_DATE_COLS = ["notice_date", "发布日期", "公告日期"]
 
 # Cache TTL (7 days for financial data)
 _CACHE_TTL_DAYS = 7
-_DEFAULT_CACHE_DIR = Path("data/fundamental_cache")
+_DEFAULT_CACHE_DIR = FUNDAMENTAL_CACHE_DIR
 
 # Estimate disclosure deadlines by report month
 # A-share rules:

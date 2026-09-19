@@ -6,7 +6,7 @@ graph (Rule 7: Full Data Lineage) from the existing registries.
 
 from __future__ import annotations
 
-from qp.shared.paths import FACTOR_REGISTRY
+from qp.shared.paths import FACTOR_REGISTRY, LINEAGE_GRAPH_JSON
 
 
 def cmd_lineage_snapshot() -> int:
@@ -62,9 +62,8 @@ def cmd_lineage_snapshot() -> int:
         print(f"  ⚠ 策略跳过 / Strategies skipped: {e}")
 
     # Persist
-    from pathlib import Path
 
-    out_path = Path("data/metadata/lineage_graph.json")
+    out_path = LINEAGE_GRAPH_JSON
     lineage.save(out_path)
 
     print()

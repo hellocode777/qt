@@ -7,7 +7,8 @@ adapter (Sina, Tencent, etc.) works from the same universe.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+
+from qp.shared.paths import MAIN_BOARD_CODES
 
 # Default set of liquid large-cap stocks — used for quick test / demo runs.
 # The full main-board list (~3000 stocks) is loaded from data/main_board_codes.json.
@@ -45,7 +46,7 @@ def get_main_board_codes() -> list[str]:
     if _MAIN_BOARD_CACHE is not None:
         return _MAIN_BOARD_CACHE
 
-    path = Path("data/main_board_codes.json")
+    path = MAIN_BOARD_CODES
     if path.exists():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))

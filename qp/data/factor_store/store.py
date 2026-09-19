@@ -25,11 +25,13 @@ from typing import Any
 import polars as pl
 from loguru import logger
 
+from qp.shared.paths import FACTOR_STORE_DIR
+
 # ------------------------------------------------------------------
 # Default paths
 # ------------------------------------------------------------------
 
-DEFAULT_STORE_ROOT = Path("data/factor_store")
+DEFAULT_STORE_ROOT = FACTOR_STORE_DIR
 RAW_TIER = "raw"
 REFINED_TIER = "refined"
 FEATURE_TIER = "feature"

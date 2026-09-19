@@ -8,7 +8,7 @@ import time
 from datetime import date
 from typing import TYPE_CHECKING
 
-from qp.shared.paths import DECISIONS_DIR, PAPER_TRADING_DIR
+from qp.shared.paths import DECISIONS_DIR, PAPER_TRADING_DIR, WATCHDOG_DIR
 from qp.shared.time import fmt_date, today_cn
 
 if TYPE_CHECKING:
@@ -316,9 +316,8 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
     # ── Watchdog: touch ping file for external monitoring (#12 fix) ──
     def watchdog_ping(job_name: str) -> None:
         from datetime import UTC, datetime
-        from pathlib import Path
 
-        ping_dir = Path("data/monitoring/watchdog")
+        ping_dir = WATCHDOG_DIR
         ping_dir.mkdir(parents=True, exist_ok=True)
         (ping_dir / f"{job_name}.ping").write_text(f"{datetime.now(UTC).isoformat()}\n")
 
