@@ -31,6 +31,8 @@ from pathlib import Path
 
 import polars as pl
 
+from qp.shared.json_io import json_load
+
 ROOT = Path(__file__).resolve().parent.parent
 QP = str(ROOT / ".venv" / "bin" / "qp")
 CANDIDATE_DIR = ROOT / "data" / "retrain_candidates"
@@ -105,8 +107,7 @@ def _run_experiment(strategy: str, start: str, end: str, extra: list[str]) -> di
     if not files:
         return {"error": "no experiment json produced"}
     latest = files[-1]
-    with open(latest, encoding="utf-8") as fh:
-        data = json.load(fh)
+    data = json_load(latest)
     metrics = data.get("metrics", {})
     return {
         "experiment_id": data.get("experiment_id", latest.stem),

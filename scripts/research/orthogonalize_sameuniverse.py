@@ -4,7 +4,6 @@
 """
 
 import glob
-import json
 import os
 import random
 import subprocess
@@ -13,6 +12,7 @@ import time
 import polars as pl
 
 from qp.shared.constants import DEFAULT_SEED
+from qp.shared.json_io import json_load, json_save
 
 STRATEGIES = ["momentum_vol_full", "mvf_noorth"]
 WINDOWS = [
@@ -68,8 +68,7 @@ for strat in STRATEGIES:
         out = (r.stdout + r.stderr).lower()
         after = latest()
         if after and after != before:
-            with open(after, encoding="utf-8") as f:
-                d = json.load(f)
+            d = json_load(after)
             m = d["metrics"]
             results.append(
                 {
@@ -105,6 +104,5 @@ for r in results:
         f"{r['excess']:>+9.1f}{r['mdd']:>8.1f}{r['turnover']:>9.0f}{r['annual']:>8.1f}{r['n_days']:>7}"
     )
 
-with open("scripts/research/orthogonalize_sameuniverse_results.json", "w", encoding="utf-8") as f:
-    json.dump(results, f, ensure_ascii=False, indent=2)
+json_save("scripts/research/orthogonalize_sameuniverse_results.json", results)
 print("\n结果已存: scripts/research/orthogonalize_sameuniverse_results.json")

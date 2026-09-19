@@ -4,10 +4,11 @@
 """
 
 import glob
-import json
 import os
 import subprocess
 import time
+
+from qp.shared.json_io import json_load, json_save
 
 STRATEGIES = ["momentum_vol_full", "mvf_noorth"]
 WINDOWS = [
@@ -53,8 +54,7 @@ for strat in STRATEGIES:
         out = (r.stdout + r.stderr).lower()
         after = latest()
         if after and after != before:
-            with open(after, encoding="utf-8") as f:
-                d = json.load(f)
+            d = json_load(after)
             m = d["metrics"]
             results.append(
                 {
@@ -89,6 +89,5 @@ for r in results:
         f"{r['excess']:>+9.1f}{r['mdd']:>8.1f}{r['turnover']:>9.0f}{r['annual']:>8.1f}"
     )
 
-with open("scripts/research/orthogonalize_walkforward_results.json", "w", encoding="utf-8") as f:
-    json.dump(results, f, ensure_ascii=False, indent=2)
+json_save("scripts/research/orthogonalize_walkforward_results.json", results)
 print("\n结果已存: scripts/research/orthogonalize_walkforward_results.json")

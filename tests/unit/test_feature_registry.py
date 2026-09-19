@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
-
 import polars as pl
 import pytest
 
 from qp.research.feature.registry import FeatureRegistry
+from qp.shared.json_io import json_load
 from qp.shared.protocols.base_feature import BaseFeature
 
 
@@ -54,8 +53,7 @@ def test_save_load_roundtrip(tmp_path) -> None:
     assert loaded.list_features() == ["Dummy_Test"]
     assert loaded._version_map["Dummy_Test"] == "1.0.0"
     # direction override persisted
-    with open(path, encoding="utf-8") as f:
-        payload = json.load(f)
+    payload = json_load(path)
     assert payload["factors"]["Dummy_Test"]["direction"] == -1
 
 
