@@ -1358,11 +1358,12 @@ class TestRetrainSignal:
             RetrainSignal,
             RetrainSignalLogger,
         )
+        from qp.shared.time import fmt_date, now_cn
 
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = RetrainSignalLogger(base_dir=tmpdir)
             signal = RetrainSignal(
-                date="2026-07-25",
+                date=fmt_date(now_cn()),
                 strategy_name="test",
                 trigger="PSI_DRIFT",
                 action=RetrainAction.SCHEDULE_RETRAIN,
@@ -1374,6 +1375,55 @@ class TestRetrainSignal:
             history = logger.load_history(days=30)
             assert len(history) == 1
             assert history["action"].item() == "SCHEDULE_RETRAIN"
+
+    def test_load_history_is_a_date_window_not_a_row_cap(self) -> None:
+        """2026-09-19: ``head(days * 10)`` capped by ROWS, so a burst of signals
+        made "last 7 days" mean "newest 70 rows" — the daily alert then reported
+        that cap (70) as if it were the actionable-signal count."""
+        import tempfile
+        from datetime import timedelta
+
+        from qp.monitoring.retrain_signal import (
+            RetrainAction,
+            RetrainSignal,
+            RetrainSignalLogger,
+        )
+        from qp.shared.time import fmt_date, now_cn
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = RetrainSignalLogger(base_dir=tmpdir)
+            today = now_cn()
+            old_day = today - timedelta(days=10)
+
+            for i in range(30):  # more than days * 1 rows to prove no row cap
+                logger.log(
+                    RetrainSignal(
+                        date=fmt_date(today),
+                        timestamp=today.isoformat(),
+                        strategy_name=f"t{i}",
+                        trigger="PSI_DRIFT",
+                        action=RetrainAction.SCHEDULE_RETRAIN,
+                    )
+                )
+            logger.log(
+                RetrainSignal(
+                    date=fmt_date(old_day),
+                    timestamp=old_day.isoformat(),
+                    strategy_name="old_signal",
+                    trigger="PSI_DRIFT",
+                    action=RetrainAction.SCHEDULE_RETRAIN,
+                )
+            )
+
+            recent = logger.load_history(days=7)
+            assert recent.height == 30  # 10 天前的不在窗口内（且未被行数上限截断）
+            assert "old_signal" not in recent["strategy_name"].to_list()
+
+            wide = logger.load_history(days=30)
+            assert wide.height == 31
+
+            capped = logger.load_history(days=7, limit=5)
+            assert capped.height == 5
 
     def test_signal_to_dict(self) -> None:
         from qp.monitoring.retrain_signal import RetrainAction, RetrainSignal

@@ -15,6 +15,46 @@ if TYPE_CHECKING:
     from qp.platform.runtime.application import Application
 
 
+# ── Retrain alert de-duplication ────────────────────────────────────
+# The notify job must not re-send the same un-actioned signal every morning:
+# 9/12–9/18 each repeated the identical 9/11 batch (the signal stays in the
+# 7-day window until it ages out).  State = timestamp of the newest signal
+# already surfaced to the operator.
+_RETRAIN_NOTIFY_STATE_FILE = "retrain_notify_state.json"
+
+
+def _retrain_notify_state_path():
+    """Path of the retrain-notify de-dup state file (monitoring dir)."""
+    from pathlib import Path
+
+    from qp.shared.paths import MONITORING_DIR
+
+    return Path(MONITORING_DIR) / _RETRAIN_NOTIFY_STATE_FILE
+
+
+def _load_retrain_notified_at() -> str:
+    """ISO timestamp of the newest already-notified signal ("" when unknown)."""
+    from qp.shared.json_io import json_load
+
+    try:
+        data = json_load(_retrain_notify_state_path())
+    except Exception:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("last_notified_at") or "")
+
+
+def _save_retrain_notified_at(timestamp: str) -> None:
+    """Persist the newest notified timestamp (best-effort)."""
+    from qp.shared.json_io import json_save
+
+    if not timestamp:
+        return
+    with contextlib.suppress(Exception):
+        json_save(_retrain_notify_state_path(), {"last_notified_at": timestamp})
+
+
 def _is_rebalance_day(d: date) -> bool:
     """True when d is a monthly rebalance day.
 
@@ -383,7 +423,8 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             print(
                 f"[scheduler] monitor_check: action={action.value} "
                 f"regime={report.regime.regime.value if report.regime else '?'} "
-                f"psi={report.psi_value:.3f} decay={report.model_decay_stage} "
+                f"psi={f'{report.psi_value:.3f}' if report.psi_available else 'n/a'} "
+                f"decay={report.model_decay_stage} "
                 f"ks={'YES' if report.kill_switch_triggered else 'no'}"
             )
             if action in (MonitorAction.STOP, MonitorAction.PAUSE_BUY):
@@ -401,7 +442,10 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                     if s.get("action") not in ("NONE", "MONITOR")
                 ]
                 if actionable:
-                    print(f"[scheduler] retrain_signals: {len(actionable)} actionable")
+                    print(
+                        f"[scheduler] retrain_signals: {len(actionable)} actionable in 7d "
+                        f"(latest {actionable[0].get('date', '?')})"
+                    )
                     for s in actionable[:3]:
                         print(
                             f"  - [{s.get('trigger', '?')}] {s.get('strategy_name', '?')}: {s.get('action', '?')}"
@@ -445,16 +489,29 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 if not actionable:
                     return  # Nothing to do
 
-                # Build alert
-                lines = [f"📢 Retrain Signal ({len(actionable)} actionable)"]
-                for s in actionable[:5]:
+                # Only NEW signals justify an email: an un-actioned signal used
+                # to re-notify every morning until it aged out of the window.
+                notified_at = _load_retrain_notified_at()
+                new_signals = [s for s in actionable if str(s.get("timestamp") or "") > notified_at]
+                if not new_signals:
+                    print(
+                        f"[scheduler] retrain_notify: 0 new / {len(actionable)} outstanding "
+                        f"(latest {actionable[0].get('date', '?')}) — 已通知过，不重复发信"
+                    )
+                    return
+
+                # Build alert (newest first — load_history sorts desc)
+                lines = [
+                    f"📢 Retrain Signal ({len(new_signals)} new / {len(actionable)} outstanding 7d)"
+                ]
+                for s in new_signals[:5]:
                     lines.append(
                         f"  [{s.get('trigger', '?')}] {s.get('strategy_name', '?'):>24s} → "
                         f"{s.get('action', '?')}"
                     )
                 lines.append(
-                    f"  最近信号: {actionable[-1].get('message', '')[:80]}"
-                    if len(actionable[-1].get("message", "")) > 0
+                    f"  最近信号: {new_signals[0].get('message', '')[:80]}"
+                    if len(new_signals[0].get("message", "")) > 0
                     else ""
                 )
 
@@ -485,6 +542,10 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                         print("[scheduler] retrain_notify: Email alert sent")
                 except Exception:
                     pass  # Email is optional
+
+                # Mark notified regardless of channel outcome — the signal was
+                # surfaced (log / alert) and repeating it daily is noise.
+                _save_retrain_notified_at(str(new_signals[0].get("timestamp") or ""))
             except Exception:
                 pass
 

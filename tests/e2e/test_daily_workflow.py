@@ -204,10 +204,16 @@ class TestRetrainSignalE2E:
 
             logger = RetrainSignalLogger(base_dir=tmpdir)
 
+            from datetime import timedelta
+
+            from qp.shared.time import fmt_date, now_cn
+
+            _today = now_cn()
+
             # Log multiple signals
             logger.log(
                 RetrainSignal(
-                    date="2026-07-25",
+                    date=fmt_date(_today - timedelta(days=2)),
                     strategy_name="test_v1",
                     trigger="PSI_DRIFT",
                     action=RetrainAction.SCHEDULE_RETRAIN,
@@ -217,7 +223,7 @@ class TestRetrainSignalE2E:
             )
             logger.log(
                 RetrainSignal(
-                    date="2026-07-26",
+                    date=fmt_date(_today - timedelta(days=1)),
                     strategy_name="test_v1",
                     trigger="IC_DECAY",
                     action=RetrainAction.REDUCE_WEIGHT,
@@ -227,7 +233,7 @@ class TestRetrainSignalE2E:
             )
             logger.log(
                 RetrainSignal(
-                    date="2026-07-27",
+                    date=fmt_date(_today),
                     strategy_name="test_v1",
                     trigger="PSI_DRIFT",
                     action=RetrainAction.MONITOR,

@@ -171,14 +171,32 @@ class RetrainSignalLogger:
 
         return signal
 
-    def load_history(self, days: int = 90) -> pl.DataFrame:
-        """Load recent retrain signal history."""
+    def load_history(self, days: int = 90, limit: int | None = None) -> pl.DataFrame:
+        """Load retrain signals from the last ``days`` calendar days.
+
+        The window is by signal date.  The previous implementation used
+        ``head(days * 10)`` — a ROW cap, not a date window — so a burst of
+        signals made "last 7 days" mean "the newest 70 rows" and the daily
+        alert then reported that cap (70) as if it were the number of
+        actionable signals.
+
+        Args:
+            days: Calendar-day lookback (date >= today - days).
+            limit: Optional cap on returned rows (newest first).
+
+        Returns:
+            Signals within the window, newest first.
+        """
         if not self._filepath.exists():
             return pl.DataFrame(schema=_RETRAIN_LOG_SCHEMA)
         df = pl.read_parquet(self._filepath)
         if df.is_empty():
             return df
-        return df.sort("date", descending=True).head(days * 10)
+        cutoff = (datetime.now(CN_TZ) - timedelta(days=days)).date().isoformat()
+        recent = df.filter(pl.col("date") >= cutoff).sort("date", descending=True)
+        if limit is not None:
+            recent = recent.head(limit)
+        return recent
 
     def stats(self, days: int = 365) -> dict[str, Any]:
         """Retrain signal statistics."""
@@ -365,6 +383,13 @@ _WEIGHT_SCALE_BY_ACTION_SEVERITY: dict[tuple[str, str], float] = {
 
 _ACTION_LOOKBACK_DAYS = 10
 
+# A PSI this large is not a drift measurement: the decision thresholds live at
+# 0.10 / 0.25, while the pre-P2-2 implementation produced fake values of 4.2 to
+# 22.3 on thin per-strategy samples.  Such a row (already persisted in
+# data/monitoring/retrain_signals.parquet by the old code) must not keep a live
+# strategy deweighted.
+_MAX_CREDIBLE_PSI = 1.0
+
 
 def load_weight_scales(
     strategy_ids: list[str] | None = None,
@@ -402,10 +427,12 @@ def load_weight_scales(
     if history.is_empty():
         return dict.fromkeys(strategy_ids, 1.0) if strategy_ids else {}
 
-    # Real date-window filter (load_history only truncates rows, it does
-    # NOT filter by date).  Signals older than `days` must not keep a
-    # strategy permanently deweighted.
+    # Signals older than `days` must not keep a strategy permanently
+    # deweighted.  (load_history has been a real date window since
+    # 2026-09-19; the cutoff remains the single authority for the window.)
     cutoff = fmt_date(datetime.now(CN_TZ) - timedelta(days=days))
+
+    from loguru import logger as _log
 
     # Most recent signal per strategy within the window (signals are
     # appended in time order, so the last occurrence of a strategy id
@@ -419,6 +446,17 @@ def load_weight_scales(
         if not sid:
             continue
         if strategy_ids is not None and sid not in strategy_ids:
+            continue
+        if (
+            str(row.get("trigger", "")) == RetrainTrigger.PSI_DRIFT.value
+            and float(row.get("psi_value", 0.0) or 0.0) >= _MAX_CREDIBLE_PSI
+        ):
+            _log.warning(
+                "忽略不可信 PSI 信号 (strategy={}, psi={}, date={})，不据此降权",
+                sid,
+                row.get("psi_value"),
+                sig_date,
+            )
             continue
         latest[sid] = row
 

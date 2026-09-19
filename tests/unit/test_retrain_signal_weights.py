@@ -93,6 +93,27 @@ class TestLoadWeightScales:
         scales = load_weight_scales(strategy_ids=["mom"], base_dir=signal_dir)
         assert scales["mom"] == 1.0
 
+    def test_implausible_psi_signal_is_ignored(self, signal_dir: str) -> None:
+        """2026-09-19: the pre-P2-2 PSI implementation persisted fake values
+        (4.2–22.3) together with SCHEDULE_RETRAIN.  A live strategy must not
+        stay deweighted by a PSI that is orders of magnitude off the
+        0.10 / 0.25 decision thresholds."""
+        sig = _sig("mom", "SCHEDULE_RETRAIN", "WARNING")
+        sig.trigger = "PSI_DRIFT"
+        sig.psi_value = 15.528893
+        _log_signals(signal_dir, [sig])
+        scales = load_weight_scales(strategy_ids=["mom"], base_dir=signal_dir)
+        assert scales["mom"] == 1.0
+
+    def test_credible_psi_signal_still_deweights(self, signal_dir: str) -> None:
+        """A PSI inside the decision band (0.25–1.0) still triggers the trim."""
+        sig = _sig("mom", "SCHEDULE_RETRAIN", "WARNING")
+        sig.trigger = "PSI_DRIFT"
+        sig.psi_value = 0.32
+        _log_signals(signal_dir, [sig])
+        scales = load_weight_scales(strategy_ids=["mom"], base_dir=signal_dir)
+        assert scales["mom"] == 0.85
+
     def test_real_default_dir_writes_to_disk(self) -> None:
         # Guard: the production default dir must remain the one
         # KillSwitchPipeline writes to.
