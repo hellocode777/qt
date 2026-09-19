@@ -317,6 +317,8 @@ class FactorHealthMonitor:
         recovery_consecutive_days: int = 20,  # Days above threshold to recover
         retirement_consecutive_days: int = 60,  # Days below threshold to retire
         ir_degradation_pct: float = 0.50,  # 50% IR drop → DEGRADED
+        significance_sigma: float = 1.0,  # decay gate: σ multiple of the slope SE
+        use_significance_gate: bool = True,  # apply the SE gate to decay rules
     ) -> None:
         self._reference_ic = abs(reference_ic_mean) if reference_ic_mean else None
         self._decay_ratio = decay_ratio
@@ -334,6 +336,12 @@ class FactorHealthMonitor:
         self._recovery_consecutive = recovery_consecutive_days
         self._retirement_consecutive = retirement_consecutive_days
         self._ir_degradation_pct = ir_degradation_pct
+        # 显著性门禁（2026-09-19，#14）：判定阈值 decay_slope=-0.001/day 与
+        # 60 日斜率自身的噪声同量级（实测 σ≈0.0011–0.0013/day），纯噪声下
+        # 20%–40% 的窗口会被判衰减。要求「点估计再退 σ 个标准误仍越界」才判衰减，
+        # 口径与策略级 rolling_ic 的 P1-3 门禁一致。
+        self._significance_sigma = significance_sigma
+        self._use_significance_gate = use_significance_gate
 
     # ------------------------------------------------------------------
     # Public API
@@ -385,10 +393,23 @@ class FactorHealthMonitor:
         ic_252d = self._rolling_mean(valid, 252) if n_valid >= self._min_days_252d else float("nan")
 
         # ── IC decay rates (rolling windows, NOT full period) ──
-        decay_rate = self._compute_decay_slope(valid)  # full-period (backward compat)
-        decay_30d = self._compute_decay_slope(valid, window=30)
-        decay_60d = self._compute_decay_slope(valid, window=60)
-        decay_120d = self._compute_decay_slope(valid, window=120)
+        # 衰减一律按 |IC| 计算（#14，2026-09-19）：40% 的因子 direction=-1，
+        # 它们的 IC 天然为负——「IC 变得更负」= 信号增强，用带符号 IC 判衰减会把
+        # 「越来越有效」误判成「衰减」（Implied_Net_Flow ic_30d=-0.059 比 ic_90d=-0.016
+        # 更强，却因斜率 -0.00267 被判 DEGRADED）。|IC| 下降才对所有方向都成立。
+        abs_valid = np.abs(valid)
+        decay_rate = self._compute_decay_slope(abs_valid)  # full-period (backward compat)
+        decay_30d = self._compute_decay_slope(abs_valid, window=30)
+        decay_60d = self._compute_decay_slope(abs_valid, window=60)
+        decay_60d_se = self._decay_slope_se(abs_valid, window=60)
+        decay_120d = self._compute_decay_slope(abs_valid, window=120)
+
+        # ── Significance gate on the decay rules (#14) ──
+        # A slope is only treated as decay when it stays below decay_slope even
+        # after relaxing it by `significance_sigma` standard errors.
+        decay_threshold = self._decay_slope
+        if self._use_significance_gate and decay_60d_se > 0:
+            decay_threshold = self._decay_slope - self._significance_sigma * decay_60d_se
 
         # ── Direction check ──
         direction_actual = 1 if ic_30d > 0 else -1
@@ -398,7 +419,9 @@ class FactorHealthMonitor:
 
         # ── Consecutive day tracking (TRAILING WINDOW only) ──
         # Use 60d rolling decay for degradation check
-        consecutive_degraded = self._count_consecutive_degraded(valid, decay_60d, ic_ir)
+        consecutive_degraded = self._count_consecutive_degraded(
+            valid, decay_60d, ic_ir, decay_threshold
+        )
         consecutive_healthy = self._count_consecutive_healthy(valid)
 
         # ── Classify lifecycle (state machine) ──
@@ -411,6 +434,8 @@ class FactorHealthMonitor:
             consecutive_degraded=consecutive_degraded,
             consecutive_healthy=consecutive_healthy,
             direction_actual=direction_actual,
+            decay_threshold=decay_threshold,
+            decay_se=decay_60d_se,
         )
 
         # ── Build status ──
@@ -423,10 +448,21 @@ class FactorHealthMonitor:
         elif should_retire:
             retirement_note = f" AUTO-RETIRE: |IC| below {self._absolute_min_ic} for {stale_days}d."
 
+        gate_note = ""
+        if (
+            self._use_significance_gate
+            and decay_60d < self._decay_slope
+            and decay_60d >= decay_threshold
+        ):
+            gate_note = (
+                f" [衰减未达显著: decay60={decay_60d:+.5f} 未低于门禁阈值"
+                f" {decay_threshold:+.5f}（σ={decay_60d_se:.5f}）→ 不判衰减]"
+            )
+
         summary = (
             f"Factor [{factor_name}] {lifecycle.value.upper()}: "
             f"IC_30d={ic_30d:+.4f} | IC_IR={ic_ir:.2f} | "
-            f"decay={decay_rate:+.5f}/day | N={n_valid}" + retirement_note
+            f"decay={decay_rate:+.5f}/day | N={n_valid}" + gate_note + retirement_note
         )
 
         return FactorHealthStatus(
@@ -496,6 +532,8 @@ class FactorHealthMonitor:
         consecutive_degraded: int,
         consecutive_healthy: int,
         direction_actual: int,
+        decay_threshold: float | None = None,
+        decay_se: float = 0.0,
     ) -> tuple[FactorLifecycle, RetiredReason | None, str]:
         """State-machine classification (v2).
 
@@ -508,10 +546,14 @@ class FactorHealthMonitor:
           6. |IC_30d| ≥ 0.02 → VALIDATED
           7. Otherwise → RESEARCH (new factor, being evaluated)
 
+        ``decay_threshold`` carries the significance-gated slope bound (#14);
+        None means "use the raw decay_slope".
+
         Returns:
             (lifecycle, retired_reason, action_string).
         """
         abs_ic = abs(ic_30d)
+        thr = self._decay_slope if decay_threshold is None else decay_threshold
 
         # ── RETIRED conditions ──
         # Pattern 1: IC_IR too low for extended period (PCF_OCF)
@@ -535,7 +577,7 @@ class FactorHealthMonitor:
             )
 
         # Pattern 3: Terminal decay
-        if decay_rate < self._decay_slope and stale_days >= self._retirement_consecutive:
+        if decay_rate < thr and stale_days >= self._retirement_consecutive:
             reason = RetiredReason.DECAY_TERMINAL
             return (
                 FactorLifecycle.RETIRED,
@@ -545,12 +587,11 @@ class FactorHealthMonitor:
 
         # ── WEAKENING: historically strong, currently declining (DP-002 v3) ──
         # Criteria: |IC| still OK but decay is real and sustained
-        if (
-            abs_ic >= 0.02
-            and abs(ic_90d) >= 0.02
-            and decay_rate < self._decay_slope
-            and consecutive_degraded >= 15  # 3 weeks of decline
-        ):
+        # "持续下行" 的证据由斜率本身承担：decay_rate 低于显著性门禁阈值即表示
+        # trailing 60 日窗口在噪声之上持续下行。旧实现额外要求
+        # `consecutive_degraded >= 15`，而那个计数器当时恒等于序列长度（无意义）；
+        # 计数器修好后该条件会整体压制 WEAKENING（#14）。
+        if abs_ic >= 0.02 and abs(ic_90d) >= 0.02 and decay_rate < thr:
             return (
                 FactorLifecycle.WEAKENING,
                 None,
@@ -560,28 +601,32 @@ class FactorHealthMonitor:
             )
 
         # ── DEGRADED conditions ──
-        if consecutive_degraded >= self._degraded_consecutive:
-            # Check if it's a direction issue
-            if decay_rate < self._decay_slope:
-                return (
-                    FactorLifecycle.DEGRADED,
-                    None,
-                    f"衰减: IC decay={decay_rate:+.5f}/day 持续{consecutive_degraded}天。"
-                    "建议降权 50%，安排复核。",
-                )
-            if ic_ir < self._degraded_ic_ir:
-                return (
-                    FactorLifecycle.DEGRADED,
-                    None,
-                    f"衰减: IC_IR={ic_ir:.2f}<{self._degraded_ic_ir} 持续{consecutive_degraded}天。"
-                    "信号一致性下降，建议降权。",
-                )
-
-        if decay_rate < self._decay_slope:
+        # (a) Weak signal consistency.  IC_IR is a FULL-HISTORY statistic (it
+        #     barely moves day to day), so it is judged directly — wrapping it
+        #     in a ">= 30 consecutive days" guard (as before) coupled it to the
+        #     broken day counter and made weak factors flip to RESEARCH (#14).
+        if ic_ir < self._degraded_ic_ir:
             return (
                 FactorLifecycle.DEGRADED,
                 None,
-                f"衰减: IC decay={decay_rate:+.5f}/day < {self._decay_slope}。"
+                f"衰减: IC_IR={ic_ir:.2f}<{self._degraded_ic_ir} 持续{consecutive_degraded}天。"
+                "信号一致性下降，建议降权。",
+            )
+
+        # (b) Significant decay: the 60d slope is below the significance-gated
+        #     threshold → DEGRADED.
+        #     NOTE (2026-09-19, #14): a mid-term counterweight ("90d IC still
+        #     significant → WEAKENING instead of DEGRADED") was prototyped here
+        #     and reverted: it cannot be told apart from real decay by the IC
+        #     series alone and it contradicts the established semantics
+        #     (IC 大幅下滑 → 降级; see tests/unit/test_factor_health.py
+        #     test_degraded_low_ic_ratio / test_decay_trend_degraded).
+        #     The proposal is recorded in docs/tracking/qt_backlog_tracker.md §#14.
+        if decay_rate < thr:
+            return (
+                FactorLifecycle.DEGRADED,
+                None,
+                f"衰减: IC decay={decay_rate:+.5f}/day < {thr}（噪声门禁后）。"
                 "IC 趋势显著下行。降权 50%，安排复核。",
             )
 
@@ -630,15 +675,33 @@ class FactorHealthMonitor:
         valid: np.ndarray,
         decay_rate: float,
         ic_ir: float,
+        decay_threshold: float | None = None,
     ) -> int:
-        """Count consecutive days meeting degraded criteria from the end."""
+        """Count trailing consecutive days whose 30-day mean IC is near zero.
+
+        Fix (2026-09-19, #14): the previous implementation compared the *current
+        scalars* (60d decay slope / full-history IC_IR) against every historical
+        day, so a single triggered condition made the count equal to the whole
+        series length (measured: 2822 of 2822 days).  The state machine's
+        ">= 30 consecutive days" guard was therefore a no-op — one bad window
+        locked a factor into DEGRADED for as long as the condition held.
+
+        Now the count is by the trailing 30-day mean IC series (the same
+        population the state machine always used — |IC| < 0.02), and only when
+        the current state actually qualifies as degraded (decay or IC_IR).
+
+        ``decay_threshold`` is the (significance-gated) slope bound; pass the
+        ungated ``self._decay_slope`` when the gate is disabled.
+        """
+        thr = self._decay_slope if decay_threshold is None else decay_threshold
+        if len(valid) < 30:
+            return 0
+        if decay_rate >= thr and ic_ir >= self._degraded_ic_ir:
+            return 0  # current state is not degraded — nothing to count
+        roll30 = np.convolve(valid, np.ones(30) / 30, "valid")
         count = 0
-        for val in reversed(valid):
-            abs_val = abs(val)
-            degraded = (
-                abs_val < 0.02 or decay_rate < self._decay_slope or ic_ir < self._degraded_ic_ir
-            )
-            if degraded:
+        for mean_ic in reversed(roll30):
+            if abs(mean_ic) < 0.02:
                 count += 1
             else:
                 break
@@ -691,6 +754,55 @@ class FactorHealthMonitor:
         x = np.arange(len(tail))
         slope = np.polyfit(x, tail, 1)[0]
         return float(slope)
+
+    @staticmethod
+    def _window_t_stat(arr: np.ndarray, window: int) -> float:
+        """t-statistic of the trailing ``window``-day mean IC (0.0 if undefined).
+
+        Used as a mid-term counterweight to the 60-day decay slope: a factor
+        whose 90-day IC is still clearly non-zero (|t| >= 2) is "pulling back",
+        not dead.
+        """
+        if len(arr) < window:
+            return 0.0
+        tail = arr[-window:]
+        sd = float(np.std(tail, ddof=1)) if len(tail) > 1 else 0.0
+        if sd <= 0:
+            return 0.0
+        return float(np.mean(tail) / (sd / np.sqrt(len(tail))))
+
+    @staticmethod
+    def _decay_slope_se(arr: np.ndarray, window: int = 60) -> float:
+        """Standard error of the linear decay slope over ``window`` days.
+
+        OLS slope SE = sqrt(SSE / (n - 2) / Sxx).  Needed because the judgement
+        threshold (``decay_slope``) sits inside the slope's own noise band:
+        measured σ ≈ 0.0011–0.0013/day for A-share factor IC series.
+
+        Args:
+            arr: 1-D array of IC values (chronological).
+            window: Lookback window for fitting (same as the slope).
+
+        Returns:
+            Slope standard error; 0.0 when it cannot be estimated.
+        """
+        if len(arr) < 12:
+            return 0.0
+        tail = arr[-min(window, len(arr)) :]
+        n = len(tail)
+        x = np.arange(n)
+        sxx = float(((x - x.mean()) ** 2).sum())
+        if sxx <= 0:
+            return 0.0
+        slope, intercept = np.polyfit(x, tail, 1)
+        resid = tail - (slope * x + intercept)
+        dof = n - 2
+        if dof <= 1:
+            return 0.0
+        s2 = float((resid**2).sum() / dof)
+        if s2 <= 0:
+            return 0.0
+        return float(np.sqrt(s2 / sxx))
 
     def get_weight_adjustments(
         self,
