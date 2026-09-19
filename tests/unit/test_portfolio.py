@@ -22,6 +22,30 @@ class TestCostModel:
         assert cost.total_cost > 0
         assert 0 < cost.total_cost_pct < 0.01  # < 1%
 
+    def test_compute_adv_converts_lots_to_shares(self) -> None:
+        """A-share daily volume is 手 (1 lot = 100 shares).  close × volume
+        alone underestimates turnover 100× → impact 10× too high."""
+        from qp.portfolio.cost_model import MarketImpactModel
+
+        prices = pl.DataFrame(
+            {
+                "trade_date": ["2026-09-17", "2026-09-18"],
+                "symbol": ["600519", "600519"],
+                "close": [10.0, 10.0],
+                "volume": [1000.0, 1000.0],  # 1000 手 = 100,000 股
+            }
+        )
+        adv = MarketImpactModel.compute_adv(prices, lookback=20)
+        assert adv["600519"] == pytest.approx(10.0 * 1000.0 * 100.0)
+
+    def test_sqrt_impact_no_penalty_for_small_order(self) -> None:
+        """¥10万 vs ¥1亿 ADV = 0.1% participation → base impact only; the 100×
+        bug made the same order look like 10% and trip the liquidity penalty."""
+        from qp.portfolio.cost_model import MarketImpactModel
+
+        impact = MarketImpactModel.sqrt_impact(trade_value=100_000.0, daily_volume=100_000_000.0)
+        assert 0 < impact < 1_000.0  # far below the 1% penalty (¥1,000)
+
     def test_estimate_trade_sell(self) -> None:
         from qp.portfolio.cost_model import CostModel
 
@@ -1537,6 +1561,38 @@ class TestLiquidityExposure:
         scores = liq.score(prices, ["A.SH", "B.SH"])
         assert len(scores) == 2
         assert all(0.0 <= v <= 1.0 for v in scores.values())
+
+    def test_adv_applies_lots_to_shares(self) -> None:
+        """ADV must count shares, not lots — otherwise every stock is scored
+        as illiquid (ADV 100× low)."""
+        from qp.portfolio.exposure.liquidity_exposure import LiquidityExposure
+
+        liq = LiquidityExposure()
+        prices = pl.DataFrame(
+            {
+                "trade_date": ["2026-09-17", "2026-09-18"],
+                "symbol": ["A.SH", "A.SH"],
+                "close": [20.0, 20.0],
+                "volume": [5000.0, 5000.0],
+            }
+        )
+        advs = liq._compute_adv(prices, ["A.SH"])
+        assert advs["A.SH"] == pytest.approx(20.0 * 5000.0 * 100.0)
+
+    def test_risk_engine_adv_applies_lots_to_shares(self) -> None:
+        """PortfolioRiskEngine._compute_advs shares the same unit rule."""
+        from qp.portfolio.portfolio_risk_engine import PortfolioRiskEngine
+
+        prices = pl.DataFrame(
+            {
+                "trade_date": ["2026-09-17", "2026-09-18"],
+                "symbol": ["A.SH", "A.SH"],
+                "close": [20.0, 20.0],
+                "volume": [5000.0, 5000.0],
+            }
+        )
+        advs = PortfolioRiskEngine._compute_advs(prices, ["A.SH"])
+        assert advs["A.SH"] == pytest.approx(20.0 * 5000.0 * 100.0)
 
     def test_classify(self) -> None:
         from qp.portfolio.exposure.liquidity_exposure import LiquidityExposure

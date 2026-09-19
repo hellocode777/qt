@@ -25,6 +25,8 @@ from typing import Any, cast
 
 import polars as pl
 
+from qp.shared.constants import SHARES_PER_LOT
+
 
 @dataclass
 class LiquidityExposure:
@@ -164,7 +166,7 @@ class LiquidityExposure:
         prices: pl.DataFrame,
         symbols: list[str],
     ) -> dict[str, float]:
-        """Compute Average Daily Value (close * volume) in CNY."""
+        """Compute Average Daily Value in CNY (close × volume × 100, 手 → 股)."""
         if prices.is_empty() or "volume" not in prices.columns:
             return {}
 
@@ -172,7 +174,7 @@ class LiquidityExposure:
         if px.is_empty():
             return {}
 
-        px = px.with_columns((pl.col("close") * pl.col("volume")).alias("dv"))
+        px = px.with_columns((pl.col("close") * pl.col("volume") * SHARES_PER_LOT).alias("dv"))
         px = px.sort(["symbol", "trade_date"])
         px = px.group_by("symbol").tail(self.adv_lookback)
 

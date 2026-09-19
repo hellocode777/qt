@@ -16,6 +16,12 @@ TRADING_DAYS_PER_WEEK = 5
 # ── Currency ───────────────────────────────────────
 DEFAULT_CURRENCY = "CNY"
 
+# ── A-share market microstructure ──────────────────
+# 日线 ``volume`` 的单位是「手」(lot)，1 手 = 100 股。腾讯 kline（TDR-001
+# 唯一行情源）返回手，所以 成交额 = close × volume × SHARES_PER_LOT。
+# 漏掉这个系数会把成交额低估 100×（ADV → 冲击成本高估 10×，流动性评分被系统性压低）。
+SHARES_PER_LOT = 100.0
+
 # ── Data ───────────────────────────────────────────
 MIN_TRAINING_WINDOW_DAYS = 500  # ~2 years of trading days
 DEFAULT_PURGED_CV_FOLDS = 5
@@ -33,6 +39,7 @@ __all__ = [
     "DEFAULT_STORAGE_BACKEND",
     "DEFAULT_TIMEZONE",
     "MIN_TRAINING_WINDOW_DAYS",
+    "SHARES_PER_LOT",
     "TRADING_DAYS_PER_MONTH",
     "TRADING_DAYS_PER_WEEK",
     "TRADING_DAYS_PER_YEAR",

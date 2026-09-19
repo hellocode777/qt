@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 import polars as pl
 
+from qp.shared.constants import SHARES_PER_LOT
+
 # A-share standard rates (2024)
 STAMP_TAX_RATE = 0.0005  # 0.05%, sell side only
 COMMISSION_RATE = 0.00025  # 0.025%, both sides
@@ -245,9 +247,11 @@ class MarketImpactModel:
 
         df = prices.sort(["symbol", "trade_date"])
 
-        # Estimate daily volume in CNY (close * volume)
+        # Estimate daily turnover in CNY: volume is in 手 → ×100 for shares.
         if "volume" in df.columns:
-            df = df.with_columns((pl.col("close") * pl.col("volume")).alias("daily_value"))
+            df = df.with_columns(
+                (pl.col("close") * pl.col("volume") * SHARES_PER_LOT).alias("daily_value")
+            )
         else:
             return {}
 

@@ -34,6 +34,7 @@ from qp.portfolio.exposure.factor_exposure import FactorExposureAnalyzer
 from qp.portfolio.exposure.marketcap_exposure import MarketCapExposure
 from qp.portfolio.industry import IndustryMapper
 from qp.portfolio.models.risk_approved_candidate import RiskApprovedCandidate
+from qp.shared.constants import SHARES_PER_LOT
 
 # ------------------------------------------------------------------
 # Default limits (per docs/7_Portfolio_Risk_Layer.md §第三部分)
@@ -564,7 +565,7 @@ class PortfolioRiskEngine:
         prices: pl.DataFrame,
         symbols: list[str],
     ) -> dict[str, float]:
-        """Compute average daily value (close * volume) in CNY."""
+        """Compute average daily value in CNY (close × volume × 100, 手 → 股)."""
         if prices.is_empty() or "volume" not in prices.columns:
             return {}
 
@@ -572,7 +573,7 @@ class PortfolioRiskEngine:
         if px.is_empty():
             return {}
 
-        px = px.with_columns((pl.col("close") * pl.col("volume")).alias("dv"))
+        px = px.with_columns((pl.col("close") * pl.col("volume") * SHARES_PER_LOT).alias("dv"))
         px = px.group_by("symbol").tail(20)
 
         advs: dict[str, float] = {}
