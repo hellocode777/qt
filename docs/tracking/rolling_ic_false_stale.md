@@ -316,9 +316,19 @@ details: action=ok regime=UNKNOWN psi=0.000
 - [x] 沙盒复刻验证：原先把 WARNING 清成 NORMAL 的那次调用，现在保持 WARNING 并打出 fail-safe 日志
 
 ### P1-5 测试隔离：禁写生产状态（见 §4.1）
-- [ ] `tests/conftest.py` 加 autouse fixture：把 `MONITORING_DIR` / 状态文件 / 信号历史重定向到 tmp（或至少禁止写生产路径）
-- [ ] 给 `test_pipeline_critical_path.py` 的 KillSwitchPipeline 集成测试加 tmp 状态目录
+- [x] `tests/conftest.py` 加 autouse fixture 重定向 monitoring 路径 → ✅ **已完成（2026-09-19 核实）**：
+      `_MONITORING_MODULES` 覆盖 9 个绑定路径的模块（`qp.shared.paths` / `system_state` /
+      `online_monitor` / `health_logger` / `factor_health_logger` / `retrain_signal` /
+      `strategy_health_logger` / `strategy_monitor` …）+ 12 个路径常量（`MONITORING_DIR` /
+      `ONLINE_SIGNAL_HISTORY` / `SYSTEM_HEALTH_LOG` / `WATCHDOG_DIR` / `DEFAULT_STATE_DIR` /
+      `DEFAULT_HEALTH_LOG_DIR` / `DEFAULT_FACTOR_HEALTH_DIR` / `DEFAULT_RETRAIN_DIR` /
+      `HEALTH_PARQUET` …）全部指向 per-test tmp；另有生产监控目录 mtime/size 快照比对告警
+- [x] `test_pipeline_critical_path.py` 的 KillSwitchPipeline 加 tmp 状态目录 → ✅ **已由全局重定向覆盖**：
+      其状态路径来自 `qp.monitoring.system_state.DEFAULT_STATE_DIR`（= `MONITORING_DIR`），
+      该模块在上述 `_MONITORING_MODULES` 内 → 无需单独处理
 - [ ] 复查 `monkeypatch.chdir` 的测试：同进程后续的**相对路径**读者（`data/...`）会失准
+      （现存 8+ 处：`tests/unit/pipeline/test_multifactor_fundamental.py`、
+      `tests/unit/data/test_capital_flow.py` 等）
 
 ### P2-1 信号历史去重 ✅ 已随 P1-1 修掉
 - [x] `_save_signal_snapshot` 改为按 `(strategy_id, date)` 覆盖写（幂等），旧数据里的重复行未回溯清理

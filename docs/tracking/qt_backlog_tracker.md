@@ -23,7 +23,7 @@
 
 - [x] 读 lgb_rank.py + TDR-005，出集成方案 → ✅ 2026-08-13 完成（tracker 过时）
 - [x] 接入 Optuna 搜索（num_leaves / learning_rate 等）→ ✅ 已实现：`qp/research/trainer/optuna_search.py`（329 行）+ CLI `qp experiment optuna`（参数由函数内手工解析，故 `--help` 只显示 `--help`，非缺陷）
-- [ ] walk-forward + Purged CV 验证 → **Purged CV 部分已实现**（目标函数即 PurgedKFold OOS IC 均值）；**真实剩余**：用 8/13 搜出的最优参数跑一次**完整 walk-forward 回测**，与生产固定参数对比（TDR-005 ⚠️：短样本最优参数不得直接写进生产）
+- [x] walk-forward + Purged CV 验证 → ✅ **2026-09-19 完成**：Purged CV 本已实现（目标函数即 PurgedKFold），本轮补齐**时间序 walk-forward**验证 → **best 参数无稳定优势，`DEFAULT_LGB_PARAMS` 不动**（详见下方 §#1-a）
 - [x] 与固定参数基线对比，记录结果 → ✅ 内置 ΔIC 对比：8/13 结果见 `data/optuna/lgb_optuna_20260813_011526.json`（30 trials，best −0.0444 vs baseline −0.0572，改善约 22%）
 
 > 📌 **2026-09-19 复核**：模块 / CLI / 结果文件 / 测试（`tests/unit/research/test_optuna_search.py`）均在位，本节 4 项中 3 项早已完成（tracker 过时）。**只剩「最优参数的完整 walk-forward 验证」**——这一步会决定是否调整生产模型参数（production-sensitive，需批准）。
@@ -236,8 +236,12 @@
   - [x] 验证：`curl /api/v1/positions?active_only=true`（600207→5.10/510.00/+60.00/+13.33%）+ headless Chrome 真实 DOM 渲染两视图（活跃视图同上；历史视图 P-00006 → +2.11%）；ruff format --check / ruff check / pyright 全 0
   - [x] `bash scripts/spa_deploy.sh` 重建并部署（`/proto/` 已引用新 bundle）
 - **遗留**:
-  - [ ] 未计佣金/印花税/滑点（与老 UI `/portfolio` 同口径）；要精确持仓收益需接交易成本模型
-  - [ ] `/api/v1/account` 的 `index.json.active_value` 仍为成本市值（`PositionLedger.total_active_value()`），与页面标记值不同源
+  - [x] 未计佣金/印花税/滑点 → ✅ **已解决**：`position_service.py` 三口径含 `est_buy_fee` /
+        `est_sell_fee` / `est_round_trip_fee` / `unrealized_pnl_net(_pct)`；2026-09-19 又给
+        `CostModel` 补了最低佣金（¥5/笔）与过户费开关（默认关闭，见 §#12-2）
+  - [x] `/api/v1/account` 的 `active_value` 与页面不同源 → ✅ **已解决**：该端点已返回
+        `valuation`（成本 / 最新收盘 / 费用后三口径），前端一律消费 `valuation`；
+        `active_value` 现在**有意**保留为成本口径并在 docstring 写明
   - [x] SPA 源码已入库：2026-09-14 从无版本控制的 `~/workspace/quant-ui-research/qp-proto/web` 移入 `qp/web/spa_src/`（`node_modules`/`dist` 与构建产物 `qp/web/static/spa/` 仍 .gitignore），`scripts/spa_deploy.sh` 默认路径随之改为仓库内
 
 ---
