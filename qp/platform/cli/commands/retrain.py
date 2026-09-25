@@ -2,26 +2,31 @@
 
 from __future__ import annotations
 
-import sys
-
 from qp.shared.time import today_cn
 
 
-def cmd_retrain() -> int:
-    """Run monthly model retrain pipeline."""
+def cmd_retrain(strategy_id: str = "", dry_run: bool = False) -> int:
+    """Run monthly model retrain pipeline.
 
+    Args:
+        strategy_id: Target strategy ID. Empty → the registry's single APPROVED
+            strategy (never a hardcoded name — ``simple_rank_v1.0`` was the old
+            default and isn't registered anywhere).
+        dry_run: Rehearsal mode — no artifacts written, no model registered.
+
+    Returns:
+        Process exit code (0 = success, 1 = unresolvable strategy or failure).
+    """
     from qp.platform.pipeline.context import PipelineContext
     from qp.research.trainer.auto_retrain import MonthlyRetrainPipeline
+    from qp.strategy.registry import resolve_single_approved_strategy_id
 
-    strategy_id = "simple_rank_v1.0"
-    dry_run = False
-
-    args = sys.argv[2:]
-    for arg in args:
-        if arg == "--dry-run":
-            dry_run = True
-        elif not arg.startswith("--"):
-            strategy_id = arg
+    if not strategy_id:
+        resolved, why = resolve_single_approved_strategy_id()
+        if resolved is None:
+            print(f"❌ {why}")
+            return 1
+        strategy_id = resolved
 
     print("═══ QP 模型重训 / Model Retrain ═══")
     print()

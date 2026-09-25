@@ -375,7 +375,7 @@ class PaperTradingTracker:
             else:
                 from qp.strategy.simple_rank import SimpleRankStrategy
 
-                registry.register(SimpleRankStrategy(top_n=10))
+                registry.register(SimpleRankStrategy(top_n=10), persist=False)
                 strategy = registry.get(run.strategy_id)
                 today = date.fromisoformat(trade_date)
                 signals = strategy.generate_signals(today)

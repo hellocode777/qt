@@ -121,7 +121,7 @@ def cmd_decide(
     # Generate signals
     try:
         registry = StrategyRegistry()
-        registry.register(SimpleRankStrategy(top_n=10))
+        registry.register(SimpleRankStrategy(top_n=10), persist=False)
         strategy = registry.get(strategy_id)
         signals = strategy.generate_signals(today)
     except Exception:

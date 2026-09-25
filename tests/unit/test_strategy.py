@@ -1926,6 +1926,150 @@ class TestStrategyLoader:
 # =============================================================================
 
 
+class TestStrategyRegistryPersistFlag:
+    """只读调用方不得写 registry 文件（2026-09-25 回归）。
+
+    背景：``qp portfolio report`` 只是出报表，却因为 ``register()`` 无条件落盘，
+    把一次性条目 ``simple_rank_v1.0`` 写进了 ``data/strategy_registry.json``。
+    现在 ``register(..., persist=False)`` 只注册到内存。
+    """
+
+    def test_register_without_persist_leaves_file_untouched(self, tmp_path: Any) -> None:
+        from qp.strategy.registry import StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry_file = tmp_path / "registry.json"
+        registry = StrategyRegistry(registry_path=registry_file)
+
+        registry.register(SimpleRankStrategy(top_n=10), persist=False)
+
+        assert not registry_file.exists(), "persist=False 不应创建 registry 文件"
+        # 内存里仍然可用（报表要拿实例生成信号）
+        assert "simple_rank_v1.0" in registry.list_strategies()
+
+    def test_register_persist_writes_file(self, tmp_path: Any) -> None:
+        import json
+
+        from qp.strategy.registry import StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry_file = tmp_path / "registry.json"
+        registry = StrategyRegistry(registry_path=registry_file)
+
+        registry.register(SimpleRankStrategy(top_n=10), persist=True)
+
+        assert registry_file.exists()
+        assert "simple_rank_v1.0" in json.loads(registry_file.read_text())["strategies"]
+
+    def test_persist_defaults_to_true(self, tmp_path: Any) -> None:
+        """默认行为不变 —— 生产注册路径（approve/loader）依赖落盘。"""
+        from qp.strategy.registry import StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry_file = tmp_path / "registry.json"
+        registry = StrategyRegistry(registry_path=registry_file)
+
+        registry.register(SimpleRankStrategy(top_n=10))
+
+        assert registry_file.exists()
+
+
+class TestStrategyRegistryApprovedIds:
+    """registry 的 APPROVED 解析 —— CLI 默认策略的唯一来源。
+
+    背景：`qp validate` / `qp retrain` 曾把默认策略写死成 `simple_rank_v1.0`
+    （registry 里不存在），现在统一走 `resolve_single_approved_strategy_id()`；
+    不唯一时必须报错而不是猜。
+    """
+
+    def test_approved_ids_filters_lifecycle(self, tmp_path: Any) -> None:
+        import json
+
+        from qp.strategy.registry import StrategyRegistry
+
+        registry_file = tmp_path / "registry.json"
+        registry_file.write_text(
+            json.dumps(
+                {
+                    "strategies": {
+                        "prod": {"lifecycle": "approved", "active": True, "meta": {}},
+                        "res": {"lifecycle": "research", "active": False, "meta": {}},
+                    }
+                }
+            )
+        )
+        registry = StrategyRegistry(registry_path=registry_file)
+
+        assert registry.approved_ids() == ["prod"]
+
+    def test_resolves_single_approved(self, tmp_path: Any, monkeypatch: Any) -> None:
+        import json
+
+        import qp.strategy.registry as registry_module
+        from qp.strategy.registry import StrategyRegistry, resolve_single_approved_strategy_id
+
+        registry_file = tmp_path / "registry.json"
+        registry_file.write_text(
+            json.dumps({"strategies": {"prod": {"lifecycle": "approved", "meta": {}}}})
+        )
+        monkeypatch.setattr(
+            registry_module,
+            "StrategyRegistry",
+            lambda *a, **k: StrategyRegistry(registry_path=registry_file),
+        )
+
+        assert resolve_single_approved_strategy_id() == ("prod", "")
+
+    def test_errors_when_none_approved(self, tmp_path: Any, monkeypatch: Any) -> None:
+        import json
+
+        import qp.strategy.registry as registry_module
+        from qp.strategy.registry import StrategyRegistry, resolve_single_approved_strategy_id
+
+        registry_file = tmp_path / "registry.json"
+        registry_file.write_text(
+            json.dumps({"strategies": {"res": {"lifecycle": "research", "meta": {}}}})
+        )
+        monkeypatch.setattr(
+            registry_module,
+            "StrategyRegistry",
+            lambda *a, **k: StrategyRegistry(registry_path=registry_file),
+        )
+
+        strategy_id, reason = resolve_single_approved_strategy_id()
+
+        assert strategy_id is None
+        assert "没有 APPROVED" in reason
+
+    def test_errors_when_multiple_approved(self, tmp_path: Any, monkeypatch: Any) -> None:
+        import json
+
+        import qp.strategy.registry as registry_module
+        from qp.strategy.registry import StrategyRegistry, resolve_single_approved_strategy_id
+
+        registry_file = tmp_path / "registry.json"
+        registry_file.write_text(
+            json.dumps(
+                {
+                    "strategies": {
+                        "a": {"lifecycle": "approved", "meta": {}},
+                        "b": {"lifecycle": "approved", "meta": {}},
+                    }
+                }
+            )
+        )
+        monkeypatch.setattr(
+            registry_module,
+            "StrategyRegistry",
+            lambda *a, **k: StrategyRegistry(registry_path=registry_file),
+        )
+
+        strategy_id, reason = resolve_single_approved_strategy_id()
+
+        assert strategy_id is None
+        assert "多个 APPROVED" in reason
+
+
 class TestStrategyRunner:
     """Test StrategyRunner — scheduling, execution, dry_run."""
 

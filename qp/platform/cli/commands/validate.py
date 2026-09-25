@@ -6,6 +6,21 @@ import sys
 
 from qp.shared.paths import MOMENTUM_20D, resolve_daily_price_path
 
+# CLI 回测指标占位值 —— 不是真实实验结果，只用于让「数据类检查项」跑起来。
+# 真实门禁结果请用 `qp experiment validate <id>`（读实验快照）。
+_PLACEHOLDER_METRICS_NOTE = (
+    "⚠️  回测指标为 CLI 占位值（非真实实验），仅数据类检查项可采信；\n"
+    "   真实门禁请用: qp experiment validate <id>"
+)
+_METRICS_SOURCE = "placeholder (CLI defaults, not a real experiment)"
+
+
+def _resolve_default_strategy_id() -> tuple[str | None, str]:
+    """返回「当前该被校验的策略」：registry 里唯一 APPROVED 的那个（见 registry 助手）。"""
+    from qp.strategy.registry import resolve_single_approved_strategy_id
+
+    return resolve_single_approved_strategy_id()
+
 
 def cmd_validate() -> int:
     """Run validation gate checks on the current strategy.
@@ -24,7 +39,7 @@ def cmd_validate() -> int:
 
     # Parse flags
     stage = "backtest_passed"
-    strategy_id = "simple_rank_v1.0"
+    strategy_id = ""  # 空 → 解析为 registry 中唯一 APPROVED 的策略
     json_output = False
 
     args = sys.argv
@@ -53,8 +68,23 @@ def cmd_validate() -> int:
         print(f"Invalid stage: '{stage}'. Valid: {', '.join(sorted(valid_stages))}")
         return 1
 
+    if not strategy_id:
+        strategy_id, why = _resolve_default_strategy_id()
+        if strategy_id is None:
+            if json_output:
+                print(_json.dumps({"status": "error", "message": why}))
+            else:
+                print(f"❌ {why}")
+            return 1
+        if not json_output:
+            print(
+                f"策略 / Strategy: {strategy_id} "
+                "（registry 中唯一 APPROVED，可用 --strategy-id 覆盖）"
+            )
+
     if not json_output:
         print(f"=== QP Validation Gate ({stage}) ===")
+        print(f"  {_PLACEHOLDER_METRICS_NOTE}")
         print()
 
     # Load data — freshest daily price snapshot on disk (see resolve_daily_price_path)
@@ -121,6 +151,7 @@ def cmd_validate() -> int:
             "status": result.status.value,
             "validation": result.metadata.get("validation", {}),
             "recommendation": result.metadata.get("recommendation", ""),
+            "metrics_source": _METRICS_SOURCE,
         }
         print(_json.dumps(out, indent=2, ensure_ascii=False, default=str))
     else:

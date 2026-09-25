@@ -277,13 +277,19 @@ uv run qp simulation shadow 2026-09-24
 ### 5.4 验证门禁
 
 ```bash
-uv run qp validate                             # 全阶段检查
-uv run qp validate --stage backtest_passed      # 指定阶段
-uv run qp validate --strategy-id simple_rank_v1.0  # 指定策略
-uv run qp validate --json                       # 机器可读输出
+uv run qp validate                                  # 默认校验 registry 里唯一 APPROVED 的策略
+uv run qp validate --stage backtest_passed           # 指定阶段
+uv run qp validate --strategy-id momentum_vol_full   # 指定策略
+uv run qp validate --json                            # 机器可读输出（含 metrics_source）
 ```
 
 可用阶段：`research` | `backtest_passed` | `paper_trading` | `shadow_production` | `production`
+
+> ⚠️ **默认策略**：不传 `--strategy-id` 时取 registry 中**唯一** `APPROVED` 的策略（当前 `momentum_vol_full`）；
+> 没有 APPROVED、或有多个 → 直接报错退出，不猜（策略名会打印在输出首行）。
+> ⚠️ **CLI 的回测指标是占位值**：`commands/validate.py` 里 `ctx.backtest_metrics` 是写死的常量，
+> 只有数据类检查项（Rank IC / IC_IR / IC t-stat / 分层 / 中性化…）是真算的。
+> 需要可信的门禁结论请用 `qp experiment validate <id>`（读实验快照）。
 
 ### 5.5 生成交易建议
 

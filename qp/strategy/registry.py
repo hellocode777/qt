@@ -344,6 +344,8 @@ class StrategyRegistry:
         strategy: BaseStrategy,
         lifecycle: StrategyLifecycle = StrategyLifecycle.RESEARCH,
         meta: StrategyMeta | None = None,
+        *,
+        persist: bool = True,
     ) -> None:
         """Register a strategy.
 
@@ -351,6 +353,11 @@ class StrategyRegistry:
             strategy: The strategy instance to register.
             lifecycle: Initial lifecycle state (default RESEARCH).
             meta: Optional metadata (feature_set, model_version, owner, etc.).
+            persist: Whether to write the on-disk registry file. Pass ``False``
+                from read-only / ephemeral callers (e.g. ``qp portfolio report``
+                which only needs a strategy instance in this process) — otherwise
+                they pollute ``data/strategy_registry.json`` with throwaway
+                entries that outlive the command.
 
         Raises:
             ValueError: If a strategy with the same ID is already registered,
@@ -382,7 +389,8 @@ class StrategyRegistry:
         self._lifecycles[sid] = lifecycle
         # Preserve metadata loaded from disk if no explicit meta provided
         self._metadata[sid] = meta or self._metadata.get(sid, StrategyMeta())
-        self._save()
+        if persist:
+            self._save()
 
     def get(self, strategy_id: str) -> BaseStrategy:
         """Get a registered strategy by ID."""
@@ -698,7 +706,51 @@ class StrategyRegistry:
         """Get all strategy metadata keyed by strategy_id."""
         return dict(self._metadata)
 
+    def approved_ids(self) -> list[str]:
+        """IDs whose lifecycle is APPROVED (ADR-031), sorted.
+
+        Includes strategies known only from persisted metadata — same as
+        :meth:`list_strategies`. IDs without a readable lifecycle are skipped.
+        """
+        ids: list[str] = []
+        for sid in self.list_strategies():
+            try:
+                if self.get_lifecycle(sid) == StrategyLifecycle.APPROVED:
+                    ids.append(sid)
+            except KeyError:
+                continue
+        return sorted(ids)
+
     @property
     def count(self) -> int:
         """Total number of registered strategies."""
         return len(self._strategies)
+
+
+def resolve_single_approved_strategy_id() -> tuple[str | None, str]:
+    """Determine "the" production strategy: the registry's single APPROVED id.
+
+    Used by CLI entry points that need a default strategy (``qp validate``,
+    ``qp retrain``). Callers must not invent an ID when this can't be resolved —
+    previous behaviour defaulted to ``simple_rank_v1.0``, which is not in the
+    registry at all, so the output looked like the production strategy had
+    failed its gate.
+
+    Returns:
+        ``(strategy_id, reason)``. ``strategy_id`` is None when the registry has
+        no APPROVED strategy or more than one; ``reason`` explains which and the
+        caller prints it (and exits non-zero).
+    """
+    try:
+        registry = StrategyRegistry()
+    except Exception as exc:  # pragma: no cover - registry load failure
+        return None, f"无法读取策略注册表 / cannot read strategy registry: {exc}"
+
+    approved = registry.approved_ids()
+    if not approved:
+        return None, "registry 里没有 APPROVED 策略 / no APPROVED strategy — 请显式指定策略"
+    if len(approved) > 1:
+        return None, (
+            f"有多个 APPROVED 策略 {approved} / multiple APPROVED strategies — 请显式指定策略"
+        )
+    return approved[0], ""

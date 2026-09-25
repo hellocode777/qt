@@ -75,9 +75,11 @@ def run(ctx: click.Context) -> None:
     raise SystemExit(cmd_run())
 
 
-@cli.command()
+@cli.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
 def fundamental() -> None:
-    """Fetch fundamental data for all stocks."""
+    """Fetch fundamental data for all stocks (options parsed by the handler: --quick)."""
     from qp.platform.cli.commands.ingest import cmd_fundamental
 
     raise SystemExit(cmd_fundamental())
@@ -113,9 +115,16 @@ def pipeline() -> None:
 # ==================================================================
 
 
-@cli.command()
+@cli.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
 def validate() -> None:
-    """Run validation gate on strategies or experiments."""
+    """Run validation gate on strategies or experiments.
+
+    Options (--stage / --strategy-id / --json) are parsed by the handler, so Click
+    must not reject them — without allow_extra_args it errored with
+    "No such option '--stage'" before the handler ever ran.
+    """
     from qp.platform.cli.commands.validate import cmd_validate
 
     raise SystemExit(cmd_validate())
@@ -758,12 +767,20 @@ def web_start(host: str, port: int, reload: bool) -> None:
 # ==================================================================
 
 
-@cli.command()
-def retrain() -> None:
-    """Trigger model retraining."""
+@cli.command(name="retrain")
+@click.argument("strategy_id", required=False, default="")
+@click.option(
+    "--dry-run",
+    "dry_run",
+    is_flag=True,
+    default=False,
+    help="演习模式：不落盘、不注册模型",
+)
+def retrain(strategy_id: str, dry_run: bool) -> None:
+    """Trigger model retraining (default: the single APPROVED strategy)."""
     from qp.platform.cli.commands.retrain import cmd_retrain
 
-    raise SystemExit(cmd_retrain())
+    raise SystemExit(cmd_retrain(strategy_id, dry_run))
 
 
 # ==================================================================

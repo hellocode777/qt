@@ -68,7 +68,8 @@ def cmd_portfolio_report() -> int:
 
     # Generate signals
     registry = StrategyRegistry()
-    registry.register(SimpleRankStrategy(top_n=10))
+    # 只读报表：不落盘（否则每次跑都在 registry 里留下一次性条目）
+    registry.register(SimpleRankStrategy(top_n=10), persist=False)
     strategies = registry.get_backtest_ready()
     aggregator = SignalAggregator(method="rank_blend")
     signals_list = [s.generate_signals(today) for s in strategies]
