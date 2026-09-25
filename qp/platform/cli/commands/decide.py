@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qp.shared.paths import DAILY_PRICE_PREFIX
+from qp.shared.paths import resolve_daily_price_path
 from qp.shared.time import today_cn
 
 if TYPE_CHECKING:
@@ -98,17 +98,17 @@ def cmd_decide(
     print()
 
     try:
-        prices = pl.read_parquet(f"{DAILY_PRICE_PREFIX}{today.isoformat()}.parquet")
-    except FileNotFoundError:
-        print("❌ 未找到数据文件。请先运行 qp run daily")
-        print("   No data found. Run 'qp run daily' first.")
+        prices = pl.read_parquet(str(resolve_daily_price_path()))
+    except FileNotFoundError as e:
+        print(f"❌ 未找到价格数据 / No daily price data: {e}")
+        print("   请先运行 qp run daily / Run 'qp run daily' first.")
         return 1
 
     # Market regime
     regime_str = ""
     try:
         engine = MarketRegimeEngine()
-        regime_result = engine.classify(prices)
+        regime_result = engine.classify_panel(prices)
         regime_str = regime_result.summary
         print(f"  市场状态 / Regime: {regime_result.regime.value}")
         print(

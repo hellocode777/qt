@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from qp.shared.paths import DATASET_DIR, MOMENTUM_20D
+from qp.shared.paths import MOMENTUM_20D, resolve_daily_price_path
 
 
 def cmd_validate() -> int:
@@ -57,15 +57,10 @@ def cmd_validate() -> int:
         print(f"=== QP Validation Gate ({stage}) ===")
         print()
 
-    # Load data — use the most recent daily price snapshot on disk
-    from pathlib import Path
-
-    price_files = sorted(Path(DATASET_DIR).glob("daily_price_*.parquet"))
+    # Load data — freshest daily price snapshot on disk (see resolve_daily_price_path)
     try:
         feature_df = pl.read_parquet(MOMENTUM_20D)
-        if not price_files:
-            raise FileNotFoundError(f"no {DATASET_DIR}/daily_price_*.parquet found")
-        price_df = pl.read_parquet(str(price_files[-1]))
+        price_df = pl.read_parquet(str(resolve_daily_price_path()))
     except FileNotFoundError as e:
         msg = f"Data not found. Run 'qp run daily' first. ({e})"
         if json_output:

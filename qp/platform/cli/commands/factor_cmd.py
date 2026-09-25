@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qp.shared.json_io import json_load
-from qp.shared.paths import DAILY_PRICE_LATEST, DATASET_DIR, FACTOR_REGISTRY
+from qp.shared.paths import DATASET_DIR, FACTOR_REGISTRY, resolve_daily_price_path
 from qp.shared.time import fmt_date
 
 if TYPE_CHECKING:
@@ -194,14 +194,10 @@ def _load_full_price() -> pl.DataFrame | None:
     """
     import polars as pl
 
-    latest = Path(DAILY_PRICE_LATEST)
-    if latest.exists():
-        return pl.read_parquet(latest)
-
-    price_files = sorted(Path(DATASET_DIR).glob("daily_price_*.parquet"))
-    if not price_files:
+    try:
+        return pl.read_parquet(resolve_daily_price_path())
+    except FileNotFoundError:
         return None
-    return pl.read_parquet(str(price_files[-1]))
 
 
 def _compute_factor_scores(

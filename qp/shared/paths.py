@@ -84,6 +84,41 @@ VERSION_TREE_JSON = Path("data/knowledge/version_tree.json")
 ONLINE_HEALTH_HISTORY = Path("data/monitoring/online_health_history.parquet")
 CAPITAL_FLOW_LATEST = Path("data/dataset/capital_flow_latest.parquet")
 
+
+# ── 解析器：读哪个数据文件只能有一个入口 ─────────────────
+def resolve_daily_price_path() -> Path:
+    """返回当前最新鲜的日线价格 parquet 路径。
+
+    优先级：
+      1. ``DAILY_PRICE_LATEST`` —— daily_pipeline 每天写入的数据产品
+      2. ``data/dataset/daily_price_*.parquet`` 中 **mtime 最新** 的一个
+
+    为什么不用 ``sorted(glob("daily_price_*.parquet"))[-1]``：
+    按文件名排序时 ``daily_price_main_2026-08-14`` 排在 ``daily_price_latest`` 之后，
+    于是"取最后一个"会静默选中**过期快照**。2026-09-25 实测：``qp monitor regime``
+    读到 8/14 的数据（latest 已是 9/24），且输出里不显示数据日期，看起来像当前值。
+    按 mtime 取最新才是"数据新鲜度"的正确语义。
+
+    Returns:
+        存在的日线价格文件路径。
+
+    Raises:
+        FileNotFoundError: 两个位置都没有任何日线价格文件。
+    """
+    if DAILY_PRICE_LATEST.exists():
+        return DAILY_PRICE_LATEST
+
+    candidates = sorted(
+        DATASET_DIR.glob("daily_price_*.parquet"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    if not candidates:
+        raise FileNotFoundError(
+            f"未找到日线价格数据：{DAILY_PRICE_LATEST} 或 {DATASET_DIR}/daily_price_*.parquet"
+        )
+    return candidates[-1]
+
+
 __all__ = [
     "ADJ_FACTOR",
     "ARTIFACTS_DIR",
@@ -145,4 +180,5 @@ __all__ = [
     "VERSION_TREE_JSON",
     "VOLATILITY_20D",
     "WATCHDOG_DIR",
+    "resolve_daily_price_path",
 ]

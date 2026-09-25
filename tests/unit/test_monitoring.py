@@ -3256,3 +3256,71 @@ class TestPSIArtifacts:
         assert PSITrigger.compute_psi(expected, actual) == DriftMonitor.compute_psi(
             expected, actual
         )
+
+
+class TestRegimePanelInput:
+    """面板输入必须走 `classify_panel`。
+
+    回归背景（2026-09-25）：`MarketRegimeEngine.classify()` 把入参当**单条**时间序列
+    （相邻行差分）。CLI 的 `qp monitor regime` / `qp decide` 直接喂了 7.3M 行的全股票
+    面板，于是"日收益"是相邻两行**不同股票**的差，输出 年化波动率 1849.8%。
+    凡面板必须压成市场序列（每个交易日均值 close），即 `classify_panel`。
+    """
+
+    @staticmethod
+    def _panel(n_dates: int = 250, n_symbols: int = 40):
+        """构造面板：日期 × 股票，横截面上故意留出大价差。"""
+        from datetime import date, timedelta
+
+        import polars as pl
+
+        rows: list[dict[str, object]] = []
+        start = date(2025, 1, 1)
+        for d in range(n_dates):
+            for i in range(n_symbols):
+                # 每只股票价位数不同（10~16 元），日间缓慢上行
+                rows.append(
+                    {
+                        "trade_date": start + timedelta(days=d),
+                        "symbol": f"{i:06d}",
+                        "close": 10.0 + i * 0.15 + d * 0.01,
+                    }
+                )
+        return pl.DataFrame(rows)
+
+    def test_market_proxy_is_one_row_per_date_sorted(self) -> None:
+        panel = self._panel()
+        proxy = self.__class__._engine().market_proxy(panel)
+
+        assert proxy.height == 250  # 一天一行，不是 250×40
+        assert proxy.columns[:1] == ["date"]
+        assert proxy["date"].to_list() == sorted(proxy["date"].to_list())
+
+    def test_market_proxy_empty_on_malformed_panel(self) -> None:
+        import polars as pl
+
+        assert self.__class__._engine().market_proxy(pl.DataFrame({"foo": [1]})).is_empty()
+
+    def test_classify_panel_avoids_cross_stock_noise(self) -> None:
+        """同一面板：直喂 classify 是噪声，classify_panel 是合理量级。"""
+        panel = self._panel()
+        engine = self.__class__._engine()
+
+        naive = engine.classify(panel)  # 旧行为：把面板当序列
+        fixed = engine.classify_panel(panel)
+
+        assert naive.annualized_vol > 1.0  # >100%：跨股票价差造出的假波动
+        assert fixed.annualized_vol < 1.0
+        assert fixed.annualized_vol < naive.annualized_vol
+
+    def test_classify_panel_unknown_when_series_too_short(self) -> None:
+        panel = self._panel(n_dates=5, n_symbols=3)
+        result = self.__class__._engine().classify_panel(panel)
+
+        assert result.regime.value == "UNKNOWN"
+
+    @staticmethod
+    def _engine():
+        from qp.monitoring.regime import MarketRegimeEngine
+
+        return MarketRegimeEngine()

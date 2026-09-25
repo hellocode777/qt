@@ -138,6 +138,60 @@ class MarketRegimeEngine:
         self._trading_days = trading_days
 
     # ------------------------------------------------------------------
+    # Panel → single series
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def market_proxy(prices: pl.DataFrame) -> pl.DataFrame:
+        """把**横截面面板**压成**单条市场序列**（每个交易日均值 close，按日期升序）。
+
+        与 ``daily_pipeline._build_index_df()`` 是同一套构造：市场状态是"整个市场"
+        的属性，必须落在一条按日期排序的序列上。
+
+        Args:
+            prices: 面板数据，含 ``trade_date``/``date`` 与 ``close``（可选 ``high``/``low``）。
+
+        Returns:
+            单行/日 的 ``[date, close(, high, low)]``；列不全时返回空 DataFrame。
+        """
+        import polars as pl
+
+        date_col = "trade_date" if "trade_date" in prices.columns else "date"
+        if date_col not in prices.columns or "close" not in prices.columns:
+            return pl.DataFrame()
+
+        aggs = [pl.col("close").mean().alias("close")]
+        for optional in ("high", "low"):
+            if optional in prices.columns:
+                aggs.append(pl.col(optional).mean().alias(optional))
+
+        return prices.group_by(date_col).agg(aggs).sort(date_col).rename({date_col: "date"})
+
+    def classify_panel(self, prices: pl.DataFrame, **kwargs: Any) -> RegimeResult:
+        """从横截面面板判别市场状态（先压成市场序列，再交给 :meth:`classify`）。
+
+        为什么需要它：:meth:`classify` 把入参当成**一条**时间序列（相邻行做差分）。
+        直接喂多股票面板时，相邻两行的"收益"是**两只不同股票**的差，算出来的
+        波动率纯属噪声 —— 2026-09-25 实测 ``qp monitor regime`` 输出
+        "年化波动率 1849.8%"。凡是面板输入必须走本方法。
+
+        Args:
+            prices: 横截面面板（``trade_date`` + ``close``）。
+            **kwargs: 透传给 :meth:`classify`（如 ``limit_up_down_ratio``）。
+
+        Returns:
+            RegimeResult；面板为空或列不全时返回 UNKNOWN。
+        """
+        series = self.market_proxy(prices)
+        if series.is_empty():
+            return RegimeResult(
+                regime=Regime.UNKNOWN,
+                confidence=0.0,
+                summary="empty or malformed price panel (need trade_date + close)",
+            )
+        return self.classify(series, **kwargs)
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 

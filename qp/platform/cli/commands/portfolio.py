@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from qp.shared.paths import DAILY_PRICE_PREFIX
+from qp.shared.paths import resolve_daily_price_path
 from qp.shared.time import today_cn
 
 # ------------------------------------------------------------------
@@ -60,10 +60,10 @@ def cmd_portfolio_report() -> int:
 
     # Load data
     try:
-        prices = pl.read_parquet(f"{DAILY_PRICE_PREFIX}{today.isoformat()}.parquet")
-    except FileNotFoundError:
-        print("❌ 错误: 未找到数据文件，请先运行 'qp run daily'")
-        print("   Error: No data found. Run 'qp run daily' first.")
+        prices = pl.read_parquet(str(resolve_daily_price_path()))
+    except FileNotFoundError as e:
+        print(f"❌ 错误: 未找到价格数据 / No daily price data: {e}")
+        print("   Run 'qp run daily' first.")
         return 1
 
     # Generate signals
@@ -86,6 +86,7 @@ def cmd_portfolio_report() -> int:
     print("── 基本概况 / Overview ──")
     print(f"  总资产 / Total Capital:     ¥{total_capital:>12,.0f}")
     print(f"  日期 / Date:                {today}")
+    print(f"  数据日期 / Data through:    {prices['trade_date'].max()}")
     print(f"  活跃策略数 / Strategies:       {len(strategies)}")
     print(f"  候选股票数 / Candidates:       {len(symbols)}")
     print()
@@ -219,13 +220,11 @@ def cmd_portfolio_risk() -> int:
 
     from qp.portfolio import CorrelationAnalyzer, IndustryMapper, PortfolioRiskManager
 
-    today = today_cn()
-
     try:
-        prices = pl.read_parquet(f"{DAILY_PRICE_PREFIX}{today.isoformat()}.parquet")
-    except FileNotFoundError:
-        print("❌ 错误: 未找到数据文件，请先运行 'qp run daily'")
-        print("   Error: No data found. Run 'qp run daily' first.")
+        prices = pl.read_parquet(str(resolve_daily_price_path()))
+    except FileNotFoundError as e:
+        print(f"❌ 错误: 未找到价格数据 / No daily price data: {e}")
+        print("   Run 'qp run daily' first.")
         return 1
 
     symbols_all = prices["symbol"].unique().to_list()

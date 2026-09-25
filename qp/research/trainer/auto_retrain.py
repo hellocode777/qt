@@ -25,7 +25,7 @@ import numpy as np
 import polars as pl
 
 from qp.shared.constants import TRADING_DAYS_PER_YEAR
-from qp.shared.paths import DATASET_DIR
+from qp.shared.paths import resolve_daily_price_path
 from qp.shared.protocols.base_pipeline import BasePipeline
 from qp.shared.time import fmt_compact, today_cn
 from qp.shared.types import PipelineStatus, StrategyLifecycle
@@ -278,18 +278,13 @@ class MonthlyRetrainPipeline(BasePipeline):
     @staticmethod
     def _load_data() -> pl.DataFrame:
         """Load daily price data."""
-        from pathlib import Path
-
         from qp.data.loader import load_dataset
 
         try:
             return load_dataset("daily_price")
         except FileNotFoundError:
-            # Try glob as fallback
-            files = sorted(Path(DATASET_DIR).glob("daily_price_*.parquet"))
-            if not files:
-                raise
-            return pl.read_parquet(str(files[-1]))
+            # Fallback: freshest snapshot on disk (mtimes, not name order)
+            return pl.read_parquet(str(resolve_daily_price_path()))
 
     # ------------------------------------------------------------------
     # Feature computation

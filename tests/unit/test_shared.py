@@ -78,3 +78,70 @@ class TestExceptions:
     def test_exception_message(self) -> None:
         error = ConfigError("test message")
         assert str(error) == "test message"
+
+
+class TestResolveDailyPricePath:
+    """`resolve_daily_price_path` — 读哪个日线文件只能有一个入口。
+
+    回归背景（2026-09-25）：monitor regime / validate / decision 等 6 处各自写
+    `sorted(glob("daily_price_*.parquet"))[-1]`，按文件名排序会把
+    `daily_price_main_2026-08-14` 排在 `daily_price_latest` 之后，于是静默读到
+    过期快照（实测 8/14 vs latest 9/24），且输出里不显示数据日期。
+    """
+
+    def test_prefers_daily_price_latest(self, tmp_path, monkeypatch) -> None:
+        """latest 存在时优先它 —— 即使别的文件名排序更靠后。"""
+        import qp.shared.paths as paths
+
+        dataset = tmp_path / "dataset"
+        dataset.mkdir()
+        latest = dataset / "daily_price_latest.parquet"
+        latest.write_bytes(b"")
+        stale = dataset / "daily_price_main_2026-08-14.parquet"
+        stale.write_bytes(b"")
+        # 旧实现的排序结果：main_ 在 latest 之后 → [-1] 选到 stale
+        assert sorted(dataset.glob("daily_price_*.parquet"))[-1] == stale
+
+        monkeypatch.setattr(paths, "DATASET_DIR", dataset)
+        monkeypatch.setattr(paths, "DAILY_PRICE_LATEST", latest)
+
+        assert paths.resolve_daily_price_path() == latest
+
+    def test_falls_back_to_freshest_by_mtime(self, tmp_path, monkeypatch) -> None:
+        """latest 缺失时按 mtime 取最新，而不是按文件名排序。"""
+        import os
+
+        import qp.shared.paths as paths
+
+        dataset = tmp_path / "dataset"
+        dataset.mkdir()
+        older = dataset / "daily_price_main_2026-08-14.parquet"
+        older.write_bytes(b"")
+        newer = dataset / "daily_price_main_2026-09-24.parquet"
+        newer.write_bytes(b"")
+        os.utime(older, (1_000_000, 1_000_000))
+
+        monkeypatch.setattr(paths, "DATASET_DIR", dataset)
+        monkeypatch.setattr(paths, "DAILY_PRICE_LATEST", tmp_path / "missing.parquet")
+
+        assert paths.resolve_daily_price_path() == newer
+
+    def test_raises_when_no_price_file_exists(self, tmp_path, monkeypatch) -> None:
+        """两个位置都没有 → FileNotFoundError（调用方据此提示跑 daily）。"""
+        import pytest
+
+        import qp.shared.paths as paths
+
+        dataset = tmp_path / "dataset"
+        dataset.mkdir()
+        monkeypatch.setattr(paths, "DATASET_DIR", dataset)
+        monkeypatch.setattr(paths, "DAILY_PRICE_LATEST", tmp_path / "missing.parquet")
+
+        with pytest.raises(FileNotFoundError):
+            paths.resolve_daily_price_path()
+
+    def test_is_exported(self) -> None:
+        """公开入口（__all__）——改动路径解析时别漏导出。"""
+        import qp.shared.paths as paths
+
+        assert "resolve_daily_price_path" in paths.__all__

@@ -489,6 +489,11 @@ uv run qp factor catalog
 uv run qp monitor regime
 ```
 
+> 输出首行是「数据日期 / Data through」+ 实际读取的文件名 —— 数据不是今天的会直接看出来。
+> 读文件走 `qp.shared.paths.resolve_daily_price_path()`（优先 `daily_price_latest.parquet`，
+> 回退按 mtime 取最新的 `daily_price_*.parquet`）。曾经这里按文件名排序取最后一个，
+> 会静默读到 `daily_price_main_2026-08-14.parquet`（2026-09-25 修复）。
+
 ### 7.6 告警通道测试
 
 ```bash
@@ -966,7 +971,7 @@ SPA 原型（`/proto/`，Vue 3，数据走 `/api/v1/*`）12 页路由：
 |------|------|
 | `qp strategy list` | 列出所有策略 |
 | `qp strategy approve <id>` | 批准策略上线（冻结不可变快照） |
-| `qp strategy approved` | 已批准策略快照列表（ADR-031） |
+| `qp strategy approved list` / `show <id>` | 已批准策略快照列表 / 详情（ADR-031） |
 | `qp strategy deactivate <id>` | 下线策略 |
 | `qp proposal create --strategy <id> --target <stage>` | 创建策略审批提案 |
 | `qp proposal list` | 列出所有提案 |

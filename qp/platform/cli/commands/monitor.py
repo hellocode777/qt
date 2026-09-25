@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from qp.shared.paths import DATASET_DIR
+from qp.shared.paths import DAILY_PRICE_LATEST, resolve_daily_price_path
 
 
 def cmd_monitor_check() -> int:
@@ -146,8 +146,6 @@ def cmd_monitor_check() -> int:
 
 def cmd_monitor_regime() -> int:
     """Detect current market regime."""
-    from pathlib import Path
-
     import polars as pl
 
     from qp.monitoring.regime import MarketRegimeEngine
@@ -155,17 +153,23 @@ def cmd_monitor_regime() -> int:
     print("=== QP 市场状态检测 / Market Regime Detection ===")
     print()
 
-    data_dir = Path(DATASET_DIR)
-    parquet_files = sorted(data_dir.glob("daily_price_*.parquet"))
-    if not parquet_files:
-        print("❌ 未找到数据文件 / No data found. 请先运行 qp run daily")
+    try:
+        price_path = resolve_daily_price_path()
+    except FileNotFoundError:
+        print(
+            f"❌ 未找到数据文件 / No data found. 缺少 {DAILY_PRICE_LATEST}（请先运行 qp run daily）"
+        )
         return 1
 
-    prices = pl.read_parquet(str(parquet_files[-1]))
+    prices = pl.read_parquet(str(price_path))
     engine = MarketRegimeEngine()
-    result = engine.classify(prices)
+    # 面板 → 市场序列：classify() 要的是单条时间序列，直接喂面板会算出噪声波动率
+    result = engine.classify_panel(prices)
 
     direction_map = {1: "上升 (Uptrend)", -1: "下降 (Downtrend)", 0: "中性 (Neutral)"}
+    data_through = prices["trade_date"].max() if "trade_date" in prices.columns else "N/A"
+
+    print(f"  数据日期 / Data through: {data_through}  ({price_path.name})")
 
     print(f"  市场状态 / Regime:      {result.regime.value}")
     print(f"  置信度 / Confidence:    {result.confidence:.0%}")
