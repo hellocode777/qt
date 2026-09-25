@@ -280,16 +280,21 @@ uv run qp simulation shadow 2026-09-24
 uv run qp validate                                  # 默认校验 registry 里唯一 APPROVED 的策略
 uv run qp validate --stage backtest_passed           # 指定阶段
 uv run qp validate --strategy-id momentum_vol_full   # 指定策略
-uv run qp validate --json                            # 机器可读输出（含 metrics_source）
+uv run qp validate --experiment mf_20260901_020520   # 指定提供指标的实验记录
+uv run qp validate --json                            # 机器可读输出（含指标来源）
 ```
 
 可用阶段：`research` | `backtest_passed` | `paper_trading` | `shadow_production` | `production`
 
-> ⚠️ **默认策略**：不传 `--strategy-id` 时取 registry 中**唯一** `APPROVED` 的策略（当前 `momentum_vol_full`）；
-> 没有 APPROVED、或有多个 → 直接报错退出，不猜（策略名会打印在输出首行）。
-> ⚠️ **CLI 的回测指标是占位值**：`commands/validate.py` 里 `ctx.backtest_metrics` 是写死的常量，
-> 只有数据类检查项（Rank IC / IC_IR / IC t-stat / 分层 / 中性化…）是真算的。
-> 需要可信的门禁结论请用 `qp experiment validate <id>`（读实验快照）。
+> ✅ **指标来源全部是真的**（2026-09-25 起）：回测指标从 `ExperimentTracker`
+> （`data/experiments/<id>.json`）读取，输出首部会打印实验 ID、创建时间和所用指标。
+> 找不到可用实验（没跑过 / 没有回测结果）→ 直接报错退出，不再用写死的占位值。
+> 默认选 `config.strategy_name == 当前策略` 的**最新**实验；用 `--experiment` 可指定。
+> ⚠️ **默认策略**：不传 `--strategy-id` 时取 registry 中**唯一** `APPROVED` 的策略；
+> 没有 APPROVED、或有多个 → 报错退出，不猜。
+> ⚠️ **「未评估」≠ 通过**：实验记录里没有的指标（净成本 Sharpe/MaxDD、日均换手、
+> 中性化前后 IC、样本内外 IC、特征重要性）不会被塞占位值，对应检查项输出
+> `Missing ...` / `not available`，末尾会集中列出「N 项未评估（不代表通过）」。
 
 ### 5.5 生成交易建议
 

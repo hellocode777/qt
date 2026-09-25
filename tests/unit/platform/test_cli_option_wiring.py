@@ -18,7 +18,15 @@ from qp.platform.cli.parser import cli
 
 # 命令 → 文档化的调用形式（CLI 参数，不含 "qp" 与命令名）
 DOCUMENTED_INVOCATIONS: dict[str, list[str]] = {
-    "validate": ["--stage", "research", "--strategy-id", "momentum_vol_full", "--json"],
+    "validate": [
+        "--stage",
+        "research",
+        "--strategy-id",
+        "momentum_vol_full",
+        "--experiment",
+        "multifactor_20260901_020520",
+        "--json",
+    ],
     "retrain": ["momentum_vol_full", "--dry-run"],
     "fundamental": ["--quick"],
     "pipeline": ["list"],

@@ -185,12 +185,13 @@ class CostAdjustedCheck(BaseRule):
         gross_dd = context.backtest_metrics.get("max_drawdown_pct")
         net_dd = context.backtest_metrics.get("max_drawdown_pct_net")
 
-        # If no net metrics, try to estimate cost impact
-        cost_pct = context.backtest_metrics.get("total_cost_pct", 0.0)
+        # 估算只在**确有成本数据**时进行：`total_cost_pct` 缺失时按 0 成本估算，
+        # 等于把 gross 当 net 报"通过"（2026-09-25 修）—— 缺数据就必须报缺数据。
+        cost_pct = context.backtest_metrics.get("total_cost_pct")
 
-        if net_sharpe is None and gross_sharpe is not None:
+        if net_sharpe is None and gross_sharpe is not None and cost_pct is not None:
             net_sharpe = gross_sharpe - cost_pct * 0.05  # rough estimate
-        if net_dd is None and gross_dd is not None:
+        if net_dd is None and gross_dd is not None and cost_pct is not None:
             net_dd = abs(float(gross_dd)) + cost_pct * 0.5
 
         if net_sharpe is None or net_dd is None:
@@ -204,6 +205,11 @@ class CostAdjustedCheck(BaseRule):
                     "or 'total_cost_pct' in context.backtest_metrics."
                 ),
             )
+
+        estimated = "total_cost_pct" in context.backtest_metrics and (
+            "sharpe_ratio_net" not in context.backtest_metrics
+            or "max_drawdown_pct_net" not in context.backtest_metrics
+        )
 
         net_sharpe = float(net_sharpe)
         net_dd = abs(float(net_dd))
@@ -231,7 +237,8 @@ class CostAdjustedCheck(BaseRule):
             threshold=self._min_sharpe,
             actual_value=round(net_sharpe, 2),
             detail=(
-                f"Post-cost: Sharpe={net_sharpe:.2f}, MaxDD={net_dd:.1f}%. "
+                ("[估算 estimated] " if estimated else "")
+                + f"Post-cost: Sharpe={net_sharpe:.2f}, MaxDD={net_dd:.1f}%. "
                 + (", ".join(failures) if failures else "Both pass thresholds.")
             ),
         )

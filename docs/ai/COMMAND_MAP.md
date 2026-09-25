@@ -31,7 +31,7 @@
 | scheduler | `commands/scheduler.py` | 调度器（systemd 管理，勿手动起第二实例） |
 | simulation | `commands/shadow.py` | 影子/纸面交易模拟 |
 | strategy | `commands/strategy.py` | list, approve, deactivate, approved |
-| validate | `commands/validate.py` | 对策略/实验跑验证 Gate；默认策略 = registry 唯一 APPROVED；CLI 回测指标是写死占位值（输出标注 metrics_source） |
+| validate | `commands/validate.py` | 对策略/实验跑验证 Gate；默认策略 = registry 唯一 APPROVED；指标取自实验记录（`--experiment` 可指定），缺失的指标列在「未评估」而非塞占位值 |
 | web | `commands/web.py` | Web UI 服务器 |
 
 ## 高频命令详解

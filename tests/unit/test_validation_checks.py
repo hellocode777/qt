@@ -376,6 +376,52 @@ class TestCostAdjustedCheck:
         result = check.check(ctx)
         assert result.status == ValidationStatus.PASS
 
+    def test_no_cost_data_fails_instead_of_assuming_zero_cost(self):
+        """只有 gross 指标时不得按"零成本"估算出 net 再报通过（2026-09-25 回归）。
+
+        旧行为：cost_pct 默认 0.0 → net = gross → detail 打印
+        "Post-cost: Sharpe=1.60 ... Both pass thresholds."，等于把 gross 当 net。
+        """
+        check = CostAdjustedCheck(min_sharpe=1.0, max_drawdown_pct=25.0)
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio": 1.6,
+                "max_drawdown_pct": 16.93,
+            }
+        )
+        result = check.check(ctx)
+
+        assert result.status == ValidationStatus.FAIL
+        assert "Missing net (post-cost) metrics" in result.detail
+        assert "Post-cost" not in result.detail
+
+    def test_estimated_from_cost_is_labeled(self):
+        """用 total_cost_pct 估算出来的 net 必须在 detail 里标明是估算。"""
+        check = CostAdjustedCheck(min_sharpe=1.0, max_drawdown_pct=25.0)
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio": 1.6,
+                "max_drawdown_pct": 16.93,
+                "total_cost_pct": 0.35,
+            }
+        )
+        result = check.check(ctx)
+
+        assert "[估算 estimated]" in result.detail
+
+    def test_measured_net_is_not_labeled_estimated(self):
+        check = CostAdjustedCheck(min_sharpe=1.0, max_drawdown_pct=25.0)
+        ctx = ValidationContext(
+            backtest_metrics={
+                "sharpe_ratio_net": 1.4,
+                "max_drawdown_pct_net": -18.0,
+            }
+        )
+        result = check.check(ctx)
+
+        assert "估算" not in result.detail
+        assert "Post-cost" in result.detail
+
 
 # ==================================================================
 # Overfit checks
