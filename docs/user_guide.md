@@ -292,9 +292,18 @@ uv run qp validate --json                            # 机器可读输出（含�
 > 默认选 `config.strategy_name == 当前策略` 的**最新**实验；用 `--experiment` 可指定。
 > ⚠️ **默认策略**：不传 `--strategy-id` 时取 registry 中**唯一** `APPROVED` 的策略；
 > 没有 APPROVED、或有多个 → 报错退出，不猜。
-> ⚠️ **「未评估」≠ 通过**：实验记录里没有的指标（净成本 Sharpe/MaxDD、日均换手、
-> 中性化前后 IC、样本内外 IC、特征重要性）不会被塞占位值，对应检查项输出
+> ⚠️ **「未评估」≠ 通过**：实验记录里没有生产者的指标不会被塞占位值，对应检查项输出
 > `Missing ...` / `not available`，末尾会集中列出「N 项未评估（不代表通过）」。
+>
+> 门禁指标 → 生产者映射（2026-09-25 起由 `multifactor_pipeline` 落盘，输出首部会回显）：
+>
+> | 检查项 | 指标 | 口径 / 来源 |
+> |---|---|---|
+> | `cost_adjusted` | `sharpe_ratio_net` / `max_drawdown_pct_net` / `total_cost_pct` | 权益曲线本身含成本（成交即扣佣金/印花税/滑点，`SimulatedBroker.get_equity = cash + 市值`）；`total_cost_pct` = 总成本 / 平均权益 |
+> | `turnover` | `daily_turnover_pct` | 累计换手（总卖出 / 平均权益）÷ 交易日数 = 日均**单边**换手；阈值区间 [5%, 200%] 即按日 |
+> | `overfit_ic_ratio` | `in_sample_ic` / `out_of_sample_ic` | 全期 `ic_mean` vs Purged-CV OOS `cv_oos_ic_mean`（口径会在输出里标注） |
+> | `feature_importance` | `feature_importance` | 线性策略 = 归一化 `|权重|`（**不是** tree gain，仅用于集中度判断） |
+> | `neutralization` | `pre/post_neutralization_ic` | **仅 legacy 因子管线路径**（`--strategy` 不在策略模式白名单时）实算 pre/post；`momentum_vol_full` 等策略模式由策略内部中性化，管线拿不到中间量 → 该项仍「未评估」 |
 
 ### 5.5 生成交易建议
 

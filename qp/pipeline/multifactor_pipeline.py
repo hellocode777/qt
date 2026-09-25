@@ -263,6 +263,9 @@ class MultiFactorPipeline(BasePipeline):
             if key in params
         }
 
+        # 中性化前组合分（仅 legacy 因子管线路径可得；策略路径由策略内部处理，留空=未测）
+        scores_pre_neutral: pl.DataFrame | None = None
+
         if use_full_strategy:
             (
                 signals,
@@ -328,17 +331,44 @@ class MultiFactorPipeline(BasePipeline):
             # Factor pipeline (winsorize → normalize → neutralize → combine)
             logger.info("[2.5/6] 因子管线处理 (Winsorize→Normalize→Neutralize→Combine)...")
             neutralize_method = "median" if industry_neutral else None
+            _industry_map = _build_industry_map(price_data) if industry_neutral else None
             scores = factor_pipeline(
                 all_raw,
                 weights=weights,
                 normalize_method="rank",
                 winsorize_method="mad",
-                industry_map=_build_industry_map(price_data) if industry_neutral else None,
+                industry_map=_industry_map,
                 neutralize_method=neutralize_method,
                 orthogonalize=orthogonalize,
             )
             logger.info("   得分矩阵: {} 行", scores.height)
             result.metrics["score_rows"] = float(scores.height)
+
+            if neutralize_method is not None:
+                # 同一套管线、只关中性化 → 得到"中性化前"组合分，供门禁
+                # NeutralizationCheck 真实比较 alpha 是否残留（不是外推值）。
+                # 结构闸：没有行业映射时中性化根本无从生效，算出来的"前后一样"
+                # 会让门禁**假通过** —— 那就别算（宁 N/A，不给装饰性数字）。
+                if not _industry_map:
+                    logger.warning(
+                        "   行业映射缺失（price_data 无 industry 列）→ 中性化未生效，"
+                        "pre/post IC 不落盘（门禁将显示未评估，而不是假通过）"
+                    )
+                else:
+                    scores_pre_neutral = factor_pipeline(
+                        all_raw,
+                        weights=weights,
+                        normalize_method="rank",
+                        winsorize_method="mad",
+                        industry_map=None,
+                        neutralize_method=None,
+                        orthogonalize=orthogonalize,
+                    )
+                    logger.info(
+                        "   中性化前组合分: {} 行（行业数: {}，用于 pre/post IC 对照）",
+                        scores_pre_neutral.height,
+                        len(set(_industry_map.values())),
+                    )
 
         # ── Stage 3: IC analysis ──
         logger.info("[3/6] Rank IC 分析...")
@@ -377,6 +407,34 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["ic_positive_pct"] = ic_record.ic_positive_pct
         result.metrics["ic_mean_pass"] = float(ic_record.ic_mean_pass)
         result.metrics["ic_ir_pass"] = float(ic_record.ic_ir_pass)
+
+        # 中性化前后 IC：只有**真的做了这次对照计算**（legacy 因子管线路径、且开了
+        # neutralize）才落盘。策略模式下组合分由策略内部产出，这里看不到它的中性化
+        # 步骤，也就不写 post —— 宁缺勿猜（门禁会显示"未评估"而不是假通过）。
+        if scores_pre_neutral is not None and not scores_pre_neutral.is_empty():
+            # 实证闸：两版组合分必须真有差异，否则说明中性化没生效（例如行业映射
+            # 退化成单行业 / 逐日常数偏移不改变次序）→ 记录"前后相同"等于假通过。
+            _max_diff = _max_score_diff(scores_pre_neutral, scores)
+            if _max_diff > 0.0:
+                _pre_ic = evaluate_factor_ic(
+                    scores_pre_neutral,
+                    price_flat,
+                    forward_days=5,
+                    min_stocks_per_day=10,
+                )
+                result.metrics["pre_neutralization_ic"] = float(_pre_ic.ic_mean)
+                result.metrics["post_neutralization_ic"] = float(ic_record.ic_mean)
+                logger.info(
+                    "   中性化前后 IC: pre={:.4f} → post={:.4f}（组合分最大差异 {:.6f}）",
+                    _pre_ic.ic_mean,
+                    ic_record.ic_mean,
+                    _max_diff,
+                )
+            else:
+                logger.warning(
+                    "   中性化前后组合分完全相同（最大差异 0）→ 中性化未生效，"
+                    "pre/post IC 不落盘（门禁显示未评估，而不是假通过）"
+                )
 
         # ── Stage 3.5: Factor IC attribution ──
         logger.info("")
@@ -807,6 +865,26 @@ class MultiFactorPipeline(BasePipeline):
         result.metrics["n_trades"] = float(bt["n_trades"])
         result.metrics["total_cost"] = bt["total_cost"]
         result.metrics["turnover_pct"] = bt.get("turnover_pct", 0.0)
+        # ── 派生/成本口径指标（2026-09-25）= 门禁 CostAdjustedCheck / TurnoverCheck 的真实输入 ──
+        # 权益曲线本身含成本（broker 成交即扣佣金/印花税/滑点），所以 sharpe/max_dd
+        # 已是成本后口径：显式再记一份 *_net，让门禁直接消费实测值而非"gross 减成本"外推。
+        result.metrics["sharpe_ratio_net"] = bt["sharpe"]
+        result.metrics["max_drawdown_pct_net"] = bt["max_dd_pct"]
+        _avg_eq = float(bt.get("avg_equity", 0.0))
+        _cost_pct = round(float(bt["total_cost"]) / _avg_eq * 100, 4) if _avg_eq > 0 else 0.0
+        result.metrics["total_cost_pct"] = _cost_pct
+        if _avg_eq > 0:
+            logger.info("   成本占比:  {:.3f}% (总成本/平均权益)", _cost_pct)
+        _n_days = float(bt.get("n_trading_days", 0) or 0)
+        result.metrics["daily_turnover_pct"] = (
+            round(float(bt.get("turnover_pct", 0.0)) / _n_days, 4) if _n_days > 0 else 0.0
+        )
+        if _n_days > 0:
+            logger.info(
+                "   日均换手:  {:.2f}% (累计 / {} 交易日)",
+                result.metrics["daily_turnover_pct"],
+                int(_n_days),
+            )
         result.metrics["stop_loss_hits"] = float(bt.get("stop_loss_hits", 0))
         result.metrics["risk_exit_hits"] = float(bt.get("risk_exit_hits", 0))
 
@@ -2002,6 +2080,8 @@ class MultiFactorPipeline(BasePipeline):
             "risk_exit_hits": risk_exit_hits,
             "max_dd_pct": round(max_dd, 2),
             "final_equity": round(final_equity, 0),
+            # 平均权益：用于把总成本换算成"占平均权益的百分比"（不含糊、可复现）
+            "avg_equity": round(avg_equity, 2),
             "n_trading_days": len(daily_equity),
             "n_trades": total_trades,
             "total_cost": round(broker.total_trading_cost, 2),
@@ -2132,6 +2212,16 @@ class MultiFactorPipeline(BasePipeline):
                 "turnover_pct": float(result.metrics.get("turnover_pct", 0.0)),
                 "total_cost": float(result.metrics.get("total_cost", 0.0)),
                 "final_equity": float(result.metrics.get("final_equity", 0.0)),
+                # ── 成本口径 / 派生指标（门禁真实输入，2026-09-25）──
+                "sharpe_ratio_net": float(result.metrics.get("sharpe_ratio_net", 0.0)),
+                "max_drawdown_pct_net": float(result.metrics.get("max_drawdown_pct_net", 0.0)),
+                "total_cost_pct": float(result.metrics.get("total_cost_pct", 0.0)),
+                "daily_turnover_pct": float(result.metrics.get("daily_turnover_pct", 0.0)),
+                # 中性化前后 IC（仅 legacy 因子管线路径有值；策略路径为 0 = 未测）
+                "pre_neutralization_ic": float(result.metrics.get("pre_neutralization_ic", 0.0)),
+                "post_neutralization_ic": float(result.metrics.get("post_neutralization_ic", 0.0)),
+                # 线性加权：以 |权重| 归一化后的占比作为特征重要性（集中度检查用）
+                "feature_importance": _normalized_importance(weights),
             },
             lineage_graph={
                 "dataset": f"{dataset}@{start_date}",
@@ -2140,6 +2230,42 @@ class MultiFactorPipeline(BasePipeline):
             },
         )
         logger.info("📝 实验已记录: {}", experiment_id)
+
+
+def _max_score_diff(a: pl.DataFrame, b: pl.DataFrame) -> float:
+    """两版组合分的最大绝对差（判断"中性化是否真的改变了分数"）。
+
+    用于门禁 NeutralizationCheck 的实证闸：如果 pre/post 两版分数完全相同，
+    "alpha 在中性化后仍存在"这句话就没有证据 —— 那就不该落盘这两个指标。
+    """
+    if a.is_empty() or b.is_empty():
+        return 0.0
+    joined = a.select(["trade_date", "symbol", "score"]).join(
+        b.select(["trade_date", "symbol", pl.col("score").alias("score_other")]),
+        on=["trade_date", "symbol"],
+        how="inner",
+    )
+    if joined.is_empty():
+        return 0.0
+    return float(joined.select((pl.col("score") - pl.col("score_other")).abs().max()).item() or 0.0)
+
+
+def _normalized_importance(weights: dict[str, float]) -> dict[str, float]:
+    """线性权重 → 归一化特征重要性字典（按重要性降序）。
+
+    门禁 FeatureImportanceCheck 只关心"重要性是否过度集中"。线性加权策略没有
+    tree gain，|权重| 的占比即它对应的"模型倚重程度"：语义与树 gain 不同，但
+    同类可比，且随实验一起落盘便于追溯来源（不冒充 gain）。
+    """
+    if not weights:
+        return {}
+    abs_w = {str(k): abs(float(v)) for k, v in weights.items()}
+    total = sum(abs_w.values())
+    if total <= 0:
+        return {}
+    return {
+        k: round(v / total, 6) for k, v in sorted(abs_w.items(), key=lambda kv: kv[1], reverse=True)
+    }
 
 
 # ── Q1-Q5 特征画像诊断 ───────────────────────────────────────────

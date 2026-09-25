@@ -115,6 +115,19 @@ class ExperimentMetrics:
     total_cost: float = 0.0
     final_equity: float = 0.0
     n_days: int = 0
+    # ── Cost / net metrics（2026-09-25 新增）──────────────────────────
+    # NOTE: SimulatedBroker.get_equity() = cash + positions_mv，而成交时现金已按
+    # commission/stamp_tax/slippage 扣减 → 权益曲线本身就**含成本**，因此
+    # sharpe_ratio / max_drawdown_pct 已经是成本后口径。这里再显式落一份 *_net，
+    # 让门禁（CostAdjustedCheck）能直接消费实测值，不必用"gross 减成本"外推；
+    # 也给以后真的能算 gross 时留出区分空间（现在 pipeline 没有 gross 序列）。
+    sharpe_ratio_net: float = 0.0
+    max_drawdown_pct_net: float = 0.0
+    total_cost_pct: float = 0.0  # 总成本 / 平均权益（%）
+    daily_turnover_pct: float = 0.0  # 平均日换手 = 累计 turnover_pct / 交易日数（%）
+    # ── 中性化前后 IC（2026-09-25 新增）──────────────────────────────
+    pre_neutralization_ic: float = 0.0  # 组合分中性化前 Rank IC
+    post_neutralization_ic: float = 0.0  # 组合分中性化后 Rank IC（= ic_mean）
     feature_importance: dict[str, float] = field(default_factory=dict)
     custom: dict[str, float] = field(default_factory=dict)
 
@@ -136,6 +149,12 @@ class ExperimentMetrics:
             "total_cost": self.total_cost,
             "final_equity": self.final_equity,
             "n_days": self.n_days,
+            "sharpe_ratio_net": self.sharpe_ratio_net,
+            "max_drawdown_pct_net": self.max_drawdown_pct_net,
+            "total_cost_pct": self.total_cost_pct,
+            "daily_turnover_pct": self.daily_turnover_pct,
+            "pre_neutralization_ic": self.pre_neutralization_ic,
+            "post_neutralization_ic": self.post_neutralization_ic,
             "feature_importance": self.feature_importance,
             "custom": self.custom,
         }

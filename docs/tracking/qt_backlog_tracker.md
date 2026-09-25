@@ -405,6 +405,54 @@
   - [x] 测试：`compute_adv` 值断言、`sqrt_impact` 小额单不再触发流动性惩罚、两处 ADV 单位断言
 - **遗留（待决定，与 #12 同源）**: 券商最低佣金 ¥5/笔、过户费未建模；回滚行（`exit_reason=rollback_wrong_size`，实际未成交）费用被高估约 ¥289
 
+### #14 门禁指标生产者 + 行业中性化失效（2026-09-25）
+
+#### #14-1 门禁 5 项「未评估」指标补齐生产者 ✅ 已完成
+
+- **背景**: `qp validate` 的 `cost_adjusted` / `turnover` / `neutralization` / `overfit_ic_ratio` /
+  `feature_importance` 长期显示「未评估」——实验记录里根本没有这些指标的生产者。
+- **已做**（`qp/research/experiment/models.py` + `tracker.py` + `qp/pipeline/multifactor_pipeline.py`）:
+
+  | 新增字段 | 口径 | 落盘位置 |
+  |---|---|---|
+  | `sharpe_ratio_net` / `max_drawdown_pct_net` | 权益曲线本身含成本（`SimulatedBroker.get_equity = _cash + 市值`，成交即扣佣金/印花税/滑点）→ 直接记实测值，不再用"gross 减成本"外推 | `_compute_backtest` → `result.metrics` |
+  | `total_cost_pct` | 总成本 / 平均权益（新增 `avg_equity` 返回值） | 同上 |
+  | `daily_turnover_pct` | 累计换手（总卖出 / 平均权益）÷ 交易日数 = 日均**单边**换手 | 同上 |
+  | `pre/post_neutralization_ic` | legacy 因子管线路径：同管线关掉 neutralize 再算一次组合分，两次 IC 对照 | Stage 3 |
+  | `feature_importance` | 线性策略 = 归一化 `|权重|`（**不是** tree gain，仅用于集中度判断） | `_record_experiment` |
+  | `in/out_of_sample_ic`（validate 侧映射） | 全期 `ic_mean` vs Purged-CV OOS `cv_oos_ic_mean` | `validate._build_context` |
+
+- **实测验证**（`qp experiment run multifactor --strategy momentum_vol_full --start=2025-09-05
+  --end=2026-08-31 --top-n=10 --rebalance=20 --skip-gate --freeze-weights=…`）:
+  `total_cost_pct=3.6439` / `daily_turnover_pct=3.6695` / `sharpe_ratio_net=1.65` /
+  `max_drawdown_pct_net=17.49` / `feature_importance` 5 项和为 1.0 → `qp validate` 输出
+  `cost_adjusted ✅`、`overfit_ic_ratio ✅ (IS=0.0773, OOS=0.0622, ratio 0.805)`、
+  `feature_importance ✅ (Top-1 25%)`；「未评估」从 5 项降到 1 项。
+- **⚠️ 新暴露的真结果**: `turnover ❌ 3.7% < 5% 下限`（检查项阈值区间 [5%, 200%] 按**日**，
+  即要求 ≥100%/月单边）。这是真实评估结果，不是 bug；是否调整阈值属策略/风控决策，**未动**。
+- **剩余缺口**: `neutralization` 在**策略模式**（`momentum_vol_full` 等白名单）仍为「未评估」
+  ——组合分由策略内部（`qp/strategy/multifactor.py`）产出，管线看不到中性化前后的中间量。
+  要闭合需让策略层把"中性化前组合分"回传（改动点在 `run_multifactor_strategy` 的 diagnostics）。
+
+#### #14-2 ⚠️ 未修：行业映射拿不到 → 中性化实际未生效（production-sensitive，待批准）
+
+- **FACT 证据**:
+  1. 真实行业映射存在：`data/stock_industry.json`（`qp/portfolio/industry.py` 消费）、
+     `data/stock_industry_csrc.json`（`qp/data/industry/csrc.py` 生成）
+  2. 因子中性化取行业映射的唯一入口是 `_build_industry_map(price_data)`
+     （`qp/pipeline/multifactor_pipeline.py:3060`、`qp/strategy/multifactor.py:1111`），
+     它要求 `price_data` 的 DataFrame **含 `industry` 列**
+  3. 全仓库无任何代码往 `price_data` 加 `industry` 列（grep 全 `qp/` 无创建点）；价格
+     parquet 列里也没有该列
+  4. 实测（legacy 路径）：关掉 neutralize 再算的组合分与中性化后**逐位相同**（IC 均 0.1084，
+     full precision 相等）→ 中性化没改变任何分数
+- **INFERENCE（待验证）**: 策略路径大概率同样失效（同一 `_build_industry_map` 模式 + 无列来源），
+  但**未实测验证**策略路径的中性化效果 —— 需在 `run_multifactor_strategy` 内插桩确认。
+- **本轮已加防护**（不是修复）: 管线检测到行业映射缺失 → 打 warning 且 **不落盘**
+  pre/post IC，避免门禁"前后相同"造成**假通过**。
+- [ ] 决定修法：把 `data/stock_industry.json` 接进 `_build_industry_map`（或在数据加载层
+      补 `industry` 列）→ 属 production 路径改动，需先确认对现有 IC/回测的影响
+
 ### 质量门禁（2026-09-19）
 - [x] `uvx ruff format --check .` → 473 files already formatted；`uvx ruff check .` → All checks passed
 - [x] `uv run pyright` → 0 errors, 0 warnings, 0 informations（注意：`uvx pyright` 找不到 .venv，会假报 ~692 个 reportMissingImports）

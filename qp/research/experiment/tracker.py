@@ -28,6 +28,15 @@ from qp.shared.types import ExperimentStatus
 DEFAULT_EXPERIMENT_DIR = EXPERIMENTS_DIR
 
 
+def _coerce_feature_importance(metrics: dict[str, Any], config: dict[str, Any]) -> dict[str, float]:
+    """Feature-importance 字典的容错读取（metrics 优先，config 兜底）。"""
+    value = metrics.get("feature_importance")
+    if isinstance(value, dict):
+        return {str(k): float(v) for k, v in value.items()}
+    fallback = config.get("feature_importance", {})
+    return fallback if isinstance(fallback, dict) else {}
+
+
 class ExperimentTracker(BaseExperimentTracker):
     """File-based experiment tracking with JSON storage.
 
@@ -57,7 +66,7 @@ class ExperimentTracker(BaseExperimentTracker):
         self,
         experiment_id: str,
         config: dict[str, Any],
-        metrics: dict[str, float],
+        metrics: dict[str, Any],
         lineage_graph: dict[str, str],
     ) -> None:
         """Record a completed experiment.
@@ -65,7 +74,9 @@ class ExperimentTracker(BaseExperimentTracker):
         Args:
             experiment_id: Unique experiment identifier.
             config: Experiment configuration (features, hyperparams, etc.).
-            metrics: Evaluation metrics (IC, Sharpe, etc.).
+            metrics: Evaluation metrics (IC, Sharpe, ...). Values are mostly
+                floats but not exclusively (ints, and the feature_importance
+                dict) — hence ``Any``.
             lineage_graph: Dataset → Feature → Model → Strategy chain.
         """
         # Build config
@@ -105,7 +116,14 @@ class ExperimentTracker(BaseExperimentTracker):
             total_cost=metrics.get("total_cost", 0.0),
             final_equity=metrics.get("final_equity", 0.0),
             n_days=int(metrics.get("n_days", 0)),
-            feature_importance=config.get("feature_importance", {}),
+            sharpe_ratio_net=metrics.get("sharpe_ratio_net", 0.0),
+            max_drawdown_pct_net=metrics.get("max_drawdown_pct_net", 0.0),
+            total_cost_pct=metrics.get("total_cost_pct", 0.0),
+            daily_turnover_pct=metrics.get("daily_turnover_pct", 0.0),
+            pre_neutralization_ic=metrics.get("pre_neutralization_ic", 0.0),
+            post_neutralization_ic=metrics.get("post_neutralization_ic", 0.0),
+            # feature_importance 是**指标**，优先从 metrics 读（历史上只从 config 读）
+            feature_importance=_coerce_feature_importance(metrics, config),
             # Purged CV OOS validation results (2026-08-25)
             custom={
                 "cv_oos_ic_mean": metrics.get("cv_oos_ic_mean", 0.0),
@@ -303,7 +321,13 @@ class ExperimentTracker(BaseExperimentTracker):
                 total_cost=met_data.get("total_cost", 0.0),
                 final_equity=met_data.get("final_equity", 0.0),
                 n_days=int(met_data.get("n_days", 0)),
-                feature_importance=met_data.get("feature_importance", {}),
+                sharpe_ratio_net=met_data.get("sharpe_ratio_net", 0.0),
+                max_drawdown_pct_net=met_data.get("max_drawdown_pct_net", 0.0),
+                total_cost_pct=met_data.get("total_cost_pct", 0.0),
+                daily_turnover_pct=met_data.get("daily_turnover_pct", 0.0),
+                pre_neutralization_ic=met_data.get("pre_neutralization_ic", 0.0),
+                post_neutralization_ic=met_data.get("post_neutralization_ic", 0.0),
+                feature_importance=_coerce_feature_importance(met_data, cfg_data),
                 custom=met_data.get("custom", {}),
             )
 

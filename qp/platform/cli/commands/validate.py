@@ -22,6 +22,9 @@ _NOT_EVALUATED_MARKERS = (
     "not computed",
 )
 
+# 基础回测指标（其余键就是"追加指标"，打印出来方便核对这次门禁吃了哪些实测值）
+_BASE_METRIC_KEYS = frozenset({"sharpe_ratio", "max_drawdown_pct", "total_return_pct"})
+
 
 def _resolve_default_strategy_id() -> tuple[str | None, str]:
     """返回「当前该被校验的策略」：registry 里唯一 APPROVED 的那个（见 registry 助手）。"""
@@ -86,10 +89,19 @@ def _build_context(
 ) -> Any:
     """用实验记录里的**实测值**构造 ValidationContext。
 
-    只放真实存在的键：实验记录里没有生产者的指标（``sharpe_ratio_net`` /
-    ``max_drawdown_pct_net`` / ``daily_turnover_pct`` / ``total_cost_pct``）
-    一律不塞占位值 —— 对应检查项会走自己的"缺数据"分支，输出里能看到它没被评估。
+    只放真实存在的键：实验记录里没有生产者的指标一律不塞占位值 ——
+    对应检查项会走自己的"缺数据"分支，输出里能看到它没被评估。
+
+    指标 → 检查项映射（2026-09-25 补齐，让门禁可评估）：
+      - ``sharpe_ratio`` / ``max_drawdown_pct``：权益曲线口径（本身含成本）
+      - ``sharpe_ratio_net`` / ``max_drawdown_pct_net`` / ``total_cost_pct`` → CostAdjustedCheck
+      - ``daily_turnover_pct``（= 累计换手 / 交易日数）→ TurnoverCheck
+      - ``pre/post_neutralization_ic``（仅 legacy 因子管线路径有值）→ NeutralizationCheck
+      - ``ic_mean`` / ``custom.cv_oos_ic_mean``（全期 IC vs Purged-CV OOS IC）→ OverfitCheck
+      - ``feature_importance``（线性策略 = 归一化 |权重|）→ FeatureImportanceCheck
     """
+    import polars as pl
+
     from qp.validation.engine import ValidationContext
 
     metrics = record.metrics
@@ -98,16 +110,41 @@ def _build_context(
         "max_drawdown_pct": float(metrics.max_drawdown_pct),
         "total_return_pct": float(metrics.total_return_pct),
     }
+    # 成本口径 / 派生指标：只在真有值时进 ctx（0 = 该实验没算，别当成"零成本/零换手"）
+    for key, value in (
+        ("sharpe_ratio_net", metrics.sharpe_ratio_net),
+        ("max_drawdown_pct_net", metrics.max_drawdown_pct_net),
+        ("total_cost_pct", metrics.total_cost_pct),
+        ("daily_turnover_pct", metrics.daily_turnover_pct),
+    ):
+        if value:
+            backtest_metrics[key] = float(value)
 
     metadata: dict[str, Any] = {
         "experiment_id": record.config.experiment_id,
         "train_start": record.config.train_start,
         "train_end": record.config.train_end,
     }
-    # 样本内外 IC 只有真算过才用：模型默认值是 0.0，无法与"真实为 0"区分
-    if metrics.in_sample_ic and metrics.out_of_sample_ic:
-        metadata["in_sample_ic"] = float(metrics.in_sample_ic)
-        metadata["out_of_sample_ic"] = float(metrics.out_of_sample_ic)
+
+    # 中性化前后 IC（legacy 因子管线路径才落这两项）
+    if metrics.pre_neutralization_ic and metrics.post_neutralization_ic:
+        metadata["pre_neutralization_ic"] = float(metrics.pre_neutralization_ic)
+        metadata["post_neutralization_ic"] = float(metrics.post_neutralization_ic)
+
+    # 过拟合：全期 IC 视作 in-sample，Purged-CV OOS IC 视作 out-of-sample
+    oos_ic = float(metrics.custom.get("cv_oos_ic_mean", 0.0) or 0.0)
+    if metrics.ic_mean and oos_ic:
+        metadata["in_sample_ic"] = float(metrics.ic_mean)
+        metadata["out_of_sample_ic"] = oos_ic
+        metadata["ic_source"] = "ic_mean(full-period) vs cv_oos_ic_mean(purged-CV OOS)"
+
+    # 特征重要性：dict → [feature, gain] 表，按 gain 降序（检查项取 gains[0] 当 top1）
+    importance = metrics.feature_importance or {}
+    if importance:
+        ranked = sorted(importance.items(), key=lambda kv: kv[1], reverse=True)
+        metadata["feature_importance"] = pl.DataFrame(
+            {"feature": [k for k, _ in ranked], "gain": [float(v) for _, v in ranked]}
+        )
 
     return ValidationContext(
         feature_df=feature_df,
@@ -216,6 +253,21 @@ def cmd_validate() -> int:
             f"sharpe={metrics.sharpe_ratio:g} | max_dd={metrics.max_drawdown_pct:g}% | "
             f"total_return={metrics.total_return_pct:g}% | n_days={metrics.n_days}"
         )
+        extra = sorted(k for k in ctx.backtest_metrics if k not in _BASE_METRIC_KEYS)
+        if extra:
+            print(
+                "  追加指标 / Extra:      "
+                + " | ".join(f"{k}={ctx.backtest_metrics[k]:g}" for k in extra)
+            )
+        provenance: list[str] = []
+        if "ic_source" in ctx.metadata:
+            provenance.append(f"overfit IC 口径: {ctx.metadata['ic_source']}")
+        if "feature_importance" in ctx.metadata:
+            provenance.append("importance: 归一化 |权重| (线性策略)")
+        if "pre_neutralization_ic" in ctx.metadata:
+            provenance.append("neutralization: 管线 pre/post IC 实测")
+        if provenance:
+            print("  口径 / Provenance:     " + " ; ".join(provenance))
         print()
 
     result = pipeline.run(ctx)

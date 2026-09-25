@@ -35,6 +35,16 @@ class _Metrics:
     total_return_pct: float = 33.95
     in_sample_ic: float = 0.0
     out_of_sample_ic: float = 0.0
+    ic_mean: float = 0.0
+    # ── 2026-09-25 新增的门禁指标（默认 0/空 = 未测）──
+    sharpe_ratio_net: float = 0.0
+    max_drawdown_pct_net: float = 0.0
+    total_cost_pct: float = 0.0
+    daily_turnover_pct: float = 0.0
+    pre_neutralization_ic: float = 0.0
+    post_neutralization_ic: float = 0.0
+    feature_importance: dict[str, float] = field(default_factory=dict)
+    custom: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -135,3 +145,76 @@ def test_build_context_omits_unmeasured_metrics(monkeypatch: Any) -> None:
     assert ctx.metadata["train_end"] == "2026-08-31"
     # in/out-of-sample IC 默认 0.0（未计算）→ 不塞进 metadata
     assert "in_sample_ic" not in ctx.metadata
+    assert "feature_importance" not in ctx.metadata
+
+
+def test_build_context_feeds_measured_cost_metrics() -> None:
+    """实测过的 net/成本/换手才进 ctx：门禁据此不再走"缺数据"分支。"""
+    from qp.platform.cli.commands.validate import _build_context
+
+    record = _Record(
+        metrics=_Metrics(
+            sharpe_ratio_net=1.81,
+            max_drawdown_pct_net=8.77,
+            total_cost_pct=3.33,
+            daily_turnover_pct=3.73,
+        )
+    )
+    ctx = _build_context(record, feature_df=None, price_df=None)
+
+    assert ctx.backtest_metrics["sharpe_ratio_net"] == pytest.approx(1.81)
+    assert ctx.backtest_metrics["max_drawdown_pct_net"] == pytest.approx(8.77)
+    assert ctx.backtest_metrics["total_cost_pct"] == pytest.approx(3.33)
+    assert ctx.backtest_metrics["daily_turnover_pct"] == pytest.approx(3.73)
+
+
+def test_build_context_feature_importance_sorted_desc() -> None:
+    """feature_importance dict → [feature, gain] 表且按 gain 降序（检查项取 gains[0] 为 top1）。"""
+    from qp.platform.cli.commands.validate import _build_context
+
+    record = _Record(
+        metrics=_Metrics(feature_importance={"Volatility_20D": 0.22, "Amplitude_5D": 0.25})
+    )
+    ctx = _build_context(record, feature_df=None, price_df=None)
+
+    fi = ctx.metadata["feature_importance"]
+    assert fi.columns == ["feature", "gain"]
+    assert fi["feature"].to_list() == ["Amplitude_5D", "Volatility_20D"]
+    assert fi["gain"].to_list() == [pytest.approx(0.25), pytest.approx(0.22)]
+
+
+def test_build_context_overfit_maps_ic_mean_and_cv_oos() -> None:
+    """过拟合项：全期 IC(in-sample) vs Purged-CV OOS IC，并标注来源口径。"""
+    from qp.platform.cli.commands.validate import _build_context
+
+    record = _Record(metrics=_Metrics(ic_mean=0.077, custom={"cv_oos_ic_mean": 0.069}))
+    ctx = _build_context(record, feature_df=None, price_df=None)
+
+    assert ctx.metadata["in_sample_ic"] == pytest.approx(0.077)
+    assert ctx.metadata["out_of_sample_ic"] == pytest.approx(0.069)
+    assert "cv_oos_ic_mean" in ctx.metadata["ic_source"]
+
+
+def test_build_context_omits_overfit_when_cv_missing() -> None:
+    """没有 CV OOS 就照旧不评估 —— 不拿"全期 IC vs 0"编造过拟合结论。"""
+    from qp.platform.cli.commands.validate import _build_context
+
+    record = _Record(metrics=_Metrics(ic_mean=0.077))
+    ctx = _build_context(record, feature_df=None, price_df=None)
+
+    assert "in_sample_ic" not in ctx.metadata
+    assert "out_of_sample_ic" not in ctx.metadata
+
+
+def test_build_context_neutralization_needs_both_ends() -> None:
+    """只有一个端点不能算"中性化前后"，宁可不评估。"""
+    from qp.platform.cli.commands.validate import _build_context
+
+    only_post = _Record(metrics=_Metrics(post_neutralization_ic=0.077))
+    ctx = _build_context(only_post, feature_df=None, price_df=None)
+    assert "post_neutralization_ic" not in ctx.metadata
+
+    both = _Record(metrics=_Metrics(pre_neutralization_ic=0.10, post_neutralization_ic=0.077))
+    ctx2 = _build_context(both, feature_df=None, price_df=None)
+    assert ctx2.metadata["pre_neutralization_ic"] == pytest.approx(0.10)
+    assert ctx2.metadata["post_neutralization_ic"] == pytest.approx(0.077)
