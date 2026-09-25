@@ -5,7 +5,7 @@
 > CLI 唯一入口：`qp`（`.venv/bin/qp`，勿用 `uv run qp`——Python 3.12 下载会超时）。
 > 入口统一在 `qp/platform/cli/commands/<组>.py`。
 
-## 命令总表（`qp --help` 实测 2026-08-11）
+## 命令总表（`qp --help` 实测 2026-08-11；industry 于 2026-09-25 补录）
 
 | 命令组 | 入口文件 | 主要子命令 |
 |---|---|---|
@@ -15,13 +15,14 @@
 | experiment | `commands/experiment.py` | list, show, run, compare, validate, clean, optuna |
 | factor | `commands/factor_cmd.py` | catalog, compute, health, list, report, update-health, validate |
 | fundamental | `commands/ingest.py`（cmd_fundamental） | 拉取基本面数据 |
+| industry | `commands/industry.py` | heat（行业热度榜：行情口径 涨幅/成交额/上涨占比；资金流口径 主力净流入；`--granularity csrc\|subsector\|sector`、`--window`、`--date`、`--top`、`--save`） |
 | ingest | `commands/ingest.py` | 从配置源导入数据（cmd_ingest） |
 | knowledge | `commands/knowledge.py` | stats, search |
 | lineage | `commands/lineage.py` | snapshot（同步注册表→血缘 DAG→lineage_graph.json） |
 | model | `commands/model.py` | list, show |
 | monitor | `commands/monitor.py` | check, regime, alert-test |
 | paper | `commands/paper.py` | start, status |
-| pipeline | `commands/ingest.py`（cmd_pipeline_list） | Pipeline 子命令 |
+| pipeline | `commands/ingest.py`（cmd_pipeline_list） | ⚠️ `qp pipeline list` 当前报 `unexpected extra argument`（parser.py 未开 allow_extra_args），命令不可用 |
 | portfolio | `commands/portfolio.py` | report, risk |
 | position | `commands/position.py` | list, show, close, pnl, history |
 | proposal | `commands/proposal.py` | list, show, create, approve, reject, withdraw |

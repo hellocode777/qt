@@ -1,7 +1,7 @@
 # QP (Quant Platform) 用户指南
 
 > 个人量化研究与投资决策操作系统
-> 更新日期：2026-08-18
+> 更新日期：2026-09-25
 
 ---
 
@@ -20,6 +20,7 @@
 11. [自动化调度](#11-自动化调度)
 12. [Web 决策中心](#12-web-决策中心)
     - [12.3 个股K线分析](#123-个股k线分析)
+    - [12.4 SPA 原型界面（/proto/）](#124-spa-原型界面proto)
 13. [全命令速查表](#13-全命令速查表)
 14. [典型工作流](#14-典型工作流)
 15. [配置说明](#15-配置说明)
@@ -264,14 +265,14 @@ uv run qp experiment run multifactor \
 ### 5.3 影子模拟（Shadow Trading）
 
 ```bash
-# 运行今日影子模拟
-uv run qp simulation shadow run
+# 影子组合绩效摘要（无参数 = 看摘要）
+uv run qp simulation shadow
 
-# 查看影子组合绩效
-uv run qp simulation shadow summary
+# 跑指定日期的影子模拟（需该日已有决策包）
+uv run qp simulation shadow 2026-09-24
 ```
 
-影子模拟与实盘持仓同步，用于在不影响实盘的情况下评估策略调整。
+影子模拟用假钱按当日决策包建仓，与实盘持仓解耦，用于在不影响实盘的情况下评估策略调整。`daily_pipeline` Step 13.1 每个交易日自动跑一次，无需手动。
 
 ### 5.4 验证门禁
 
@@ -594,9 +595,9 @@ uv run qp paper status simple_rank_v1.0
          │                  └─ data/decisions/dp-2026-07-25-xxx.json
          │                     data/decisions/trade_decision_audit.parquet (T2)
          │
-18:32  paper_trading      模拟盘推进：执行当日交易，满 30 天自动评估
-         │
 18:30  email_report       发送今日 DecisionPackage 邮件
+         │
+18:32  paper_trading      模拟盘推进：执行当日交易，满 30 天自动评估
          │
       ┌─ 闭环反馈 ─────────────────────────────────────┐
       │  FailureArchiveLogger → ClusterAnalyzer        │
@@ -671,8 +672,8 @@ tail -f logs/$(date +%F)/email_report.log
 | 09:17 | `retrain_notify` | 检查重训练信号，发邮件提醒 | `data/monitoring/watchdog/retrain_notify.ping` |
 | 16:53 | `pre_close_check` | KillSwitchPipeline 收盘前二次确认（STOP → 跳过当日 daily_pipeline） | `data/monitoring/watchdog/pre_close_check.ping` |
 | 18:00 | `daily_pipeline` | DailyPipeline: 数据→因子→特征→策略→风控→DecisionPackage + 因子健康增量更新 | `data/monitoring/watchdog/daily_pipeline.ping` |
-| 18:32 | `paper_trading` | 模拟盘推进：执行当日交易（等 daily_pipeline 拉价完成后），30 天到期自动评估 PASS/FAIL | `data/monitoring/watchdog/paper_trading.ping` |
 | 18:30 | `email_report` | 发送今日 DecisionPackage 邮件 | `data/monitoring/watchdog/email_report.ping` |
+| 18:32 | `paper_trading` | 模拟盘推进：执行当日交易（等 daily_pipeline 拉价完成后），30 天到期自动评估 PASS/FAIL | `data/monitoring/watchdog/paper_trading.ping` |
 
 ### 11.3 监控 Scheduler 本身
 
@@ -722,7 +723,15 @@ data/
 
 ## 12. Web 决策中心
 
-QP 提供一个只读的 Web 仪表盘，用于可视化投资决策、持仓和监控状态。
+QP 的 Web 端是**一个进程、一个端口（默认 8080）、两套界面**：
+
+| 界面 | 地址 | 技术栈 |
+|------|------|--------|
+| 页面式（旧） | `http://localhost:8080/` | Jinja2 + HTMX |
+| SPA 原型（新） | `http://localhost:8080/proto/` | Vue 3 + ECharts + Tailwind，读 `/api/v1/*` |
+
+> ⚠️ **不是「只读」界面**：`POST /review/{id}`（旧界面）/ `POST /api/v1/decisions/{id}/review`（SPA）的 `approve` 默认 `create_positions=True` — 按决策包 SELL 平仓 + BUY 建仓，真实写入 `data/positions` 与 account。
+> `/execute` 与 `/close` 只做状态流转（`APPROVED → PARTIALLY_EXECUTED → MONITORING → CLOSED`）。券商侧的真实下单仍由人工完成。
 
 ### 12.1 手动启动
 
@@ -833,6 +842,29 @@ journalctl --user -u qp-web -f
 
 示例：`curl http://localhost:8080/api/stocks/600519/kline?days=90`
 
+### 12.4 SPA 原型界面（/proto/）
+
+新版界面是 Vue 3 SPA，构建产物在 `qp/web/static/spa`，由 FastAPI 挂载到 `/proto`（`qp/web/app.py:30-80`，含 history 路由 fallback + 目录穿越防护）。前端源码就在本仓库 `qp/web/spa_src/`。
+
+**构建 / 部署**：
+
+```bash
+cd qp/web/spa_src && npm install   # 首次
+bash scripts/spa_deploy.sh         # build（base=/proto/）→ 拷贝 dist → qp/web/static/spa
+```
+
+> 构建产物更新后需重启 `qp-web`（`--reload` 模式会自动重载）。
+
+**开发模式**（Vite :5173，`/api` 反代到 127.0.0.1:8080）：
+
+```bash
+cd qp/web/spa_src && npm run dev
+```
+
+**访问**：`http://localhost:8080/proto/`（12 页路由见 §13「Web 页面」表）
+
+**后端 JSON 端点**：`/api/v1/*`，共 27 个路由（`qp/web/routers/api_v1.py`），含 `/api/v1/industry-heat`、`/api/v1/health`、`/api/v1/positions`、`/api/v1/decisions/{id}`、`/api/v1/system-health`、`/api/v1/stocks/search`、`/api/v1/knowledge` 等；写操作只有决策包 review / execute / close 三个 POST。
+
 ---
 
 ## 13. 全命令速查表
@@ -844,9 +876,8 @@ journalctl --user -u qp-web -f
 | `qp version` | 显示版本号 |
 | `qp doctor` | 环境诊断 |
 | `qp --help` | 帮助信息 |
-| `qp web start [--port] [--host] [--reload]` | 启动 Web 决策中心 |
-| `qp pipeline list` | 列出已注册管道 |
-| `qp scheduler start` | 启动后台定时调度器 |
+| `qp web start [--port] [--host] [--reload]` | 启动 Web 决策中心（页面式 `/` + SPA `/proto/`） |
+| `qp scheduler start` | 前台启动调度器（⚠️ 仅调试用；生产由 systemd 管理，勿起第二实例） |
 
 ### Web 页面
 
@@ -865,6 +896,25 @@ journalctl --user -u qp-web -f
 | `/proposals` | 审批提案 |
 | `/stocks` | 个股K线分析 |
 | `/stocks/{code}` | 个股K线详情 |
+| `/paper` | 模拟盘状态 |
+| `/api/stocks/{code}/kline?days=N` | K线 JSON API |
+
+SPA 原型（`/proto/`，Vue 3，数据走 `/api/v1/*`）12 页路由：
+
+| 路径 | 页面 |
+|------|------|
+| `/proto/` | 总览 |
+| `/proto/industry` | 行业热度 |
+| `/proto/paper` | 模拟盘 |
+| `/proto/positions` | 持仓 |
+| `/proto/chart` | 行情 |
+| `/proto/strategies` | 策略 |
+| `/proto/factors` | 因子 |
+| `/proto/decisions` | 决策 |
+| `/proto/experiments` | 回测 |
+| `/proto/simulation` | 影子 |
+| `/proto/monitor` | 监控 |
+| `/proto/knowledge` | 复盘 |
 
 ### 数据
 
@@ -874,9 +924,10 @@ journalctl --user -u qp-web -f
 | `qp data index` | 拉取沪深300 指数日线（市场过滤/状态检测用） |
 | `qp capital-flow` | 拉取资金流数据（主力净流入/北向持股） |
 | `qp fundamental` | 拉取基本面数据 |
+| `qp industry heat [--date] [--window] [--granularity] [--source] [--top]` | 行业热度榜（行情口径 涨幅/成交额/上涨占比；资金流口径 主力净流入） |
 | `qp ingest [start] [end] [--demo]` | 数据摄入（支持 Demo） |
 | `qp run daily [--demo]` | 端到端每日管道 |
-| `qp lineage <dataset>` | 数据血缘图 |
+| `qp lineage snapshot` | 生成数据血缘图（写 `data/metadata/lineage_graph.json`） |
 
 ### 实验与研究
 
@@ -890,6 +941,7 @@ journalctl --user -u qp-web -f
 | `qp experiment compare` | 对比最近实验 |
 | `qp experiment validate <id>` | 验证指定实验 |
 | `qp experiment clean --keep 20` | 清理旧实验 |
+| `qp experiment optuna` | Optuna 超参搜索（LambdaRank，TDR-005） |
 | `qp model list` | 列出模型 |
 | `qp model show <id>` | 模型详情 |
 | `qp retrain [strategy] [--dry-run]` | 模型重训 |
@@ -912,13 +964,15 @@ journalctl --user -u qp-web -f
 | 命令 | 说明 |
 |------|------|
 | `qp strategy list` | 列出所有策略 |
-| `qp strategy approve <id>` | 批准策略上线 |
+| `qp strategy approve <id>` | 批准策略上线（冻结不可变快照） |
+| `qp strategy approved` | 已批准策略快照列表（ADR-031） |
 | `qp strategy deactivate <id>` | 下线策略 |
 | `qp proposal create --strategy <id> --target <stage>` | 创建策略审批提案 |
 | `qp proposal list` | 列出所有提案 |
 | `qp proposal show <id>` | 查看提案详情 |
 | `qp proposal approve <id>` | 批准提案 |
 | `qp proposal reject <id>` | 驳回提案 |
+| `qp proposal withdraw <id>` | 撤回提案 |
 
 ### 组合
 
@@ -943,8 +997,8 @@ journalctl --user -u qp-web -f
 |------|------|
 | `qp paper start [strategy]` | 启动 30 天模拟交易 |
 | `qp paper status [strategy]` | 模拟交易状态 |
-| `qp simulation shadow run` | 运行影子模拟 |
-| `qp simulation shadow summary` | 影子组合绩效摘要 |
+| `qp simulation shadow` | 影子组合绩效摘要 |
+| `qp simulation shadow <YYYY-MM-DD>` | 跑指定日期的影子模拟（该日需已有决策包） |
 
 ### 决策
 
@@ -995,8 +1049,8 @@ bash deploy/install-systemd.sh
   09:17 → retrain_notify   重训信号检查
   16:53 → pre_close_check  收盘前二次确认
   18:00 → daily_pipeline   产出 DecisionPackage（含因子健康增量更新）
-  18:32 → paper_trading    模拟盘推进
   18:30 → email_report     邮件日报
+  18:32 → paper_trading    模拟盘推进
 
   → factor_health / factor_ic_series  每日自动更新
   → system_health_log  每日自动写入
@@ -1030,8 +1084,8 @@ bash deploy/install-systemd.sh
   qp experiment run multifactor --strategy momentum_vol_full --start 2024-01-01
 
 第二步: 验证
+  qp experiment validate <id>        → 对实验跑质量 Gate
   qp validate --stage backtest_passed
-  qp backtest run simple_rank_v1.0
 
 第三步: 模拟交易
   qp paper start simple_rank_v1.0
@@ -1071,22 +1125,25 @@ bash deploy/install-systemd.sh
 
 配置文件优先级：**CLI 参数 > 环境变量 > config.toml > 默认值**
 
-### 14.1 配置文件
+### 15.1 配置文件
 
 从模板复制：
 ```bash
 cp config.toml.example config.toml
 ```
 
-### 14.2 关键配置项
+### 15.2 关键配置项
 
 ```toml
-[runtime]
-env = "development"                      # development | production
+[project]
+name = "qp"
 
 [storage]
 backend = "duckdb"                       # duckdb | sqlite
-duckdb_path = "data/quant.duckdb"
+duckdb_path = "data/qp.duckdb"
+parquet_dir = "data/parquet"
+raw_dir = "data/raw"
+dataset_dir = "data/dataset"
 
 [logging]
 level = "INFO"                           # DEBUG | INFO | WARNING | ERROR
@@ -1096,31 +1153,42 @@ format = "colored"                       # colored | json
 timezone = "Asia/Shanghai"
 
 [data]
+default_start_date = "2015-01-01"
 default_source = "akshare"
-default_start_date = "2020-01-01"
+cache_enabled = true
+cache_ttl_hours = 24
 
 [model]
-default_model = "LightGBM"
-default_objective = "lambdarank"
-cv_folds = 5
-purge_days = 20
-embargo_days = 5
+default_algorithm = "lightgbm"
+objective = "lambdarank"
+purged_cv_folds = 5
+min_training_window_days = 500
 
 [backtest]
-slippage = 0.001
-commission = 0.0003
-stamp_tax = 0.001
+default_slippage_pct = 0.001
+commission_pct = 0.00025
+stamp_tax_pct = 0.0005
+adv_limit_pct = 0.10
 
 [monitoring]
-psi_threshold = 0.25
-max_drawdown_ratio = 11.5
-model_decay_ic_ratio = 0.5
+psi_threshold = 0.25                     # PSI 熔断阈值（§7.1）
+max_drawdown_strategy_ratio = 1.5        # 回撤 > 历史最大 ×1.5
+monthly_drawdown_limit = 0.15            # 月回撤 15%
+rolling_60d_drawdown_limit = 0.20        # 60 日回撤 20%
+consecutive_loss_days = 15               # 配置项（ConsecutiveLoss 触发器实际硬编码 5 日，见 §7.1）
+model_decay_ic_ratio = 0.30              # IC 衰减至训练 IC 的 30%
 
 [broker]
 provider = "simulated"
+
+[runtime]
+env = "development"                      # development | production
 ```
 
-### 14.3 环境变量
+> 上面每一行都取自仓库里的 `config.toml.example` / `qp/platform/config/models.py`（2026-09-25 核对）。
+> `max_drawdown_strategy_ratio` 曾在本指南里被写成不存在的 `max_drawdown_ratio`，`model_decay_ic_ratio` 曾写成 `0.5`。
+
+### 15.3 环境变量
 
 ```bash
 export QP_ENV=production
@@ -1137,7 +1205,7 @@ export TELEGRAM_BOT_TOKEN=xxx
 
 ## 16. 项目架构
 
-### 15.1 十二层架构
+### 16.1 十二层架构
 
 ```
 Layer 1:  platform/     — 运行时基础（配置、日志、CLI、调度、存储、管道）
@@ -1154,7 +1222,7 @@ Layer 11: (monitoring)  — 系统状态机、RetrainSignal、Watchdog
 Layer 12: (knowledge)   — 策略版本树、失败聚类分析、黑名单规则生成
 ```
 
-### 15.2 目录结构
+### 16.2 目录结构
 
 ```
 qp/
@@ -1186,7 +1254,7 @@ qp/
 └── shared/            # 共享模块（协议、类型、常量、异常）
 ```
 
-### 15.3 核心设计原则
+### 16.3 核心设计原则
 
 - **决策辅助系统**，非自动交易 — 系统产出建议，人执行决策
 - **混合架构** — DataFrame 管道做数据/研究，Domain Model 做组合/决策
@@ -1196,29 +1264,40 @@ qp/
 - **单入口 CLI** — 所有操作通过 `qp` 命令
 - **禁止** `print()`、裸 `except:`、`utils/` 目录
 
-### 15.4 当前策略
+### 16.4 当前策略
 
-**生产策略（registry approved + active）：**
+当前 `data/strategy_registry.json` 全量（10 个，2026-09-25 实读）：
 
-| 策略 | ID | 类型 | 状态 |
-|------|-----|------|------|
-| Momentum+Vol | `momentum_vol_full` | 5 因子反转 | 🚀 **PRODUCTION**（唯一 active） |
+| 策略 | lifecycle | active | approved 快照 |
+|------|-----------|--------|----------------|
+| `momentum_vol_full` | approved | ✅ true | ✅ v20260811（2026-08-12 by Wei） |
+| `lvr_vol_only` | backtest_passed | false | ✅ v20260808（by webui） |
+| `lvr_vol_mom1m` | research | false | — |
+| `momentum_v1.0` | research | false | — |
+| `momentum_vol_mf` | research | false | — |
+| `mvf_noorth` | research | false | — |
+| `mvf_v2_amount` | research | false | — |
+| `mvf_v2_expansion` | research | false | — |
+| `quality_v1.0` | research | false | — |
+| `value_v1.0` | research | false | — |
 
-`momentum_vol_full` 5 因子权重（由全量 IC 归因确定，registry 冻结值）：
+**生产唯一 active 策略：`momentum_vol_full`**（5 因子反转）。
 
-| 因子 | 权重 | IC 依据 |
-|------|------|---------|
-| Amplitude_5D | -0.233 | IC=-0.072 |
-| Volatility_20D | +0.182 | IC=+0.063（唯一正向，低波异象） |
-| Momentum_3M | -0.237 | IC=-0.057（A股反转） |
-| Volume_Concentration | -0.176 | IC=-0.055 |
-| Volume_Trend_10D | -0.172 | IC=-0.041 |
+生产权重取 **approved 冻结快照**（`registry.get_approved()`），不是 meta 里那套旧值 —— `daily_pipeline.py:496-512` 明确读快照，理由见 ADR-031：
 
-**研究/回测通过策略（registry 记录）：** `mvf_noorth`、`mvf_v2_amount`、`mvf_v2_expansion`、`mvf_v2_vol_conc`、`lvr_vol_only`、`lvr_vol_mom1m` 等（lifecycle=research/backtest_passed，均非 active）。
+| 因子 | 权重（approved 冻结快照） |
+|------|--------------------------|
+| Amplitude_5D | -0.25 |
+| Volatility_20D | +0.22（唯一正向，低波异象） |
+| Momentum_3M | -0.20（A股反转） |
+| Volume_Concentration | -0.19 |
+| Volume_Trend_10D | -0.14 |
 
-**代码注册的实验策略（未进 registry）：** `alpha_multi_factor_v1`（12 因子）、`alpha_multi_factor_v2`（14 因子反转版）。
+> registry `meta.weights` 里另有一套更细的旧值（-0.2331 / +0.1823 / -0.2368 / -0.1758 / -0.1721），那是审批前的记录，生产不读。
 
-> 策略选择逻辑（daily_pipeline）：第 1 优先 APPROVED 策略（当前为 momentum_vol_full）；无则退回 research 策略（有权重+backtest_ic）；最后兜底 hardcode。
+> 策略选择逻辑（`daily_pipeline.py:459-477`，ADR-031 Policy A）：**只跑 lifecycle==APPROVED 的策略**；没有 APPROVED 就跳过当日策略执行并报警，**不退回 research、不兜底 hardcode**。
+
+**代码注册但未进 registry 的策略配置：** `alpha_multi_factor_v1`（12 因子）、`alpha_multi_factor_v2`（14 因子反转版），及 `alpha_ensemble_v2` / `alpha_ensemble_v3` / `lvr_vol_stable` / `low_vol_reversal` 等（`qp/strategy/strategies/`）。
 
 ---
 
@@ -1243,6 +1322,14 @@ uv run pytest -x -q                        # 快速模式
 ---
 
 ## 18. 故障排查
+
+### 已知问题（2026-09-25 核对，尚未修代码）
+
+| 现象 | 原因 | 现状 |
+|------|------|------|
+| `qp pipeline list` 报 `Error: Got unexpected extra argument (list)` | `qp/platform/cli/parser.py:97-106` 的 `pipeline` 命令没开 `allow_extra_args`，`list` 分支永远进不去 | 命令不可用；目前直接看 `qp/pipeline/` 目录 |
+| 同时存在 systemd `qp-scheduler` 和手动 `qp scheduler start` → 定时 Job 跑两遍 | 两套调度器并存（2026-08-18 email_report 双发邮件的成因） | 生产只用 systemd；`install-systemd.sh` 会校验进程恰为 1 |
+| `qp scheduler start --help` 的 Job 时间表漏列 `paper_trading 18:32` | docstring 未同步（`commands/scheduler.py:225-238`） | 仅注释过时，实际 Job 正常注册 |
 
 ### 数据文件不存在
 
