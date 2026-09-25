@@ -26,12 +26,12 @@
 | portfolio | `commands/portfolio.py` | report, risk |
 | position | `commands/position.py` | list, show, close, pnl, history |
 | proposal | `commands/proposal.py` | list, show, create, approve, reject, withdraw |
-| retrain | `commands/retrain.py` | 触发模型重训 |
+| retrain | `commands/retrain.py` | `qp retrain [strategy_id] [--dry-run]`；不传策略 = registry 里唯一 APPROVED（解析失败即报错，不猜） |
 | run | `commands/ingest.py`（cmd_run，parser.py 转发） | 运行 Pipeline（daily 等） |
 | scheduler | `commands/scheduler.py` | 调度器（systemd 管理，勿手动起第二实例） |
 | simulation | `commands/shadow.py` | 影子/纸面交易模拟 |
 | strategy | `commands/strategy.py` | list, approve, deactivate, approved |
-| validate | `commands/validate.py` | 对策略/实验跑验证 Gate |
+| validate | `commands/validate.py` | 对策略/实验跑验证 Gate；默认策略 = registry 唯一 APPROVED；CLI 回测指标是写死占位值（输出标注 metrics_source） |
 | web | `commands/web.py` | Web UI 服务器 |
 
 ## 高频命令详解

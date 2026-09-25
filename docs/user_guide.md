@@ -506,7 +506,10 @@ uv run qp monitor regime
 uv run qp monitor alert-test
 ```
 
-支持 6 种告警通道：Terminal / Log / Telegram / 钉钉 / 企业微信 / Email。
+支持告警通道（`monitoring/alerts.py` 共 7 个通道类：Terminal / Log / Telegram / 钉钉 DingTalk / 企业微信 WeCom / Email / File）。
+
+> `qp monitor alert-test` 实测只注册其中 3 个：Terminal / Log / Telegram（WARNING 起）。
+> 其余通道要在部署时自行 `AlertManager.add_channel(...)` 接进来 —— 别把"可用通道类"当成"已接通"。
 
 ---
 
@@ -516,13 +519,17 @@ uv run qp monitor alert-test
 # 列出所有已注册模型
 uv run qp model list
 
-# 查看模型详情
-uv run qp model show lgb_lambdarank_v20260722
+# 查看模型详情（<model_id> 从 model list 里取）
+uv run qp model show <model_id>
 
 # 模型重训（建议先用 --dry-run）
-uv run qp retrain simple_rank_v1.0 --dry-run
-uv run qp retrain simple_rank_v1.0
+uv run qp retrain --dry-run                     # 演习；不传策略 = registry 里唯一 APPROVED
+uv run qp retrain                               # 正式重训（目标同上）
+uv run qp retrain momentum_vol_full --dry-run   # 显式指定策略
 ```
+
+> 实测（2026-09-25）：`qp model list` 当前为空 —— 模型在跑过实验（`--model`）或重训成功后才会注册。
+> 空列表是真实状态，不是命令坏了。
 
 ---
 
@@ -551,16 +558,19 @@ uv run qp knowledge search "最大回撤"
 
 ```bash
 # 启动 30 天模拟交易
-uv run qp paper start simple_rank_v1.0
+uv run qp paper start lvr_vol_only
 
 # 查看进度
-uv run qp paper status simple_rank_v1.0
+uv run qp paper status lvr_vol_only
 ```
+
+> 可用策略 ID 以 registry 为准（当前有 30 天模拟盘记录的是 `momentum_vol_full` 与 `lvr_vol_only`）；
+> `qp paper start` 只接受**已注册**策略，不自动注册（否则污染 `data/strategy_registry.json`）。
 
 输出示例：
 ```
 ═══ QP 模拟交易状态 / Paper Trading Status ═══
-  策略 / Strategy:    simple_rank_v1.0
+  策略 / Strategy:    lvr_vol_only
   已过天数 / Days:    12/30
   当前权益 / Equity:  ¥1,023,500
 
@@ -1100,8 +1110,8 @@ bash deploy/install-systemd.sh
   qp validate --stage backtest_passed
 
 第三步: 模拟交易
-  qp paper start simple_rank_v1.0
-  qp paper status           → 每天检查进度
+  qp paper start <strategy_id>   → 需已注册的策略（如 lvr_vol_only）
+  qp paper status                → 每天检查进度
 
 第四步: 上线
   30 天通过后 → 策略生命周期自动流转到 Production
@@ -1111,8 +1121,8 @@ bash deploy/install-systemd.sh
 
 ```
 月初:
-  qp retrain simple_rank_v1.0 --dry-run   → 演习
-  qp retrain simple_rank_v1.0             → 正式重训
+  qp retrain --dry-run                    → 演习（目标=registry 唯一 APPROVED）
+  qp retrain                              → 正式重训
   qp portfolio report                     → 组合 KPI 报告
   qp portfolio risk                       → 风控复查
   qp knowledge stats                      → 知识库回顾
