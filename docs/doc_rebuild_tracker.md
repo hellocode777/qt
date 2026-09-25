@@ -171,27 +171,31 @@ qp/
 
 ### 1.3 CLI 命令地图
 
+> 2026-09-25 按 `qp --help` 实测重写（原表列出的 `qp backtest run` 从不存在，
+> 见 `docs/ai/COMMAND_MAP.md`）。
+
 ```
 qp
 ├── version, doctor
-├── ingest
-├── run daily, fundamental, pipeline
+├── data fetch, index
+├── ingest, capital-flow, fundamental, industry heat
+├── run daily, pipeline list
 ├── validate
+├── decide
+├── factor list, health, report, update-health, validate, compute, catalog, register
+├── experiment list, show, run, compare, validate, clean, optuna
+├── model list, show, retrain
+├── strategy list, approve, approved, deactivate
+├── proposal list, show, create, approve, reject, withdraw
 ├── portfolio report, risk
 ├── position list, show, close, pnl, history
+├── paper start, status
 ├── simulation shadow
-├── experiment list, show, run, compare, validate, clean
-├── model list, show
-├── data fetch
-├── backtest run
 ├── monitor check, regime, alert-test
 ├── knowledge stats, search
-├── decide
-├── paper start, status
+├── lineage snapshot
 ├── web start
-├── retrain
 ├── scheduler start
-├── proposal list, show, create, approve, reject
 ```
 
 ---
