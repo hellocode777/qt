@@ -231,6 +231,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
       - pre_close_check:   KillSwitchPipeline fast    (weekdays 16:53)
       - daily_pipeline:    DailyPipeline              (weekdays 18:00)
       - email_report:      Email DecisionPackage      (weekdays 18:30)
+      - paper_trading:     Advance paper trading      (weekdays 18:32)
 
     When an Application is provided (via CLI main), the scheduler uses
     the runtime's logger, config, and signal handling (ADR-012).

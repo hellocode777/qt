@@ -22,7 +22,7 @@
 | model | `commands/model.py` | list, show |
 | monitor | `commands/monitor.py` | check, regime, alert-test |
 | paper | `commands/paper.py` | start, status |
-| pipeline | `commands/ingest.py`（cmd_pipeline_list） | ⚠️ `qp pipeline list` 当前报 `unexpected extra argument`（parser.py 未开 allow_extra_args），命令不可用 |
+| pipeline | `commands/ingest.py`（cmd_pipeline_list） | list（data_ingest / fundamental_ingest / feature_compute / daily） |
 | portfolio | `commands/portfolio.py` | report, risk |
 | position | `commands/position.py` | list, show, close, pnl, history |
 | proposal | `commands/proposal.py` | list, show, create, approve, reject, withdraw |

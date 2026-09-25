@@ -877,6 +877,7 @@ cd qp/web/spa_src && npm run dev
 | `qp doctor` | 环境诊断 |
 | `qp --help` | 帮助信息 |
 | `qp web start [--port] [--host] [--reload]` | 启动 Web 决策中心（页面式 `/` + SPA `/proto/`） |
+| `qp pipeline list` | 列出已注册管道（data_ingest / fundamental_ingest / feature_compute / daily） |
 | `qp scheduler start` | 前台启动调度器（⚠️ 仅调试用；生产由 systemd 管理，勿起第二实例） |
 
 ### Web 页面
@@ -1295,6 +1296,8 @@ qp/
 
 > registry `meta.weights` 里另有一套更细的旧值（-0.2331 / +0.1823 / -0.2368 / -0.1758 / -0.1721），那是审批前的记录，生产不读。
 
+> ⚠️ 快照里的 `parameters` 字段（`orthogonalize` / `top_n` / `rebalance` / `anti_chase`）在日线生产链路里是**惰性字段**：`daily_pipeline` 只取 `weights` + `industry_neutral`（`compute_today_scores_full()` 没有正交化入参）。所以快照写着的 `orthogonalize: true` **不会**把 VIF 正交化重新打开——2026-08-13 那次关闭仍然有效（生效值来自 `strategy/config.py`，momentum_vol_full = False）。改快照里这几个字段对生产无影响。
+
 > 策略选择逻辑（`daily_pipeline.py:459-477`，ADR-031 Policy A）：**只跑 lifecycle==APPROVED 的策略**；没有 APPROVED 就跳过当日策略执行并报警，**不退回 research、不兜底 hardcode**。
 
 **代码注册但未进 registry 的策略配置：** `alpha_multi_factor_v1`（12 因子）、`alpha_multi_factor_v2`（14 因子反转版），及 `alpha_ensemble_v2` / `alpha_ensemble_v3` / `lvr_vol_stable` / `low_vol_reversal` 等（`qp/strategy/strategies/`）。
@@ -1323,13 +1326,11 @@ uv run pytest -x -q                        # 快速模式
 
 ## 18. 故障排查
 
-### 已知问题（2026-09-25 核对，尚未修代码）
+### 已知问题与注意事项（2026-09-25）
 
 | 现象 | 原因 | 现状 |
 |------|------|------|
-| `qp pipeline list` 报 `Error: Got unexpected extra argument (list)` | `qp/platform/cli/parser.py:97-106` 的 `pipeline` 命令没开 `allow_extra_args`，`list` 分支永远进不去 | 命令不可用；目前直接看 `qp/pipeline/` 目录 |
 | 同时存在 systemd `qp-scheduler` 和手动 `qp scheduler start` → 定时 Job 跑两遍 | 两套调度器并存（2026-08-18 email_report 双发邮件的成因） | 生产只用 systemd；`install-systemd.sh` 会校验进程恰为 1 |
-| `qp scheduler start --help` 的 Job 时间表漏列 `paper_trading 18:32` | docstring 未同步（`commands/scheduler.py:225-238`） | 仅注释过时，实际 Job 正常注册 |
 
 ### 数据文件不存在
 

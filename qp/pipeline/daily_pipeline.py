@@ -518,7 +518,16 @@ class DailyPipeline(BasePipeline):
                         " [from frozen snapshot]" if approved is not None else " [from Registry]",
                     )
 
-                    # Parameters: prefer frozen snapshot, fall back to meta
+                    # Parameters: prefer frozen snapshot, fall back to meta.
+                    # NOTE: `industry_neutral` is the ONLY frozen parameter this
+                    # path consumes — compute_today_scores_full() takes weights +
+                    # industry_neutral only, so no orthogonalization happens here
+                    # at all. The snapshot also freezes orthogonalize / top_n /
+                    # rebalance / anti_chase, which are INERT in production:
+                    # momentum_vol_full's snapshot says orthogonalize=True, but
+                    # that does NOT re-enable VIF orthogonalization (turned off
+                    # 2026-08-13). Editing those fields in the snapshot changes
+                    # nothing; the live strategy config is what governs them.
                     industry_neutral = params.get("industry_neutral", True)
                     if not isinstance(industry_neutral, bool):
                         industry_neutral = True

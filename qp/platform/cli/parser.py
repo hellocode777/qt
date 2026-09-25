@@ -94,7 +94,9 @@ def capital_flow(ctx: click.Context) -> None:
     raise SystemExit(cmd_capital_flow())
 
 
-@cli.command()
+@cli.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
 def pipeline() -> None:
     """Pipeline subcommands. Try: qp pipeline list"""
     import sys
