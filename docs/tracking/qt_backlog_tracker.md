@@ -478,10 +478,18 @@
 - **数据侧异常**: `data/dataset/factor_values_daily.parquet` 现有 **50 个日期**（2016-10-31 … 2026-09-24，每日约 3000 行，个别日期只有 1 行），
   而 docstring 假设"normally the latest trading day" → IC 循环多做 30+ 天的横截面。写入方是 `qp/pipeline/factor_calc_pipeline.py`（`qp factor compute`）与 `qp-daily` 定时任务，需查为何累积历史日期。
 - **影响面**: `qp-daily.timer`（Mon..Fri 17:57）每周 5 次付这份成本；**任何跑 DailyPipeline 的测试也各付一次** → 这解释了全量套件 ~13 分钟的基线，以及"单文件超时 120s/240s/420s 全部误判为卡死"。
-- [ ] 决定优化方案（三选一或组合，均属 production-sensitive，需批准）:
-      1. `compute_daily_ic_series` 按日期窗口裁剪价格帧（7×，影响所有调用方，需回归 IC 数值一致性）
-      2. `compute_ic_decay` 单次 pass 出多 horizon（省 6 次里的 4 次）
-      3. `run_incremental` 预计算一次多 horizon 前向收益并跨因子复用（168 次 pass → 6 次）
+- [x] **方案 1 已落地（fe69d189）**: `compute_daily_ic_series` 排序前只保留"得分日可达"的价格行
+      窗口 = `[score_date, score_date + forward_days + 10 交易日缓冲]`（缓冲覆盖停牌使 `shift(-n).over(symbol)` 越过 horizon 的情况）
+      - 证据 1（数值等价，真实数据）: 28 因子 × 5 horizon **全部逐位相同**（参考实现 vs 优化后），
+        140 次调用 **359.9s → 186.4s（1.9×）**
+      - 证据 2（单测）: 新增 `tests/unit/research/test_rank_ic_window.py` 19 项（含改造前参考实现作 oracle、
+        停牌洞、末日期、空得分帧、日期不可对齐、字符串日期）；`tests/unit/research` + 因子健康/监控测试全绿
+      - 证据 3（质量门禁）: `uvx ruff format --check .` 483 files already formatted、`uvx ruff check .` All checks passed、
+        `uv run pyright` 0 errors
+      - 未达预期说明: 实测 1.9× 而非预估 7× —— 裁剪本身有成本（`unique()` 0.094s + semi join + 子帧排序），
+        且基本面因子得分帧有 ~420 个日期（窗口更宽）
+- [ ] 方案 2（`compute_ic_decay` 单次 pass 出多 horizon，省 6 次里的 4 次）未做
+- [ ] 方案 3（`run_incremental` 预计算一次多 horizon 前向收益并跨因子复用，168 次 pass → 6 次）未做 —— 收益最大，但只治这条链路
 
 ### 质量门禁（2026-09-19）
 - [x] `uvx ruff format --check .` → 473 files already formatted；`uvx ruff check .` → All checks passed
