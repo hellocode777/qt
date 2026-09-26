@@ -69,7 +69,10 @@ class FactorCalculator:
             price_df: Full price dataset with [trade_date, symbol, open, high,
                 low, close, volume]. May span many dates.
             date: Target trade date (str or datetime.date). If None, uses the
-                latest date in price_df.
+                latest date in price_df. Only symbols that have a price row
+                *on* that date are scored, and every emitted row carries that
+                date — a suspended/delisted stock is skipped instead of being
+                stamped with its own stale last date.
             factors: Factor names to compute. If None, computes all
                 PRICE_VOLUME_FACTORS (19 factors).
             index_df: Optional index proxy DataFrame for Residual_Momentum_3M.
@@ -85,6 +88,16 @@ class FactorCalculator:
             price_df = price_df.with_columns(pl.col("trade_date").str.to_date())
         # Use pl.lit for type-safe comparison with Date columns
         price_slice = price_df.filter(pl.col("trade_date") <= pl.lit(target_date))
+        # Only symbols that actually trade on target_date. Without this filter a
+        # suspended/delisted stock gets stamped with its own stale last date
+        # (the row below takes ``factors_df.tail(1)``), silently mixing
+        # unrelated dates into a single-date output — see
+        # docs/tracking/qt_backlog_tracker.md.
+        symbols = sorted(
+            price_df.filter(pl.col("trade_date") == pl.lit(target_date))["symbol"]
+            .unique()
+            .to_list()
+        )
 
         factor_names = factors or PRICE_VOLUME_FACTORS
 
@@ -94,12 +107,11 @@ class FactorCalculator:
         logger.info(
             "FactorCalculator: date={} stocks={} factors={}",
             target_date,
-            price_slice["symbol"].n_unique(),
+            len(symbols),
             len(factor_names),
         )
 
         rows: list[dict[str, object]] = []
-        symbols = sorted(price_slice["symbol"].unique().to_list())
         skipped = 0
 
         for i, symbol in enumerate(symbols):

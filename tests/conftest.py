@@ -11,9 +11,15 @@ from pathlib import Path
 import pytest
 
 _PRODUCTION_MONITORING_DIR = Path(__file__).resolve().parent.parent / "data" / "monitoring"
+_PRODUCTION_FACTOR_VALUES = (
+    Path(__file__).resolve().parent.parent / "data" / "dataset" / "factor_values_daily.parquet"
+)
 
 # Modules that bind monitoring paths at import time.  They are patched to a
 # per-test temp dir so no test can touch the live scheduler's files.
+# ``qp.pipeline.factor_calc_pipeline`` is included because FactorCalcPipeline
+# writes data/dataset/factor_values_daily.parquet — the one production artifact
+# a test managed to write (2026-09-26, see docs/tracking/qt_backlog_tracker.md).
 _MONITORING_MODULES = (
     "qp.shared.paths",
     "qp.monitoring.system_state",
@@ -24,6 +30,7 @@ _MONITORING_MODULES = (
     "qp.monitoring.strategy_health_logger",
     "qp.monitoring.strategy_monitor",
     "qp.monitoring.kill_switch_pipeline",
+    "qp.pipeline.factor_calc_pipeline",
 )
 
 
@@ -41,6 +48,8 @@ def _monitoring_overrides(target: Path) -> dict[str, object]:
         "HEALTH_PARQUET": target / "strategy_health.parquet",
         "_ONLINE_SIGNAL_PARQUET": target / "online_signal_history.parquet",
         "_ONLINE_HEALTH_PARQUET": target / "online_health_history.parquet",
+        # FactorCalcPipeline's default write dir (bound at import from DATASET_DIR).
+        "_DEFAULT_OUTPUT_DIR": target,
     }
 
 
@@ -53,6 +62,14 @@ def _production_fingerprint() -> dict[str, tuple[int, int]]:
         for p in sorted(_PRODUCTION_MONITORING_DIR.rglob("*"))
         if p.is_file()
     }
+
+
+def _stat_fingerprint(path: Path) -> tuple[int, int] | None:
+    """(size, mtime_ns) of a single production file, or None if absent."""
+    if not path.is_file():
+        return None
+    st = path.stat()
+    return (st.st_size, st.st_mtime_ns)
 
 
 @pytest.fixture(autouse=True)
@@ -98,13 +115,28 @@ def _isolate_monitoring_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):  #
 
 @pytest.fixture(scope="session", autouse=True)
 def _guard_production_monitoring():
-    """Backstop: warn if the test session modified the live monitoring dir.
+    """Backstop: catch a test session that modified live production artifacts.
 
     Isolation above should make this impossible; the guard exists to catch
     paths that are not enumerated there (e.g. newly added writers).
+
+    ``data/dataset/factor_values_daily.parquet`` fails hard: only the daily
+    pipeline and manual ``qp factor compute`` write it, so a test writing it is
+    always a bug (2026-09-26, see docs/tracking/qt_backlog_tracker.md).
     """
     before = _production_fingerprint()
+    before_fv = _stat_fingerprint(_PRODUCTION_FACTOR_VALUES)
     yield
+    after_fv = _stat_fingerprint(_PRODUCTION_FACTOR_VALUES)
+    if before_fv != after_fv:
+        pytest.fail(
+            f"a test wrote the live factor dataset {_PRODUCTION_FACTOR_VALUES} "
+            f"(size/mtime {before_fv} → {after_fv}). Isolate the writer (tmp output_dir "
+            "or stub the pipeline) instead of writing data/ — see "
+            "docs/tracking/qt_backlog_tracker.md. If the scheduled qp-daily run overlapped "
+            "this session, re-run the suite when it is idle.",
+            pytrace=False,
+        )
     after = _production_fingerprint()
     changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
     if changed:

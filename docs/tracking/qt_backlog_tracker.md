@@ -530,10 +530,24 @@
       - 空跑实测：该文件跑完 `factor_values_daily.parquet` + `data/monitoring/*.parquet` md5 **全部不变**
       - 顺带提速：该文件 38.25s（只 stub 1.5 时）→ **1.50s**；全量套件 148.63s → **13.41-13.59s**（两次复现，exit 0）
       - 门禁：`uvx ruff format --check .` 483 files / `uvx ruff check .` passed / `uv run pyright` 0 errors
-- [ ] **建议 B（日期语义，行为变更）**：`compute(date=...)` 只保留"在 target_date 当天有价格"的 symbol，
-      不再把停止交易股写成它们自己的陈旧日期；配套对存量文件做一次显式清理或 full_history 重建
-- [ ] 可选加固：给 tests/conftest.py 加自动 fixture，快照生产产物 md5，测试改动了就 fail（防止同类污染回归）
-- INFERENCE（未验证）：19 只停止交易股另有 2026-08-05 一行，推测来自更早的价格快照（同期"三源复权混入"事故），merge 保留至今
+- [x] **建议 B（日期语义）已落地**：`FactorCalculator.compute()` 只输出"在 target_date 当天有价格"的 symbol
+      （`qp/research/factor_calculator.py:88-97`），不再把停牌/退市股写成它们自己的陈旧日期；`compute_all_dates` 逐日调用它，一并修复
+      - 单测：新增 `test_only_symbols_trading_on_target_date_are_emitted`；**回退实现即变红**（`['000001','000002'] == ['000001']` 断言失败）
+      - 真实数据新旧对比（7,306,376 行价格，target=2026-09-24）：旧 **3040 行/16 个日期**（含 24 行陈旧行、跨 15 个日期）→ 新 **3016 行/1 个日期**；
+        target 当天 3016 行**逐列完全相同**（零附带改动）
+      - 存量清理：按"该 (date, symbol) 当天无价"删除 **19 行**（全在 2026-08-05，19 只退市股 — 3037-3018=19 与推算吻合），
+        备份 `/tmp/factor_values_daily.backup.parquet`；清后 111,649 行 / 50 日期
+      - 清理零影响证明：用清后文件从零重算 IC（415 日期 / 28 因子 / 4343 行）与生产序列比对 —— 键 **全部 ⊆ 生产**，交集内数值 **0 处不一致**；
+        2026-08-05 的 28 个因子 IC **逐位相同**
+      - 保留说明：13 个"单股陈旧日期"行（如 000748@2016-10-31）是**当天确实有价的合法计算**，不是破损数据；
+        新代码不会再产出这类行，存量按 append-only 原则保留
+- [x] **建议 C（防回归守卫）已落地**（`tests/conftest.py`）
+      - 隔离：新增模块 `qp.pipeline.factor_calc_pipeline` → `_DEFAULT_OUTPUT_DIR` 重定向到 per-test tmp（写盘不再可能落到 data/）
+      - 守卫：`data/dataset/factor_values_daily.parquet` 增加会话级指纹校验，被测试改动即 **fail**；
+        `data/monitoring/*` 维持原设计 warn（调度器/手工 qp 会并发写，避免误报）
+      - 有牙证明：临时写一个"故意重写生产文件"的测试 → `ERROR at teardown` + 退出码 1 + 明确报错（文件内容 md5 未变，已删临时测试）
+- [x] 门禁：`uvx ruff format --check .` 483 files / `uvx ruff check .` passed / `uv run pyright` 0 errors / 全量 pytest **PYTEST_EXIT=0**（12.6-13.6s）
+- [x] 事实修正：19 只退市股的 2026-08-05 行**已确认为无价陈旧行**（清理时精确命中 19 行），此前标注的 INFERENCE 升级为 FACT
 
 ### 质量门禁（2026-09-19）
 - [x] `uvx ruff format --check .` → 473 files already formatted；`uvx ruff check .` → All checks passed

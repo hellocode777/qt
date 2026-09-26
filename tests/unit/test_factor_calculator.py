@@ -169,6 +169,30 @@ class TestFactorCalculator:
 
         assert result.is_empty()
 
+    def test_only_symbols_trading_on_target_date_are_emitted(self) -> None:
+        """A stock that stopped trading is not stamped with its own stale last date.
+
+        Regression: compute() takes ``factors_df.tail(1)`` per symbol, so without
+        a "trades on target_date" filter a suspended/delisted stock was emitted
+        with its own last trade date — polluting a single-date output with
+        unrelated dates (see docs/tracking/qt_backlog_tracker.md).
+        """
+        dates = _make_date_range(MIN_DAYS + 10)
+        live, dead = "000001", "000002"
+        price_df = pl.concat(
+            [
+                _make_price_df([live], dates),
+                _make_price_df([dead], dates[:-10], seed=7),  # stopped 10 days early
+            ]
+        )
+        target = dates[-1]
+
+        calc = FactorCalculator()
+        result = calc.compute(price_df, date=target, factors=["Momentum_3M"])
+
+        assert result["symbol"].to_list() == [live]
+        assert result["trade_date"].unique().to_list() == [target]
+
     def test_compute_all_dates(self) -> None:
         """Full-history mode produces multiple dates."""
         dates = _make_date_range(MIN_DAYS)
