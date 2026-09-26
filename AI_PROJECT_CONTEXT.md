@@ -102,6 +102,7 @@ Factor Library → Factor Calculation → Factor Health Monitor → Strategy Sel
 | 项目地图（子系统） | `docs/ai/PROJECT_MAP.md` |
 | 模块地图（功能→文件） | `docs/ai/MODULE_MAP.md` |
 | 命令地图（命令→入口→流程） | `docs/ai/COMMAND_MAP.md` |
+| 命令手册（全量命令 + 参数表，自动生成） | `docs/command_reference.md` |
 | 数据流（Raw→Gold→下游） | `docs/ai/DATA_FLOW.md` |
 | 量化改动 11 项检查 | `docs/ai/QUANT_VERIFICATION_CHECKLIST.md` |
 | 任务留痕模板 | `docs/templates/TASK_RECORD.md` |

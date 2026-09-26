@@ -2,13 +2,16 @@
 
 > 用途：给 AI 定位"某个命令做了什么"。先查本表拿到命令组入口文件，
 > 再只读相关 handler 和 service。
+> **全量命令手册（58 条命令 + 参数表，自动生成）见 `docs/command_reference.md`**；
+> 本文件只挑高频命令讲流程，不再重复参数细节。
 > CLI 唯一入口：`qp`（`.venv/bin/qp`，勿用 `uv run qp`——Python 3.12 下载会超时）。
 > 入口统一在 `qp/platform/cli/commands/<组>.py`。
 
-## 命令总表（`qp --help` 实测 2026-08-11；industry 于 2026-09-25 补录）
+## 命令总表（`qp --help` 实测 2026-08-11；industry 于 2026-09-25 补录；capital-flow/version 于 2026-09-26 补录）
 
 | 命令组 | 入口文件 | 主要子命令 |
 |---|---|---|
+| capital-flow | `commands/ingest.py`（cmd_capital_flow） | 无子命令；透传 `--quick` / `--northbound` / `--incremental` |
 | data | `commands/data_cmd.py` | fetch（拉取行情）, index（基准指数 CSI300/上证，打印最新交易日 + OK/STALE，支持 `--symbol=`） |
 | decide | `commands/decide.py` | 生成/审阅投资决策 |
 | doctor | `commands/meta.py`（cmd_doctor） | 环境自检 |
@@ -32,6 +35,7 @@
 | simulation | `commands/shadow.py` | 影子/纸面交易模拟 |
 | strategy | `commands/strategy.py` | list, approve, deactivate, approved |
 | validate | `commands/validate.py` | 对策略/实验跑验证 Gate；默认策略 = registry 唯一 APPROVED；指标取自实验记录（`--experiment` 可指定），缺失的指标列在「未评估」而非塞占位值 |
+| version | `commands/meta.py`（cmd_version） | 打印版本信息 |
 | web | `commands/web.py` | Web UI 服务器 |
 
 ## 高频命令详解
