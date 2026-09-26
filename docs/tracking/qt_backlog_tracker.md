@@ -482,7 +482,7 @@
       窗口 = `[score_date, score_date + forward_days + 10 交易日缓冲]`（缓冲覆盖停牌使 `shift(-n).over(symbol)` 越过 horizon 的情况）
       - 证据 1（数值等价，真实数据）: 28 因子 × 5 horizon **全部逐位相同**（参考实现 vs 优化后），
         140 次调用 **359.9s → 186.4s（1.9×）**
-      - 证据 2（单测）: 新增 `tests/unit/research/test_rank_ic_window.py` 19 项（含改造前参考实现作 oracle、
+      - 证据 2（单测）: 新增 `tests/unit/research/test_rank_ic_window.py` **17 项**（含改造前参考实现作 oracle、
         停牌洞、末日期、空得分帧、日期不可对齐、字符串日期）；`tests/unit/research` + 因子健康/监控测试全绿
       - 证据 3（质量门禁）: `uvx ruff format --check .` 483 files already formatted、`uvx ruff check .` All checks passed、
         `uv run pyright` 0 errors
