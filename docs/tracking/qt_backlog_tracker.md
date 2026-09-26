@@ -524,9 +524,15 @@
 - [x] **影响评估**：IC 无影响（散落日期横截面 1-4 只 < `min_stocks_per_day=10` → 跳过）；
       策略快路径无影响（`_compute_today_from_parquet` 先按 `trade_date == today` 过滤，multifactor.py:1474-1480）；
       写盘原子 + merge 去重 → 内容稳定（套件跑完 md5 不变）
-- [ ] **建议 A（测试隔离，低风险）**：给上述两用例传 `parameters={"output_dir": tmpdir}`，或直接把 `FactorCalcPipeline` stub 掉
+- [x] **建议 A（测试隔离）已落地**：两个用例新增 stub —— 注意 Step 1.5/1.6 都是**函数内 import**，
+      必须 patch 源模块 `qp.pipeline.factor_calc_pipeline.FactorCalcPipeline` /
+      `qp.monitoring.factor_health_pipeline.FactorHealthPipeline`（patch `qp.pipeline.daily_pipeline.X` 会 AttributeError）
+      - 空跑实测：该文件跑完 `factor_values_daily.parquet` + `data/monitoring/*.parquet` md5 **全部不变**
+      - 顺带提速：该文件 38.25s（只 stub 1.5 时）→ **1.50s**；全量套件 148.63s → **13.41-13.59s**（两次复现，exit 0）
+      - 门禁：`uvx ruff format --check .` 483 files / `uvx ruff check .` passed / `uv run pyright` 0 errors
 - [ ] **建议 B（日期语义，行为变更）**：`compute(date=...)` 只保留"在 target_date 当天有价格"的 symbol，
       不再把停止交易股写成它们自己的陈旧日期；配套对存量文件做一次显式清理或 full_history 重建
+- [ ] 可选加固：给 tests/conftest.py 加自动 fixture，快照生产产物 md5，测试改动了就 fail（防止同类污染回归）
 - INFERENCE（未验证）：19 只停止交易股另有 2026-08-05 一行，推测来自更早的价格快照（同期"三源复权混入"事故），merge 保留至今
 
 ### 质量门禁（2026-09-19）

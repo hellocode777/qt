@@ -107,7 +107,16 @@ class TestDailyPipelineCriticalPath:
                     "qp.pipeline.daily_pipeline._load_price_data",
                     return_value=({}, pl.DataFrame()),
                 ),
+                # Steps 1.5/1.6 lazily import and write production data — stub both.
+                patch("qp.pipeline.factor_calc_pipeline.FactorCalcPipeline") as factor_cls,
+                patch("qp.monitoring.factor_health_pipeline.FactorHealthPipeline") as fh_cls,
             ):
+                factor_cls.return_value.run.return_value = PipelineResult(
+                    status=PipelineStatus.SUCCESS
+                )
+                fh_cls.return_value.run_incremental.return_value = PipelineResult(
+                    status=PipelineStatus.SUCCESS
+                )
                 result = pipeline.run(ctx)
 
             assert result.status.value in ("success", "failed")
@@ -162,7 +171,14 @@ class TestDailyPipelineCriticalPath:
                 "qp.pipeline.daily_pipeline._load_price_data",
                 return_value=({}, pl.DataFrame()),
             ),
+            # Steps 1.5/1.6 lazily import and write production data — stub both.
+            patch("qp.pipeline.factor_calc_pipeline.FactorCalcPipeline") as factor_cls,
+            patch("qp.monitoring.factor_health_pipeline.FactorHealthPipeline") as fh_cls,
         ):
+            factor_cls.return_value.run.return_value = PipelineResult(status=PipelineStatus.SUCCESS)
+            fh_cls.return_value.run_incremental.return_value = PipelineResult(
+                status=PipelineStatus.SUCCESS
+            )
             result = pipeline.run(ctx)
             assert result.status.value in ("success", "failed")
 
