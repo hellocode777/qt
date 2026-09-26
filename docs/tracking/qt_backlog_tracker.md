@@ -453,6 +453,36 @@
 - [ ] 决定修法：把 `data/stock_industry.json` 接进 `_build_industry_map`（或在数据加载层
       补 `industry` 列）→ 属 production 路径改动，需先确认对现有 IC/回测的影响
 
+#### #14-3 DailyPipeline Step 1.6（FactorHealthPipeline.run_incremental）实测 4-5 分钟，不是"几个小时" ⚠️ 未修（待批准）
+
+- **起因**: 全量 pytest 看起来"卡在" `test_pipeline_critical_path.py`（改任何东西后套件都跑不完），先怀疑是新改动回归。
+- **归因（有效对照）**: 父提交 `fa788b07` + **同一份数据**跑同一用例同样超时（240s、38 CPU-分钟）
+  → 与改动无关；用 faulthandler 抓栈定位到 `daily_pipeline.py:335 → factor_health_pipeline.py:322/447`。
+- **实测成本（逐段计时，非推测）**:
+
+  | 环节 | 实测 | 说明 |
+  |---|---|---|
+  | `_build_fundamental_score_frames` | **0.6s** | 9 个基本面因子，PIT join_asof 不慢 |
+  | 单个价量因子 `compute_daily_ic_series` | **1.5s** | 内部对**全量价格帧**排序+算前向收益 |
+  | 单个价量因子 `compute_ic_decay` | **7.5s** | = 5 个 horizon **各重算一遍** `evaluate_factor_ic`（1/3/5/10/20） |
+  | 单因子合计 | **9.0s** | 19 个价量因子 ≈ 2.8 分钟；+9 个基本面因子 ≈ 1.35 分钟 |
+  | 每次 run 总计 | **≈4-5 分钟** | 与观测（4-8 分钟）一致；docstring 却写"runs in seconds" |
+
+- **机制（代码位置）**: `qp/research/evaluation/rank_ic.py`
+  - `compute_daily_ic_series()` 无条件 `price_df.sort(["symbol","trade_date"])` 并给**全部 730 万行**算
+    `shift(-forward).over("symbol")`，之后再 join 得分日期 → 每次调用 1.11s，与"需要几天 IC"无关
+  - `compute_ic_decay()` 对 5 个 horizon 逐次调用 `evaluate_factor_ic` → 每因子 6 次全量价格 pass
+  - `run_incremental()` 串行跑 28 个因子 → 168 次全量 pass ≈ 3.1 分钟（占总耗时约 7 成）
+- **优化空间（已实测）**: 把价格帧先按"得分日期 ± forward 尾巴"裁剪再排序 → 1.11s → **0.15s**（7.4×）。
+  ⚠️ 坑：不能只留得分日期本身，必须保留末日期之后 `forward_days`（decay 到 20 天）的交易日，否则最新日期的前向收益会变 NaN。
+- **数据侧异常**: `data/dataset/factor_values_daily.parquet` 现有 **50 个日期**（2016-10-31 … 2026-09-24，每日约 3000 行，个别日期只有 1 行），
+  而 docstring 假设"normally the latest trading day" → IC 循环多做 30+ 天的横截面。写入方是 `qp/pipeline/factor_calc_pipeline.py`（`qp factor compute`）与 `qp-daily` 定时任务，需查为何累积历史日期。
+- **影响面**: `qp-daily.timer`（Mon..Fri 17:57）每周 5 次付这份成本；**任何跑 DailyPipeline 的测试也各付一次** → 这解释了全量套件 ~13 分钟的基线，以及"单文件超时 120s/240s/420s 全部误判为卡死"。
+- [ ] 决定优化方案（三选一或组合，均属 production-sensitive，需批准）:
+      1. `compute_daily_ic_series` 按日期窗口裁剪价格帧（7×，影响所有调用方，需回归 IC 数值一致性）
+      2. `compute_ic_decay` 单次 pass 出多 horizon（省 6 次里的 4 次）
+      3. `run_incremental` 预计算一次多 horizon 前向收益并跨因子复用（168 次 pass → 6 次）
+
 ### 质量门禁（2026-09-19）
 - [x] `uvx ruff format --check .` → 473 files already formatted；`uvx ruff check .` → All checks passed
 - [x] `uv run pyright` → 0 errors, 0 warnings, 0 informations（注意：`uvx pyright` 找不到 .venv，会假报 ~692 个 reportMissingImports）
