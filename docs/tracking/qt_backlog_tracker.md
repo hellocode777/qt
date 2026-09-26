@@ -508,6 +508,27 @@
       - **总账**: 原始实现 ~4-5 分钟/次 → 现在 **17.9s**；`test_pipeline_critical_path.py` 由"420s 超时被杀"变为 325s 跑完
         （该数字含多个 DailyPipeline 用例，非单次 run_incremental）
 
+### factor_values_daily.parquet 的两个异常（2026-09-26 查清，只诊断未改码）
+- [x] **写入方**：唯一生产者 = `qp/pipeline/factor_calc_pipeline.py`（`_DATASET_NAME="factor_values_daily"`，全仓无第二个 writer）
+      - 增量模式（默认）：`FactorCalculator.compute(price_df, date=None)` → target_date 取价格最大日 → 逐股计算 →
+        **每行 trade_date 取该股自己最后一行**（`factor_calculator.py:117-120`：`last = factors_df.tail(1)` + `_trade_date_value(last["trade_date"])`）
+        → `merge_with_existing()` 按 (trade_date, symbol) 去重、append-only、**从不清理** → `write_atomic()`
+      - 正常触发：DailyPipeline Step 1.5（`qp-daily` 工作日 17:57）；证据 `logs/scheduler.log` 2026-09-25 18:21 "Incremental write: 111668 rows"
+      - **测试触发（污染）**：`tests/unit/test_pipeline_critical_path.py` 两个用例 patch 了 `DataPipeline` / `FeaturePipeline` /
+        `_load_price_data`，但**没 patch `FactorCalcPipeline`**，context 也没传 `output_dir` → 走默认生产路径写盘。逐用例实测确认为：
+        `TestDailyPipelineCriticalPath::test_system_state_normal_allows_execution_fails_on_missing_data` 与
+        `TestDailyPipelineCriticalPath::test_state_check_is_advisory`（全量套件跑一次 → mtime 被改 2 次，与两个用例一一对应）
+- [x] **50 个日期的构成**：37 个 2026-08-05→2026-09-24 连续交易日（每工作日一次增量，各 ~3015-3037 行）
+      + 13 个散落日期各 1-4 行 = **已停止交易个股**，其 trade_date 被写成该股自己最后一个交易日
+      （实测对应：000748 价格止于 2016-10-31 ↔ 因子行 2016-10-31；600068→2021-09-01；000004→2026-07-13；600421→2026-06-22）
+- [x] **影响评估**：IC 无影响（散落日期横截面 1-4 只 < `min_stocks_per_day=10` → 跳过）；
+      策略快路径无影响（`_compute_today_from_parquet` 先按 `trade_date == today` 过滤，multifactor.py:1474-1480）；
+      写盘原子 + merge 去重 → 内容稳定（套件跑完 md5 不变）
+- [ ] **建议 A（测试隔离，低风险）**：给上述两用例传 `parameters={"output_dir": tmpdir}`，或直接把 `FactorCalcPipeline` stub 掉
+- [ ] **建议 B（日期语义，行为变更）**：`compute(date=...)` 只保留"在 target_date 当天有价格"的 symbol，
+      不再把停止交易股写成它们自己的陈旧日期；配套对存量文件做一次显式清理或 full_history 重建
+- INFERENCE（未验证）：19 只停止交易股另有 2026-08-05 一行，推测来自更早的价格快照（同期"三源复权混入"事故），merge 保留至今
+
 ### 质量门禁（2026-09-19）
 - [x] `uvx ruff format --check .` → 473 files already formatted；`uvx ruff check .` → All checks passed
 - [x] `uv run pyright` → 0 errors, 0 warnings, 0 informations（注意：`uvx pyright` 找不到 .venv，会假报 ~692 个 reportMissingImports）
