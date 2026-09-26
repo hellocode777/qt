@@ -503,6 +503,8 @@
         缺 horizon 抛 KeyError、窗口边界），research + factor_health + monitoring 全绿
       - 证据 4（质量门禁）: `uvx ruff format --check .` → 483 files already formatted；`uvx ruff check .` → All checks passed；
         `uv run pyright` → 0 errors
+      - 证据 5（全量回归）: `7d7a8c0f` 全量 pytest **WALL=148.63s / 100% / exit 0 / 1 skip**（skip 与改动无关）
+        —— 对比方案 1 时的 345.96s，套件再提速 **2.3×**；原始实现下套件需 ~13 分钟且单文件常见超时误判
       - **总账**: 原始实现 ~4-5 分钟/次 → 现在 **17.9s**；`test_pipeline_critical_path.py` 由"420s 超时被杀"变为 325s 跑完
         （该数字含多个 DailyPipeline 用例，非单次 run_incremental）
 
