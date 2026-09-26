@@ -2,8 +2,10 @@
 
 > 用途：给 AI 定位"某个命令做了什么"。先查本表拿到命令组入口文件，
 > 再只读相关 handler 和 service。
-> **全量命令手册（58 条命令 + 参数表，自动生成）见 `docs/command_reference.md`**；
+> **全量命令手册（60 条可执行命令 + 参数表，自动生成）见 `docs/command_reference.md`**；
 > 本文件只挑高频命令讲流程，不再重复参数细节。
+> 命令增删改后重跑 `python scripts/maintenance/gen_command_reference.py` 重新生成该手册
+> （手改会被覆盖；`tests/unit/test_docs_command_reference.py` 会检查它是否与 CLI 同步，陈旧即测试失败）。
 > CLI 唯一入口：`qp`（`.venv/bin/qp`，勿用 `uv run qp`——Python 3.12 下载会超时）。
 > 入口统一在 `qp/platform/cli/commands/<组>.py`。
 

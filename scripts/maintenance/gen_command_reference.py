@@ -6,6 +6,10 @@ truth, so this doc is *generated*, never hand-edited:
 
     .venv/bin/python scripts/maintenance/gen_command_reference.py
 
+Use ``--check`` to verify the committed doc matches the CLI (exit 1 + message when
+stale); ``tests/unit/test_docs_command_reference.py`` runs exactly that, so changing
+the CLI without regenerating fails the suite instead of silently rotting the doc.
+
 Two kinds of commands exist:
 
 * **declared** — Click owns the parameters (``--foo`` shows up on the command
@@ -26,6 +30,7 @@ from __future__ import annotations
 import ast
 import inspect
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -438,11 +443,28 @@ def main() -> int:
     out.append("\n## 4. 维护\n")
     out.append(
         "- 命令增删改后重跑生成器即可（`parser.py` 才是权威；本文件不建议手改）。\n"
+        "- **忘了重跑不会静默腐化**：`tests/unit/test_docs_command_reference.py` 会跑 "
+        "`gen_command_reference.py --check`，文档与 CLI 不一致即测试失败。\n"
         "- 生成器不联网、不写数据，只读 `parser.py` 与 handler 源码；两次运行结果字节一致。\n"
         "- 想补充示例，改生成器顶部的 `WORKFLOWS`（带存在性断言，写错命令会直接报错退出）。\n"
     )
 
-    OUT.write_text("\n".join(out) + "\n", encoding="utf-8")
+    rendered = "\n".join(out) + "\n"
+    if "--check" in sys.argv[1:]:
+        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
+        if current != rendered:
+            n_doc = len(re.findall(r"^\| `qp ", current, re.M))
+            n_new = len(re.findall(r"^\| `qp ", rendered, re.M))
+            print(
+                f"STALE: {OUT} 与当前 CLI 不一致（速查表条目 {n_doc} → {n_new}）。"
+                "重跑 `python scripts/maintenance/gen_command_reference.py` 重新生成。",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"up to date: {OUT} ({len(rendered)} bytes)")
+        return 0
+
+    OUT.write_text(rendered, encoding="utf-8")
     dispatched = sum(len(v) for v in dispatch.values())
     print(
         f"wrote {OUT} ({OUT.stat().st_size} bytes) | commands={len(leaves)} "

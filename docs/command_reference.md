@@ -1043,6 +1043,7 @@ qp web start
 ## 4. 维护
 
 - 命令增删改后重跑生成器即可（`parser.py` 才是权威；本文件不建议手改）。
+- **忘了重跑不会静默腐化**：`tests/unit/test_docs_command_reference.py` 会跑 `gen_command_reference.py --check`，文档与 CLI 不一致即测试失败。
 - 生成器不联网、不写数据，只读 `parser.py` 与 handler 源码；两次运行结果字节一致。
 - 想补充示例，改生成器顶部的 `WORKFLOWS`（带存在性断言，写错命令会直接报错退出）。
 
