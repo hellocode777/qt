@@ -18,6 +18,12 @@ import pytest
 from qp.research.evaluation.rank_ic import (
     _restrict_price_to_score_windows,
     compute_daily_ic_series,
+    compute_daily_ic_series_from_forward,
+    compute_ic_decay,
+    compute_ic_decay_from_forward,
+    evaluate_factor_ic,
+    evaluate_factor_ic_from_forward,
+    prepare_forward_returns,
 )
 
 
@@ -204,3 +210,73 @@ class TestWindowRestrictionGuards:
         restricted = _restrict_price_to_score_windows(score_df, price_df, forward_days=5)
 
         assert restricted["trade_date"].min() == days[20]
+
+
+class TestPreparedForwardEquivalence:
+    """Prepare-once-per-horizon must match the per-call path exactly."""
+
+    @pytest.mark.parametrize("forward_days", [1, 3, 5, 10, 20])
+    def test_prepared_ic_series_matches_per_call(self, forward_days: int) -> None:
+        days = _trading_days(40)
+        price_df = _price_frame(suspend_days=days[5:7])
+        score_df = _score_frame(days)
+
+        prepared = prepare_forward_returns(price_df, forward_days, score_df["trade_date"])
+
+        assert compute_daily_ic_series_from_forward(score_df, prepared) == compute_daily_ic_series(
+            score_df, price_df, forward_days=forward_days
+        )
+
+    def test_prepared_evaluation_matches_per_call(self) -> None:
+        price_df = _price_frame()
+        score_df = _score_frame(_trading_days(40))
+        prepared = prepare_forward_returns(price_df, 5, score_df["trade_date"])
+
+        assert evaluate_factor_ic_from_forward(score_df, prepared) == evaluate_factor_ic(
+            score_df, price_df, forward_days=5
+        )
+
+    def test_prepared_decay_matches_per_call(self) -> None:
+        price_df = _price_frame()
+        score_df = _score_frame(_trading_days(40))
+        horizons = [1, 3, 5, 10, 20]
+        prepared = {
+            h: prepare_forward_returns(price_df, h, score_df["trade_date"]) for h in horizons
+        }
+
+        assert compute_ic_decay_from_forward(
+            score_df, prepared, horizons=horizons
+        ) == compute_ic_decay(score_df, price_df, horizons=horizons)
+
+    def test_decay_raises_for_missing_horizon(self) -> None:
+        """A missing prepared horizon must not silently become IC=0."""
+        price_df = _price_frame()
+        score_df = _score_frame(_trading_days(40))
+        prepared = {1: prepare_forward_returns(price_df, 1, score_df["trade_date"])}
+
+        with pytest.raises(KeyError):
+            compute_ic_decay_from_forward(score_df, prepared, horizons=[1, 5])
+
+    def test_prepare_without_dates_still_correct(self) -> None:
+        """Skipping the restriction changes nothing but the row count."""
+        days = _trading_days(40)
+        price_df = _price_frame(suspend_days=days[5:7])
+        score_df = _score_frame(days)
+        prepared = prepare_forward_returns(price_df, 5)
+
+        assert compute_daily_ic_series_from_forward(score_df, prepared) == _reference_daily_ic(
+            score_df, price_df, 5
+        )
+        assert prepared["trade_date"].min() == str(days[0])
+
+    def test_prepared_frame_keeps_only_reachable_dates(self) -> None:
+        price_df = _price_frame()
+        days = _trading_days(40)
+        score_df = _score_frame([days[30]])
+
+        prepared = prepare_forward_returns(price_df, 5, score_df["trade_date"])
+
+        assert prepared["trade_date"].min() == str(days[30])
+        # Forward returns exist through day+5 only; later rows drop as nulls
+        # (the window itself extends 5+10 days, covered by the helper test).
+        assert prepared["trade_date"].max() == str(days[34])

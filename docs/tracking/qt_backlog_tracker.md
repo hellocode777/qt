@@ -488,8 +488,23 @@
         `uv run pyright` 0 errors
       - 未达预期说明: 实测 1.9× 而非预估 7× —— 裁剪本身有成本（`unique()` 0.094s + semi join + 子帧排序），
         且基本面因子得分帧有 ~420 个日期（窗口更宽）
-- [ ] 方案 2（`compute_ic_decay` 单次 pass 出多 horizon，省 6 次里的 4 次）未做
-- [ ] 方案 3（`run_incremental` 预计算一次多 horizon 前向收益并跨因子复用，168 次 pass → 6 次）未做 —— 收益最大，但只治这条链路
+- [x] **方案 2 + 方案 3 已落地**: 新增 `prepare_forward_returns` / `compute_daily_ic_series_from_forward` /
+      `compute_ic_decay_from_forward` —— **每个 horizon 只准备一次前向收益，28 个因子复用**；
+      同时把"逐日对 merged 全帧 filter"改成单趟 `partition_by`（fund 因子 420 天、100 万行时 0.75s → ~0.2s，
+      这是方案 3 能否真正见效的关键：准备只占每次调用成本的 ~25%）。
+      方案 2（decay 单次 pass 出多 horizon）**未单独实现**——准备层抽出后，decay 的 5 个 horizon 只剩
+      join+分组，不再有全量价格 pass，其收益已被方案 3 覆盖。
+      - 证据 1（数值等价，真实数据）: 28 因子 × 5 horizon **逐位相同**；旧路径 240.4s →
+        新路径 13.9s（准备 1.7s + IC 12.2s）= **17.3×**
+      - 证据 2（端到端集成）: 真实 `run_incremental`、同一份 monitoring 种子数据跑两次对比：
+        **before 113.4s → after 17.9s（6.3×）**，两边 status=SUCCESS / 28 因子，
+        产出 `factor_ic_series.parquet`（57069 行）与 `factor_health.parquet`（870 行）**逐列逐行完全相同**
+      - 证据 3（单测）: `test_rank_ic_window.py` 扩到 **27 项**（新增 prepare/from_forward/decay 等价、
+        缺 horizon 抛 KeyError、窗口边界），research + factor_health + monitoring 全绿
+      - 证据 4（质量门禁）: `uvx ruff format --check .` → 483 files already formatted；`uvx ruff check .` → All checks passed；
+        `uv run pyright` → 0 errors
+      - **总账**: 原始实现 ~4-5 分钟/次 → 现在 **17.9s**；`test_pipeline_critical_path.py` 由"420s 超时被杀"变为 325s 跑完
+        （该数字含多个 DailyPipeline 用例，非单次 run_incremental）
 
 ### 质量门禁（2026-09-19）
 - [x] `uvx ruff format --check .` → 473 files already formatted；`uvx ruff check .` → All checks passed

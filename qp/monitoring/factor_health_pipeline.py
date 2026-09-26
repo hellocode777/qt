@@ -252,11 +252,12 @@ class FactorHealthPipeline(BasePipeline):
              (factor_name, date)) and log a fresh health snapshot to
              factor_health.parquet (dedup by (factor_name, date)).
 
-        This is the lightweight alternative to the full-history
-        ``qp factor update-health`` command: it only recomputes IC for the
-        dates present in ``factor_values`` (normally the latest trading day)
-        and re-classifies health from the accumulated IC history, so it runs
-        in seconds rather than ~2 min per factor.
+        Forward returns are prepared **once per horizon** for all factors
+        (see ``prepare_forward_returns``), not once per factor per horizon —
+        that hoisting is what keeps this incremental pass affordable on a
+        multi-year price history.  Only the dates present in ``factor_values``
+        are evaluated; health is then re-classified from the accumulated IC
+        history.
 
         Args:
             factor_values: Optional [trade_date, symbol, <factor cols>] frame.
@@ -273,7 +274,10 @@ class FactorHealthPipeline(BasePipeline):
         from datetime import UTC, datetime
 
         from qp.research.evaluation.rank_ic import (
-            compute_daily_ic_series,
+            DEFAULT_DECAY_HORIZONS,
+            compute_daily_ic_series_from_forward,
+            compute_ic_decay_from_forward,
+            prepare_forward_returns,
         )
 
         try:
@@ -327,11 +331,11 @@ class FactorHealthPipeline(BasePipeline):
                     if fname not in factor_cols:
                         factor_cols.append(fname)
 
-            date_str = fmt_date(datetime.now(UTC))
-            updated = 0
+            # ── 3. Build every factor's score frame ──
+            # The union of their dates drives how much price history the
+            # forward returns below need to keep.
+            score_frames: dict[str, pl.DataFrame] = {}
             skipped: list[str] = []
-
-            # ── 3. Per-factor IC + health ──
             for fname in factor_cols:
                 if fname in fund_scores:
                     score_df = fund_scores[fname]
@@ -345,12 +349,33 @@ class FactorHealthPipeline(BasePipeline):
                 if score_df.is_empty():
                     skipped.append(fname)
                     continue
+                score_frames[fname] = score_df
 
+            # ── 3b. Prepare forward returns ONCE per horizon ──
+            # Previously each factor paid the sort/shift over the price history
+            # once per horizon (28 factors × 6 horizons = 168 full passes);
+            # hoisting it out of the factor loop is the bulk of the speedup.
+            decay_horizons = list(DEFAULT_DECAY_HORIZONS)
+            horizons = sorted({forward_days, *decay_horizons})
+            prepared: dict[int, pl.DataFrame] = {}
+            if score_frames:
+                query_dates = pl.concat(
+                    [
+                        frame.select(pl.col("trade_date").cast(pl.Utf8))
+                        for frame in score_frames.values()
+                    ]
+                )["trade_date"].unique()
+                prepared = {h: prepare_forward_returns(px, h, query_dates) for h in horizons}
+
+            date_str = fmt_date(datetime.now(UTC))
+            updated = 0
+
+            # ── 3c. Per-factor IC + health ──
+            for fname, score_df in score_frames.items():
                 try:
-                    daily_records = compute_daily_ic_series(
+                    daily_records = compute_daily_ic_series_from_forward(
                         score_df,
-                        price_df,
-                        forward_days=forward_days,
+                        prepared[forward_days],
                         min_stocks_per_day=min_stocks_per_day,
                     )
                     if not daily_records:
@@ -368,13 +393,15 @@ class FactorHealthPipeline(BasePipeline):
                     ics = ic_series["ic"].to_list()
                     status = self._monitor.check_factor(fname, ics)
 
-                    # Multi-horizon decay curve (1d/3d/5d/10d/20d)
+                    # Multi-horizon decay curve (1d/3d/5d/10d/20d) from the
+                    # forward returns already prepared for this run.
                     multi_horizon: dict[int, float] = {}
                     try:
-                        from qp.research.evaluation.rank_ic import compute_ic_decay
-
-                        decay_records = compute_ic_decay(
-                            score_df, price_df, min_stocks_per_day=min_stocks_per_day
+                        decay_records = compute_ic_decay_from_forward(
+                            score_df,
+                            prepared,
+                            horizons=decay_horizons,
+                            min_stocks_per_day=min_stocks_per_day,
                         )
                         for h, rec in decay_records.items():
                             multi_horizon[h] = rec.ic_mean

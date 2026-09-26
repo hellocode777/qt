@@ -13,22 +13,32 @@ from qp.research.evaluation.layered_test import (
     compute_quantile_spread_series,
 )
 from qp.research.evaluation.rank_ic import (
+    DEFAULT_DECAY_HORIZONS,
     ICRecord,
     compute_daily_ic_series,
+    compute_daily_ic_series_from_forward,
     compute_ic_decay,
+    compute_ic_decay_from_forward,
     compute_rank_ic,
     evaluate_factor_ic,
+    evaluate_factor_ic_from_forward,
+    prepare_forward_returns,
 )
 
 __all__ = [
     # Rank IC
+    "DEFAULT_DECAY_HORIZONS",
     "ICRecord",
     # Layered test
     "LayeredTestResult",
     "compute_daily_ic_series",
+    "compute_daily_ic_series_from_forward",
     "compute_ic_decay",
+    "compute_ic_decay_from_forward",
     "compute_layered_returns",
     "compute_quantile_spread_series",
     "compute_rank_ic",
     "evaluate_factor_ic",
+    "evaluate_factor_ic_from_forward",
+    "prepare_forward_returns",
 ]
