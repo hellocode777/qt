@@ -31,15 +31,15 @@
       "active": false
     },
     "lvr_vol_only": {
-      "lifecycle": "backtest_passed",
+      "lifecycle": "approved",
       "meta": {
-        "strategy_version": "v20260808",
+        "strategy_version": "v20261008",
         "model_version": "",
         "feature_version": "",
         "feature_set": [],
         "rebalance_frequency": "daily",
         "rebalance_day": 0,
-        "owner": "experiment",
+        "owner": "Wei",
         "description": "",
         "tags": [],
         "weights": {
@@ -52,17 +52,17 @@
           "orthogonalize": true,
           "anti_chase": true
         },
-        "backtest_ic": 0.0543,
-        "backtest_sharpe": 1.52,
-        "backtest_max_dd": 9.7,
-        "backtest_excess_return": 26.730000000000004
+        "backtest_ic": 0.0518,
+        "backtest_sharpe": 1.47,
+        "backtest_max_dd": 8.77,
+        "backtest_excess_return": 67.88
       },
-      "active": false,
+      "active": true,
       "approved": {
         "strategy_id": "lvr_vol_only",
-        "version": "v20260808",
-        "approved_at": "2026-08-08T12:30:30.915323+00:00",
-        "approved_by": "webui",
+        "version": "v20261008",
+        "approved_at": "2026-10-08T07:11:10.258488+08:00",
+        "approved_by": "Wei",
         "weights": {
           "Volatility_20D": 1.0
         },
@@ -74,12 +74,43 @@
           "anti_chase": true
         },
         "backtest_summary": {
-          "ic": 0.0543,
-          "sharpe": 1.52,
-          "max_dd": 9.7,
-          "excess_return": 26.730000000000004
+          "ic": 0.0518,
+          "sharpe": 1.47,
+          "max_dd": 8.77,
+          "excess_return": 67.88
         },
         "validation_report_id": "",
+        "validation_report": {
+          "status": "PASS",
+          "score": 100.0,
+          "confidence": 1.0,
+          "rules": [
+            {
+              "rule_name": "rank_ic",
+              "status": "PASS",
+              "score": 0.0518,
+              "threshold": 0.02,
+              "actual_value": 0.0518,
+              "detail": "Mean IC from backtest"
+            },
+            {
+              "rule_name": "sharpe_ratio",
+              "status": "PASS",
+              "score": 1.47,
+              "threshold": 0.5,
+              "actual_value": 1.47,
+              "detail": "Sharpe ratio from backtest"
+            }
+          ],
+          "failed_rules": [],
+          "recommendation": "Backtest metrics frozen at approve time (ADR-031).",
+          "metrics": {
+            "ic_mean": 0.0518,
+            "sharpe_ratio": 1.47,
+            "max_drawdown_pct": 8.77,
+            "excess_return_pct": 67.88
+          }
+        },
         "meta": {}
       }
     },
@@ -105,7 +136,7 @@
       "active": false
     },
     "momentum_vol_full": {
-      "lifecycle": "approved",
+      "lifecycle": "backtest_passed",
       "meta": {
         "strategy_version": "v20260814",
         "model_version": "",
@@ -135,7 +166,7 @@
         "backtest_max_dd": 9.21,
         "backtest_excess_return": 56.33
       },
-      "active": true,
+      "active": false,
       "approved": {
         "strategy_id": "momentum_vol_full",
         "version": "v20260811",
