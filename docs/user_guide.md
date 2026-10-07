@@ -1,7 +1,7 @@
 # QP (Quant Platform) 用户指南
 
 > 个人量化研究与投资决策操作系统
-> 更新日期：2026-09-25
+> 更新日期：2026-10-08
 
 ---
 
@@ -1302,12 +1302,12 @@ qp/
 
 ### 16.4 当前策略
 
-当前 `data/strategy_registry.json` 全量（10 个，2026-09-25 实读）：
+当前 `data/strategy_registry.json` 全量（10 个，2026-10-08 实读）：
 
 | 策略 | lifecycle | active | approved 快照 |
 |------|-----------|--------|----------------|
-| `momentum_vol_full` | approved | ✅ true | ✅ v20260811（2026-08-12 by Wei） |
-| `lvr_vol_only` | backtest_passed | false | ✅ v20260808（by webui） |
+| `momentum_vol_full` | backtest_passed | false | ✅ v20260811（2026-08-12 by Wei，保留供审计） |
+| `lvr_vol_only` | approved | ✅ true | ✅ v20261008（2026-10-08 by Wei） |
 | `lvr_vol_mom1m` | research | false | — |
 | `momentum_v1.0` | research | false | — |
 | `momentum_vol_mf` | research | false | — |
@@ -1317,21 +1317,25 @@ qp/
 | `quality_v1.0` | research | false | — |
 | `value_v1.0` | research | false | — |
 
-**生产唯一 active 策略：`momentum_vol_full`**（5 因子反转）。
+**生产唯一 active 策略：`lvr_vol_only`**（低波单因子）—— 2026-10-08 由 `momentum_vol_full` 换入。
 
 生产权重取 **approved 冻结快照**（`registry.get_approved()`），不是 meta 里那套旧值 —— `daily_pipeline.py:496-512` 明确读快照，理由见 ADR-031：
 
-| 因子 | 权重（approved 冻结快照） |
+| 因子 | 权重（approved 冻结快照 v20261008） |
 |------|--------------------------|
-| Amplitude_5D | -0.25 |
-| Volatility_20D | +0.22（唯一正向，低波异象） |
-| Momentum_3M | -0.20（A股反转） |
-| Volume_Concentration | -0.19 |
-| Volume_Trend_10D | -0.14 |
+| Volatility_20D | +1.00（低波异象） |
 
-> registry `meta.weights` 里另有一套更细的旧值（-0.2331 / +0.1823 / -0.2368 / -0.1758 / -0.1721），那是审批前的记录，生产不读。
+> **切换依据**（2026-10-08 同口径对照，2024-01-01→2026-07-01 / Top10 / rebalance 20d / n_days=602）：
+> `lvr_vol_only` IC 0.0518 / Sharpe 1.47 / MaxDD 8.77% / 超额 +67.88%（实验 `multifactor_20261007_230557`，
+> 即 v20261008 快照的指标来源）vs `momentum_vol_full` IC 0.0690 / Sharpe 0.60 / MaxDD 19.22% / 超额 -1.68%
+> （实验 `multifactor_20261007_231048`，与 2026-09-26 那次逐位一致 → 基线可复现）。
+> 代价：IC 更低、集中度更高（单因子）。
+> `momentum_vol_full` 的 v20260811 快照保留供审计（lifecycle=backtest_passed、active=false）。
+> ⚠️ 反向复归要重新 `qp strategy approve`，而 `approve()` 从 `meta.weights` 重建快照 ——
+> 届时冻结的会是 v20260814 那套（-0.2331 / +0.1823 / …），**不是**原 v20260811（-0.25 / +0.22 / …）。
+> 要精确回滚请用 git 恢复 `data/strategy_registry.json`。
 
-> ⚠️ 快照里的 `parameters` 字段（`orthogonalize` / `top_n` / `rebalance` / `anti_chase`）在日线生产链路里是**惰性字段**：`daily_pipeline` 只取 `weights` + `industry_neutral`（`compute_today_scores_full()` 没有正交化入参）。所以快照写着的 `orthogonalize: true` **不会**把 VIF 正交化重新打开——2026-08-13 那次关闭仍然有效（生效值来自 `strategy/config.py`，momentum_vol_full = False）。改快照里这几个字段对生产无影响。
+> ⚠️ 快照里的 `parameters` 字段（`orthogonalize` / `top_n` / `rebalance` / `anti_chase`）在日线生产链路里是**惰性字段**：`daily_pipeline` 只取 `weights` + `industry_neutral`（`compute_today_scores_full()` 没有正交化入参）。所以生产日线**不做** VIF 正交化 / 防追高 / 自定义调仓周期，无论快照或 `strategy/config.py` 里怎么写 —— `lvr_vol_only`（config `orthogonalize=True`）与此前的 `momentum_vol_full`（config `orthogonalize=False`，2026-08-13 关闭）都是如此。改快照里这几个字段对生产无影响。
 
 > 策略选择逻辑（`daily_pipeline.py:459-477`，ADR-031 Policy A）：**只跑 lifecycle==APPROVED 的策略**；没有 APPROVED 就跳过当日策略执行并报警，**不退回 research、不兜底 hardcode**。
 

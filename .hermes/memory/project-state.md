@@ -10,10 +10,12 @@
 - 策略注册表（运行事实）：`data/strategy_registry.json`
 - 近期决策：`docs/archive/adr/`（ADR-001~033）
 
-## 当前活跃工作（截至 2026-08-13）
+## 当前活跃工作（截至 2026-10-08）
 
-- **唯一 APPROVED 策略**：momentum_vol_full（v20260811, 5 因子）
-- **Paper Trading**：lvr_vol_only 候选（pt-c2c3c5ba）推进中，scheduler 18:05 自动跑
+- **唯一 APPROVED 策略**：`lvr_vol_only`（v20261008，低波单因子 `Volatility_20D +1.0`）
+  —— 2026-10-08 由 `momentum_vol_full` 换入；mvF 降为 backtest_passed（v20260811 快照保留供审计），依据见 `docs/tracking/qt_backlog_tracker.md` #6
+- **Paper Trading**：`lvr_vol_only`（pt-8a24c686，起始 2026-08-21）跑到 30/30 中
+  —— 切换先行，未等模拟盘满 30 天（已知取舍，非 bug）
 - 见 `docs/tracking/qt_backlog_tracker.md` 的最新条目
 
 ## 已知未完成

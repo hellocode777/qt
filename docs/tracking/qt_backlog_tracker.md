@@ -167,6 +167,15 @@
 - [x] 选定候选 lvr_vol_only（低波单因子，与 mvF 真分散化）
 - [x] Paper Trading 启动 `pt-8b63c05c`（0/30 天，与 mvF pt-bb27fc9d 并行）
 - [ ] 30 天后 evaluate() → APPROVED → 记录第二个生产策略
+- [x] ⚠️ **2026-10-08 提前切换（未等模拟盘满 30 天，属已知取舍不是 bug）**：生产策略由 `momentum_vol_full` 换成 `lvr_vol_only`
+  - 命令：`qp strategy approve lvr_vol_only --by Wei --version v20261008 --from-experiment multifactor_20261007_230557` + `qp strategy deactivate momentum_vol_full`
+  - 当时模拟盘 `lvr_vol_only` = 25/30 天（起始 2026-08-21）；`cmd_strategy_approve` 只校验有 weights，不检查模拟盘 → 这道门被跳过
+  - 依据 = 同口径对照（2024-01-01→2026-07-01 / Top10 / rebalance 20d / n_days=602，2026-10-08 现跑）：
+    `lvr_vol_only` IC 0.0518 / Sharpe 1.47 / MaxDD 8.77% / 超额 +67.88%（`multifactor_20261007_230557`）vs
+    `momentum_vol_full` IC 0.0690 / Sharpe 0.60 / MaxDD 19.22% / 超额 -1.68%（`multifactor_20261007_231048`，与 9-26 那次逐位一致 → 基线可复现）
+  - 代价：IC 更低（0.052 vs 0.069）、单因子集中度更高；`momentum_vol_full` v20260811 快照保留（lifecycle=backtest_passed，active=false）
+  - 回滚：git 恢复 `data/strategy_registry.json`（精确）；重新 `approve momentum_vol_full` 会从 meta 重建快照 → 拿到 v20260814 权重（-0.2331/+0.1823/…），**不是**原 v20260811（-0.25/+0.22/…）
+- [ ] 模拟盘 `lvr_vol_only` 继续跑到 30/30，届时把 `evaluate()` 结果并入本条（切换已先行，本条只作留痕）
 
 ### #7 实盘闭环验证 ⭐⭐⭐
 - **证据**: ADR-032 现金账本已建，无证据走通完整周期
