@@ -9,6 +9,11 @@ truth, so this doc is *generated*, never hand-edited:
 Use ``--check`` to verify the committed doc matches the CLI (exit 1 + message when
 stale); ``tests/unit/test_docs_command_reference.py`` runs exactly that, so changing
 the CLI without regenerating fails the suite instead of silently rotting the doc.
+``--out PATH`` renders to another file (used by the determinism test).
+
+The render must stay **deterministic**: ``--check`` is a byte comparison, so the
+document must not embed anything that changes on its own (build date/time, host,
+PID) — otherwise the guard goes red the next day without any CLI change.
 
 Two kinds of commands exist:
 
@@ -31,7 +36,6 @@ import ast
 import inspect
 import re
 import sys
-from datetime import date
 from pathlib import Path
 
 import click
@@ -375,9 +379,21 @@ def _known_commands(flat, dispatch) -> set[str]:
     return known
 
 
+def _parse_argv(argv: list[str]) -> tuple[bool, Path]:
+    """``--check`` compares instead of writing; ``--out PATH`` retargets the file."""
+    out = OUT
+    if "--out" in argv:
+        index = argv.index("--out")
+        if index + 1 >= len(argv):
+            raise SystemExit("--out 需要一个路径参数")
+        out = Path(argv[index + 1])
+    return "--check" in argv, out
+
+
 def main() -> int:
     from qp.platform.cli.parser import cli
 
+    check, out_path = _parse_argv(sys.argv[1:])
     handlers, dispatch = _decl_map()
     flat = _collect(cli)
     leaves = [(p, c) for p, c in flat if not isinstance(c, click.Group)]
@@ -389,7 +405,10 @@ def main() -> int:
         "# QP CLI 命令手册（全量）\n",
         "> **本文件由脚本生成，请勿手改**："
         "`.venv/bin/python scripts/maintenance/gen_command_reference.py`\n"
-        f"> 权威来源：`qp/platform/cli/parser.py`（Click 定义）；生成日期：{date.today().isoformat()}；"
+        # NOTE: never render a volatile field (build date/time, host, PID) here.
+        # `--check` compares bytes, so any such field makes the guard fail on the
+        # *next* day/runner even when the CLI did not change.
+        "> 权威来源：`qp/platform/cli/parser.py`（Click 定义）；"
         f"可执行命令 **{len(leaves) + dispatched}** 条"
         f"（Click 命令 {len(leaves)} + 手动分派 {dispatched}），命令节点 {len(flat)} 个"
         f"（命令组 {len(groups)} 个，含嵌套组 {len(nested)} 个）。\n"
@@ -445,29 +464,33 @@ def main() -> int:
         "- 命令增删改后重跑生成器即可（`parser.py` 才是权威；本文件不建议手改）。\n"
         "- **忘了重跑不会静默腐化**：`tests/unit/test_docs_command_reference.py` 会跑 "
         "`gen_command_reference.py --check`，文档与 CLI 不一致即测试失败。\n"
-        "- 生成器不联网、不写数据，只读 `parser.py` 与 handler 源码；两次运行结果字节一致。\n"
+        "- 生成器不联网、不写数据，只读 `parser.py` 与 handler 源码；两次运行结果字节一致"
+        "（**刻意不写生成日期**：`--check` 是字节比对，任何随时间变化的字段都会让守卫在"
+        "第二天必然失败）。文档新鲜度看 `git log -1 -- docs/command_reference.md`。\n"
         "- 想补充示例，改生成器顶部的 `WORKFLOWS`（带存在性断言，写错命令会直接报错退出）。\n"
     )
 
     rendered = "\n".join(out) + "\n"
-    if "--check" in sys.argv[1:]:
-        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
+    n_bytes = len(rendered.encode("utf-8"))
+    if check:
+        current = out_path.read_text(encoding="utf-8") if out_path.exists() else ""
         if current != rendered:
             n_doc = len(re.findall(r"^\| `qp ", current, re.M))
             n_new = len(re.findall(r"^\| `qp ", rendered, re.M))
             print(
-                f"STALE: {OUT} 与当前 CLI 不一致（速查表条目 {n_doc} → {n_new}）。"
+                f"STALE: {out_path} 与当前 CLI 不一致（速查表条目 {n_doc} → {n_new}）。"
                 "重跑 `python scripts/maintenance/gen_command_reference.py` 重新生成。",
                 file=sys.stderr,
             )
             return 1
-        print(f"up to date: {OUT} ({len(rendered)} bytes)")
+        print(f"up to date: {out_path} ({n_bytes} bytes)")
         return 0
 
-    OUT.write_text(rendered, encoding="utf-8")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
     dispatched = sum(len(v) for v in dispatch.values())
     print(
-        f"wrote {OUT} ({OUT.stat().st_size} bytes) | commands={len(leaves)} "
+        f"wrote {out_path} ({n_bytes} bytes) | commands={len(leaves)} "
         f"+dispatched={dispatched} | groups={len(groups)} (nested {len(nested)}) | nodes={len(flat)}"
     )
     return 0

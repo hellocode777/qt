@@ -1,7 +1,7 @@
 # QP CLI 命令手册（全量）
 
 > **本文件由脚本生成，请勿手改**：`.venv/bin/python scripts/maintenance/gen_command_reference.py`
-> 权威来源：`qp/platform/cli/parser.py`（Click 定义）；生成日期：2026-09-26；可执行命令 **60** 条（Click 命令 59 + 手动分派 1），命令节点 75 个（命令组 16 个，含嵌套组 1 个）。
+> 权威来源：`qp/platform/cli/parser.py`（Click 定义）；可执行命令 **60** 条（Click 命令 59 + 手动分派 1），命令节点 75 个（命令组 16 个，含嵌套组 1 个）。
 > CLI 入口：`.venv/bin/qp`（等价 `python -m qp.platform.cli.main`；**勿用 `uv run qp`**，Python 3.12 下载会超时）。
 > 相关：`docs/ai/COMMAND_MAP.md`（AI 定位：命令 → 代码入口 → 流程）、`docs/user_guide.md`（使用指南）。
 
@@ -1044,6 +1044,6 @@ qp web start
 
 - 命令增删改后重跑生成器即可（`parser.py` 才是权威；本文件不建议手改）。
 - **忘了重跑不会静默腐化**：`tests/unit/test_docs_command_reference.py` 会跑 `gen_command_reference.py --check`，文档与 CLI 不一致即测试失败。
-- 生成器不联网、不写数据，只读 `parser.py` 与 handler 源码；两次运行结果字节一致。
+- 生成器不联网、不写数据，只读 `parser.py` 与 handler 源码；两次运行结果字节一致（**刻意不写生成日期**：`--check` 是字节比对，任何随时间变化的字段都会让守卫在第二天必然失败）。文档新鲜度看 `git log -1 -- docs/command_reference.md`。
 - 想补充示例，改生成器顶部的 `WORKFLOWS`（带存在性断言，写错命令会直接报错退出）。
 
