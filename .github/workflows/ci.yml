@@ -11,6 +11,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 依赖一律用 --frozen 安装 uv.lock 里的版本。
+# 裸 `uv sync` / `uv run` 会在 runner 上重新解析依赖（实测：click 被装成 8.5.0，
+# 而 uv.lock 锁的是 8.4.2），于是 CI 环境 ≠ 本地环境 ≠ 锁文件：
+# click 8.5 把未显式声明的 flag 默认值从 False 改成内部 Sentinel.UNSET，
+# 生成的 docs/command_reference.md 因此与提交版本不同，pytest 守卫误报 STALE。
+# 锁文件是环境契约，CI 必须复现它，而不是悄悄升级。
 jobs:
   lint:
     name: Ruff
@@ -46,15 +52,15 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --frozen --dev
 
       - name: Run Pyright
-        run: uv run pyright
+        run: uv run --frozen pyright
 
       # mypy 渐进式接入: polars 动态类型噪音多(328 errors), 先跑不阻塞, 后续逐步清零
       - name: Run Mypy (progressive)
         continue-on-error: true
-        run: uv run mypy qp
+        run: uv run --frozen mypy qp
 
   tests:
     name: Pytest
@@ -71,11 +77,11 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --frozen --dev
 
       - name: Run Pytest
         run: |
-          uv run pytest \
+          uv run --frozen pytest \
             --cov=qp \
             --cov-report=term-missing \
             --cov-report=xml
@@ -94,13 +100,13 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --frozen --dev
 
       - name: qp version
-        run: uv run qp version
+        run: uv run --frozen qp version
 
       - name: qp doctor
-        run: uv run qp doctor
+        run: uv run --frozen qp doctor
 
       - name: qp --help
-        run: uv run qp --help
+        run: uv run --frozen qp --help

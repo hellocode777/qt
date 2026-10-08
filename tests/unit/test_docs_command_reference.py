@@ -14,10 +14,14 @@ Fix by running:  .venv/bin/python scripts/maintenance/gen_command_reference.py
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
+import types
 from pathlib import Path
+
+import click
 
 REPO = Path(__file__).resolve().parents[2]
 GENERATOR = REPO / "scripts" / "maintenance" / "gen_command_reference.py"
@@ -101,3 +105,36 @@ def test_generated_doc_is_time_independent(tmp_path: Path) -> None:
     assert rendered[0] == rendered[1], (
         "生成物含随时间变化的字段（生成日期/时间），--check 会在次日无 CLI 变更时误报 STALE"
     )
+
+
+def test_flag_default_ignores_click_unset_sentinel() -> None:
+    """A flag's documented default must not depend on the click version.
+
+    click >= 8.5 keeps ``Sentinel.UNSET`` on flags declared without ``default``
+    (8.4 materialised ``False``), so ``str(param.default)`` leaked
+    "Sentinel.UNSET（开关）" into the rendered doc — CI (click 8.5.0) then
+    disagreed with the committed doc (click 8.4.2) with zero CLI drift.
+    """
+    generator = _load_generator()
+
+    class UnsetSentinel:
+        def __str__(self) -> str:
+            return "Sentinel.UNSET"
+
+    unset = click.Option(["--force"], is_flag=True, help="force it")
+    unset.default = UnsetSentinel()
+    rows = generator._param_rows(click.Command("demo", params=[unset]))
+    assert rows == [["--force", "选项", "可选", "False（开关）", "force it"]]
+
+    explicit = click.Option(["--save/--no-save"], is_flag=True, default=True, help="keep it")
+    rows = generator._param_rows(click.Command("demo", params=[explicit]))
+    assert rows[0][3] == "True（开关）"
+
+
+def _load_generator() -> types.ModuleType:
+    """Import the generator script (``scripts/`` is not a package)."""
+    spec = importlib.util.spec_from_file_location("gen_command_reference", GENERATOR)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

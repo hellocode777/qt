@@ -304,6 +304,19 @@ def _pass_through_flags(module: str, func: str) -> list[tuple[str, str]]:
     return [(f, desc[f]) for f in order]
 
 
+def _flag_default(option: click.Option) -> bool:
+    """Effective default of a flag, independent of the click version.
+
+    click >= 8.5 keeps an internal ``Sentinel.UNSET`` on flags declared without
+    ``default`` (8.4 materialised ``False``), so ``str(p.default)`` renders
+    ``Sentinel.UNSET`` there and ``False`` here. For a bare boolean flag an unset
+    default auto-derives to ``False`` (click docs, Options → default), which is
+    what the doc should say: the sentinel is an implementation detail, not a
+    default a user can act on.
+    """
+    return option.default if isinstance(option.default, bool) else False
+
+
 def _param_rows(cmd: click.Command) -> list[list[str]]:
     rows: list[list[str]] = []
     for p in cmd.params:
@@ -315,7 +328,7 @@ def _param_rows(cmd: click.Command) -> list[list[str]]:
         flags = " ".join(getattr(p, "opts", []) or [])
         default = "" if p.default is None else str(p.default)
         if isinstance(p, click.Option) and p.is_flag:
-            default = f"{default}（开关）"
+            default = f"{_flag_default(p)}（开关）"
         rows.append(
             [
                 flags,
