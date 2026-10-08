@@ -11,12 +11,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# 依赖一律用 --frozen 安装 uv.lock 里的版本。
-# 裸 `uv sync` / `uv run` 会在 runner 上重新解析依赖（实测：click 被装成 8.5.0，
-# 而 uv.lock 锁的是 8.4.2），于是 CI 环境 ≠ 本地环境 ≠ 锁文件：
-# click 8.5 把未显式声明的 flag 默认值从 False 改成内部 Sentinel.UNSET，
-# 生成的 docs/command_reference.md 因此与提交版本不同，pytest 守卫误报 STALE。
-# 锁文件是环境契约，CI 必须复现它，而不是悄悄升级。
+# 关于依赖版本：uv.lock 未纳入版本控制（.gitignore），因此 CI 上 `uv sync --dev`
+# 会重新解析并装到满足 pyproject 的最新版（实测 click 从 8.4.2 变成 8.5.0）。
+# 因此凡是由代码生成的产物（如 docs/command_reference.md）必须对依赖版本健壮：
+# 不要渲染依赖库的内部实现细节（click 8.5 把未声明 default 的 flag 从 False 改成
+# Sentinel.UNSET，曾让文档守卫在零 CLI 变更下报 STALE）。
+# 守卫：tests/unit/test_docs_command_reference.py 的
+# test_flag_default_ignores_click_unset_sentinel / test_generated_doc_is_time_independent。
+# 若要让 CI 与本地环境完全一致，需先 `git add -f uv.lock` 再把这里的 uv 命令加 --frozen。
+
 jobs:
   lint:
     name: Ruff
@@ -52,15 +55,15 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --frozen --dev
+        run: uv sync --dev
 
       - name: Run Pyright
-        run: uv run --frozen pyright
+        run: uv run pyright
 
       # mypy 渐进式接入: polars 动态类型噪音多(328 errors), 先跑不阻塞, 后续逐步清零
       - name: Run Mypy (progressive)
         continue-on-error: true
-        run: uv run --frozen mypy qp
+        run: uv run mypy qp
 
   tests:
     name: Pytest
@@ -77,11 +80,11 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --frozen --dev
+        run: uv sync --dev
 
       - name: Run Pytest
         run: |
-          uv run --frozen pytest \
+          uv run pytest \
             --cov=qp \
             --cov-report=term-missing \
             --cov-report=xml
@@ -100,13 +103,13 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --frozen --dev
+        run: uv sync --dev
 
       - name: qp version
-        run: uv run --frozen qp version
+        run: uv run qp version
 
       - name: qp doctor
-        run: uv run --frozen qp doctor
+        run: uv run qp doctor
 
       - name: qp --help
-        run: uv run --frozen qp --help
+        run: uv run qp --help
