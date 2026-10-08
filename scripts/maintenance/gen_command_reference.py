@@ -33,6 +33,7 @@ following decorator parents so nested groups (``qp strategy approved``) and
 from __future__ import annotations
 
 import ast
+import difflib
 import inspect
 import re
 import sys
@@ -390,6 +391,45 @@ def _parse_argv(argv: list[str]) -> tuple[bool, Path]:
     return "--check" in argv, out
 
 
+def _click_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("click")
+    except Exception:  # pragma: no cover — click is a hard dependency
+        return "unknown"
+
+
+def _report_stale(out_path: Path, current: str, rendered: str) -> None:
+    """Diagnose a --check mismatch: counts, env fingerprint, bounded unified diff.
+
+    The counts alone ("条目 60 → 60") say nothing when the tree did not change —
+    this happened for real once (a volatile build date in the header), so always
+    surface the concrete lines that differ plus the interpreter that rendered them.
+    """
+    n_doc = len(re.findall(r"^\| `qp ", current, re.M))
+    n_new = len(re.findall(r"^\| `qp ", rendered, re.M))
+    diff_lines = list(
+        difflib.unified_diff(
+            current.splitlines(),
+            rendered.splitlines(),
+            fromfile=str(out_path),
+            tofile="re-rendered-from-CLI",
+            lineterm="",
+            n=1,
+        )
+    )
+    report = [
+        f"STALE: {out_path} 与当前 CLI 不一致（速查表条目 {n_doc} → {n_new}）。"
+        "重跑 `python scripts/maintenance/gen_command_reference.py` 重新生成。",
+        f"env: python={sys.version.split()[0]} click={_click_version()} cwd={Path.cwd()}",
+    ]
+    report.extend(diff_lines[:40])
+    if len(diff_lines) > 40:
+        report.append(f"... diff 共 {len(diff_lines)} 行，仅显示前 40 行")
+    print("\n".join(report), file=sys.stderr)
+
+
 def main() -> int:
     from qp.platform.cli.parser import cli
 
@@ -475,13 +515,7 @@ def main() -> int:
     if check:
         current = out_path.read_text(encoding="utf-8") if out_path.exists() else ""
         if current != rendered:
-            n_doc = len(re.findall(r"^\| `qp ", current, re.M))
-            n_new = len(re.findall(r"^\| `qp ", rendered, re.M))
-            print(
-                f"STALE: {out_path} 与当前 CLI 不一致（速查表条目 {n_doc} → {n_new}）。"
-                "重跑 `python scripts/maintenance/gen_command_reference.py` 重新生成。",
-                file=sys.stderr,
-            )
+            _report_stale(out_path, current, rendered)
             return 1
         print(f"up to date: {out_path} ({n_bytes} bytes)")
         return 0

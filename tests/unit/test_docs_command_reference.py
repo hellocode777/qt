@@ -36,7 +36,8 @@ def test_command_reference_matches_cli() -> None:
     )
 
     assert result.returncode == 0, (
-        "docs/command_reference.md 与当前 CLI 不一致（命令增删改后忘了重跑生成器）。\n"
+        "docs/command_reference.md 与当前 CLI 不一致（命令增删改后忘了重跑生成器），"
+        "或生成器输出了非确定性内容（见下方 diff/env）。\n"
         f"stdout: {result.stdout.strip()}\nstderr: {result.stderr.strip()}\n"
         "修复：.venv/bin/python scripts/maintenance/gen_command_reference.py"
     )
