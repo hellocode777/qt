@@ -1053,10 +1053,12 @@ class DailyPipeline(BasePipeline):
                 from qp.decision.position_ledger import PositionLedger
                 from qp.portfolio.risk_exit import (
                     Priority,
+                    RiskExitConfig,
                     RiskExitManager,
                     TradeReason,
                 )
 
+                exit_config = RiskExitConfig()
                 ledger = PositionLedger()
                 active_positions = ledger.get_active()
 
@@ -1083,7 +1085,7 @@ class DailyPipeline(BasePipeline):
                             sym_vol = (
                                 prices.filter(pl.col("symbol") == sym)
                                 .sort("trade_date", descending=True)
-                                .head(20)  # 20-day lookback for avg volume
+                                .head(exit_config.liquidity_lookback_days)
                             )
                             if not sym_vol.is_empty():
                                 volume_data[sym] = sym_vol["volume"].to_list()
@@ -1107,7 +1109,7 @@ class DailyPipeline(BasePipeline):
 
                     # ── 第二类：Risk Exit (每日必检) ──
                     if holdings and current_prices:
-                        exit_mgr = RiskExitManager()
+                        exit_mgr = RiskExitManager(exit_config)
                         risk_signals = exit_mgr.evaluate_daily(
                             holdings=holdings,
                             prices=current_prices,

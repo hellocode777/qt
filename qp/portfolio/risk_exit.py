@@ -35,6 +35,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from qp.shared.constants import SHARES_PER_LOT
 from qp.shared.paths import BLACKLIST
 
 # ------------------------------------------------------------------
@@ -107,7 +108,12 @@ class RiskExitConfig:
     force_sell_delist: bool = True  # 退市强制卖出
     force_sell_blacklist: bool = True  # 黑名单强制卖出
     max_suspension_days: int = 30  # 长期停牌阈值
-    liquidity_min_avg_volume: int = 100_000  # 日均成交量最低阈值 (股)
+    # 日均成交量最低阈值 (股)。⚠️ 日线 volume 原始单位是「手」(腾讯 kline,
+    # 见 SHARES_PER_LOT)，比较前必须 ×SHARES_PER_LOT —— 漏乘会把门槛放大
+    # 100×，40% 主板股票被误判「流动性不足」并次日强制卖出 (2026-10-09 事故)。
+    # 取值与 qp/data/universe/liquidity.py 的流动性下限口径一致 (500k 股/日,
+    # 主板通过率 99.9%)，保证「买入侧闸门」与「卖出侧闸门」同一标准。
+    liquidity_min_avg_volume: int = 500_000  # 500_000 股/日 ≈ 5_000 手/日
     liquidity_lookback_days: int = 20  # 流动性回看天数
     blacklist_path: str | Path = BLACKLIST  # 黑名单文件路径
 
@@ -205,11 +211,13 @@ class RiskExitManager:
                     reasons.append(TradeReason.STOP_LOSS)
 
             # ── MEDIUM: 流动性风险 ──
+            # vols 为日线 volume 原始值, 单位「手」; 配置阈值单位「股」,
+            # 必须 ×SHARES_PER_LOT 后再比较 (漏乘 = 门槛放大 100×)。
             if volume_data and symbol in volume_data:
                 vols = volume_data[symbol]
                 if vols:
-                    avg_vol = sum(vols) / len(vols)
-                    if avg_vol < self.config.liquidity_min_avg_volume:
+                    avg_vol_shares = sum(vols) / len(vols) * SHARES_PER_LOT
+                    if avg_vol_shares < self.config.liquidity_min_avg_volume:
                         reasons.append(TradeReason.RISK_LIQUIDITY)
 
             # ── MEDIUM: 长期停牌 ──

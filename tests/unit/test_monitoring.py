@@ -2296,6 +2296,37 @@ class TestExitEnginePipelineIntegration:
             ledgermod.POSITIONS_INDEX = Path(orig_pos_dir) / "index.json"
             ledgermod.ACCOUNT_FILE = Path(orig_pos_dir) / "account.json"
 
+    def test_exit_check_liquidity_volume_unit_is_lots(self) -> None:
+        """流动性检查: volume_data 单位是「手」, 比较前必须 ×SHARES_PER_LOT.
+
+        2026-10-09 事故: 601158 日线 volume≈63_246(手) 被直接当成 63_246 股
+        与 100_000 股阈值比较 → 误判「流动性不足」次日强制卖出。
+        """
+        from qp.portfolio.risk_exit import RiskExitManager
+
+        mgr = RiskExitManager()
+
+        # 日均 1_000 手 = 100_000 股 < 500_000 股 → 触发流动性退出
+        illiquid = mgr.evaluate_daily(
+            holdings={"601158": 100},
+            prices={"601158": 4.06},
+            cost_basis={"601158": 4.04},
+            date_str="2026-10-09",
+            volume_data={"601158": [1_000.0] * 20},
+        )
+        assert len(illiquid) == 1
+        assert "RISK_LIQUIDITY" in illiquid[0].reasons
+
+        # 日均 63_246 手 = 6_324_600 股 ≥ 500_000 股 → 不触发 (事故中的真实值)
+        liquid = mgr.evaluate_daily(
+            holdings={"601158": 100},
+            prices={"601158": 4.06},
+            cost_basis={"601158": 4.04},
+            date_str="2026-10-09",
+            volume_data={"601158": [63_246.0] * 20},
+        )
+        assert liquid == []
+
 
 class TestAlphaDecayDetector:
     """Test AlphaDecayDetector (P3.2)."""
