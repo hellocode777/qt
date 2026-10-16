@@ -64,15 +64,27 @@ unit 文件本身完好（`[Install] WantedBy=default.target` 一直在）。开
 install-systemd.sh → "smtp env: .../smtp.env present (mode 600)" + "verification: 1 scheduler process(es) running"
 ```
 
-### 遗留（只能人工做）
+### 轮换结果（2026-10-16 · 已实测生效）
 
-- [ ] **轮换 163 授权码**：163 邮箱网页版 → 设置 → POP3/SMTP/IMAP → 授权码管理 → 重置；
-      把新值写入 `~/.config/qp/smtp.env`，然后 `systemctl --user restart qp-scheduler`。
-      理由：旧值已进 git 历史并 push 过，私有仓风险有界，但**删历史无用 —— 只能轮换**。
-      轮换一次即让上表所有副本（含旧仓、会话日志）一起失效，这是最省的收口方式。
-- [ ] 旧仓 `~/workspace/QuantTrading` 也有同一枚值（`config/__init__.py:157`，值已提交进 HEAD，但该仓**无 remote、从未外传**）：
-      建议轮换后把该处改为读环境变量 / `.env`，并清 `config/__pycache__/`；本次未动（另一项目，等你点头）
-- [ ] 是否用 `git filter-repo` 清历史：当前不必要（轮换后旧值即失效）；若将来仓库转公开，必须先做。
+| 验证项 | 结果 |
+|---|---|
+| 新授权码 `smtplib.SMTP_SSL(smtp.163.com:465).login()` | **OK** |
+| 被泄露的旧值再登一次 | **AUTH-FAIL 535 authentication failed** → 泄露值彻底作废 |
+| 运行中进程是否吃到新值 | MainPID 16987，`SMTP_*` 5 个，密码 SHA256 指纹与 env 文件一致 |
+| env 文件权限 | 0600 |
+| 端到端发信 | 测试邮件（主题含 `[SMTP-ROTATION-TEST]`）已投递到 zhang_shuai777@163.com |
+
+→ 上表所有副本（git 历史 / 旧仓回收站副本 / Hermes·Claude 会话记录 / `.bash_history` 残留）
+中的旧值**已同步失效**，无需再做删除或清历史操作。
+
+### 人工步骤（已完成，留档）
+
+1. 163 网页 → 设置 → POP3/SMTP/IMAP → 授权密码管理 → 删除 `设备2 2026.6.21`（腾出名额，满 2/2）
+2. 同区域「新增授权密码」→ 手机验证 → 复制 16 位新码（只显示一次）
+3. 本机写入（新值不经对话记录）：
+   `python3 -c '...getpass...'` 单行版覆写 `SMTP_PASSWORD=` 行（避免 heredoc 缩进坑）→
+   `systemctl --user restart qp-scheduler`
+4. 本次由 agent 完成上述 §「轮换结果」五项验证
 
 ---
 
@@ -178,7 +190,8 @@ PY
 
 ## 6. 遗留 / 待决策
 
-- [ ] 轮换 163 授权码（§1，只有人工能做）
+- [x] **轮换 163 授权码** —— 2026-10-16 完成并实测：新值登录 OK / 旧值 535 失败（见 §1「轮换结果」）
+- [x] 旧仓 `~/workspace/QuantTrading` 那枚同值副本 —— 随旧仓退役进回收站（§7）；旧值已失效，副本不再构成风险
 - [x] `crontab 0 17 * * 1-5`（旧仓 pipeline）与 systemd `18:00 daily_pipeline` **语义重复** ——
       2026-10-16 随旧仓退役一并删除（§7），重复问题自然消失
 - [ ] `guard_minutes`（daily_pipeline 25 / 其余 5）是人工经验值；pipeline 时长若变化需同步，

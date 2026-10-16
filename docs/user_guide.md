@@ -715,7 +715,8 @@ systemctl --user restart qp-scheduler
 18:30 `email_report` 静默失败）。
 
 > ⚠️ 历史（2026-10-16）：明文授权码曾写在 unit 模板里并已提交推送（私有仓）→ 该凭据
-> **需轮换**。详见 `docs/tracking/scheduler_credential_and_hook.md`。
+> **已轮换并实测失效**（新值登录 OK / 旧值 535 认证失败）。详见
+> `docs/tracking/scheduler_credential_and_hook.md`。
 
 #### 自动部署钩子（post-commit）
 
