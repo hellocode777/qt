@@ -10,9 +10,40 @@ from typing import TYPE_CHECKING
 
 from qp.shared.paths import DECISIONS_DIR, PAPER_TRADING_DIR, WATCHDOG_DIR
 from qp.shared.time import fmt_date, today_cn
+from qp.shared.types import StrategyLifecycle
 
 if TYPE_CHECKING:
     from qp.platform.runtime.application import Application
+
+
+# ── Paper-trading auto-promotion guard ──────────────────────────────
+# Lifecycle states the 30-day paper-trading evaluation must NEVER rewrite
+# automatically.  APPROVED is a production-ready frozen snapshot (ADR-031)
+# and daily_pipeline runs ONLY APPROVED strategies, so promoting an
+# approved strategy to SHADOW_PRODUCTION silently stops the whole strategy
+# path: 2026-10-14 lvr_vol_only passed its paper run, was rewritten to
+# SHADOW_PRODUCTION, and 10/15-10/16 produced no DecisionPackage at all
+# (pipeline early-returns with "无 APPROVED 策略").  The same guard applies
+# in both directions — a FAIL must not demote a live strategy to RESEARCH.
+_PAPER_PROMOTION_PROTECTED: frozenset[StrategyLifecycle] = frozenset(
+    {
+        StrategyLifecycle.APPROVED,
+        StrategyLifecycle.SHADOW_PRODUCTION,
+        StrategyLifecycle.PRODUCTION,
+        StrategyLifecycle.WARNING,
+        StrategyLifecycle.KILL_SWITCH,
+    }
+)
+
+
+def _paper_auto_lifecycle_change_allowed(current: StrategyLifecycle | None) -> bool:
+    """Whether the paper-trading auto-evaluation may rewrite ``current``.
+
+    ``True`` only for lifecycles strictly below SHADOW_PRODUCTION.  States at
+    or above it (plus WARNING / KILL_SWITCH) require an explicit human
+    decision — see the 2026-10-14 incident note above.
+    """
+    return current is None or current not in _PAPER_PROMOTION_PROTECTED
 
 
 # ── Retrain alert de-duplication ────────────────────────────────────
@@ -676,7 +707,6 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
             from pathlib import Path
 
             from qp.pipeline.daily_pipeline import _load_price_data
-            from qp.shared.types import StrategyLifecycle
             from qp.simulation.paper_trading import PaperTradingTracker
             from qp.strategy.registry import StrategyRegistry
 
@@ -720,7 +750,23 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                     # Auto-evaluate on completion
                     if run.is_complete:
                         result = tracker.evaluate(run)
-                        if result.passed:
+                        try:
+                            current_lifecycle = registry.get_lifecycle(run.strategy_id)
+                        except KeyError:
+                            current_lifecycle = None
+                        # Safety gate: never silently rewrite a lifecycle that
+                        # already sits at or above SHADOW_PRODUCTION (both
+                        # directions — a FAIL must not demote a live APPROVED
+                        # strategy either).  See _PAPER_PROMOTION_PROTECTED.
+                        if not _paper_auto_lifecycle_change_allowed(current_lifecycle):
+                            assert current_lifecycle is not None
+                            print(
+                                f"[scheduler] paper_trading: {run.strategy_id} "
+                                f"{'PASSED' if result.passed else 'FAILED'} but lifecycle "
+                                f"is already '{current_lifecycle.value}' — "
+                                f"不自动改写，需人工决策"
+                            )
+                        elif result.passed:
                             registry.set_lifecycle(
                                 run.strategy_id, StrategyLifecycle.SHADOW_PRODUCTION
                             )
