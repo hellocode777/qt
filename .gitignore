@@ -69,6 +69,9 @@ htmlcov/
 # Secrets
 .env
 .env.local
+# SMTP credentials for the systemd scheduler unit (live copy lives in
+# ~/.config/qp/smtp.env; this entry guards against copying one into the repo)
+smtp.env
 *.pem
 *.key
 data/dataset/*.bak_*

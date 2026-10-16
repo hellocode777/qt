@@ -13,6 +13,10 @@
 # - The user-level copy is (re)installed from the deploy template.
 # - Safe to run repeatedly (idempotent): no-op when already correct.
 #
+# Credentials: the unit reads EnvironmentFile=~/.config/qp/smtp.env (chmod 600).
+# This script refuses to deploy if that file is missing, because the scheduler
+# would otherwise come up with no SMTP credentials (see docs/tracking/).
+#
 # Usage:
 #   bash deploy/install-systemd.sh            # install/repair user-level service
 #   bash deploy/install-systemd.sh --check    # dry-run: report state, change nothing
@@ -23,6 +27,7 @@ SERVICE_NAME="qp-scheduler.service"
 SYSTEM_UNIT="/etc/systemd/system/${SERVICE_NAME}"
 USER_UNIT="${HOME}/.config/systemd/user/${SERVICE_NAME}"
 TEMPLATE="$(cd "$(dirname "$0")" && pwd)/systemd/${SERVICE_NAME}"
+ENV_FILE="${HOME}/.config/qp/smtp.env"
 CHECK_ONLY="${1:-}"
 
 log()  { printf '[install-systemd] %s\n' "$*"; }
@@ -45,10 +50,30 @@ if [ "$usr_exists" = yes ] && systemctl --user is-enabled "$SERVICE_NAME" >/dev/
 if [ "$usr_exists" = yes ] && systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then usr_active=yes; fi
 
 log "state: system=${sys_exists}/enabled=${sys_enabled}/active=${sys_active}  user=${usr_exists}/enabled=${usr_enabled}/active=${usr_active}"
+if [ -f "$ENV_FILE" ]; then
+    log "smtp env: ${ENV_FILE} present (mode $(stat -c %a "$ENV_FILE"))"
+else
+    log "smtp env: ${ENV_FILE} MISSING — email_report will not be able to send"
+fi
 
 if [ "$CHECK_ONLY" = "--check" ]; then
     log "dry-run (--check): would remove system-level copy if present, install user-level from template"
     exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 1b. SMTP credential gate
+#
+# Secrets left the repo on 2026-10-16 (a plaintext SMTP_PASSWORD used to live in
+# deploy/systemd/qp-scheduler.service and was committed + pushed to origin).
+# The unit now reads EnvironmentFile=~/.config/qp/smtp.env; if that file is
+# absent the scheduler would start with no credentials and every email_report
+# run would fail silently at 18:30.  Refuse to deploy instead.
+# ---------------------------------------------------------------------------
+if [ ! -f "$ENV_FILE" ]; then
+    log "ERROR: missing ${ENV_FILE}"
+    log "  fix: cp deploy/systemd/smtp.env.example \"$ENV_FILE\" && \$EDITOR \"$ENV_FILE\" && chmod 600 \"$ENV_FILE\""
+    die "refusing to deploy without SMTP credentials"
 fi
 
 # ---------------------------------------------------------------------------

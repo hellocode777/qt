@@ -1,3 +1,10 @@
+# QP scheduler — user-level systemd unit (single canonical instance).
+#
+# SMTP credentials are deliberately NOT stored in this file (2026-10-16):
+# a plaintext SMTP_PASSWORD used to sit here and was committed to git history
+# and pushed to origin.  Secrets now come from the EnvironmentFile below
+# (~/.config/qp/smtp.env, chmod 600; see deploy/systemd/smtp.env.example).
+# Never commit real credentials back into this unit.
 [Unit]
 Description=QP Quant Platform Daily Scheduler
 After=network-online.target
@@ -7,11 +14,7 @@ Wants=network-online.target
 Type=simple
 User=shuai
 WorkingDirectory=/home/shuai/workspace/qt
-Environment="SMTP_HOST=smtp.163.com"
-Environment="SMTP_PORT=465"
-Environment="SMTP_SENDER=zhang_shuai777@163.com"
-Environment="SMTP_PASSWORD=REjmVVGvbCSdiatG"
-Environment="SMTP_RECEIVER=zhang_shuai777@163.com"
+EnvironmentFile=-/home/shuai/.config/qp/smtp.env
 ExecStart=/home/shuai/workspace/qt/.venv/bin/python -m qp.platform.cli.main scheduler start
 Restart=always
 RestartSec=30
