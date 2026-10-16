@@ -91,8 +91,11 @@
 
 ### qp scheduler（systemd 管理）
 - 服务：`qp-scheduler.service`，ExecStart=`python -m qp.platform.cli.main scheduler start`，Restart=always RestartSec=30
+- 凭据：unit 读 `EnvironmentFile=-/home/shuai/.config/qp/smtp.env`（600，模板 `deploy/systemd/smtp.env.example`）；**凭据不入仓**，缺文件时 `install-systemd.sh` 拒绝部署
 - 6 个工作日 job：monitor_check 09:07 / retrain_notify 09:17 / pre_close_check 16:53 / daily_pipeline 18:00 / paper_trading 18:32 / email_report 18:30
 - 重启：sudo 或 `kill -TERM <MainPID>` 等 30s 自动拉起；**勿绕过 systemd 起第二实例**
+- 部署钩子：`.git/hooks/post-commit` → `deploy/git-post-commit.sh`（`qp/**` 除 `qp/web/**` + `deploy/` 脚本触发）。三道守卫：暂停（unit 非 enabled → 跳过）+ 任务窗口（从本文件 job 注册表派生，重启会掐断在跑 job）+ sudo；干跑 `QP_HOOK_DRY_RUN=1 QP_HOOK_FILES="qp/x.py" QP_HOOK_NOW_MIN=1090 bash deploy/git-post-commit.sh`
+- ⚠️ 改本文件 job 时间/新增 job 后：钩子窗口自动跟着变；但 `guard_minutes`（daily_pipeline 25 / 其余 5）是时长经验值，长任务变化要同步
 - `retrain_notify` 去重：同一批信号只通知一次（状态文件 `data/monitoring/retrain_notify_state.json` 记 `last_notified_at`），无新信号只打日志；信号→策略权重在 `daily_pipeline` Step 9（`load_weight_scales`）
 
 ## 查命令细节的方法

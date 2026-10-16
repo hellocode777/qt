@@ -699,6 +699,45 @@ tail -f logs/$(date +%F)/email_report.log
 
 > 每个 Job 写入当天日期子目录，每天一个新文件，自动清理 7 天前的旧目录。
 
+#### SMTP 凭据（不在仓库里）
+
+unit 不内置任何凭据，改为读 `EnvironmentFile=~/.config/qp/smtp.env`（权限 600）：
+
+```bash
+mkdir -p ~/.config/qp
+cp deploy/systemd/smtp.env.example ~/.config/qp/smtp.env   # 仅首次
+$EDITOR ~/.config/qp/smtp.env        # SMTP_HOST/PORT/SENDER/PASSWORD/RECEIVER
+chmod 600 ~/.config/qp/smtp.env
+systemctl --user restart qp-scheduler
+```
+
+`install-systemd.sh` 在该文件缺失时会**拒绝部署**（否则调度器会带空凭据起来，
+18:30 `email_report` 静默失败）。
+
+> ⚠️ 历史（2026-10-16）：明文授权码曾写在 unit 模板里并已提交推送（私有仓）→ 该凭据
+> **需轮换**。详见 `docs/tracking/scheduler_credential_and_hook.md`。
+
+#### 自动部署钩子（post-commit）
+
+`.git/hooks/post-commit` → `deploy/git-post-commit.sh`：commit 命中 `qp/**`（除 `qp/web/**`）
+或 `deploy/` 脚本时自动跑 `install-systemd.sh`，让常驻进程与代码保持一致。三道守卫：
+
+| 守卫 | 行为 |
+|---|---|
+| 暂停守卫 | unit 非 `enabled`（`systemctl --user disable qp-scheduler`）→ 跳过部署。**因此"暂停"能扛住 commit**；恢复用 `systemctl --user enable --now qp-scheduler` |
+| 任务窗口守卫 | 窗口从 `qp/platform/cli/commands/scheduler.py` 的 job 注册表**派生**（非手抄），命中则跳过 —— 重启会 `shutdown(wait=False)` 掐断在跑的 job |
+| sudo 守卫 | 仅当系统级副本存在且 sudo 需密码时跳过 |
+
+当前派生窗口：monitor_check 09:05–09:12 / retrain_notify 09:15–09:22 / pre_close_check 16:51–16:58 /
+daily_pipeline 17:58–18:25（实测跑 22 分钟）/ email_report 18:28–18:35 / paper_trading 18:30–18:37。
+
+干跑验证（不动服务）：
+
+```bash
+QP_HOOK_DRY_RUN=1 QP_HOOK_VERBOSE=1 QP_HOOK_FILES="qp/x.py" QP_HOOK_NOW_MIN=1090 \
+  bash deploy/git-post-commit.sh
+```
+
 ### 11.2 六任务时间表
 
 | 时间 | Job | 执行内容 | watchdog |
