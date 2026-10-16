@@ -56,7 +56,12 @@ qp/knowledge/    长期记忆（失败归档/决策审计）
 |---|---|---|
 | 腾讯 kline（唯一行情源） | `qp/data/adapter/tencent_adapter.py` | research/strategy 禁止直调；不复权原始价 |
 | AkShare（仅复权因子） | `qp/data/adapter/akshare_adapter.py`（qfq-factor） | 不拉行情；research/strategy 禁止直调 |
-| QuantTrading DB | `qp/data/adapter/quant_trading_db_adapter.py` | 直接读 `~/workspace/QuantTrading/data/quant.db`（SQLite） |
+
+> 同一 / 历史来源：`quant_trading_db`（旧 QuantTrading 库 `~/workspace/QuantTrading/data/quant.db`）已于 2026-10-16
+> 随旧仓一起退役 —— `qp/data/adapter/quant_trading_db_adapter.py` 在当前代码中**不存在**，
+> 基本面/估值已改为读 qt 本地 parquet（见 `qp/pipeline/daily_pipeline.py:111`）。
+> `data/dataset/registry.json` / `qp/web/services/data_quality_service.py` 里残留的 `quant_trading_db`
+> 字样只是历史来源标注（provenance）与展示映射，不是活跃数据依赖。
 
 ## 关键口径（回答数据问题时的"证据锚点"）
 

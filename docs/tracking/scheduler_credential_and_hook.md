@@ -40,7 +40,7 @@ unit 文件本身完好（`[Install] WantedBy=default.target` 一直在）。开
 | `deploy/systemd/qp-scheduler.service`（qt） | **是** → 已随 `6b3dc3a0` push 到私有 GitHub | 工作区/HEAD 已清；历史残留 → **只能轮换** |
 | `~/.config/systemd/user/qp-scheduler.service` | 否（本机） | 已由模板刷新，命中数 0 |
 | `~/.bash_history` | 否 | 已删 2 行（无备份） |
-| `~/workspace/QuantTrading/config/__init__.py:157` | 否（该仓 **无 remote**，从未 push；值在 HEAD/`0a2daa7`） | **未动**（属另一项目）→ 见遗留 |
+| `~/workspace/QuantTrading/config/__init__.py:157` | 否（该仓 **无 remote**，从未 push；值在 HEAD/`0a2daa7`） | 旧仓已于 2026-10-16 **整体移入回收站**（见 §7） |
 | 同仓 `config/__pycache__/__init__.cpython-314.pyc` | 否 | 同上（清 `__pycache__` 即可） |
 | `~/.hermes/state.db`(+`-wal`)、`~/.hermes/sessions/request_dump_*.json`、`~/.hermes/webui/sessions/*` | 否（本机 600） | 会话记录，读 unit 文件时写入；轮换后自然失效 |
 | `~/.claude/projects/-home-shuai-workspace-qt/*.jsonl` | 否（本机 600） | 同上 |
@@ -179,9 +179,35 @@ PY
 ## 6. 遗留 / 待决策
 
 - [ ] 轮换 163 授权码（§1，只有人工能做）
-- [ ] `crontab 0 17 * * 1-5`（旧仓 `~/workspace/QuantTrading/scripts/run_pipeline.py`）与 systemd
-      `18:00 daily_pipeline` **语义重复**（两套每日 pipeline），历史遗留；是否清掉 crontab 那条待定
+- [x] `crontab 0 17 * * 1-5`（旧仓 pipeline）与 systemd `18:00 daily_pipeline` **语义重复** ——
+      2026-10-16 随旧仓退役一并删除（§7），重复问题自然消失
 - [ ] `guard_minutes`（daily_pipeline 25 / 其余 5）是人工经验值；pipeline 时长若变化需同步，
       更彻底的做法是让 job 自己上报 duration（未做）
 - [ ] `deploy/systemd/qp-scheduler.service` 里的 `User=shuai` 在**用户级** unit 中被 systemd 忽略
       （`systemd-analyze verify --user` 无告警），属误导性残留，本次未动
+
+---
+
+## 7. 旧仓 `~/workspace/QuantTrading` 退役（2026-10-16）
+
+用户决定：该仓不再需要 → 删除。**删前先核牵连面**（FACT）：
+
+| 检查项 | 结果 |
+|---|---|
+| qt 是否消费它 | **否**。`qp/data/adapter/quant_trading_db_adapter.py` 当前代码里**不存在**（`ls` 报 No such file）；全仓 grep 只剩"从 QuantTrading 迁移"一类注释、`data/dataset/registry.json` 的历史 source 标注、`data_quality_service.py` 的展示映射 —— 均非活跃依赖 |
+| crontab 引用 | 3 行：`0 17 * * 1-5` pipeline、`@reboot` 启动 webui、`*/2` 保活 webui（不摘掉 → 目录没了以后 cron 每天/每 2 分钟报错） |
+| 运行中进程 | `streamlit run webui/app.py --server.port 8501`（PID 4773，旧 QT 界面） |
+| systemd 单元 | 无（`~/.config/systemd/user/` 与 `/etc/systemd/system/` 均无引用） |
+| 体量 / 可恢复性 | 4.6G（`quant.db` 2.5G、`.git` 294M）；**无 remote**；工作区 2893 个未提交改动 → 删掉即不可找回 |
+
+执行的清理：
+
+1. crontab：备份 `~/.crontab.backup.before_qt_removal.20261016_1946` → 删除那 5 行（含 2 行注释头）→
+   复核 diff 仅此 5 行；现存只剩 3 条 Hermes 相关（6:00 日报 / 1 号归档 / 5:50 单词卡）
+2. 停 `streamlit` PID 4773 → `:8501` 释放（旧 QT 界面**没了**，qt 自己的 UI 是 `:8080` SPA + api_v1）
+3. `gio trash /home/shuai/workspace/QuantTrading` → 工作区已无此目录，内容在
+   `~/.local/share/Trash/`（可恢复；`gio trash --empty` 才真正释放 4.6G）
+4. 复核：进程引用 0、crontab 引用 0、`docs/ai/DATA_FLOW.md` 里那行失效导航已更新
+
+> 注：回收站里的副本仍带着那枚旧 SMTP 授权码 —— 这正是 §1 遗留「轮换授权码」优先的原因，
+> 轮换后该副本即便留着也不再构成风险；想彻底释放磁盘再执行 `gio trash --empty`。
