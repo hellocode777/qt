@@ -40,7 +40,7 @@ unit 文件本身完好（`[Install] WantedBy=default.target` 一直在）。开
 | `deploy/systemd/qp-scheduler.service`（qt） | **是** → 已随 `6b3dc3a0` push 到私有 GitHub | 工作区/HEAD 已清；历史残留 → **只能轮换** |
 | `~/.config/systemd/user/qp-scheduler.service` | 否（本机） | 已由模板刷新，命中数 0 |
 | `~/.bash_history` | 否 | 已删 2 行（无备份） |
-| `~/workspace/QuantTrading/config/__init__.py:157` | 否（该仓 **无 remote**，从未 push；值在 HEAD/`0a2daa7`） | 旧仓已于 2026-10-16 **整体移入回收站**（见 §7） |
+| `~/workspace/QuantTrading/config/__init__.py:157` | 否（该仓 **无 remote**，从未 push；值在 HEAD/`0a2daa7`） | 旧仓 2026-10-16 移入回收站 → 同日**永久删除**（§7） |
 | 同仓 `config/__pycache__/__init__.cpython-314.pyc` | 否 | 同上（清 `__pycache__` 即可） |
 | `~/.hermes/state.db`(+`-wal`)、`~/.hermes/sessions/request_dump_*.json`、`~/.hermes/webui/sessions/*` | 否（本机 600） | 会话记录，读 unit 文件时写入；轮换后自然失效 |
 | `~/.claude/projects/-home-shuai-workspace-qt/*.jsonl` | 否（本机 600） | 同上 |
@@ -222,5 +222,6 @@ PY
    `~/.local/share/Trash/`（可恢复；`gio trash --empty` 才真正释放 4.6G）
 4. 复核：进程引用 0、crontab 引用 0、`docs/ai/DATA_FLOW.md` 里那行失效导航已更新
 
-> 注：回收站里的副本仍带着那枚旧 SMTP 授权码 —— 这正是 §1 遗留「轮换授权码」优先的原因，
-> 轮换后该副本即便留着也不再构成风险；想彻底释放磁盘再执行 `gio trash --empty`。
+> 注：回收站里那份副本（4.6G）已于同日**永久删除** —— 只删 `QuantTrading` 这一项，
+> 回收站其它条目（旧日志、笔记等 26M）保留；`/home` 已用 117G→112G，释放约 5G。
+> 删前旧值已在 §1 轮换失效，故无需"先擦除再删"。
