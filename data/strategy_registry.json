@@ -136,7 +136,7 @@
       "active": false
     },
     "momentum_vol_full": {
-      "lifecycle": "backtest_passed",
+      "lifecycle": "shadow_production",
       "meta": {
         "strategy_version": "v20260814",
         "model_version": "",
