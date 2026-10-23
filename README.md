@@ -3,7 +3,7 @@
 A personal quantitative research & investment decision operating system.
 
 > **Status**: Phase 0-6 Complete — 10-layer architecture fully implemented.  
-> **Tests**: 1049 passed | **CLI**: 20+ commands | **Quality**: ruff=0, pyright=0
+> **Tests**: 1,800+ test functions | **CLI**: 20+ commands | **Quality**: ruff=0, pyright=0
 > **Python**: 3.12 (pinned via `.python-version`)
 
 ## Quick Start
@@ -24,9 +24,9 @@ uv run qp --help
 | 1 | `platform/` | ✅ Runtime, config, logging, CLI, scheduler, storage, pipeline |
 | 2 | `data/` | ✅ Adapters (Tencent/AKShare/Demo), cleaning, calendar, corporate actions |
 | 3 | `research/` | ✅ Features, PurgedKFold, LightGBM, experiments, auto-retrain |
-| 4 | `validation/` | ✅ Rule engine, 9 checks (IC, overfit, backtest) |
+| 4 | `validation/` | ✅ Rule engine, 23 validation rules (factor / overfit / backtest / paper / process / production) |
 | 5 | `strategy/` | ✅ SimpleRank, SignalAggregator, StrategyRegistry, PaperTradingTracker |
-| 6 | `portfolio/` | ✅ Risk manager, cost model, allocators (3), optimizer, risk model |
+| 6 | `portfolio/` | ✅ Risk manager, cost model, 4 allocators (equal-weight / Kelly / risk-parity / vol-target), optimizer, risk model |
 | 7 | `simulation/` | ✅ SimulatedBroker, slippage models (3), backtest, corporate actions |
 | 8 | `decision/` | ✅ TradeRecommendation, DecisionReport, DecisionEngine |
 | 9 | `monitoring/` | ✅ KillSwitch, drift, model decay, market regime, alerts (3 channels) |
