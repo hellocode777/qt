@@ -11,14 +11,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# 关于依赖版本：uv.lock 未纳入版本控制（.gitignore），因此 CI 上 `uv sync --dev`
-# 会重新解析并装到满足 pyproject 的最新版（实测 click 从 8.4.2 变成 8.5.0）。
-# 因此凡是由代码生成的产物（如 docs/command_reference.md）必须对依赖版本健壮：
-# 不要渲染依赖库的内部实现细节（click 8.5 把未声明 default 的 flag 从 False 改成
-# Sentinel.UNSET，曾让文档守卫在零 CLI 变更下报 STALE）。
-# 守卫：tests/unit/test_docs_command_reference.py 的
-# test_flag_default_ignores_click_unset_sentinel / test_generated_doc_is_time_independent。
-# 若要让 CI 与本地环境完全一致，需先 `git add -f uv.lock` 再把这里的 uv 命令加 --frozen。
+# 关于依赖版本：uv.lock 已纳入版本控制，CI 使用 `uv sync --dev --frozen` 安装，
+# 保证与本地环境完全一致。升级依赖请显式执行 `uv lock` 并提交新的 uv.lock，
+# 不要在 CI 里隐式升级——曾因 duckdb 未锁定而升到移除 DuckDBPyConnection.pl 的新版本，
+# 导致 23 个 duckdb 测试与 Pyright 同时失败。
+# 由代码生成的产物（如 docs/command_reference.md）仍须对依赖版本健壮：
+# 不要渲染依赖库的内部实现细节。守卫见 tests/unit/test_docs_command_reference.py。
 
 jobs:
   lint:
@@ -55,7 +53,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --dev --frozen
 
       - name: Run Pyright
         run: uv run pyright
@@ -80,7 +78,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --dev --frozen
 
       - name: Run Pytest
         run: |
@@ -103,7 +101,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --dev --frozen
 
       - name: qp version
         run: uv run qp version
