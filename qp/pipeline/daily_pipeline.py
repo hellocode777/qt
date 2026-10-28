@@ -220,16 +220,10 @@ class DailyPipeline(BasePipeline):
             force_rebalance = bool(context.parameters.get("force_rebalance", False))
 
             # 2026-10-28: 调仓节奏参数化（默认 monthly = 原行为，零行为变更）。
-            # 判定逻辑抽到模块级 _resolve_rebalance_day（内联版本让 run() 复杂到
-            # pyright 报 reportGeneralTypeIssues）。
-            is_rebalance_day, _rebalance_rule = _resolve_rebalance_day(
-                today=today,
-                force_rebalance=force_rebalance,
-                context_parameters=context.parameters,
-                log=logger,
-            )
-            if _rebalance_rule:
-                result.metadata["rebalance_rule"] = _rebalance_rule
+            # 判定逻辑抽到模块级 _resolve_rebalance_day。
+            # ⚠️ 2026-10-29 修：这段必须放在 **数据抓取之后**（见下方 Step 1 之后），
+            # 否则 trading_days 节奏读到的是"昨天为止"的交易日序列，今天的日期不在里面
+            # → 永远判定"今天不是调仓日"，节奏形同关闭。
 
             # ================================================================
             # Step 0: System state check (#8 fix)
@@ -281,6 +275,18 @@ class DailyPipeline(BasePipeline):
                     result.status = PipelineStatus.FAILED
                     return result
                 result.metrics.update({f"data_{k}": v for k, v in data_result.metrics.items()})
+
+            # ── 调仓日判定（必须在数据抓取之后）──
+            # trading_days 节奏依赖 `daily_price_latest` 的 trade_date 序列；过早判定会
+            # 缺今天的日期 → 恒判"非调仓日"（2026-10-29 实测踩到）。
+            is_rebalance_day, _rebalance_rule = _resolve_rebalance_day(
+                today=today,
+                force_rebalance=force_rebalance,
+                context_parameters=context.parameters,
+                log=logger,
+            )
+            if _rebalance_rule:
+                result.metadata["rebalance_rule"] = _rebalance_rule
 
             # ================================================================
             # Step 1.5: Factor Calculator — produce factor_values_daily.parquet
@@ -1501,6 +1507,10 @@ def _resolve_rebalance_day(
             trade_dates = load_trade_dates(DAILY_PRICE_LATEST)
             is_reb, reason = is_trading_days_rebalance(today.isoformat(), cadence, trade_dates)
             is_reb = force_rebalance or is_reb
+            if "晚于最新数据" in reason:
+                # 正常链路里调仓判定在数据抓取之后；走到这里说明数据没更新，
+                # 节奏会静默失效 → 用 WARNING 让它可见（2026-10-29 踩过）。
+                log.warning("调仓节奏可能失效：{}", reason)
             log.info("调仓节奏: {} | 今日调仓={}", cadence.describe(), is_reb)
             return is_reb, reason + (" | forced" if force_rebalance else "")
         except Exception as exc:
