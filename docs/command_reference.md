@@ -834,6 +834,7 @@ _无参数（或由 handler 自行解析，见代码入口）。_
 | `--version` | 选项 | 可选 | `` | Freeze version string |
 | `--from-experiment` | 选项 | 可选 | `` | Load weights & metrics from this experiment_id |
 | `--force` | 选项 | 可选 | `False（开关）` | Bypass approval guard (missing approver / failed quality gate); logged as WARNING |
+| `--params` | 选项 | 可选 | `` | JSON object merged into frozen snapshot parameters, e.g. {"rebalance_cadence":"trading_days","rebalance_days":40} |
 
 **代码入口**：`qp.platform.cli.commands.strategy.cmd_strategy_approve`
 

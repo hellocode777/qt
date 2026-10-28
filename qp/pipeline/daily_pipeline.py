@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import polars as pl
@@ -218,29 +218,18 @@ class DailyPipeline(BasePipeline):
             # 节假日自动顺延到当月首个交易日（10/1 国庆 → 10/8）。
             # --force-rebalance 可强制当调仓日处理（建仓/手动重平衡用）
             force_rebalance = bool(context.parameters.get("force_rebalance", False))
-            try:
-                from qp.data.calendar.calendar import TradingCalendar
 
-                _cal = TradingCalendar()
-                # first_trading_day_of_month 内部触发 akshare 加载并设置
-                # has_real_calendar；调用后才可信。
-                _first_td = _cal.first_trading_day_of_month(today.year, today.month)
-                if _cal.has_real_calendar is True:
-                    is_rebalance_day = force_rebalance or (
-                        _cal.is_first_trading_day_of_month(today)
-                    )
-                    result.metadata["rebalance_rule"] = (
-                        f"first_trading_day_of_month={_first_td.isoformat()}"
-                    )
-                else:
-                    # akshare 日历不可用（网络挂）→ weekend-only 会把节假日
-                    # 误判成交易日（10/1 国庆当工作日）。退回 day<=5 近似。
-                    logger.warning("TradingCalendar 无真实日历（akshare 不可用），退回 day<=5 近似")
-                    is_rebalance_day = force_rebalance or today.day <= 5
-            except Exception as exc:
-                # 日历模块异常 → 退回 day<=5 近似，别让整条 pipeline 挂
-                logger.warning("TradingCalendar 不可用，退回 day<=5 近似: {}", exc)
-                is_rebalance_day = force_rebalance or today.day <= 5
+            # 2026-10-28: 调仓节奏参数化（默认 monthly = 原行为，零行为变更）。
+            # 判定逻辑抽到模块级 _resolve_rebalance_day（内联版本让 run() 复杂到
+            # pyright 报 reportGeneralTypeIssues）。
+            is_rebalance_day, _rebalance_rule = _resolve_rebalance_day(
+                today=today,
+                force_rebalance=force_rebalance,
+                context_parameters=context.parameters,
+                log=logger,
+            )
+            if _rebalance_rule:
+                result.metadata["rebalance_rule"] = _rebalance_rule
 
             # ================================================================
             # Step 0: System state check (#8 fix)
@@ -1453,3 +1442,87 @@ class DailyPipeline(BasePipeline):
             result.errors.append(f"{type(e).__name__}: {e}")
 
         return result
+
+
+def _resolve_rebalance_day(
+    *,
+    today: date,
+    force_rebalance: bool,
+    context_parameters: dict[str, Any],
+    log: Any,
+) -> tuple[bool, str | None]:
+    """决定今天是否调仓，返回 ``(is_rebalance_day, rebalance_rule)``。
+
+    2026-10-28 抽出为模块级函数：原先内联在 `run()` 里，让该方法复杂到 pyright
+    报 `reportGeneralTypeIssues: Code is too complex to analyze`。
+
+    判定优先级：
+    1. ``approved`` 快照的 ``rebalance_cadence``（``trading_days`` / ``monthly``）
+       —— 必须用 ``registry.load_active()`` 读快照；``load_active_as_meta()``
+       返回的其实是 registry meta（不含冻结的 cadence 参数）。
+    2. ``trading_days`` 不可用（数据缺失/参数非法）→ 退回 monthly。
+    3. monthly 走 akshare 真实日历；日历不可用 → 退回 ``day<=5`` 近似。
+
+    ``rebalance_rule`` 写入 ``result.metadata`` 供决策包/日志留痕。
+    """
+    from qp.pipeline.rebalance_cadence import (
+        MODE_TRADING_DAYS,
+        is_trading_days_rebalance,
+        load_trade_dates,
+        resolve_cadence,
+    )
+
+    approved_params: dict[str, Any] = {}
+    try:
+        from qp.strategy.registry import StrategyRegistry
+
+        snapshots = StrategyRegistry().load_active()
+        if snapshots:
+            if len(snapshots) > 1:
+                log.warning(
+                    "cadence: 存在 {} 个 active APPROVED 快照，节奏参数取第一个（{}）",
+                    len(snapshots),
+                    getattr(snapshots[0], "strategy_id", "?"),
+                )
+            approved_params = dict(getattr(snapshots[0], "parameters", {}) or {})
+    except Exception as exc:  # 读不到快照就用 context/默认，不影响主链
+        log.debug("cadence: 读取 approved 快照失败，退回 context/默认: {}", exc)
+
+    try:
+        cadence = resolve_cadence(approved_params, context_parameters)
+    except ValueError as exc:
+        log.error("cadence 参数非法，退回 monthly: {}", exc)
+        cadence = resolve_cadence({}, {})
+
+    if cadence.mode == MODE_TRADING_DAYS:
+        from qp.shared.paths import DAILY_PRICE_LATEST
+
+        try:
+            trade_dates = load_trade_dates(DAILY_PRICE_LATEST)
+            is_reb, reason = is_trading_days_rebalance(today.isoformat(), cadence, trade_dates)
+            is_reb = force_rebalance or is_reb
+            log.info("调仓节奏: {} | 今日调仓={}", cadence.describe(), is_reb)
+            return is_reb, reason + (" | forced" if force_rebalance else "")
+        except Exception as exc:
+            log.warning(
+                "trading_days 调仓节奏不可用（{}），退回月度判定: {}", cadence.describe(), exc
+            )
+
+    try:
+        from qp.data.calendar.calendar import TradingCalendar
+
+        cal = TradingCalendar()
+        # first_trading_day_of_month 内部触发 akshare 加载并设置 has_real_calendar；
+        # 调用后 has_real_calendar 才可信。
+        first_td = cal.first_trading_day_of_month(today.year, today.month)
+        if cal.has_real_calendar is True:
+            rule = f"first_trading_day_of_month={first_td.isoformat()}"
+            return (force_rebalance or cal.is_first_trading_day_of_month(today)), rule
+        # akshare 日历不可用（网络挂）→ weekend-only 会把节假日误判成交易日
+        # （10/1 国庆当工作日）。退回 day<=5 近似。
+        log.warning("TradingCalendar 无真实日历（akshare 不可用），退回 day<=5 近似")
+    except Exception as exc:
+        # 日历模块异常 → 退回 day<=5 近似，别让整条 pipeline 挂
+        log.warning("TradingCalendar 不可用，退回 day<=5 近似: {}", exc)
+
+    return (force_rebalance or today.day <= 5), None

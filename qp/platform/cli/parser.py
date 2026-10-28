@@ -697,12 +697,20 @@ def strategy_list() -> None:
     default=False,
     help="Bypass approval guard (missing approver / failed quality gate); logged as WARNING",
 )
+@click.option(
+    "--params",
+    "extra_params",
+    type=str,
+    default=None,
+    help='JSON object merged into frozen snapshot parameters, e.g. {"rebalance_cadence":"trading_days","rebalance_days":40}',
+)
 def strategy_approve(
     strategy_id: str,
     by: str,
     version: str | None,
     from_experiment: str | None,
     force: bool,
+    extra_params: str | None,
 ) -> None:
     """Freeze a strategy as an ApprovedStrategy snapshot."""
     from qp.platform.cli.commands.strategy import cmd_strategy_approve
@@ -714,6 +722,7 @@ def strategy_approve(
             version=version,
             from_experiment=from_experiment,
             force=force,
+            extra_params=extra_params,
         )
     )
 

@@ -16,6 +16,7 @@ def cmd_strategy_approve(
     version: str | None = None,
     from_experiment: str | None = None,
     force: bool = False,
+    extra_params: str | None = None,
 ) -> int:
     """Freeze a registered strategy as an ApprovedStrategy snapshot.
 
@@ -27,6 +28,9 @@ def cmd_strategy_approve(
             this experiment_id instead of the current Registry metadata.
         force: Bypass the approval guard's blocking checks (missing
             approver / failed quality gate). Logged as WARNING.
+        extra_params: JSON object merged into the frozen snapshot's
+            ``parameters`` (e.g. ``{"rebalance_cadence":"trading_days",
+            "rebalance_days":40}``). Does not mutate registry meta.
 
     The strategy must already be registered with weights, parameters,
     and backtest metrics in its StrategyMeta (unless --from-experiment
@@ -117,6 +121,22 @@ def cmd_strategy_approve(
         print("   设置 meta.weights 后再 approve")
         return 1
 
+    # ── 额外参数并入冻结快照（如调仓节奏 rebalance_cadence / rebalance_days）──
+    parameters_override: dict[str, object] | None = None
+    if extra_params:
+        import json as _json
+
+        try:
+            parsed = _json.loads(extra_params)
+        except ValueError as exc:
+            print(f"❌ --params 不是合法 JSON: {exc}")
+            return 1
+        if not isinstance(parsed, dict):
+            print('❌ --params 必须是 JSON 对象，例如 {"rebalance_days": 40}')
+            return 1
+        parameters_override = {str(k): v for k, v in parsed.items()}
+        print(f"📎 并入快照参数 / Params merged: {parameters_override}")
+
     # Approve
     try:
         approved = registry.approve(
@@ -124,6 +144,7 @@ def cmd_strategy_approve(
             approved_by=approved_by,
             version=version,
             force=force,
+            parameters_override=parameters_override,
         )
     except ValueError as exc:
         print(f"❌ 审批失败 / Approval failed: {exc}")

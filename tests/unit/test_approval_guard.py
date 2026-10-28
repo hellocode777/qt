@@ -158,3 +158,45 @@ class TestRegistryApprovalGuard:
         approved = registry.approve("simple_rank_v1.0", approved_by="researcher")
         assert approved.approved_by == "researcher"  # type: ignore[attr-defined]
         assert registry.get_lifecycle("simple_rank_v1.0") == StrategyLifecycle.APPROVED
+
+
+class TestApproveParametersOverride:
+    """调仓节奏等参数随 approve 一并冻结进快照（不改 registry meta）。"""
+
+    @staticmethod
+    def _registry(tmp_path: Path):
+        from qp.strategy.registry import StrategyMeta, StrategyRegistry
+        from qp.strategy.simple_rank import SimpleRankStrategy
+
+        registry = StrategyRegistry(registry_path=tmp_path / "registry.json")
+        registry.register(
+            SimpleRankStrategy(top_n=10),
+            meta=StrategyMeta(
+                weights={"F1": -0.25, "F2": 0.15},
+                parameters={"top_n": 10, "rebalance": 20},
+            ),
+        )
+        return registry
+
+    def test_override_merged_into_snapshot_only(self, tmp_path: Path) -> None:
+        registry = self._registry(tmp_path)
+        approved = registry.approve(
+            "simple_rank_v1.0",
+            approved_by="Wei",
+            parameters_override={"rebalance_cadence": "trading_days", "rebalance_days": 40},
+        )
+
+        snapshot_params = approved.parameters  # type: ignore[attr-defined]
+        assert snapshot_params["rebalance_cadence"] == "trading_days"
+        assert snapshot_params["rebalance_days"] == 40
+        assert snapshot_params["top_n"] == 10  # 原有参数保留
+
+        # registry meta 不被改写（避免“没批准但参数变了”的中间态）
+        meta = registry.get_meta("simple_rank_v1.0")
+        assert "rebalance_cadence" not in (meta.parameters or {})
+
+    def test_no_override_keeps_meta_parameters(self, tmp_path: Path) -> None:
+        registry = self._registry(tmp_path)
+        approved = registry.approve("simple_rank_v1.0", approved_by="Wei")
+        assert approved.parameters.get("rebalance") == 20  # type: ignore[attr-defined]
+        assert "rebalance_cadence" not in approved.parameters  # type: ignore[attr-defined]

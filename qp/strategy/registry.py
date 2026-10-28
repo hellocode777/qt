@@ -554,6 +554,7 @@ class StrategyRegistry:
         version: str | None = None,
         validation_report: dict[str, Any] | None = None,
         force: bool = False,
+        parameters_override: dict[str, Any] | None = None,
     ) -> object:
         """Freeze a strategy as an ApprovedStrategy snapshot.
 
@@ -567,6 +568,9 @@ class StrategyRegistry:
             validation_report: Optional validation report to freeze.
             force: Bypass the approval guard's blocking checks (logged at
                 WARNING level). See ``qp.strategy.approval_guard``.
+            parameters_override: Extra parameters merged into the frozen
+                snapshot's ``parameters`` (e.g. ``rebalance_cadence`` /
+                ``rebalance_days``). Does NOT mutate registry meta.
 
         Returns:
             ApprovedStrategy instance.
@@ -592,6 +596,15 @@ class StrategyRegistry:
             raise ValueError(
                 f"Strategy '{strategy_id}' has no weights in metadata. "
                 f"Set meta.weights before approving."
+            )
+
+        if parameters_override:
+            # 只影响本次冻结的快照，不改 registry meta（避免留下“没批准但参数变了”的中间态）
+            from dataclasses import replace as _replace
+
+            meta = _replace(
+                meta,
+                parameters={**(meta.parameters or {}), **parameters_override},
             )
 
         if version is None:
