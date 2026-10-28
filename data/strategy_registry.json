@@ -33,7 +33,7 @@
     "lvr_vol_only": {
       "lifecycle": "approved",
       "meta": {
-        "strategy_version": "v20261008",
+        "strategy_version": "v20261028c",
         "model_version": "",
         "feature_version": "",
         "feature_set": [],
@@ -52,32 +52,35 @@
           "orthogonalize": true,
           "anti_chase": true
         },
-        "backtest_ic": 0.0518,
-        "backtest_sharpe": 1.47,
-        "backtest_max_dd": 8.77,
-        "backtest_excess_return": 67.88
+        "backtest_ic": 0.0522,
+        "backtest_sharpe": 1.59,
+        "backtest_max_dd": 8.91,
+        "backtest_excess_return": 94.97999999999999
       },
       "active": true,
       "approved": {
         "strategy_id": "lvr_vol_only",
-        "version": "v20261008",
-        "approved_at": "2026-10-08T07:11:10.258488+08:00",
+        "version": "v20261028c",
+        "approved_at": "2026-10-28T21:52:59.164139+08:00",
         "approved_by": "Wei",
         "weights": {
           "Volatility_20D": 1.0
         },
         "parameters": {
           "top_n": 10,
-          "rebalance": 20,
+          "rebalance": 40,
           "industry_neutral": true,
           "orthogonalize": true,
-          "anti_chase": true
+          "anti_chase": true,
+          "rebalance_cadence": "trading_days",
+          "rebalance_days": 40,
+          "rebalance_anchor": "2026-10-29"
         },
         "backtest_summary": {
-          "ic": 0.0518,
-          "sharpe": 1.47,
-          "max_dd": 8.77,
-          "excess_return": 67.88
+          "ic": 0.0522,
+          "sharpe": 1.59,
+          "max_dd": 8.91,
+          "excess_return": 94.97999999999999
         },
         "validation_report_id": "",
         "validation_report": {
@@ -88,27 +91,27 @@
             {
               "rule_name": "rank_ic",
               "status": "PASS",
-              "score": 0.0518,
+              "score": 0.0522,
               "threshold": 0.02,
-              "actual_value": 0.0518,
+              "actual_value": 0.0522,
               "detail": "Mean IC from backtest"
             },
             {
               "rule_name": "sharpe_ratio",
               "status": "PASS",
-              "score": 1.47,
+              "score": 1.59,
               "threshold": 0.5,
-              "actual_value": 1.47,
+              "actual_value": 1.59,
               "detail": "Sharpe ratio from backtest"
             }
           ],
           "failed_rules": [],
           "recommendation": "Backtest metrics frozen at approve time (ADR-031).",
           "metrics": {
-            "ic_mean": 0.0518,
-            "sharpe_ratio": 1.47,
-            "max_drawdown_pct": 8.77,
-            "excess_return_pct": 67.88
+            "ic_mean": 0.0522,
+            "sharpe_ratio": 1.59,
+            "max_drawdown_pct": 8.91,
+            "excess_return_pct": 94.97999999999999
           }
         },
         "meta": {}

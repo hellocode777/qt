@@ -66,6 +66,9 @@
 - 流程：**门禁守卫**（缺批准人 / `decision` 未放行 / `data_integrity|factor_validity|portfolio_conversion` 非 PASS → 拒绝）→ 校验有权重 → 冻结不可变快照（ApprovedStrategy）→ lifecycle→APPROVED → 快照带 validation_report
 - 守卫读最新 `<strategy_id>_*_gate.json`（按 `timestamp` 排序）；无门禁记录只告警不阻断（研究期策略）
 - `--force` 显式越过硬拦，日志留 WARNING 痕迹；被拒时退出码 1
+- `--params '{"k":"v"}'` 把额外参数并入**冻结快照**（不改 registry meta），用于冻结调仓节奏：
+  `--params '{"rebalance_cadence":"trading_days","rebalance_days":40,"rebalance_anchor":"2026-10-29"}'`
+  （`qp/pipeline/rebalance_cadence.py` 消费；默认 monthly = 原「每月首个交易日」行为）
 - 配套：`deactivate` → lifecycle→BACKTEST_PASSED；判断"跑不跑"以 lifecycle 为准，别信 approved dict
 
 ### qp monitor check / regime

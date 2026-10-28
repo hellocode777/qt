@@ -121,7 +121,7 @@ uv run qp ingest 2024-01-01 2024-12-31
 |------|------|
 | 买入标的 | 调仓日进入 Target Portfolio 的 Top N 股票 |
 | 默认持仓数 | Top 10 |
-| 买入时间 | 仅调仓日（每月第一个真实交易日） |
+| 买入时间 | 仅调仓日（默认「每月第一个真实交易日」；可用 `rebalance_cadence=trading_days` 改成每 N 个交易日，见 §16.4） |
 | 建仓方式 | 按目标权重一次性建仓 |
 
 **明确不采用**：固定止盈（切断动量 Alpha）、最大持仓天数（人为规则）、Score 硬阈值（不同市场阶段不可比）。
@@ -1347,7 +1347,7 @@ qp/
 | 策略 | lifecycle | active | approved 快照 |
 |------|-----------|--------|----------------|
 | `momentum_vol_full` | backtest_passed | false | ✅ v20260811（2026-08-12 by Wei，保留供审计） |
-| `lvr_vol_only` | approved | ✅ true | ✅ v20261008（2026-10-08 by Wei） |
+| `lvr_vol_only` | approved | ✅ true | ✅ v20261028c（2026-10-28 by Wei，40 交易日节奏） |
 | `lvr_vol_mom1m` | research | false | — |
 | `momentum_v1.0` | research | false | — |
 | `momentum_vol_mf` | research | false | — |
@@ -1373,9 +1373,42 @@ qp/
 > `momentum_vol_full` 的 v20260811 快照保留供审计（lifecycle=backtest_passed、active=false）。
 > ⚠️ 反向复归要重新 `qp strategy approve`，而 `approve()` 从 `meta.weights` 重建快照 ——
 > 届时冻结的会是 v20260814 那套（-0.2331 / +0.1823 / …），**不是**原 v20260811（-0.25 / +0.22 / …）。
+
+#### 调仓节奏（rebalance_cadence，2026-10-28 落地）
+
+v20261028c 快照把调仓节奏从「每月第一个真实交易日」改成 **每 40 个交易日**：
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `rebalance_cadence` | `trading_days` | `monthly`（默认/原行为）或 `trading_days` |
+| `rebalance_days` | `40` | 每 40 个交易日一轮 |
+| `rebalance_anchor` | `2026-10-29` | 锚点=切换后首个交易日；锚点不必是已存在的交易日 |
+
+- 判定逻辑在 `qp/pipeline/rebalance_cadence.py`：`offset = 锚点后第几个交易日`，`offset % 40 == 0` 即调仓日
+- 交易日序列取本地行情 `daily_price_latest.parquet` 的 `trade_date`（**不依赖 akshare 网络**）
+- 优先级：approved 快照参数 → 运行时 context 参数 → 默认 monthly
+- 冻结方式：`qp strategy approve <id> --by <名字> --params '{"rebalance_cadence":"trading_days","rebalance_days":40,"rebalance_anchor":"YYYY-MM-DD"}'`
+
+**依据**（2026-10-28 实测，2024-01-01 起、Top10、行业中性、冻结单因子权重、offset=6）：
+
+| 周期 | Sharpe（end 08-14 / 07-01） | MaxDD（08-14） | 换手 | 成本占比 |
+|---|---|---|---|---|
+| 5d | 0.56 / — | 21.24% | 3124% | 13.60% |
+| 10d | 0.94 / 0.87 | 16.48% | 2532% | 11.18% |
+| 20d（原月度近似） | 1.26 / 1.08 | 11.04% | 1860% | 8.34% |
+| 30d | 1.18 / 0.76 | 14.59% | 1328% | 5.91% |
+| **40d** | **1.59 / 1.50** | **8.91%** | 1054% | 4.63% |
+| 60d | 1.01 / 1.33 | 14.39% | 681% | 2.89% |
+
+- 40d 在三个相位（offset 6/0/12）分别 1.59 / 1.92 / 1.87 → 不是抽到好相位
+- 收益改进机制：换手 1860%→1054%、成本 8.34%→4.63%（高频被成本吃死）
+- ⚠️ 已知行为：节奏是**固定槽位**——某个调仓日若被 regime 门禁拦掉（bear 且 confidence>0.7），
+  下一次要等满 40 个交易日；需要立即建仓时用 `qp run daily --force-rebalance`（一次性，不改节奏）
+
 > 要精确回滚请用 git 恢复 `data/strategy_registry.json`。
 
-> ⚠️ 快照里的 `parameters` 字段（`orthogonalize` / `top_n` / `rebalance` / `anti_chase`）在日线生产链路里是**惰性字段**：`daily_pipeline` 只取 `weights` + `industry_neutral`（`compute_today_scores_full()` 没有正交化入参）。所以生产日线**不做** VIF 正交化 / 防追高 / 自定义调仓周期，无论快照或 `strategy/config.py` 里怎么写 —— `lvr_vol_only`（config `orthogonalize=True`）与此前的 `momentum_vol_full`（config `orthogonalize=False`，2026-08-13 关闭）都是如此。改快照里这几个字段对生产无影响。
+> ⚠️ 快照里的 `parameters` 字段里，`orthogonalize` / `top_n` / `rebalance` / `anti_chase` 在日线生产链路仍是**惰性字段**（`daily_pipeline` 只取 `weights` + `industry_neutral`；`compute_today_scores_full()` 没有正交化入参），所以生产日线**不做** VIF 正交化 / 防追高，改这些字段对生产无影响。
+> **例外（2026-10-28 起）**：`rebalance_cadence` / `rebalance_days` / `rebalance_anchor` 是**生效字段** —— `daily_pipeline` 会读 approved 快照并用它们决定调仓日（见上「调仓节奏」小节）。注意必须读 `load_active()` 快照，`load_active_as_meta()` 返回的其实是 registry meta（不含冻结节奏参数）。
 
 > 策略选择逻辑（`daily_pipeline.py:459-477`，ADR-031 Policy A）：**只跑 lifecycle==APPROVED 的策略**；没有 APPROVED 就跳过当日策略执行并报警，**不退回 research、不兜底 hardcode**。
 

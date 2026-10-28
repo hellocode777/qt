@@ -653,8 +653,25 @@
 - [x] **40d 相位稳健性**（end 08-14 三个相位）：offset=6 → 1.59 / 8.91%；offset=0 → **1.92** / 5.39%；offset=12 → **1.87** / 9.64% → 40d 在所有相位都不低于 1.59，稳健优于 20d（1.26/1.08）
 - [x] **项目自带 40d 变体对比**：`lvr_vol_stable`（40d + 卖出缓冲×4 + 5日得分平滑）offset=6 → Sharpe **1.85** / MaxDD 8.96% / 超额 +121.28% / 换手 1032% / 成本 4.80%，优于裸 40d（1.59 / 8.91% / +94.98%）
 - [x] **结论**：lvr_vol_only 的最优调仓周期约 **40 个交易日（双月）**，Sharpe 合理区间 1.6–1.9（相位不同），比月度（20d）的 1.1–1.3 高一大截；高频（5/10d）被成本吃死（成本 11–14%）
-- [ ] **待办：落地 40d 需要改生产调仓判定** —— 生产调仓日由 `daily_pipeline.py:229-232` 的 `is_first_trading_day_of_month` 决定，`approved` 里的 `rebalance` 是惰性字段（`:521-530` 注释）；要按 40d 跑，得先把 cadence 变成参数驱动（或加双月判定），不是改个参数就行
+- [x] **落地 40d 需要改生产调仓判定 → 已完成（见下方「落地」条目）** —— 生产调仓日原由 `daily_pipeline.py` 的 `is_first_trading_day_of_month` 决定，`approved.rebalance` 是惰性字段；已改为 cadence 参数驱动
 - [ ] **待办：`lvr_vol_stable` 未注册** —— 只在代码里 `register_config`（research 配置），未进 registry；要用需先 `qp experiment run` → 门禁 → `approve --by`（现在有守卫把关）
+- [x] **落地：40 交易日节奏已上线（v20261028c，2026-10-28）**
+      - 代码：新增 `qp/pipeline/rebalance_cadence.py`（`monthly` 默认 / `trading_days`+N），
+        `daily_pipeline` 读 **approved 快照**参数决定调仓日；`qp strategy approve --params` 可把节奏冻结进快照
+        （`parameters_override` 只影响快照，不改 registry meta）
+      - 交易日序列取本地 `daily_price_latest.parquet` 的 `trade_date`，不依赖 akshare 网络
+      - 切换命令：`qp strategy approve lvr_vol_only --by Wei --version v20261028c --from-experiment multifactor_20261028_132421 --params '{"rebalance_cadence":"trading_days","rebalance_days":40,"rebalance_anchor":"2026-10-29","rebalance":40}'`
+      - 冻结结果：Sharpe 1.59 / IC 0.0522 / MaxDD 8.91% / 超额 +94.98%（来自 40d 实验 `multifactor_20261028_132421`）
+      - 生效验证（真链路，非 mock）：`load_active()` → spec=`trading_days=40, anchor=2026-10-29`；
+        今天 10-28 判「早于锚点不调仓」，模拟 10-29 为 `offset=0` 调仓日、11-02 为 `offset=2 next_gap=38`
+      - **踩坑**：`load_active_as_meta()` 的 docstring 说返回冻结参数，实现却是 registry meta →
+        读不到 `rebalance_cadence`。已改为 `load_active()`，并在 user_guide 标注
+      - **踩坑**：锚点若要求必须存在于交易日序列，把锚点设为「明天」会因数据未更新而抛错 →
+        改为「从锚点起数交易日」，锚点可以是未来日期或节假日
+      - 测试：`tests/unit/pipeline/test_rebalance_cadence.py`（15 例，含锚点未来/非交易日语义）、
+        `test_approval_guard.py` 新增 2 例（参数并入快照但不改 meta）
+      - ⚠️ 已知行为：固定槽位节奏 —— 调仓日被 regime 门禁拦掉就等满 40 个交易日；
+        应急建仓用 `qp run daily --force-rebalance`（一次性）
 - [x] **顺带踩到一个已有记录的坑**：对比 `lvr_vol_stable` 那次运行**没带 `--freeze-weights`**（非复现模式），pipeline 于是自动往 `data/strategy_registry.json` 写了一条 `lvr_vol_stable`（lifecycle=research / active=false / meta 带 backtest 数字）。生产不受影响，但 tracked 文件被静默改动 → 已 `git checkout` 回滚。**结论：只是做对比实验时一律带 `--freeze-weights`，避免回写 registry**
 
 ---
