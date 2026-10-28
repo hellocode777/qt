@@ -863,7 +863,12 @@ class MultiFactorPipeline(BasePipeline):
         logger.info("[5/6] 回测 (SimulatedBroker, 信号日调仓)...")
         _bt_offset = int(cli_overrides.get("rebalance_offset", 0)) if cli_overrides else 0
         bt = self._compute_backtest(
-            signals, price_data, scores=scores, top_n=top_n, rebalance_offset=_bt_offset
+            signals,
+            price_data,
+            scores=scores,
+            top_n=top_n,
+            rebalance_offset=_bt_offset,
+            rebalance_freq=rebalance_freq,
         )
         logger.info("   总收益:    {:+.2f}%", bt["total_return_pct"])
         logger.info("   年化夏普:  {:.2f}", bt["sharpe"])
@@ -1676,6 +1681,7 @@ class MultiFactorPipeline(BasePipeline):
         scores: pl.DataFrame | None = None,
         top_n: int = 10,
         rebalance_offset: int = 0,
+        rebalance_freq: int = 20,
     ) -> dict[str, Any]:
         """Broker-based backtest via Layer 7 SimulatedBroker.
 
@@ -1761,11 +1767,15 @@ class MultiFactorPipeline(BasePipeline):
         risk_exit_hits = 0
         min_equity = initial_capital
         min_date = str(all_dates[0]) if all_dates else ""
-        rebalance_freq = 20  # match generate_rebalance_signals default
+        # 2026-10-28: 原先这里硬编码 rebalance_freq = 20（注释「match
+        # generate_rebalance_signals default」），导致 `--rebalance=N` 只改了信号
+        # 生成、回测仍按 20 天撮合 → 全周期阶梯的回测结果逐位相同（非预期）。
+        # 现在由调用方传入；默认 20 保持历史结果可比（历史 run 都是 20）。
+        freq = rebalance_freq if rebalance_freq and rebalance_freq > 0 else 20
         # 2026-08-16: honor rebalance_offset so a windowed experiment's
         # backtest rebalances on the same calendar as its signal generator
         # (and as the full-range run).
-        offset_mod = rebalance_offset % rebalance_freq if rebalance_offset else 0
+        offset_mod = rebalance_offset % freq if rebalance_offset else 0
 
         # Track cost basis per symbol (for stop loss calculation)
         cost_basis: dict[str, float] = {}
@@ -1773,9 +1783,9 @@ class MultiFactorPipeline(BasePipeline):
         for trading_day_idx, d in enumerate(all_dates):
             d_str = str(d)
             is_rebalance_day = (
-                (trading_day_idx - offset_mod) % rebalance_freq == 0
+                (trading_day_idx - offset_mod) % freq == 0
                 if rebalance_offset
-                else trading_day_idx % rebalance_freq == 0
+                else trading_day_idx % freq == 0
             )
 
             # Build price & ADV maps for this trading day

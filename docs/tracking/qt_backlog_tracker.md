@@ -635,6 +635,28 @@
 - [x] **测试**：`tests/unit/test_approval_guard.py` 16 例（空/空白批准人、白名单边界、force 越过、按 timestamp 取最新门禁、磁盘门禁触发拦截、无记录只告警、registry 集成含 force 冻结）
 - [x] **文档同步**：`docs/user_guide.md` 命令表 + `docs/ai/COMMAND_MAP.md`（顺带把 experiment 示例的 `--top-n 10` 空格写法改为 `=` 形式，并写明"回测结论必须带 (start, end, offset) 三件套"）
 
+### 调仓周期实测：40 日显著优于 20 日（2026-10-28）
+- [x] **先修了一个阻断性缺陷**：`_compute_backtest` 内部硬编码 `rebalance_freq = 20`（注释「match generate_rebalance_signals default」，`multifactor_pipeline.py` 回测段），导致 `--rebalance=N` 只改信号生成、回测仍按 20 日撮合 → 首轮 5/10/20 日阶梯结果**逐位相同**（Sharpe 1.26 / 换手 1860% / 成本 8.339%）
+      - 修法：`_compute_backtest(..., rebalance_freq: int = 20)` 由调用方传入；默认 20 保证历史 run 结果仍可比
+      - 回归测试：`tests/unit/pipeline/test_backtest_rebalance_freq.py`（freq=5 的交易数与换手必须高于 freq=20；不传参 == 传 20）；合成数据实测 5d/10d/20d/40d → 14/10/10/2 笔
+- [x] **周期阶梯（2024-01-01 起，offset=6，Top10，行业中性，冻结单因子权重）**：
+
+      | 周期 | Sharpe(end 08-14) | Sharpe(end 07-01) | MaxDD(08-14) | 换手 | 成本占比 |
+      |---|---|---|---|---|---|
+      | 5d | 0.56 | — | 21.24% | 3124% | 13.60% |
+      | 10d | 0.94 | 0.87 | 16.48% | 2532% | 11.18% |
+      | 20d（生产近似）| 1.26 | 1.08 | 11.04% | 1860% | 8.34% |
+      | 30d | 1.18 | 0.76 | 14.59% | 1328% | 5.91% |
+      | **40d** | **1.59** | **1.50** | **8.91%** | 1054% | 4.63% |
+      | 60d | 1.01 | 1.33 | 14.39% | 681% | 2.89% |
+
+- [x] **40d 相位稳健性**（end 08-14 三个相位）：offset=6 → 1.59 / 8.91%；offset=0 → **1.92** / 5.39%；offset=12 → **1.87** / 9.64% → 40d 在所有相位都不低于 1.59，稳健优于 20d（1.26/1.08）
+- [x] **项目自带 40d 变体对比**：`lvr_vol_stable`（40d + 卖出缓冲×4 + 5日得分平滑）offset=6 → Sharpe **1.85** / MaxDD 8.96% / 超额 +121.28% / 换手 1032% / 成本 4.80%，优于裸 40d（1.59 / 8.91% / +94.98%）
+- [x] **结论**：lvr_vol_only 的最优调仓周期约 **40 个交易日（双月）**，Sharpe 合理区间 1.6–1.9（相位不同），比月度（20d）的 1.1–1.3 高一大截；高频（5/10d）被成本吃死（成本 11–14%）
+- [ ] **待办：落地 40d 需要改生产调仓判定** —— 生产调仓日由 `daily_pipeline.py:229-232` 的 `is_first_trading_day_of_month` 决定，`approved` 里的 `rebalance` 是惰性字段（`:521-530` 注释）；要按 40d 跑，得先把 cadence 变成参数驱动（或加双月判定），不是改个参数就行
+- [ ] **待办：`lvr_vol_stable` 未注册** —— 只在代码里 `register_config`（research 配置），未进 registry；要用需先 `qp experiment run` → 门禁 → `approve --by`（现在有守卫把关）
+- [x] **顺带踩到一个已有记录的坑**：对比 `lvr_vol_stable` 那次运行**没带 `--freeze-weights`**（非复现模式），pipeline 于是自动往 `data/strategy_registry.json` 写了一条 `lvr_vol_stable`（lifecycle=research / active=false / meta 带 backtest 数字）。生产不受影响，但 tracked 文件被静默改动 → 已 `git checkout` 回滚。**结论：只是做对比实验时一律带 `--freeze-weights`，避免回写 registry**
+
 ---
 
 ## 关联
