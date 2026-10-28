@@ -33,11 +33,22 @@ import polars as pl
 # Default thresholds
 # ------------------------------------------------------------------
 
+# 量纲约定（2026-10-28 修复）：以下阈值与 `data/dataset/fundamentals_latest.parquet`
+# 一致，全部用**百分数**（ROE 中位数 ≈ 4.01、gross_margin ≈ 23.28、debt_ratio ≈ 46.80）。
+#
+# 事故：原常量误写为小数语义（ROE -0.05 / gross_margin 0.10 / net_profit_growth -0.50），
+# 与百分数数据比较后造成三重错配：
+#   - net_profit_growth: 任何净利润降幅 > 0.5% 的股票被剔除 → 大面积误杀
+#     （实测当日质量过滤通过率只有 34%，1035/3020；Top-10 有 5 只因此出局）
+#   - gross_margin: 0.10 vs 百分数 → 该检查几乎永不触发（形同虚设）
+#   - ROE: -0.05 vs 百分数 → 把「容忍 -5%」收紧成「容忍 -0.05%」
+#   - debt_ratio: 85 本就是百分数 → 此项一直正确
+# 改阈值/新增字段前务必确认字段量纲：本文件用百分数，PE_TTM 是倍数（0~200）。
 DEFAULT_QUALITY_FILTERS: dict[str, dict[str, float]] = {
-    "ROE": {"min": -0.05},  # Tolerate mild cyclical losses
-    "gross_margin": {"min": 0.10},  # Gross margin > 10%
-    "net_profit_growth": {"min": -0.50},  # No cliff-drops
-    "debt_ratio": {"max": 85.0},  # Debt ratio < 85% (percentage)
+    "ROE": {"min": -5.0},  # ROE > -5%（容忍周期低谷）
+    "gross_margin": {"min": 10.0},  # 毛利率 > 10%
+    "net_profit_growth": {"min": -50.0},  # 净利增速 > -50%（不允许断崖）
+    "debt_ratio": {"max": 85.0},  # 资产负债率 < 85%（百分数）
 }
 
 DEFAULT_VALUATION_FILTERS: dict[str, dict[str, float]] = {
@@ -56,11 +67,20 @@ HARD_CUTOFFS: dict[str, Any] = {
 
 
 def _get_latest_value(df: pl.DataFrame, field: str) -> float | None:
-    """Get the most recent non-null value of a field from a DataFrame."""
+    """Get the most recent non-null value of a field from a DataFrame.
+
+    先按报告期排序再取最后一行（2026-10-28 修）：原先直接 `tail(1)`，若 frames
+    未按日期排序就会取到**旧报告**，阈值判断随之失真。优先 report_date，
+    其次 publish_date；两者都没有时保持原顺序语义。
+    """
     if df is None or df.is_empty():
         return None
     if field not in df.columns:
         return None
+    for date_col in ("report_date", "publish_date"):
+        if date_col in df.columns:
+            df = df.sort(date_col)
+            break
     col = df[field].drop_nulls()
     if col.is_empty():
         return None

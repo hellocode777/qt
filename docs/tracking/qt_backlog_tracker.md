@@ -674,6 +674,37 @@
         应急建仓用 `qp run daily --force-rebalance`（一次性）
 - [x] **顺带踩到一个已有记录的坑**：对比 `lvr_vol_stable` 那次运行**没带 `--freeze-weights`**（非复现模式），pipeline 于是自动往 `data/strategy_registry.json` 写了一条 `lvr_vol_stable`（lifecycle=research / active=false / meta 带 backtest 数字）。生产不受影响，但 tracked 文件被静默改动 → 已 `git checkout` 回滚。**结论：只是做对比实验时一律带 `--freeze-weights`，避免回写 registry**
 
+### 质量过滤单位错配修复（2026-10-28）
+- [x] **根因**：`qp/strategy/quality_filter.py` 的 `DEFAULT_QUALITY_FILTERS` 用**小数**语义
+      （`ROE -0.05` / `gross_margin 0.10` / `net_profit_growth -0.50`），而 `fundamentals_latest.parquet`
+      是**百分数**（ROE 中位 4.01 / 毛利率 23.28 / 负债率 46.80）。三重后果：
+      - `net_profit_growth`：任何净利降幅 > 0.5% 即被剔除 → **大面积误杀**
+      - `gross_margin`：0.10 对百分数几乎永不触发 → **该检查形同虚设**
+      - `ROE`：把「容忍 −5%」收紧成「容忍 −0.05%」
+      - `debt_ratio`：85 本就是百分数 → 此项一直正确（所以 bug 一直没被发现）
+- [x] **修复**：阈值统一到百分数 `ROE>-5.0 / gross_margin>10.0 / net_profit_growth>-50.0 / debt_ratio<85.0`；
+      并在文件头写死量纲约定（含 `PE_TTM` 是倍数 0~200）
+- [x] **顺带修**：`_get_latest_value()` 原先直接 `tail(1)` 取最后一行的非空值 —— frames 未按日期排序时会取到**旧报告**。
+      改为优先按 `report_date`（其次 `publish_date`）排序后取最新
+- [x] **影响实测（2026-10-28 当日截面）**：
+      | 指标 | 修复前 | 修复后 |
+      |---|---|---|
+      | PIT universe | 1035 只 | **1457 只**（+41%） |
+      | 静态过滤 | 1041 只 | 1448 只 |
+      | Top-10 被质量过滤剔除 | 5 只 | **2 只** |
+      - 剩下的 2 只理由合法：`603167` 毛利率 8.6% < 10%；`600054` PE 216 > 200
+      - 之前被误杀的 `000591`(−36.5%) / `601669`(−25.6%) / `000544`(−3.2%) 重新进入
+- [x] **测试**：`tests/unit/strategy/test_quality_filter_units.py` 18 例 —— 用**百分数量纲**的合成数据断言
+      通过/剔除行为（NPG −23% 必须过、−60% 必须拦、毛利率 5% 必须拦、ROE −3% 必须过…），
+      并把阈值常量钉死（改回小数立即变红）
+- [x] 门禁：`pytest` EXIT=0 / `uv run pyright` 0 errors / `uvx ruff check`+`format --check` 通过（494 files）
+- [ ] **待办（重要）：历史结论需重跑复核** —— 所有经 `quality_filter` 的回测/实验结果都是在
+      「错误 universe」上得到的，包括 `lvr_vol_only` 的 40d vs 20d 对照（Sharpe 1.59/1.26…）、
+      momentum_vol_full 的 B 组（1.99/0.65）、以及所有 IC 类结论。universe 变大 41% 后选股集合会变
+- [ ] **待办：基本面脏值** —— `debt_ratio` 最大 1.07e8、`net_profit_growth` 最大 57 万、`gross_margin` 最小值 −5678
+      → 需在入库/过滤前做截断（当前靠阈值碰巧拦住，但没有显式清洗）
+- [x] **备注**：CLI `--quality-min-roe` 只被解析、从未消费（dead param），本次未动
+
 ---
 
 ## 关联
