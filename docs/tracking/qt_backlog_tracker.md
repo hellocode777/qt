@@ -580,6 +580,13 @@
       - 证据：修复前 B 组（实际 orth off）打印 `正交化: ✅`；修复后同配置打印 `正交化: ❌ (取生效值)`，与策略引擎横幅 `正交化: 关` 一致
 - [x] **门禁**：`.venv/bin/ruff check --fix` + `check` + `format --check` 通过（本地 ruff 0.15.22；`uvx ruff` 因 10.1MiB 下载在 GFW 下卡住未完成）；`uv run pyright` **0 errors 0 warnings**（注意：`.venv/bin/pyright` 会假报 564 个 reportMissingImports，必须用 `uv run pyright`）
       - pytest 全量：见下一条
+- [x] **offset 敏感性补测**（`--rebalance-offset=6`，同窗口，用于对齐全样本调仓日历）：
+      - B 组 `multifactor_20261028_113850` → IC 0.0702 / Sharpe **0.61** / MaxDD 16.03% / 超额 +2.05%
+      - `lvr_vol_only` `multifactor_20261028_114052` → IC 0.0518 / Sharpe **1.08** / MaxDD 15.39% / 超额 +35.46%
+      - 结论：offset 改变绝对值但**不改变排序**（lvr 两种相位都赢）；但 **lvr 对相位明显更敏感** —— Sharpe 1.47→1.08、MaxDD 8.77%→15.39%、超额 67.9%→35.5%，而 B 组只从 0.65→0.61
+      - 因此 lvr 的合理预期区间是 **Sharpe 1.08–1.47 / MaxDD 8.8–15.4% / 超额 +35%–+68%**，不要引用单点 1.47
+- [x] **CLI 陷阱（本次踩到）**：`--rebalance-offset 6`（空格形式）被**静默忽略**，只有 `--rebalance-offset=6` 生效（`experiment.py:315` 仅匹配 `=` 形式）。第一轮跑出的"offset 对照"其实是 offset=0，已废弃重跑。是否生效只看日志 `配置覆盖: {...}` 里有没有该 key
+      - 同类：`--top-n` / `--rebalance` 也只认 `=` 形式；本次全部跑批都用的是空格形式，**恰好等于默认值（top_n=10, rebalance=20）所以无数值影响**，但要记牢：换成 5/15 这类非默认值时会静默失效
 - [ ] **待办：`approve()` 无门禁守卫** —— `registry.py:550-610` 只把 meta 原样冻结，gate=`research_only` / `portfolio_conversion=FAIL` / `approved_by` 为空**都不阻止** approve；本次跳过了 shadow_production 阶段（paper 30/30 仅「建议晋级 SHADOW_PRODUCTION」）
 - [ ] **待办：因子缓存只覆盖 541 天** —— `data/experiments/_factor_raw_cache.parquet`（构建于 2026-09-26）只有 2024-04-08→2026-07-01，命中缓存不补算，更早窗口的长回测静默缺数据
 - [ ] **待办：数据缺口** —— `index_csi300` 停 2026-09-30（影响 market_filter MA20/MA60）、`capital_flow_latest` 停 09-10、`index_sh000001` 停 09-18
