@@ -15,6 +15,7 @@ def cmd_strategy_approve(
     approved_by: str = "",
     version: str | None = None,
     from_experiment: str | None = None,
+    force: bool = False,
 ) -> int:
     """Freeze a registered strategy as an ApprovedStrategy snapshot.
 
@@ -24,6 +25,8 @@ def cmd_strategy_approve(
         version: Optional version string override.
         from_experiment: If set, load weights + backtest metrics from
             this experiment_id instead of the current Registry metadata.
+        force: Bypass the approval guard's blocking checks (missing
+            approver / failed quality gate). Logged as WARNING.
 
     The strategy must already be registered with weights, parameters,
     and backtest metrics in its StrategyMeta (unless --from-experiment
@@ -32,9 +35,23 @@ def cmd_strategy_approve(
     from pathlib import Path
 
     from qp.shared.types import StrategyLifecycle
+    from qp.strategy.approval_guard import ApprovalBlockedError, enforce_approval
     from qp.strategy.registry import StrategyMeta, StrategyRegistry
 
     registry = StrategyRegistry()
+
+    # ── 门禁守卫前置 ──
+    # 放在 --from-experiment 之前：否则被拒绝时 registry meta 已经被改写，
+    # 出现「没批准但权重变了」的中间态。
+    try:
+        enforce_approval(strategy_id, approved_by, force=force)
+    except ApprovalBlockedError as exc:
+        print("❌ 审批被门禁守卫拒绝 / Approval blocked by guard:")
+        for issue in exc.issues:
+            if issue.blocking:
+                print(f"   [{issue.code}] {issue.message}")
+        print("   确认要越过请加 --force（日志留 WARNING 级痕迹）")
+        return 1
 
     # ── Load weights & metrics from experiment if specified ──
     if from_experiment:
@@ -106,6 +123,7 @@ def cmd_strategy_approve(
             strategy_id=strategy_id,
             approved_by=approved_by,
             version=version,
+            force=force,
         )
     except ValueError as exc:
         print(f"❌ 审批失败 / Approval failed: {exc}")

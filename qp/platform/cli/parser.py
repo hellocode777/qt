@@ -691,11 +691,18 @@ def strategy_list() -> None:
     default=None,
     help="Load weights & metrics from this experiment_id",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Bypass approval guard (missing approver / failed quality gate); logged as WARNING",
+)
 def strategy_approve(
     strategy_id: str,
     by: str,
     version: str | None,
     from_experiment: str | None,
+    force: bool,
 ) -> None:
     """Freeze a strategy as an ApprovedStrategy snapshot."""
     from qp.platform.cli.commands.strategy import cmd_strategy_approve
@@ -706,6 +713,7 @@ def strategy_approve(
             approved_by=by,
             version=version,
             from_experiment=from_experiment,
+            force=force,
         )
     )
 

@@ -151,16 +151,30 @@ async def strategy_detail(request: Request, strategy_id: str) -> Any:
 
 @router.post("/strategies/{strategy_id}/approve")
 async def strategy_approve(request: Request, strategy_id: str) -> Any:
-    """Approve a strategy — set lifecycle to APPROVED."""
+    """Approve a strategy — set lifecycle to APPROVED.
+
+    门禁守卫（2026-10-28）：缺少批准人 / 质量门禁未过时会被拒绝，
+    失败原因通过 ``?approve_error=`` 回传页面并记 WARNING 日志。
+    """
+    from urllib.parse import quote
+
+    from qp.strategy.approval_guard import ApprovalBlockedError
+
+    error = ""
     try:
         from qp.strategy.registry import StrategyRegistry
 
         registry = StrategyRegistry()
         registry.approve(strategy_id, approved_by="webui")
+    except ApprovalBlockedError as exc:
+        error = str(exc)
+        logger.warning("Approve {} blocked by guard: {}", strategy_id, error)
     except Exception as exc:
+        error = str(exc)
         logger.warning("Approve {} failed: {}", strategy_id, exc)
 
-    return RedirectResponse(url=f"/strategies/{strategy_id}", status_code=303)
+    suffix = f"?approve_error={quote(error)}" if error else ""
+    return RedirectResponse(url=f"/strategies/{strategy_id}{suffix}", status_code=303)
 
 
 @router.post("/strategies/{strategy_id}/deactivate")

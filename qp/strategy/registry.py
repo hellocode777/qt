@@ -553,6 +553,7 @@ class StrategyRegistry:
         approved_by: str = "",
         version: str | None = None,
         validation_report: dict[str, Any] | None = None,
+        force: bool = False,
     ) -> object:
         """Freeze a strategy as an ApprovedStrategy snapshot.
 
@@ -563,6 +564,9 @@ class StrategyRegistry:
             strategy_id: Strategy to approve.
             approved_by: Person or system approving the strategy.
             version: Freeze version string (default: "v" + today).
+            validation_report: Optional validation report to freeze.
+            force: Bypass the approval guard's blocking checks (logged at
+                WARNING level). See ``qp.strategy.approval_guard``.
 
         Returns:
             ApprovedStrategy instance.
@@ -570,11 +574,18 @@ class StrategyRegistry:
         Raises:
             KeyError: If strategy is not registered.
             ValueError: If strategy has no weights set in metadata.
+            ApprovalBlockedError: If the approval guard blocks (missing
+                approver / failed quality gate) and ``force`` is False.
         """
+        from qp.strategy.approval_guard import enforce_approval
         from qp.strategy.approved import ApprovedStrategy
 
         if strategy_id not in self._strategies and strategy_id not in self._lifecycles:
             raise KeyError(f"Strategy '{strategy_id}' not registered")
+
+        # 2026-10-28: 门禁守卫（宪法 rule.md §5「Validation Gate 强制审查关卡」）。
+        # 事故：一次静默 approve 把生产切到 decision=research_only 的策略上。
+        enforce_approval(strategy_id, approved_by, force=force)
 
         meta = self._metadata.get(strategy_id, StrategyMeta())
         if not meta.weights:
