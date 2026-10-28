@@ -191,7 +191,27 @@ class MultiFactorPipeline(BasePipeline):
             engine_label,
         )
         if use_full_strategy:
-            logger.info("质量过滤: ✅ | 行业中性: ✅ | 正交化: ✅ | 防追高: ✅ | 大盘过滤: ✅")
+            # 2026-10-28: 原先硬编码 "正交化: ✅"，与实际参数无关（orth off 的 run 也
+            # 打 ✅，曾据此误判策略配置）。生效值 = CLI 显式传参 > 策略配置默认
+            # ——因为 cli_overrides 只覆盖「显式出现在参数里的 key」（见下方构造），
+            # 不传参时走的是策略配置自己的开关。
+            effective_orth = orthogonalize
+            effective_neutral = industry_neutral
+            try:
+                from qp.strategy.config import get_strategy_config as _effective_cfg
+
+                _cfg_eff = _effective_cfg(strategy_name)
+                if "orthogonalize" not in params:
+                    effective_orth = _cfg_eff.orthogonalize
+                if "industry_neutral" not in params:
+                    effective_neutral = _cfg_eff.industry_neutral
+            except Exception:
+                pass
+            logger.info(
+                "行业中性: {} | 正交化: {} (取生效值) | 其余开关见策略引擎横幅",
+                "✅" if effective_neutral else "❌",
+                "✅" if effective_orth else "❌",
+            )
         elif industry_neutral:
             logger.info("行业中性化: ✅ | 因子正交化: {}", "✅" if orthogonalize else "❌")
 
@@ -1164,12 +1184,16 @@ class MultiFactorPipeline(BasePipeline):
 
         logger.info("[2/6] 策略引擎 — {} 完整版...", config.display_name or config.name)
         logger.info(
-            "   因子: {} 个 | 质量过滤: ✅ ({}只有基本面) | "
-            "估值: ✅ ({}只有估值) | 行业中性: ✅ | "
-            "正交化: ✅ | 防追高: ✅ | 卖出缓冲: {}",
+            "   因子: {} 个 | 质量过滤: {} ({}只有基本面) | "
+            "估值: ✅ ({}只有估值) | 行业中性: {} | "
+            "正交化: {} | 防追高: {} | 卖出缓冲: {}",
             len(config.factors),
+            "✅" if config.quality_filter else "❌",
             n_fund,
             n_val,
+            "✅" if config.industry_neutral else "❌",
+            "✅" if config.orthogonalize else "❌",
+            "✅" if config.anti_chase else "❌",
             config.get_sell_buffer_rank(),
         )
 
