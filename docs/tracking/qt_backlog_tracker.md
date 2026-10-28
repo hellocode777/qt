@@ -563,6 +563,29 @@
 - [x] `uv run pyright` → 0 errors, 0 warnings, 0 informations（注意：`uvx pyright` 找不到 .venv，会假报 ~692 个 reportMissingImports）
 - [x] 全量 `pytest -q` → exit 0（基线 1768 passed；本次新增/更新 9 项测试）
 
+### 策略切换窗口口径事故 + 假「正交化: ✅」修复（2026-10-28）
+- [x] **现象**：19:00 生产策略被切到 `momentum_vol_full` B 组（v20261028，orth off，`approved_by` 空，未提交），`lvr_vol_only` 降回 backtest_passed/inactive。**经用户确认为有意操作，不是事故**
+- [x] **冻结数字溯源（纠正首轮误判）**：IC 0.0845 / Sharpe 1.99 / MaxDD 9.21 / 超额 +56.33 来自 `059dcd9f`（2026-08-14）三组对照的 B 组 = `multifactor_20260814_041259`，窗口 2024-09-01→2026-08-05（23 个月）
+      - 三个 8-14 artifact 已被物理清理，只能在 `git show 059dcd9f:data/experiments/...` 取回 → **查数字出处先 `git log -S <数字>`**，别因 `data/experiments/` 搜不到就断言「无 provenance」（本次首轮就这么误判了）
+- [x] **同窗对照实测**（2024-01-01→2026-07-01，602 天，同一份 541 天因子缓存；全部 `--freeze-weights` 复现模式，不回写 registry）：
+      - `multifactor_20261028_111517` B 组权重 → IC 0.0702 / Sharpe **0.65** / MaxDD 19.01% / 超额 +0.47%
+      - `multifactor_20261007_231048` 旧 v20260811 权重 → 0.0690 / 0.60 / 19.22% / −1.68%
+      - `multifactor_20261028_111810` `lvr_vol_only` → 0.0518 / **1.47** / 8.77% / +67.88%（与 10-07 记录**逐位一致** → harness 确定性可信）
+      - **结论：1.99 不可外推**（同窗只剩 0.65）；B 组相对旧权重只多 0.05 Sharpe、回撤与超额基本不动；同窗下 lvr Sharpe 2.3×、MaxDD 不到一半
+- [x] **处置：回滚** → `git checkout data/strategy_registry.json`；复核 `APPROVED=['lvr_vol_only']`、`load_active()=['lvr_vol_only']`、快照 v20261008 / by Wei、`git status` 干净
+- [x] **代码修复：两处假 `✅`**（`qp/pipeline/multifactor_pipeline.py`）
+      - (a) 镜像层横幅 `质量过滤/行业中性/正交化/防追高/大盘过滤: ✅` 全是硬编码字面量
+      - (b) 策略层 `因子: N 个 | … | 正交化: ✅` 同样硬编码
+      - 改为按「CLI 显式传参 > 策略配置默认」计算**生效值**（`cli_overrides` 只覆盖显式传入的 key，不传参时走策略配置 → 只看 params 仍会错）
+      - 证据：修复前 B 组（实际 orth off）打印 `正交化: ✅`；修复后同配置打印 `正交化: ❌ (取生效值)`，与策略引擎横幅 `正交化: 关` 一致
+- [x] **门禁**：`.venv/bin/ruff check --fix` + `check` + `format --check` 通过（本地 ruff 0.15.22；`uvx ruff` 因 10.1MiB 下载在 GFW 下卡住未完成）；`uv run pyright` **0 errors 0 warnings**（注意：`.venv/bin/pyright` 会假报 564 个 reportMissingImports，必须用 `uv run pyright`）
+      - pytest 全量：见下一条
+- [ ] **待办：`approve()` 无门禁守卫** —— `registry.py:550-610` 只把 meta 原样冻结，gate=`research_only` / `portfolio_conversion=FAIL` / `approved_by` 为空**都不阻止** approve；本次跳过了 shadow_production 阶段（paper 30/30 仅「建议晋级 SHADOW_PRODUCTION」）
+- [ ] **待办：因子缓存只覆盖 541 天** —— `data/experiments/_factor_raw_cache.parquet`（构建于 2026-09-26）只有 2024-04-08→2026-07-01，命中缓存不补算，更早窗口的长回测静默缺数据
+- [ ] **待办：数据缺口** —— `index_csi300` 停 2026-09-30（影响 market_filter MA20/MA60）、`capital_flow_latest` 停 09-10、`index_sh000001` 停 09-18
+- [ ] **待办：策略健康 100/100 含「无历史即满分」** —— `strategy_monitor.py:205-232` 三项无历史时各直接给 25 分，展示需改 N/A
+- [x] **教训已固化**：`qp-project` skill → `references/production-strategy-parameters.md` 新增「窗口口径陷阱」整节（四行对照表 + `--freeze-weights` 复现命令）+ 三条陷阱（缓存 541 天不补算 / 假 ✅ 是硬编码 / CV 参数 CLI 不可控）
+
 ---
 
 ## 关联
