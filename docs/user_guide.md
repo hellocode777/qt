@@ -1040,7 +1040,7 @@ SPA 原型（`/proto/`，Vue 3，数据走 `/api/v1/*`）12 页路由：
 | 命令 | 说明 |
 |------|------|
 | `qp strategy list` | 列出所有策略 |
-| `qp strategy approve <id>` | 批准策略上线（冻结不可变快照） |
+| `qp strategy approve <id> --by <名字>` | 批准策略上线（冻结不可变快照）；门禁守卫会拦「缺批准人 / 门禁结论未放行 / 必需检查项非 PASS」，确认要越过加 `--force` |
 | `qp strategy approved list` / `show <id>` | 已批准策略快照列表 / 详情（ADR-031） |
 | `qp strategy deactivate <id>` | 下线策略 |
 | `qp proposal create --strategy <id> --target <stage>` | 创建策略审批提案 |

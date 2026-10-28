@@ -607,11 +607,33 @@
       - **重要纠正**：同批次早先写的"±7% 扰动换掉半个持仓 / 权重优化在拟合噪声"**结论下得太重**。实测 ±10% 内指标平滑（宽度 0.08、重叠 90%）；旧权重 vs B 权重那次 50% 重排来自 Mom3M(±18%)、VolTrend(±23%) 的更大差异 → 真实形态是 **±10% 内平滑、再大就跳变**
       - **新结论**：6 组扰动**全部跑赢**基线 1.08 → registry 里那组"最优权重"位于宽平台底部而非峰值，"B 组最优"缺乏支撑；但平台高度是可测的 → **选权重看扰动后的平台高度，不追单点最优**
       - 复查待办：可换 end=2026-07-01 再跑一次，验证"平台/悬崖"是否随行情 regime 变化
+- [x] **换 end=2026-07-01 复查（regime 依赖性）**：同参数（±10% / 6 组 / seed 42 / offset=6）
+      - 基线 `multifactor_20261028_123017`：Sharpe **0.61** / MaxDD 16.03% / 超额 +2.05%
+      - 扰动组：0.61 / 0.67 / 0.64 / 0.67 / 0.54 / 0.60 → min 0.54 · P10 0.57 · P50 0.62 · P90 0.67 · max 0.67 · **宽度 0.10**
+      - 首日持仓重叠：min 90% · P50 100% → 同样判定 **STABLE**
+      - 结论：**两个窗口都 STABLE**（宽度 0.08 vs 0.10）→ "±10% 内平滑"不随 regime 变化；变化的是**水平**（P50 1.14 vs 0.62），那是截止日效应、不是权重噪声
+      - **再修正一条**：先前"基线落在平台底部"是 **08-14 窗口特有**（基线 1.08 低于全部 6 组扰动）；07-01 窗口里基线 0.61 处于区间中部（最低 0.54）→ 不能当成普遍结论
+- [x] **脚本缺陷修复**：汇总文件名原为 `weight_stability_<date>.json`，**同日两次运行会互相覆盖**（08-14 那份被 07-01 覆盖，剩 `weight_stability_2026-07-01_*.json`）；改为 `weight_stability_<end>_<时间戳>.json`（`report_path()` 已实测两窗口不重名）。08-14 的汇总数值仍完整保留在本条目里
 - [x] **044652 复现失败（如实记录）**：记忆中的预期为 +107% / 超额 +87.7% / 回撤 9.1%，今日实跑 +78.78% / +59.41% / 9.60%。差异来源：当前因子缓存缺 2024-01→04、且只到 2026-07-01，数据 vintage 与当日不同 → **该条旧结论今日不可复核**，引用时必须标注
 - [ ] **待办：因子缓存只覆盖 541 天** —— `data/experiments/_factor_raw_cache.parquet`（构建于 2026-09-26）只有 2024-04-08→2026-07-01，命中缓存不补算，更早窗口的长回测静默缺数据
 - [ ] **待办：数据缺口** —— `index_csi300` 停 2026-09-30（影响 market_filter MA20/MA60）、`capital_flow_latest` 停 09-10、`index_sh000001` 停 09-18
 - [ ] **待办：策略健康 100/100 含「无历史即满分」** —— `strategy_monitor.py:205-232` 三项无历史时各直接给 25 分，展示需改 N/A
 - [x] **教训已固化**：`qp-project` skill → `references/production-strategy-parameters.md` 新增「窗口口径陷阱」整节（四行对照表 + `--freeze-weights` 复现命令）+ 三条陷阱（缓存 541 天不补算 / 假 ✅ 是硬编码 / CV 参数 CLI 不可控）
+
+### 策略审批准入守卫（2026-10-28，收口上文事故）
+- [x] **根因**：`StrategyRegistry.approve()` 只把 meta 原样冻结（`registry.py:550-610`），既不查质量门禁也不查批准人 → 一次不带 `--by` 的 approve 就能把生产切到 `decision=research_only` / `portfolio_conversion=FAIL` 的策略上
+- [x] **落地**：新增 `qp/strategy/approval_guard.py`
+      - 硬拦：`approved_by` 为空 / 最新门禁 `decision` 不在 `{proceed, approved, pass, go}` / `data_integrity`·`factor_validity`·`portfolio_conversion` 非 PASS
+      - 仅告警：`robustness`·`cost_capacity` 非 PASS、完全无门禁记录（研究期策略不误伤）
+      - 门禁文件按记录内 `timestamp` 取最新（不假设文件名字典序=时间序）
+      - `ApprovalBlockedError(ValueError)`：沿用既有 `except ValueError` 调用方，同时带结构化 `issues`
+- [x] **接线**：`approve(..., force=False)` 首行强制校验；CLI 加 `--force`；WebUI 失败回 `?approve_error=`；**CLI 守卫前置到 `--from-experiment` 写 meta 之前**（否则会留下「审批被拒但权重已被改写」的中间态）
+- [x] **真命令实测**（对真实门禁文件，非 mock）：
+      - `qp strategy approve momentum_vol_full` → `MISSING_APPROVER` + `GATE_DECISION(research_only)` + `GATE_PORTFOLIO_CONVERSION(FAIL)`，**退出码 1**
+      - 加 `--by Wei` 仍被门禁拦（只剩两条）→ 证明"写了批准人也绕不过门禁"
+      - 两次尝试后 `git status data/strategy_registry.json` 为空 → 拒绝路径无副作用
+- [x] **测试**：`tests/unit/test_approval_guard.py` 16 例（空/空白批准人、白名单边界、force 越过、按 timestamp 取最新门禁、磁盘门禁触发拦截、无记录只告警、registry 集成含 force 冻结）
+- [x] **文档同步**：`docs/user_guide.md` 命令表 + `docs/ai/COMMAND_MAP.md`（顺带把 experiment 示例的 `--top-n 10` 空格写法改为 `=` 形式，并写明"回测结论必须带 (start, end, offset) 三件套"）
 
 ---
 

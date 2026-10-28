@@ -62,8 +62,10 @@
 - 判定逻辑在 `qp/monitoring/factor_health_logger.py`（stage 排序见 cmd_factor_list）；因子计算在 `qp/research/factor_calculator.py`
 
 ### qp strategy approve <id> --by <名字>
-- 入口：`commands/strategy.py` → `qp/strategy/registry.py` + `approved.py`
-- 流程：校验有权重 → 冻结不可变快照（ApprovedStrategy）→ lifecycle→APPROVED → 快照带 validation_report
+- 入口：`commands/strategy.py` → `qp/strategy/registry.py` + `approved.py` + `qp/strategy/approval_guard.py`
+- 流程：**门禁守卫**（缺批准人 / `decision` 未放行 / `data_integrity|factor_validity|portfolio_conversion` 非 PASS → 拒绝）→ 校验有权重 → 冻结不可变快照（ApprovedStrategy）→ lifecycle→APPROVED → 快照带 validation_report
+- 守卫读最新 `<strategy_id>_*_gate.json`（按 `timestamp` 排序）；无门禁记录只告警不阻断（研究期策略）
+- `--force` 显式越过硬拦，日志留 WARNING 痕迹；被拒时退出码 1
 - 配套：`deactivate` → lifecycle→BACKTEST_PASSED；判断"跑不跑"以 lifecycle 为准，别信 approved dict
 
 ### qp monitor check / regime
@@ -74,7 +76,10 @@
 
 ### qp experiment run multifactor
 - 入口：`commands/experiment.py` → `qp/pipeline/multifactor_pipeline.py`（MultiFactorPipeline）
-- 示例：`qp experiment run multifactor --strategy momentum_vol_full --start 2024-01-01 --end 2026-07-23 --top-n 10 --rebalance 20`（加 `--skip-gate` 跳过门禁）
+- 示例：`qp experiment run multifactor --strategy momentum_vol_full --start=2024-01-01 --end=2026-07-23 --top-n=10 --rebalance=20`（加 `--skip-gate` 跳过门禁）
+- ⚠️ **`--top-n` / `--rebalance` / `--rebalance-offset` 只认 `=` 形式**（`experiment.py:315` 只匹配 `--xxx=`），空格形式**静默忽略不报错**；`--start` / `--end` / `--symbols` 两种都支持。是否生效只看日志 `配置覆盖: {...}` 是否含该 key
+- ⚠️ **`--freeze-weights='{"F":w,...}'` 是复现某组配置的唯一方式**：freeze 模式跳过 registry 回写（`multifactor_pipeline.py:997`），不会污染生产快照
+- ⚠️ 回测结论必须写全 `(start, end, rebalance-offset)` 三件套——同权重换截止日 6 周，Sharpe 可差 0.5（2026-10-28 实测）
 - ⚠️ 需要 Gold 数据集；数据缺失先 `qp data fetch`
 - 历史脚本 `run_multifactor_experiment.py` 已于 2026-08-12 删除（被 CLI 取代，跨层违规）
 

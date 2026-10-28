@@ -44,7 +44,7 @@ from loguru import logger
 
 from qp.shared.json_io import json_load, json_save
 from qp.shared.paths import EXPERIMENTS_DIR, REPORTS_DIR
-from qp.shared.time import fmt_compact
+from qp.shared.time import fmt_ts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -251,6 +251,15 @@ def _verdict(sharpes: list[float], overlaps: list[float]) -> str:
     return "MARGINAL: 边界情况，需扩大扰动组数或换窗口复核"
 
 
+def report_path(end: str) -> Path:
+    """汇总文件名：带上 end 与时间戳，避免同日两次运行互相覆盖。
+
+    2026-10-28 踩过：文件名只有日期时，同日跑的第二个窗口（end=2026-07-01）
+    直接覆盖了第一个（end=2026-08-14）的汇总。
+    """
+    return REPORTS_DIR / f"weight_stability_{end}_{fmt_ts()}.json"
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="权重扰动稳定性检验（冻结权重逐组回测）")
     parser.add_argument("--strategy", default="momentum_vol_full")
@@ -362,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         for r in results
     ]
 
-    out_path = json_save(REPORTS_DIR / f"weight_stability_{fmt_compact()}.json", summary)
+    out_path = json_save(report_path(args.end), summary)
 
     stats = summary["perturbed"]
     assert isinstance(stats, dict)
