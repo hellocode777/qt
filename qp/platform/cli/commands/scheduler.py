@@ -687,6 +687,32 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         )
     )
 
+    # ── Job 4.6: capital flow incremental refresh (18:40 on weekdays) ──
+    # 18:40: after daily_pipeline so the per-symbol cache already holds the
+    # previous tail; incremental mode then fetches ~1 page/stock instead of
+    # ~40. Must stay incremental — a full pull is ~40 pages/stock and hits
+    # Sina's 456 rate limit regardless of the 0.3s interval.
+    def job_capital_flow() -> None:
+        with job_log_sink("capital_flow"):
+            from qp.pipeline.capital_flow_pipeline import CapitalFlowPipeline
+
+            ctx = _make_ctx("scheduled_capital_flow", incremental=True)
+            result = CapitalFlowPipeline().run(ctx)
+            symbols = result.metrics.get("output_symbols", "?")
+            rows = result.metrics.get("raw_rows", "?")
+            watchdog_ping("capital_flow")
+            print(
+                f"[scheduler] capital_flow: {result.status.value} — {symbols} symbols, {rows} rows"
+            )
+
+    scheduler.add_job(
+        Job(
+            name="capital_flow",
+            task=job_capital_flow,
+            trigger=CronTrigger(day_of_week="mon-fri", hour="18", minute="40"),
+        )
+    )
+
     # ── Job 4.5: paper trading daily advance (18:32 on weekdays) ──
     # 18:32: AFTER daily_pipeline (18:00) finishes fetching today's prices
     # (~18:22-18:26), so the run advances to the CURRENT trading day

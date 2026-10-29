@@ -56,8 +56,10 @@ class CapitalFlowPipeline(BasePipeline):
 
         try:
             logger.info("拉取资金流数据: {} 只股票", len(symbol_list))
-            # 增量模式加请求间隔，规避新浪 456 限流(实测无限速时 3059 只里只有 163 只成功)
-            adapter = CapitalFlowAdapter(request_interval=0.3 if incremental else 0.0)
+            # 必须限速: 新浪 MoneyFlow 单股返回全历史(~40 页)，无限速批量抓 3059 只会
+            # 触发 456 限流并熔断(_RATE_LIMIT_CIRCUIT_BREAK=30)，实测每次只成功 163 只。
+            # 增量/全量只影响请求页数，不改变限流策略，因此两种模式都要间隔。
+            adapter = CapitalFlowAdapter(request_interval=0.3)
             raw = adapter.fetch_raw(
                 date(2000, 1, 1),
                 today_cn(),
