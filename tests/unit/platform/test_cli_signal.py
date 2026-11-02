@@ -28,7 +28,11 @@ def factor_parquet(tmp_path, monkeypatch: pytest.MonkeyPatch):
             "Volatility_20D": [-0.10, -0.11, -0.13],
         }
     ).write_parquet(path)
+    # 两处都要 patch：_compute_today_from_parquet 读 multifactor 的常量，
+    # 而 cmd_signal._factor_dates() 读的是 signal 模块导入时绑定的那份。
+    # 只 patch 一处 → 本地有 data 文件时假绿，CI（无 data）直接红。
     monkeypatch.setattr(multifactor, "FACTOR_VALUES_DAILY", path)
+    monkeypatch.setattr(signal_mod, "FACTOR_VALUES_DAILY", path)
     return path
 
 
