@@ -931,12 +931,15 @@ class DailyPipeline(BasePipeline):
                 result.metrics["estimated_cost_pct"] = round(total_impact / total_capital * 100, 4)
 
             # ================================================================
-            # Step 12: Capital allocation (Layer 8 engine) — only on rebalance day
+            # Step 12: Capital allocation (Layer 8 engine)
+            #   调仓日 → 常规建仓/换仓；空仓 → 首次建仓不受 cadence 约束
             # ================================================================
             orders: list[Order] = []
             tp: Any = None
             alloc_capital = total_capital
-            if is_rebalance_day and not filtered_signals.is_empty():
+            has_active_positions = _has_active_positions()
+            allow_buy = _should_generate_buys(is_rebalance_day, has_active_positions)
+            if allow_buy and not filtered_signals.is_empty():
                 # Build candidates DataFrame for CapitalAllocator
                 # CapitalAllocator expects pandas with columns:
                 #   [symbol, alpha_score, risk_cluster, max_weight_limit,
@@ -1275,7 +1278,7 @@ class DailyPipeline(BasePipeline):
                 strategy_id="multi_strategy_ensemble",
                 total_capital=total_capital,
             )
-            if is_rebalance_day and not filtered_signals.is_empty() and not prices.is_empty():
+            if allow_buy and not filtered_signals.is_empty() and not prices.is_empty():
                 # Use only latest price per symbol (avoid stale historical prices)
                 latest_prices = prices.sort("trade_date", descending=True).unique(
                     subset=["symbol"], keep="first"
@@ -1336,8 +1339,8 @@ class DailyPipeline(BasePipeline):
                     )
                 except Exception as exc:
                     logger.warning("DecisionEngine failed: {}", exc)
-            elif not is_rebalance_day:
-                logger.info("非调仓日 — 跳过 BUY 信号生成 (Only Risk/Rank Exit runs daily)")
+            elif not allow_buy:
+                logger.info("非调仓日且有持仓 — 跳过 BUY 信号生成 (Only Risk/Rank Exit runs daily)")
 
             # P3.1: Append exit engine SELL recommendations
             if sell_recommendations:
@@ -1370,6 +1373,8 @@ class DailyPipeline(BasePipeline):
                     "allocator_used": str(result.metadata.get("allocator_used", "equal_weight")),
                     "strategy_health_count": str(len(strategy_health_data)),
                     "is_rebalance_day": str(is_rebalance_day),
+                    "has_active_positions": str(has_active_positions),
+                    "allow_buy": str(allow_buy),
                 },
             )
 
@@ -1448,6 +1453,46 @@ class DailyPipeline(BasePipeline):
             result.errors.append(f"{type(e).__name__}: {e}")
 
         return result
+
+
+def _has_active_positions() -> bool:
+    """是否已有活跃持仓 —— 只读探测，不构造 ``PositionLedger``。
+
+    ``PositionLedger.__init__`` 在 ``account.json`` 缺失时会落盘
+    （``_save_account``），这里只要一个布尔值，不能带写副作用。
+
+    读取失败时按 **有持仓** 处理：退回旧的调仓日判定，宁可不放开建仓，
+    也不让一次读盘异常变成"每天都全量建仓"。
+    """
+    from qp.decision.position_ledger import POSITIONS_PARQUET
+    from qp.shared.types import PositionState
+
+    try:
+        if not POSITIONS_PARQUET.exists():
+            return False
+        frame = pl.read_parquet(POSITIONS_PARQUET, columns=["status"])
+    except Exception:
+        from loguru import logger as _log
+
+        _log.debug("持仓状态探测失败，按有持仓处理（退回调仓日判定）")
+        return True
+    if frame.is_empty():
+        return False
+    active = [PositionState.HOLDING.value, PositionState.REDUCING.value]
+    return frame.filter(pl.col("status").is_in(active)).height > 0
+
+
+def _should_generate_buys(is_rebalance_day: bool, has_active_positions: bool) -> bool:
+    """BUY 是否放行：调仓日 **或** 当前空仓。
+
+    cadence 的语义是「定期调整已有持仓」。空仓时没有可调整的对象，若仍要求
+    等到调仓日，regime 门禁的连续拦截会把首次建仓无限后推——2026-11 实况：
+    anchor 落在 10-29（bear 门禁当天），下一次调仓机会被推到 40 个交易日之后。
+
+    ⇒ 首次建仓不受 cadence 约束；已有持仓仍只在调仓日加仓/换仓。
+    注意：本函数只管 cadence，不碰 Quality Gate（bear/crisis 仍由 Step 7.5 拦）。
+    """
+    return bool(is_rebalance_day or not has_active_positions)
 
 
 def _resolve_rebalance_day(
