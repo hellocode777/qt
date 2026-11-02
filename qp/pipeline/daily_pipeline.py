@@ -1353,6 +1353,33 @@ class DailyPipeline(BasePipeline):
                 for sid in signals_map:
                     strategy_signal_counts[sid] = len(signals_map[sid])
 
+            # 记录本次调仓（动态锚点）。判据是「真的产生调仓动作」而不是
+            # is_rebalance_day：空仓首次建仓可能落在非调仓日，它同样确立下一次
+            # 调仓的起算点；而「调仓日但无候选/无卖出」不记录，不白耗窗口。
+            if _should_record_rebalance(len(orders), len(sell_recommendations)):
+                import re as _re
+
+                from qp.pipeline.rebalance_cadence import record_rebalance_executed
+
+                _days = 0
+                if _rebalance_rule:
+                    _m = _re.search(r"trading_days=(\d+)", _rebalance_rule)
+                    if _m:
+                        _days = int(_m.group(1))
+                record_rebalance_executed(
+                    today.isoformat(),
+                    strategy_id=(registered_ids[0] if registered_ids else ""),
+                    days=_days,
+                    reason=(_rebalance_rule or "")[:160],
+                )
+                logger.info(
+                    "动态锚点已更新：last_executed={}（days={}，orders={}，sells={}）",
+                    today.isoformat(),
+                    _days,
+                    len(orders),
+                    len(sell_recommendations),
+                )
+
             # Build the package
             package = DecisionPackage(
                 package_id=package_id,
@@ -1495,6 +1522,17 @@ def _should_generate_buys(is_rebalance_day: bool, has_active_positions: bool) ->
     return bool(is_rebalance_day or not has_active_positions)
 
 
+def _should_record_rebalance(n_orders: int, n_sells: int) -> bool:
+    """今天是否记为「已执行调仓」（动态锚点的起算点）。
+
+    判据是**真的产生了调仓动作**，而不是 ``is_rebalance_day``：
+    空仓首次建仓可能发生在非调仓日（见 :func:`_should_generate_buys`），
+    它同样确立了下一次调仓的起算点，必须记录，否则下次会按静态 anchor
+    提前调仓。反过来，「调仓日但无候选/无卖出」不记录，不白耗窗口。
+    """
+    return n_orders > 0 or n_sells > 0
+
+
 def _resolve_rebalance_day(
     *,
     today: date,
@@ -1518,12 +1556,15 @@ def _resolve_rebalance_day(
     """
     from qp.pipeline.rebalance_cadence import (
         MODE_TRADING_DAYS,
+        is_overdue_rebalance,
         is_trading_days_rebalance,
+        load_last_executed,
         load_trade_dates,
         resolve_cadence,
     )
 
     approved_params: dict[str, Any] = {}
+    approved_strategy_id = ""
     try:
         from qp.strategy.registry import StrategyRegistry
 
@@ -1536,6 +1577,7 @@ def _resolve_rebalance_day(
                     getattr(snapshots[0], "strategy_id", "?"),
                 )
             approved_params = dict(getattr(snapshots[0], "parameters", {}) or {})
+            approved_strategy_id = str(getattr(snapshots[0], "strategy_id", "") or "")
     except Exception as exc:  # 读不到快照就用 context/默认，不影响主链
         log.debug("cadence: 读取 approved 快照失败，退回 context/默认: {}", exc)
 
@@ -1550,13 +1592,33 @@ def _resolve_rebalance_day(
 
         try:
             trade_dates = load_trade_dates(DAILY_PRICE_LATEST)
-            is_reb, reason = is_trading_days_rebalance(today.isoformat(), cadence, trade_dates)
+            # 动态锚点优先：距上次「实际执行」调仓满 N 个交易日即到期并允许补做，
+            # 避免调仓日撞上 Quality Gate 被拦后整整错后一轮
+            # （见 rebalance_cadence.is_overdue_rebalance 的 docstring）。
+            last_executed = load_last_executed(approved_strategy_id)
+            is_reb = False
+            reason = ""
+            if last_executed:
+                is_reb, reason = is_overdue_rebalance(
+                    today.isoformat(), cadence, trade_dates, last_executed
+                )
+                if not is_reb and "不在交易日序列" in reason:
+                    # 状态里的日期已不在行情序列（数据重建/清理）→ 回退日历语义
+                    log.warning("动态调仓锚点不可用（{}），回退日历判定", reason)
+                    last_executed = None
+            if not last_executed:
+                is_reb, reason = is_trading_days_rebalance(today.isoformat(), cadence, trade_dates)
             is_reb = force_rebalance or is_reb
             if "晚于最新数据" in reason:
                 # 正常链路里调仓判定在数据抓取之后；走到这里说明数据没更新，
                 # 节奏会静默失效 → 用 WARNING 让它可见（2026-10-29 踩过）。
                 log.warning("调仓节奏可能失效：{}", reason)
-            log.info("调仓节奏: {} | 今日调仓={}", cadence.describe(), is_reb)
+            log.info(
+                "调仓节奏: {} | 动态锚点={} | 今日调仓={}",
+                cadence.describe(),
+                last_executed or "无（用快照 anchor）",
+                is_reb,
+            )
             return is_reb, reason + (" | forced" if force_rebalance else "")
         except Exception as exc:
             log.warning(

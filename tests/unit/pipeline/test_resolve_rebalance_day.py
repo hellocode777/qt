@@ -140,3 +140,74 @@ class TestResolveRebalanceDay:
             today=TODAY, force_rebalance=False, context_parameters={}, log=_FakeLog()
         )
         assert ok is False  # 退回 monthly 后 29 号不调仓
+
+
+class TestDynamicAnchorWiring:
+    """2026-11：调仓日撞上 Quality Gate 被拦后，超期即补做（动态锚点接线）。"""
+
+    def _patch_last_executed(self, monkeypatch, value):
+        from qp.pipeline import rebalance_cadence
+
+        monkeypatch.setattr(rebalance_cadence, "load_last_executed", lambda sid="": value)
+
+    def test_overdue_anchor_overrides_calendar(self, monkeypatch) -> None:
+        """日历上今天不是调仓日，但距上次实际调仓已超 40 个交易日 → 应当调仓。"""
+        _patch_snapshots(
+            monkeypatch,
+            {
+                "rebalance_cadence": "trading_days",
+                "rebalance_days": 40,
+                "rebalance_anchor": "2026-09-01",
+            },
+        )
+        _patch_trade_dates(monkeypatch, DATES)
+
+        # 先证明日历语义下今天不调仓
+        calendar_ok, _ = dp._resolve_rebalance_day(
+            today=TODAY, force_rebalance=False, context_parameters={}, log=_FakeLog()
+        )
+        assert calendar_ok is False
+
+        # 动态锚点：上次实际调仓 2026-09-01，已远超 40 个交易日
+        self._patch_last_executed(monkeypatch, "2026-09-01")
+        overdue_ok, rule = dp._resolve_rebalance_day(
+            today=TODAY, force_rebalance=False, context_parameters={}, log=_FakeLog()
+        )
+        assert overdue_ok is True
+        assert rule is not None and "last_executed=2026-09-01" in rule
+
+    def test_within_window_stays_false(self, monkeypatch) -> None:
+        """刚调过仓（3 天前）→ 即使日历判定为调仓日也不该重复调。"""
+        _patch_snapshots(
+            monkeypatch,
+            {
+                "rebalance_cadence": "trading_days",
+                "rebalance_days": 40,
+                "rebalance_anchor": "2026-09-01",
+            },
+        )
+        _patch_trade_dates(monkeypatch, DATES)
+        self._patch_last_executed(monkeypatch, "2026-10-26")
+
+        ok, _rule = dp._resolve_rebalance_day(
+            today=TODAY, force_rebalance=False, context_parameters={}, log=_FakeLog()
+        )
+        assert ok is False
+
+    def test_no_state_falls_back_to_calendar(self, monkeypatch) -> None:
+        """没有状态文件 → 走旧的日历语义，行为不变。"""
+        _patch_snapshots(
+            monkeypatch,
+            {
+                "rebalance_cadence": "trading_days",
+                "rebalance_days": 40,
+                "rebalance_anchor": "2026-09-01",
+            },
+        )
+        _patch_trade_dates(monkeypatch, DATES)
+        self._patch_last_executed(monkeypatch, None)
+
+        ok, _rule = dp._resolve_rebalance_day(
+            today=TODAY, force_rebalance=False, context_parameters={}, log=_FakeLog()
+        )
+        assert ok is False

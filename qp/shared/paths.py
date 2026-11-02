@@ -35,6 +35,7 @@ MODELS_DIR = Path("data/models")
 CACHE_DIR = Path("data/cache")
 ARTIFACTS_DIR = Path("data/artifacts")
 POSITIONS_DIR = Path("data/positions")
+STATE_DIR = Path("data/state")
 PORTFOLIO_DIR = Path("data/portfolio")
 OPTUNA_DIR = Path("data/optuna")
 INDUSTRY_HEAT_DIR = Path("data/industry_heat")
@@ -59,6 +60,8 @@ FUNDAMENTALS_LATEST = Path("data/dataset/fundamentals_latest.parquet")
 FACTOR_VALUES_DAILY = Path("data/dataset/factor_values_daily.parquet")
 FACTOR_REGISTRY = Path("data/factor_registry.json")
 STRATEGY_REGISTRY = Path("data/strategy_registry.json")
+# 上次真正执行过调仓的日期（动态锚点）——见 qp/pipeline/rebalance_cadence.py
+REBALANCE_STATE_FILE = Path("data/state/rebalance_state.json")
 BLACKLIST = Path("data/blacklist.json")
 STOCK_NAMES = Path("data/stock_names.json")
 STOCK_INDUSTRY = Path("data/stock_industry.json")
@@ -165,12 +168,14 @@ __all__ = [
     "QP_DUCKDB",
     "QP_SQLITE",
     "RAW_DIR",
+    "REBALANCE_STATE_FILE",
     "REGIME_NOTES_DIR",
     "REPORTS_DIR",
     "SCHEMAS_JSON",
     "SILVER_DIR",
     "SIMULATION_DIR",
     "SOURCES_JSON",
+    "STATE_DIR",
     "STOCK_INDUSTRY",
     "STOCK_INDUSTRY_CSRC",
     "STOCK_NAMES",
