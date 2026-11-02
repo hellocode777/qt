@@ -488,6 +488,21 @@ def decide(
 
 
 # ==================================================================
+# Signal (read-only preview)
+# ==================================================================
+
+
+@cli.command()
+@click.option("--date", "as_of", default="", help="基准日 YYYY-MM-DD（默认: 本地因子库最新交易日）")
+@click.option("--top", type=int, default=0, help="显示前 N 只（默认: 快照 top_n）")
+def signal(as_of: str, top: int) -> None:
+    """Preview today's signals only (read-only: no fetch, no decision package)."""
+    from qp.platform.cli.commands.signal import cmd_signal
+
+    raise SystemExit(cmd_signal(as_of=as_of, top=top))
+
+
+# ==================================================================
 # Industry Heat (行业资金流热度)
 # ==================================================================
 

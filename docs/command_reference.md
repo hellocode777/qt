@@ -1,7 +1,7 @@
 # QP CLI 命令手册（全量）
 
 > **本文件由脚本生成，请勿手改**：`.venv/bin/python scripts/maintenance/gen_command_reference.py`
-> 权威来源：`qp/platform/cli/parser.py`（Click 定义）；可执行命令 **60** 条（Click 命令 59 + 手动分派 1），命令节点 75 个（命令组 16 个，含嵌套组 1 个）。
+> 权威来源：`qp/platform/cli/parser.py`（Click 定义）；可执行命令 **61** 条（Click 命令 60 + 手动分派 1），命令节点 76 个（命令组 16 个，含嵌套组 1 个）。
 > CLI 入口：`.venv/bin/qp`（等价 `python -m qp.platform.cli.main`；**勿用 `uv run qp`**，Python 3.12 下载会超时）。
 > 相关：`docs/ai/COMMAND_MAP.md`（AI 定位：命令 → 代码入口 → 流程）、`docs/user_guide.md`（使用指南）。
 
@@ -69,6 +69,7 @@
 | `qp retrain` | Trigger model retraining (default: the single APPROVED strategy). |
 | `qp run` | Run a pipeline. All args pass through to handler. |
 | `qp scheduler` | Job scheduler (long-running). Try: qp scheduler start |
+| `qp signal` | Preview today's signals only (read-only: no fetch, no decision package). |
 | `qp simulation shadow` | Run or view shadow production. |
 | `qp strategy approve` | Freeze a strategy as an ApprovedStrategy snapshot. |
 | `qp strategy approved list` | List all approved (frozen) strategy snapshots. |
@@ -796,6 +797,18 @@ _无参数（或由 handler 自行解析，见代码入口）。_
 | `subcommand` | 位置参数 | 可选 | `STRING` |  |
 
 **代码入口**：`qp.platform.cli.commands.scheduler.cmd_scheduler_start`
+
+
+### `qp signal`
+
+**作用**：Preview today's signals only (read-only: no fetch, no decision package).
+
+| 参数 | 类型 | 必填 | 默认 | 说明 |
+|---|---|---|---|---|
+| `--date` | 选项 | 可选 | `` | 基准日 YYYY-MM-DD（默认: 本地因子库最新交易日） |
+| `--top` | 选项 | 可选 | `0` | 显示前 N 只（默认: 快照 top_n） |
+
+**代码入口**：`qp.platform.cli.commands.signal.cmd_signal`
 
 
 ### `qp simulation`
