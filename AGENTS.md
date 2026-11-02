@@ -105,7 +105,9 @@ CLI/API
 Do not infer execution flow solely from filenames or directory names.
 Verify imports and actual calls when necessary.
 
-For this project: CLI entry is `qp` (`.venv/bin/qp`). Command groups map to
+For this project: CLI entry is `qp` — interactive commands are written
+`uv run qp ...`; repo scripts / systemd / cron use the absolute path
+`.venv/bin/qp` (no PATH or cwd dependency). Command groups map to
 `qp/platform/cli/commands/*.py` — see `docs/ai/COMMAND_MAP.md`.
 
 ---

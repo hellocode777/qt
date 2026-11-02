@@ -6,9 +6,9 @@
 > 本文件只挑高频命令讲流程，不再重复参数细节。
 > 命令增删改后重跑 `python scripts/maintenance/gen_command_reference.py` 重新生成该手册
 > （手改会被覆盖；`tests/unit/test_docs_command_reference.py` 会检查它是否与 CLI 同步，陈旧即测试失败）。
-> CLI 入口：`qp`。两种调用等价 —— `.venv/bin/qp` 与 `uv run qp`（2026-11-02 实测：
-> `uv run qp --version` 0.2s、`uv run qp signal` 0.69s，uv 复用现有 `.venv` 不重新下载）。
-> 只有当 `.venv` 缺失/损坏需要重建时 `uv run` 才会同步依赖，那种情况才慢。
+> CLI 入口：`qp`。**手敲命令统一写 `uv run qp ...`**；仓库脚本 / systemd / cron 用绝对路径
+> `.venv/bin/qp`（不依赖 PATH 与 cwd）。两者等价（2026-11-02 实测：`uv run qp signal` 0.69s
+> vs `.venv/bin/qp signal` 0.65s）；仅 `.venv` 需重建时 `uv run` 才同步依赖，那时才慢。
 > 入口统一在 `qp/platform/cli/commands/<组>.py`。
 
 ## 命令总表（`qp --help` 实测 2026-08-11；industry 于 2026-09-25 补录；capital-flow/version 于 2026-09-26 补录）

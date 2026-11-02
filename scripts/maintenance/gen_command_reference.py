@@ -465,7 +465,12 @@ def main() -> int:
         f"可执行命令 **{len(leaves) + dispatched}** 条"
         f"（Click 命令 {len(leaves)} + 手动分派 {dispatched}），命令节点 {len(flat)} 个"
         f"（命令组 {len(groups)} 个，含嵌套组 {len(nested)} 个）。\n"
-        "> CLI 入口：`.venv/bin/qp`（等价 `python -m qp.platform.cli.main`；**勿用 `uv run qp`**，Python 3.12 下载会超时）。\n"
+        # 交互命令统一用 `uv run qp`；systemd/脚本内用绝对路径（不依赖 PATH/cwd）。
+        # 旧文案「勿用 uv run qp，Python 3.12 下载会超时」已失效（2026-11-02 实测：
+        # uv run qp --version 0.2s，与 .venv/bin/qp 等价；仅 .venv 需重建时才同步依赖）。
+        "> CLI 入口：`.venv/bin/qp`（等价 `python -m qp.platform.cli.main`）。\n"
+        "> **手敲命令统一写 `uv run qp ...`**；仓库脚本 / systemd / cron 里用绝对路径 `.venv/bin/qp`"
+        "（不依赖 PATH 与 cwd）。\n"
         "> 相关：`docs/ai/COMMAND_MAP.md`（AI 定位：命令 → 代码入口 → 流程）、`docs/user_guide.md`（使用指南）。\n",
         "\n## 0. 读法与约定\n",
         "- 每条命令给出：**作用**、**参数表**、**代码入口**。\n"

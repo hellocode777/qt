@@ -2,7 +2,8 @@
 
 > **本文件由脚本生成，请勿手改**：`.venv/bin/python scripts/maintenance/gen_command_reference.py`
 > 权威来源：`qp/platform/cli/parser.py`（Click 定义）；可执行命令 **61** 条（Click 命令 60 + 手动分派 1），命令节点 76 个（命令组 16 个，含嵌套组 1 个）。
-> CLI 入口：`.venv/bin/qp`（等价 `python -m qp.platform.cli.main`；**勿用 `uv run qp`**，Python 3.12 下载会超时）。
+> CLI 入口：`.venv/bin/qp`（等价 `python -m qp.platform.cli.main`）。
+> **手敲命令统一写 `uv run qp ...`**；仓库脚本 / systemd / cron 里用绝对路径 `.venv/bin/qp`（不依赖 PATH 与 cwd）。
 > 相关：`docs/ai/COMMAND_MAP.md`（AI 定位：命令 → 代码入口 → 流程）、`docs/user_guide.md`（使用指南）。
 
 
