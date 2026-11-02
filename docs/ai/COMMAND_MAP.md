@@ -6,7 +6,9 @@
 > 本文件只挑高频命令讲流程，不再重复参数细节。
 > 命令增删改后重跑 `python scripts/maintenance/gen_command_reference.py` 重新生成该手册
 > （手改会被覆盖；`tests/unit/test_docs_command_reference.py` 会检查它是否与 CLI 同步，陈旧即测试失败）。
-> CLI 唯一入口：`qp`（`.venv/bin/qp`，勿用 `uv run qp`——Python 3.12 下载会超时）。
+> CLI 入口：`qp`。两种调用等价 —— `.venv/bin/qp` 与 `uv run qp`（2026-11-02 实测：
+> `uv run qp --version` 0.2s、`uv run qp signal` 0.69s，uv 复用现有 `.venv` 不重新下载）。
+> 只有当 `.venv` 缺失/损坏需要重建时 `uv run` 才会同步依赖，那种情况才慢。
 > 入口统一在 `qp/platform/cli/commands/<组>.py`。
 
 ## 命令总表（`qp --help` 实测 2026-08-11；industry 于 2026-09-25 补录；capital-flow/version 于 2026-09-26 补录）
@@ -34,6 +36,7 @@
 | retrain | `commands/retrain.py` | `qp retrain [strategy_id] [--dry-run]`；不传策略 = registry 里唯一 APPROVED（解析失败即报错，不猜） |
 | run | `commands/ingest.py`（cmd_run，parser.py 转发） | 运行 Pipeline（daily 等） |
 | scheduler | `commands/scheduler.py` | 调度器（systemd 管理，勿手动起第二实例） |
+| signal | `commands/signal.py` | 只读预览今日信号：读 approved 快照冻结权重 → `_compute_today_from_parquet`（与 Step 6 同一函数）→ 全截面排名；不拉数据、不生成决策包、不写任何文件（`--date` / `--top`） |
 | simulation | `commands/shadow.py` | 影子/纸面交易模拟 |
 | strategy | `commands/strategy.py` | list, approve, deactivate, approved |
 | validate | `commands/validate.py` | 对策略/实验跑验证 Gate；默认策略 = registry 唯一 APPROVED；指标取自实验记录（`--experiment` 可指定），缺失的指标列在「未评估」而非塞占位值 |
