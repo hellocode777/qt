@@ -606,18 +606,15 @@ class DailyPipeline(BasePipeline):
             avg_validation_score = 100.0
             result.metrics["avg_validation_score"] = round(avg_validation_score, 1)
 
-            dangerous_regimes = {"bear", "crisis"}
             regime_confidence = result.metrics.get("regime_confidence", 0.0)
-            if regime_label in dangerous_regimes and regime_confidence > 0.7:
-                result.metadata["quality_gate"] = (
-                    f"BLOCKED — regime={regime_label} (confidence={regime_confidence:.0%})"
-                    f" → 跳过今日交易"
-                )
-                logger.warning(
-                    "⛔ Quality Gate: regime={} confidence={:.0%} → 跳过今日交易",
-                    regime_label,
-                    regime_confidence,
-                )
+            gate_blocked, gate_label = _quality_gate_blocks(
+                regime_label,
+                float(regime_confidence),
+                bear_buy_disabled=bool(context.parameters.get("bear_buy_disabled", False)),
+            )
+            if gate_blocked:
+                result.metadata["quality_gate"] = gate_label
+                logger.warning("⛔ Quality Gate: {} → 跳过今日交易", gate_label)
                 package_id = f"dp-{today.isoformat()}-{run_id_short}"
                 quality_regime = RegimeContext(
                     regime=regime_label,
@@ -633,7 +630,7 @@ class DailyPipeline(BasePipeline):
                     validation=validation_results,
                     metadata={
                         "pipeline_run_id": context.run_id,
-                        "quality_gate": "BLOCKED",
+                        "quality_gate": gate_label,
                         "avg_validation_score": str(avg_validation_score),
                         "is_rebalance_day": str(is_rebalance_day),
                     },
@@ -645,6 +642,14 @@ class DailyPipeline(BasePipeline):
                 result.artifacts.append(str(json_path))
                 result.artifacts.append(str(md_path))
                 return result
+
+            # bear 放行：仓位交给 regime 敞口（10%）× 单票上限（8%）× 健康系数。
+            result.metadata["quality_gate"] = gate_label
+            if gate_label == "BEAR_REDUCED_EXPOSURE":
+                logger.info(
+                    "⚠️ 熊市降敞口放行：仓位按 regime 敞口 {:.0%}（单票上限 8% / 止损仍生效）",
+                    suggested_position_pct,
+                )
 
             # ================================================================
             # Step 8: Execute all registered strategies
@@ -1531,6 +1536,37 @@ def _should_record_rebalance(n_orders: int, n_sells: int) -> bool:
     提前调仓。反过来，「调仓日但无候选/无卖出」不记录，不白耗窗口。
     """
     return n_orders > 0 or n_sells > 0
+
+
+def _quality_gate_blocks(
+    regime_label: str,
+    confidence: float,
+    *,
+    bear_buy_disabled: bool = False,
+) -> tuple[bool, str]:
+    """Step 7.5 Quality Gate：今日交易是否被拦，以及留痕标签。
+
+    2026-11 起 **bear 不再硬拦**。理由：`market_regime.REGIME_POSITION_MAP`
+    本来就给 bear 分配了 10% 敞口，而旧 gate 用 `suggested_exposure=0.0`
+    提前 return，把这个设计整体作废——实况是空仓状态下连续 6 个交易日
+    （10-27~11-03，confidence 0.73~0.80）一个单都不下，连信号都不生成。
+
+    现在：
+    - ``crisis``（全市场跌停潮，``PANIC_LIMIT_DOWN_COUNT``）→ 仍然硬拦
+    - ``bear`` → 放行，仓位交给 10% 敞口 × 单票上限（8%）× 健康系数约束
+    - ``bear_buy_disabled=True`` → 恢复旧的「bear 也硬拦」行为（回退开关）
+
+    Returns:
+        ``(是否拦截, 标签)``。放行的 bear 标 ``BEAR_REDUCED_EXPOSURE``。
+    """
+    blocked_regimes = {"crisis"} | ({"bear"} if bear_buy_disabled else set())
+    if regime_label in blocked_regimes and confidence > 0.7:
+        return True, (
+            f"BLOCKED — regime={regime_label} (confidence={confidence:.0%}) → 跳过今日交易"
+        )
+    if regime_label == "bear":
+        return False, "BEAR_REDUCED_EXPOSURE"
+    return False, "OK"
 
 
 def _resolve_rebalance_day(
