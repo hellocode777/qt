@@ -38,7 +38,8 @@ def load_prices() -> tuple[dict[tuple[str, str], float], list[str]]:
 def load_packs() -> dict[str, dict]:
     packs: dict[str, dict] = {}
     for f in sorted(glob.glob("data/decisions/dp-*.json")):
-        d = json.load(open(f))
+        with open(f) as fh:
+            d = json.load(fh)
         packs[str(d.get("date"))] = d  # 同日多包 → 后者覆盖（重跑）
     return packs
 
