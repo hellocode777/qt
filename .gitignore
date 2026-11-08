@@ -49,6 +49,8 @@ data/monitoring/watchdog/
 data/factor_store/
 data/paper_trading/
 data/industry_heat/
+data/state/
+data/retrain_candidates/
 *.log
 logs/
 

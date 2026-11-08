@@ -37,6 +37,10 @@ def json_save(
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=indent, ensure_ascii=ensure_ascii, default=default)
+        # Trailing newline matches the repo's pre-commit "end-of-file-fixer"
+        # convention. Without it every rewrite of a tracked JSON file (e.g.
+        # data/listing_dates_cache.json) showed up as a 1-line git diff.
+        f.write("\n")
     return p
 
 
