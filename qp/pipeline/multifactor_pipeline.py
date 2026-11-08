@@ -1012,6 +1012,7 @@ class MultiFactorPipeline(BasePipeline):
             weights=weights,
             top_n=top_n,
             rebalance_freq=rebalance_freq,
+            rebalance_offset=_bt_offset,
             industry_neutral=industry_neutral,
             orthogonalize=orthogonalize,
         )
@@ -2177,6 +2178,7 @@ class MultiFactorPipeline(BasePipeline):
         weights: dict[str, float] | None = None,
         top_n: int = 10,
         rebalance_freq: int = 20,
+        rebalance_offset: int = 0,
         industry_neutral: bool = False,
         orthogonalize: bool = False,
     ) -> None:
@@ -2212,6 +2214,7 @@ class MultiFactorPipeline(BasePipeline):
                 "description": (
                     f"Multi-factor experiment: {len(features)} factors, "
                     f"Top-{top_n}, rebalance={rebalance_freq}d"
+                    f"{f', offset={rebalance_offset}d' if rebalance_offset else ''}"
                     f"{', industry-neutral' if industry_neutral else ''}"
                     f"{', orthogonalized' if orthogonalize else ''}"
                 ),
@@ -2226,7 +2229,12 @@ class MultiFactorPipeline(BasePipeline):
                 "cv_folds": int(result.metrics.get("cv_n_folds", 0) or 3),
                 "purge_days": 10,
                 "embargo_days": 5,
-                "tags": ["multifactor", f"top{top_n}", f"rebalance{rebalance_freq}d"],
+                "tags": [
+                    "multifactor",
+                    f"top{top_n}",
+                    f"rebalance{rebalance_freq}d",
+                    *([f"offset{rebalance_offset}d"] if rebalance_offset else []),
+                ],
             },
             metrics={
                 "ic_mean": float(result.metrics.get("ic_mean", 0.0)),
