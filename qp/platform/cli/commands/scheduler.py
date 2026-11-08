@@ -732,13 +732,15 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
         with job_log_sink("paper_trading"):
             from pathlib import Path
 
+            from loguru import logger
+
             from qp.pipeline.daily_pipeline import _load_price_data
             from qp.simulation.paper_trading import PaperTradingTracker
             from qp.strategy.registry import StrategyRegistry
 
             _, flat_prices = _load_price_data()
             if flat_prices.is_empty():
-                print("[scheduler] paper_trading: no price data, skipping")
+                logger.warning("[scheduler] paper_trading: no price data, skipping")
                 watchdog_ping("paper_trading")
                 return
 
@@ -753,7 +755,14 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 if run is not None and not run.is_complete:
                     runs.append(run)
             if not runs:
-                print("[scheduler] paper_trading: no active runs")
+                # Name the completed runs explicitly: the empty-day log used to
+                # say only "no active runs", so there was no way to tell
+                # "nothing ever started" from "everything already finished".
+                done = sorted(p.name[: -len("_paper.json")] for p in state_dir.glob("*_paper.json"))
+                logger.info(
+                    "[scheduler] paper_trading: no active runs"
+                    + (f" (completed on disk: {', '.join(done)})" if done else "")
+                )
                 watchdog_ping("paper_trading")
                 return
 
@@ -762,14 +771,14 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                 # Idempotency guard: skip if this trading day was already
                 # recorded (e.g. scheduler restarts, manual + cron overlap).
                 if run.daily_records and str(run.daily_records[-1].date) >= latest_date:
-                    print(
+                    logger.info(
                         f"[scheduler] paper_trading: {run.strategy_id} "
                         f"already at {latest_date}, skip"
                     )
                     continue
                 try:
                     tracker.run_day(run, latest_date, flat_prices)
-                    print(
+                    logger.info(
                         f"[scheduler] paper_trading: {run.strategy_id} "
                         f"day {run.elapsed_days}/30 equity={run.current_equity:,.0f}"
                     )
@@ -786,7 +795,7 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                         # strategy either).  See _PAPER_PROMOTION_PROTECTED.
                         if not _paper_auto_lifecycle_change_allowed(current_lifecycle):
                             assert current_lifecycle is not None
-                            print(
+                            logger.warning(
                                 f"[scheduler] paper_trading: {run.strategy_id} "
                                 f"{'PASSED' if result.passed else 'FAILED'} but lifecycle "
                                 f"is already '{current_lifecycle.value}' — "
@@ -796,18 +805,18 @@ def cmd_scheduler_start(app: Application | None = None) -> int:
                             registry.set_lifecycle(
                                 run.strategy_id, StrategyLifecycle.SHADOW_PRODUCTION
                             )
-                            print(
+                            logger.info(
                                 f"[scheduler] paper_trading: {run.strategy_id} PASSED → "
                                 f"SHADOW_PRODUCTION ({result.recommendation})"
                             )
                         else:
                             registry.set_lifecycle(run.strategy_id, StrategyLifecycle.RESEARCH)
-                            print(
+                            logger.info(
                                 f"[scheduler] paper_trading: {run.strategy_id} FAILED → "
                                 f"RESEARCH ({result.recommendation})"
                             )
                 except Exception as exc:
-                    print(f"[scheduler] paper_trading: {run.strategy_id} error: {exc}")
+                    logger.error(f"[scheduler] paper_trading: {run.strategy_id} error: {exc}")
 
             watchdog_ping("paper_trading")
 
