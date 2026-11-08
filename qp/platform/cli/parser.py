@@ -573,9 +573,12 @@ def paper_start(strategy_id: str, capital: float) -> None:
 
 
 @paper.command("status")
-@click.argument("strategy_id", required=False, default="momentum_vol_full")
-def paper_status(strategy_id: str) -> None:
-    """Show paper trading status."""
+@click.argument("strategy_id", required=False, default=None)
+def paper_status(strategy_id: str | None) -> None:
+    """Show paper trading status.
+
+    Omit STRATEGY_ID for an overview of every run (active vs completed).
+    """
     from qp.platform.cli.commands.paper import cmd_paper_status
 
     raise SystemExit(cmd_paper_status(strategy_id))

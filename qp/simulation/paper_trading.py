@@ -28,6 +28,7 @@ from typing import Any
 
 import numpy as np
 import polars as pl
+from loguru import logger
 
 from qp.shared.paths import PAPER_TRADING_DIR
 from qp.shared.time import today_cn
@@ -544,6 +545,24 @@ class PaperTradingTracker:
         if not state_file.exists():
             return None
         return self._load(state_file)
+
+    def list_runs(self) -> list[PaperTradingRun]:
+        """Load every run on disk — active and completed, oldest first.
+
+        A run stops being *active* once ``is_complete`` turns true (30 elapsed
+        days or an evaluation result). The scheduler advances only active runs;
+        completed files stay on disk because the WebUI equity curve and the
+        audit trail still read them.
+        """
+        runs: list[PaperTradingRun] = []
+        for state_file in sorted(self._data_dir.glob("*_paper.json")):
+            try:
+                runs.append(self._load(state_file))
+            except (KeyError, OSError, TypeError, ValueError):
+                logger.warning(f"Skipping unreadable paper run: {state_file}")
+                continue
+        runs.sort(key=lambda r: str(r.start_date))
+        return runs
 
     # ------------------------------------------------------------------
     # Persistence

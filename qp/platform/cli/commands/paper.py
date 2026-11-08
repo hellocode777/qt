@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from qp.shared.time import today_cn
+
+if TYPE_CHECKING:
+    from qp.simulation.paper_trading import PaperTradingRun, PaperTradingTracker
 
 
 def cmd_paper_start(strategy_id: str = "momentum_vol_full", capital: float = 100_000) -> int:
@@ -39,16 +44,61 @@ def cmd_paper_start(strategy_id: str = "momentum_vol_full", capital: float = 100
     return 0
 
 
-def cmd_paper_status(strategy_id: str = "momentum_vol_full") -> int:
-    """Show current paper trading status."""
+def _paper_status_label(run: PaperTradingRun) -> str:
+    """One-line lifecycle label for a paper run (never fakes a measurement)."""
+    if run.result is not None:
+        return "✅ PASS · 已完成" if run.result.passed else "❌ FAIL · 已完成"
+    if run.is_complete:
+        return "已完成（未评估）"
+    return f"进行中 {run.elapsed_days}/30"
+
+
+def _print_paper_overview(tracker: PaperTradingTracker) -> int:
+    """Print one row per run on disk, separating active from completed."""
+    runs = tracker.list_runs()
+    print("═══ QP 模拟交易状态 / Paper Trading Status ═══")
+    print()
+    if not runs:
+        print("  ℹ 没有任何模拟交易运行。启动一只: qp paper start <strategy_id>")
+        print()
+        return 0
+
+    print("  ── 全部运行 / All runs ──")
+    for run in runs:
+        ret = f"{run.result.total_return_pct:+.2f}%" if run.result else "N/A"
+        print(
+            f"  {run.strategy_id:<24} {run.run_id:<14} {run.start_date!s:<12} "
+            f"{run.elapsed_days:>2}/30  ¥{run.current_equity:>10,.0f}  "
+            f"收益 {ret:<9} {_paper_status_label(run)}"
+        )
+    active = sum(1 for r in runs if not r.is_complete)
+    print()
+    print(f"  活跃 / Active: {active} ｜ 已完成 / Completed: {len(runs) - active}")
+    print("  ℹ 已完成运行保留在 data/paper_trading/（WebUI 净值曲线 + 审计用）；")
+    print("    scheduler 18:32 的 job 只推进未完成的 run，不会重复推进。")
+    print("  查看单条详情: qp paper status <strategy_id>")
+    print()
+    return 0
+
+
+def cmd_paper_status(strategy_id: str | None = None) -> int:
+    """Show paper trading status.
+
+    With no strategy id: one row per run on disk, marking which runs are still
+    active (the scheduler advances those) and which are completed history.
+    """
     from qp.simulation.paper_trading import PaperTradingTracker
 
     tracker = PaperTradingTracker()
+    if not strategy_id:
+        return _print_paper_overview(tracker)
+
     run = tracker.load(strategy_id)
 
     if run is None:
         print(f"  ⚠ 未找到 '{strategy_id}' 的模拟交易记录。请先运行 'qp paper start'。")
         print("  ⚠ No paper trading run found. Run 'qp paper start' first.")
+        print("  ℹ 查看全部运行: qp paper status")
         return 1
 
     st = tracker.status(run)
@@ -60,6 +110,7 @@ def cmd_paper_status(strategy_id: str = "momentum_vol_full") -> int:
     print(f"  起始日期 / Start:   {st['start_date']}")
     print(f"  已过天数 / Days:    {st['elapsed_days']}/30")
     print(f"  当前权益 / Equity:  ¥{st['current_equity']:,.0f}")
+    print(f"  状态 / Status:      {_paper_status_label(run)}")
     print()
 
     if st["is_complete"] and "result" in st:

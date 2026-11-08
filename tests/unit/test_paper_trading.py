@@ -323,3 +323,106 @@ class TestPaperWeb:
         assert "PASS: Paper trading successful." in resp.text
         assert "最终" in resp.text
         assert "1.80" in resp.text  # final Sharpe from run.result
+
+
+class TestListRuns:
+    """``list_runs`` backs ``qp paper status`` with no strategy argument.
+
+    Completed runs (30 days or an evaluation result) must stay discoverable —
+    they are not deleted, only no longer advanced by the scheduler — so the
+    overview has to separate them from still-active runs.
+    """
+
+    @staticmethod
+    def _write(data_dir: Path, name: str, payload: dict) -> None:
+        import json
+
+        (data_dir / name).write_text(json.dumps(payload))
+
+    def test_lists_completed_and_active_oldest_first(self, tmp_path: Path) -> None:
+        data_dir = tmp_path / "pt"
+        data_dir.mkdir()
+        self._write(
+            data_dir,
+            "lvr_vol_only_paper.json",
+            {
+                "run_id": "pt-done",
+                "strategy_id": "lvr_vol_only",
+                "capital": 100_000.0,
+                "start_date": "2026-08-21",
+                "created_at": "2026-08-21T00:00:00+08:00",
+                "daily_records": [
+                    {
+                        "date": "2026-08-21",
+                        "equity": 101_000.0,
+                        "cash": 0.0,
+                        "n_positions": 3,
+                        "n_signals": 5,
+                        "n_trades": 1,
+                        "daily_return": 0.01,
+                        "total_cost": 0.0,
+                    }
+                ],
+                "result": {
+                    "passed": True,
+                    "recommendation": "PASS",
+                    "total_return_pct": 8.99,
+                    "sharpe_ratio": 1.58,
+                    "max_drawdown_pct": 5.0,
+                },
+            },
+        )
+        self._write(
+            data_dir,
+            "newstrat_paper.json",
+            {
+                "run_id": "pt-active",
+                "strategy_id": "newstrat",
+                "capital": 100_000.0,
+                "start_date": "2026-10-20",
+                "created_at": "2026-10-20T00:00:00+08:00",
+                "daily_records": [
+                    {
+                        "date": "2026-10-20",
+                        "equity": 99_500.0,
+                        "cash": 0.0,
+                        "n_positions": 2,
+                        "n_signals": 4,
+                        "n_trades": 1,
+                        "daily_return": -0.005,
+                        "total_cost": 0.0,
+                    }
+                ],
+            },
+        )
+
+        runs = PaperTradingTracker(data_dir=str(data_dir)).list_runs()
+
+        assert [r.strategy_id for r in runs] == ["lvr_vol_only", "newstrat"]
+        assert runs[0].is_complete is True  # has an evaluation result
+        assert runs[1].is_complete is False  # still advancing
+
+    def test_skips_unreadable_file(self, tmp_path: Path) -> None:
+        data_dir = tmp_path / "pt"
+        data_dir.mkdir()
+        (data_dir / "broken_paper.json").write_text("{not json")
+        self._write(
+            data_dir,
+            "good_paper.json",
+            {
+                "run_id": "pt-good",
+                "strategy_id": "good",
+                "capital": 100_000.0,
+                "start_date": "2026-11-01",
+                "daily_records": [],
+            },
+        )
+
+        runs = PaperTradingTracker(data_dir=str(data_dir)).list_runs()
+
+        assert [r.strategy_id for r in runs] == ["good"]
+
+    def test_empty_dir_returns_empty_list(self, tmp_path: Path) -> None:
+        data_dir = tmp_path / "pt"
+        data_dir.mkdir()
+        assert PaperTradingTracker(data_dir=str(data_dir)).list_runs() == []
