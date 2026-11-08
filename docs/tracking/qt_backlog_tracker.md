@@ -735,6 +735,27 @@
 
 ---
 
+## 月度重训候选核查（2026-11-08）
+
+- [x] **`retrain_20261101` 候选作废（无需采纳）** —— 快照 `verdict=HOLD`、
+      `message="当前策略最近 12 个月表现健康 (IC +0.06，Sharpe +1.37)，无需切换"`；
+      且 `strategy=momentum_vol_full` 自 2026-10-08 起已**不是**生产策略
+      （当前唯一 APPROVED = `lvr_vol_only`）→ 不采纳、不改任何权重。
+      历史 4 份快照（8/25、9/01、10/01、11/01）verdict 全为 HOLD。
+- [x] **根因修复：月度重训盯错策略** —— `scripts/retrain_monthly.py` 的 `DEFAULT_STRATEGY`
+      硬编码 `momentum_vol_full`（注释还写着「当前生产策略（唯一 APPROVED）」）。
+      危险点：`deactivate` 会保留 approved 快照供审计，所以
+      `get_approved("momentum_vol_full")` 照样返回 v20260811 旧权重 → 脚本能正常跑完并输出
+      「健康 HOLD」，读的人会以为生产策略被验证过了。**盯错策略比不跑更危险。**
+      修法：`DEFAULT_STRATEGY = ""` + `_resolve_production_strategy()` 动态取唯一 APPROVED，
+      APPROVED 数量 ≠ 1 时报错退出而不是猜。
+- [x] **同步修 Hermes cron `qt-monthly-retrain`（`0 10 1 * *`）prompt**：
+      去掉硬编码 `--strategy momentum_vol_full`、修正快照文件名
+      （prompt 写 `candidate_YYYYMMDD.json`，实际产物是 `retrain_YYYYMMDD.json`）、
+      新增「快照 `strategy` 字段必须等于当前 APPROVED」核对步骤（不一致要在报告开头点名）。
+
+---
+
 ## 关联
 
 - 架构导航: `docs/ai/PROJECT_MAP.md`

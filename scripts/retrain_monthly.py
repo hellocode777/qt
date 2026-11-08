@@ -8,10 +8,10 @@
   3. 跑优化实验：qp experiment run multifactor --optimize-weights
      → IC 驱动的新权重候选（multifactor_pipeline._optimize_weights_from_ic）
   4. 解析最新两个实验 JSON，对比，生成候选快照
-     data/retrain_candidates/candidate_YYYYMMDD.json（gitignored 运行产物）
+     data/retrain_candidates/retrain_YYYYMMDD.json（gitignored 运行产物）
 
 用法（qt 仓库根目录）:
-  .venv/bin/python scripts/retrain_monthly.py
+  .venv/bin/python scripts/retrain_monthly.py            # 自动盯当前唯一 APPROVED
   .venv/bin/python scripts/retrain_monthly.py --strategy momentum_vol_full --lookback-months 12
   .venv/bin/python scripts/retrain_monthly.py --max-stocks 500   # 快速验证（小样本可能被 gate 拦截）
   .venv/bin/python scripts/retrain_monthly.py --skip-gate        # 仅探索：跳过质量门禁
@@ -39,8 +39,27 @@ QP = str(ROOT / ".venv" / "bin" / "qp")
 CANDIDATE_DIR = ROOT / "data" / "retrain_candidates"
 EXPERIMENTS_DIR = ROOT / "data" / "experiments"
 
-# 当前生产策略（唯一 APPROVED）
-DEFAULT_STRATEGY = "momentum_vol_full"
+# 生产策略：默认自动解析「当前唯一 APPROVED」，--strategy 可显式覆盖。
+# ⚠️ 2026-11-08 修正：原为硬编码 "momentum_vol_full"。生产切到 lvr_vol_only 后，
+# 脚本仍盯着已停用的 mvF——而 deactivate 会保留 approved 快照（供审计），
+# 于是 get_approved("momentum_vol_full") 照样返回旧权重，脚本正常跑完并输出
+# 「指标健康 HOLD」，读的人会以为生产策略被验证过了。盯错策略比不跑更危险。
+DEFAULT_STRATEGY = ""
+
+
+def _resolve_production_strategy() -> str | None:
+    """当前唯一 APPROVED 策略 id；若 APPROVED 数量 ≠ 1 则返回 None。"""
+    sys.path.insert(0, str(ROOT))
+    from qp.shared.types import StrategyLifecycle
+    from qp.strategy.registry import StrategyRegistry
+
+    registry = StrategyRegistry()
+    approved = [
+        sid
+        for sid in registry.list_strategies()
+        if registry.get_lifecycle(sid) == StrategyLifecycle.APPROVED
+    ]
+    return approved[0] if len(approved) == 1 else None
 
 
 def _load_approved(strategy: str) -> dict:
@@ -137,13 +156,23 @@ def _fmt(v, suffix="") -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--strategy", default=DEFAULT_STRATEGY)
+    parser.add_argument(
+        "--strategy",
+        default=DEFAULT_STRATEGY,
+        help="策略 id；留空 = 自动取当前唯一 APPROVED 策略",
+    )
     parser.add_argument("--lookback-months", type=int, default=12)
     parser.add_argument("--max-stocks", type=int, default=0, help="0=不限制（全市场）")
     parser.add_argument("--skip-gate", action="store_true", help="跳过质量门禁（仅探索）")
     args = parser.parse_args()
 
-    strategy = args.strategy
+    strategy = args.strategy or _resolve_production_strategy()
+    if not strategy:
+        print(
+            "❌ 无法自动确定生产策略（APPROVED 数量 ≠ 1）——请用 --strategy 显式指定",
+            file=sys.stderr,
+        )
+        return 1
     end = _latest_trade_date()
     start = fmt_date(datetime.strptime(end, "%Y-%m-%d") - timedelta(days=30 * args.lookback_months))
     print(f"月度重训 [{strategy}]  窗口: {start} → {end}", flush=True)
