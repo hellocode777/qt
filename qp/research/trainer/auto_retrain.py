@@ -220,14 +220,13 @@ class MonthlyRetrainPipeline(BasePipeline):
                     f"overlap={drift_report.get('overlap_count', 0)}/5 top features. "
                     f"Human review required before promotion."
                 )
-            elif drift_report.get("drift_severity") == "moderate" and not dry_run:
+            elif drift_report.get("drift_severity") == "moderate" and not dry_run and logger:
                 # Moderate drift: log warning but allow promotion
-                if logger:
-                    logger.warning(
-                        "Feature importance drift (moderate): overlap={}/5. "
-                        "Promotion allowed but review recommended.",
-                        drift_report.get("overlap_count", 0),
-                    )
+                logger.warning(
+                    "Feature importance drift (moderate): overlap={}/5. "
+                    "Promotion allowed but review recommended.",
+                    drift_report.get("overlap_count", 0),
+                )
 
             # Step 7: Register if passed (unless dry run)
             if result.validation_passed and not dry_run:
