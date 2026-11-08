@@ -32,6 +32,7 @@ from qp.decision.models import DecisionReport, TradeRecommendation
 from qp.platform.pipeline.context import PipelineContext
 from qp.platform.pipeline.result import PipelineResult
 from qp.portfolio.capital_allocator import CapitalAllocator, CapitalAllocatorConfig
+from qp.portfolio.cash.reserve_policy import ReservePolicy
 from qp.portfolio.cost_model import CostModel, MarketImpactModel
 from qp.portfolio.risk_manager import PortfolioRiskManager
 from qp.portfolio.single_portfolio import Order
@@ -962,25 +963,35 @@ class DailyPipeline(BasePipeline):
                     if "raw_score" in filtered_signals.columns
                     else None
                 )
+                # 按 regime 建议敞口缩放分配资本（如 sideways_down → 30%）。
+                # 再乘策略健康系数（Step 9 auto-deweight）：IC 衰减被降权的
+                # 策略 → 自动减少投入资金，而不是等人工干预。
+                alloc_ratio = suggested_position_pct * strategy_exposure_scale
+                alloc_capital = total_capital * alloc_ratio
+                # 单票上限的语义是「占总资产 8%」（见 decision/engine.py 的
+                # alloc_capital_ratio 换算），而 CapitalAllocator 的
+                # max_weight_limit 是「相对 alloc_capital」的权重上限 →
+                # 必须按敞口比例换算，否则熊市 10% 敞口下 8% 只剩总资产 0.8%。
+                cap_on_alloc = _single_position_cap_on_alloc(alloc_ratio)
+
                 candidates_pl = filtered_signals.select(
                     [
                         "symbol",
                         (pl.col(score_col) if score_col else pl.lit(0.5)).alias("alpha_score"),
-                        pl.lit(0.08).alias("max_weight_limit"),
+                        pl.lit(cap_on_alloc).alias("max_weight_limit"),
                         pl.lit("").alias("risk_cluster"),
                     ]
                 )
                 candidates_pd = candidates_pl.to_pandas()
 
-                # 按 regime 建议敞口缩放分配资本（如 sideways_down → 30%）。
-                # 再乘策略健康系数（Step 9 auto-deweight）：IC 衰减被降权的
-                # 策略 → 自动减少投入资金，而不是等人工干预。
-                # 不缩放时 equal_weight 对 5 只候选会给 20%/只，超过风控 8% 上限。
-                alloc_capital = total_capital * suggested_position_pct * strategy_exposure_scale
                 alloc_config = CapitalAllocatorConfig(
                     method=alloc_method,
                     cash_buffer=0.05,
                     target_vol=0.15,
+                    # 候选不足防御（n < scarcity_threshold）用 n × standard_position_weight
+                    # 推目标仓位；该常量同样是「占总资产」语义，必须按敞口换算，
+                    # 否则 3 只 × 8% = 24% of alloc → 现金 76%，仓位再被砍到总资产 2.4%。
+                    reserve_policy=ReservePolicy(standard_position_weight=cap_on_alloc),
                 )
                 allocator = CapitalAllocator(alloc_config)
                 alloc_result = allocator.run(
@@ -994,6 +1005,10 @@ class DailyPipeline(BasePipeline):
                 result.metadata["alloc_capital"] = (
                     f"{alloc_capital:.0f} (regime exposure {suggested_position_pct:.0%} "
                     f"× strategy health {strategy_exposure_scale:.0%})"
+                )
+                result.metadata["single_position_cap"] = (
+                    f"{cap_on_alloc:.1%} of alloc "
+                    f"(= {SINGLE_POSITION_CAP_OF_TOTAL:.0%} of total capital)"
                 )
                 result.metrics["n_positions_out"] = tp.n_equities if tp else 0
                 result.metrics["cash_reserve"] = round(tp.cash_reserve, 4) if tp else 0.0
@@ -1512,6 +1527,34 @@ def _has_active_positions() -> bool:
         return False
     active = [PositionState.HOLDING.value, PositionState.REDUCING.value]
     return frame.filter(pl.col("status").is_in(active)).height > 0
+
+
+# 单票权重上限，按**总资产**口径（风控语义：单票 ≤ 总资产 8%）。
+# 注意 CapitalAllocator 的 max_weight_limit 是相对 alloc_capital 的，
+# 传进去之前必须用 _single_position_cap_on_alloc() 换算。
+SINGLE_POSITION_CAP_OF_TOTAL = 0.08
+
+
+def _single_position_cap_on_alloc(alloc_ratio: float) -> float:
+    """把「占总资产 N%」的单票上限换算成「占 ``alloc_capital``」的权重上限。
+
+    ``alloc_ratio = alloc_capital / total_capital``（regime 敞口 × 策略健康系数）。
+
+    ``CapitalAllocator`` 的 ``max_weight_limit`` 是相对传入 ``total_capital``
+    （daily 路径下 = ``alloc_capital``）的权重上限，而风控语义「单票 ≤ 总资产 8%」
+    是按**总资产**说的。两者基数不同，必须先换算：
+
+    - 敞口 10%（bear）→ 上限 80% of alloc，等权 1/3 不受限 → 用满 10% 敞口
+    - 敞口 30%（sideways_down）→ 上限 27% of alloc，等价于总资产 8% 不被突破
+    - 敞口 0（Quality Gate 拦下/健康系数为 0）→ 返回 1.0，交给上游「不建仓」处理
+
+    历史 bug（2026-11 修）：这里曾硬编码 0.08，于是熊市 10% 敞口下每只只有
+    总资产 0.8%，3 只合计 2.4% —— 实测平均仓位 2.40%，策略满仓能赚 9% 的市场
+    里账户三个月只 +0.41%。
+    """
+    if alloc_ratio <= 0:
+        return 1.0
+    return min(1.0, SINGLE_POSITION_CAP_OF_TOTAL / alloc_ratio)
 
 
 def _should_generate_buys(is_rebalance_day: bool, has_active_positions: bool) -> bool:

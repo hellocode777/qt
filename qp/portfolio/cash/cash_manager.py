@@ -13,7 +13,7 @@ Defense triggers:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -155,17 +155,25 @@ class CashManager:
         cash_decision: CashDecision,
         total_capital: float,
         weight_col: str = "target_weight",
+        cap_col: str = "max_weight_limit",
     ) -> pd.DataFrame:
         """Scale position weights to match the cash decision.
 
         If the cash decision increased cash reserve beyond what the
         normalizer already accounted for, scale down equity weights.
 
+        ⚠️ 缩放**不得突破单票上限**：若「各票 cap 之和」小于目标仓位
+        （如 5 只 × 8% cap = 总权重 40%，而 cash manager 想要 95% 仓位），
+        则以 cap 总额为上限，缺口留作现金。单票上限是硬约束，
+        不能为了用满权益而放大 —— 反例：50% 敞口 × 5 只 × 16% cap，
+        无保护时会被放大到 19%/只，等于单票 9.5% 总资产，突破 8% 风控线。
+
         Args:
             positions: Position DataFrame with [symbol, target_weight, target_capital].
             cash_decision: CashDecision from evaluate().
             total_capital: Total portfolio capital.
             weight_col: Name of the weight column.
+            cap_col: Per-position cap column (optional).
 
         Returns:
             Adjusted positions DataFrame.
@@ -176,6 +184,11 @@ class CashManager:
         df = positions.copy()
         current_equity = df[weight_col].sum()
         target_equity = cash_decision.equity_exposure
+
+        # 单票上限之和 = 不突破 cap 前提下可投入的最大权重总额
+        if cap_col in df.columns and not bool(df[cap_col].isna().all()):
+            cap_total = float(cast("float", df[cap_col].fillna(1.0).clip(lower=0.0).sum()))
+            target_equity = min(target_equity, cap_total)
 
         if current_equity > 0 and abs(current_equity - target_equity) > 0.001:
             scale = target_equity / current_equity
